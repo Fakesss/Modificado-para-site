@@ -1,0 +1,178 @@
+<analysis>
+<original_problem_statement>
+The user wants to create a responsive, mobile-first web application in Portuguese called “Ranking Matemática – Equipes”. The app aims to gamify mathematics studies for students from 6th to 9th grade.
+
+**PRODUCT REQUIREMENTS:**
+- **Gamification:** Students earn points by watching video lessons and completing exercises.
+- **Rankings:** There should be team-based rankings (Alfa, Delta, Omega) and class-based rankings (6th to 9th grade), with an overall ranking as well.
+- **User Roles:**
+    - **ALUNO (Student):** Can view rankings and their own progress.
+    - **ALUNO_LIDER (Team Leader):** Same as a student, but can also view the individual performance of their own team members.
+    - **ADMIN:** Full access to manage classes, teams, users, content, exercises, and view reports.
+- **UI/UX:** Modern design with rounded corners, cards, and team-specific colors (Alfa: gold, Delta: blue, Omega: green). A streak indicator with a fire icon should be present.
+- **Content:**
+    - **Video Lessons:** Track viewing progress, awarding points for completion (>=90% watched).
+    - **Exercises:** Support both PDF uploads and manual creation of questions (multiple choice, text). The manual creator needs a rich-text editor that supports inline images.
+- **Admin Panel:**
+    - Full CRUD for all entities.
+    - Customizable UI tabs for the student app.
+    - Reports on performance and most frequently failed BNCC skills.
+- **Authentication:** Specific admin user credentials provided. Login should redirect to the appropriate user dashboard.
+- **Recent User Adjustments (MUST BE FOLLOWED):**
+    - **Registration Flow:** Students must select their  (Class) and  (Team) during registration, not at login. The registration button should be disabled until these are selected.
+    - **Team-based Theme:** A subtle, thin neon line with the user's team color should be present throughout the student interface.
+    - **Navigation:** All Back buttons must be functional. Admins need a Return to Admin Panel button when using the View as Student mode.
+    - **Soft Deletes:** Deleting lessons or exercises should move them to a Trash for 7 days, allowing for restoration or permanent deletion. A confirmation prompt is required before any deletion.
+</original_problem_statement>
+
+**User's preferred language**: Portuguese (pt-BR). The next agent must respond in Portuguese.
+
+**what currently exists?**
+A full-stack Expo (React Native) and FastAPI application has been scaffolded.
+- **Backend ():** Contains all data models (Turma, Equipe, Usuario, etc.), JWT-based authentication, and API endpoints for most CRUD operations and rankings. Initial data has been seeded.
+- **Frontend ():** A comprehensive file-based routing structure using  is in place, with placeholder screens for nearly all features.  manages user sessions. The login and registration screens have been modified to move team/class selection to the registration page. A  component has been created.
+
+**Last working item**:
+- **Last item agent was working:** The agent was about to modify the main student layout file () to implement two features from the user's latest request:
+    1.  Add a Return to Admin Panel button for the admin's View as Student mode.
+    2.  Improve the visual appearance and correctness of the  component.
+- **Status:** IN PROGRESS
+- **Agent Testing Done:** N
+- **Which testing method agent to use?** Frontend testing agent (to verify the new button and visual changes) and backend testing agent (for the upcoming soft-delete logic).
+- **User Testing Done:** N
+
+**All Pending/In progress Issue list**:
+-   Issue 1: The soft delete (Trash Can) feature for content and exercises is not implemented. (P0)
+-   Issue 2: The Admin Panel UI does not update automatically after creating, editing, or deleting items. (P1)
+-   Issue 3: The  component's visibility is poor and may not be displaying the correct team color consistently. (P1)
+-   Issue 4: General navigation issue where Back buttons might not be working correctly across all screens. (P2)
+-   Issue 5: A previously noted bug where the user's team was not updating correctly after login needs re-verification with the new registration flow. (P2)
+
+**Issues Detail:**
+-   **Issue 1: Implement soft delete (Trash Can)**
+    -   **Attempted fixes:** The agent previously modified the backend to perform **hard deletes** (), which is now incorrect based on the latest user request.
+    -   **Next debug checklist:**
+        1.  **Backend ():**
+            -   Modify  and  Pydantic models to include  and .
+            -   Change the  endpoints for these models to update these fields (set  and ) instead of deleting the record.
+            -   Create new endpoints:
+                -    (trash) to list soft-deleted items.
+                -    to restore an item ().
+                -    for permanent deletion.
+            -   (Future Task) Implement a background job or scheduled task to permanently delete items older than 7 days from the trash.
+        2.  **Frontend:**
+            -   Add a confirmation modal before any delete action.
+            -   Update the delete functions in the admin panels to call the new soft-delete endpoints.
+            -   Create a new Lixeira (Trash) screen in the admin panel () to display deleted items with Restore and Delete Permanently buttons.
+    -   **Why fix this issue and what will be achieved with the fix?** To fulfill a mandatory user requirement for data safety, allowing admins to recover accidentally deleted content.
+    -   **Status:** NOT STARTED
+    -   **Is recurring issue?** N
+    -   **Should Test frontend/backend/both after fix?** both
+    -   **Blocked on other issue:** None
+
+-   **Issue 2: Admin Panel lists do not auto-update**
+    -   **Attempted fixes:** None.
+    -   **Next debug checklist:**
+        1.  The current approach of using  with  is insufficient for managing server state. The best practice is to introduce a server-state management library.
+        2.  Install .
+        3.  Refactor all data-fetching logic in the admin panel screens (e.g., , ) to use the  hook.
+        4.  Refactor all create, update, and delete functions to use the  hook.
+        5.  In the  callback of each  hook, call  to automatically refetch the relevant list.
+    -   **Why fix this issue and what will be achieved with the fix?** To meet the user's explicit criterion for a seamless admin experience where changes are reflected instantly without manual page reloads.
+    -   **Status:** NOT STARTED
+    -   **Is recurring issue?** Y
+    -   **Should Test frontend/backend/both after fix?** Frontend
+    -   **Blocked on other issue:** None
+
+**In progress Task List**:
+-   **Task 1: Implement View as Student mode and Back to Admin button.** (P0)
+
+**Task Detail:**
+-   **Task 1: View as Student and Back to Admin button**
+    -   **Where to resume:** Modify  and potentially .
+    -   **What will be achieved with this?** Admins will be able to preview the student experience and easily return to their admin dashboard, fulfilling a user requirement.
+    -   **Implementation steps:**
+        1.  In , add state to track impersonation (e.g., , ).
+        2.  Create a function  that saves the current admin session and sets the  object to the student's data.
+        3.  In , conditionally render a Voltar ao Painel do Administrador button if  is not null. This button should call a  function in the context to restore the admin session.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** Frontend
+    -   **Blocked on something:** None
+
+**Upcoming and Future Tasks**
+-   **Upcoming Tasks:**
+    -   (P1) **Fix Neon Line:** Adjust the CSS in  to make it more visible but still subtle. Verify the correct team color is passed and rendered.
+    -   (P1) **Fix Back Buttons:** Systematically review all screens with nested navigation (e.g., viewing an exercise from a list) and ensure the back button works as expected using .
+    -   (P2) **Admin Exercise Creator UI:** Implement the rich-text editor with inline image support for manual exercise creation.
+    -   (P2) **Team Leader View:** Build the screen for leaders to view their team's detailed progress.
+-   **Future Tasks:**
+    -   (P2) **Admin Reports:** Implement the most failed BNCC skills report.
+    -   (P3) **Notifications System:** Build the backend and frontend for user/team notifications.
+    -   (P3) **Video Progress Logic:** Implement the frontend logic to accurately track video watch time to meet the >=90% completion rule.
+    -   (P3) **Exercise Submission & Scoring:** Implement the full flow for submitting answers, server-side grading, and awarding points.
+
+**Completed work in this session**
+- **Ranking Display Logic:** Fixed the ranking podium on both the Home screen and Ranking screen to correctly display even when a class has fewer than three teams, using placeholders for empty spots.
+- **Login/Registration Flow:**
+    - Re-architected the login flow twice based on evolving user requirements.
+    - Current implementation: Login is simple (email/pass), while Registration is where the user must select their  (Class) and  (Team).
+
+**Earlier issues found/mentioned but not fixed**
+-   **Issue 1: Admin Panel UI does not auto-update on data changes.**
+    -   **Debug checklist:** See Issue 2 in the **All Pending/In progress Issue list** section.
+    -   **Why to solve this issue and what will be achieved with this?** This is a direct user request to improve the admin experience, making it feel modern and responsive.
+    -   **Should Test frontend/backend/both after fix:** Frontend
+    -   **Is recurring issue?** Y
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+-   **Frontend:** React Native (with Expo), Expo Router, React Context for Auth.
+-   **Backend:** FastAPI, Pydantic for models.
+-   **Database:** MongoDB.
+-   **Authentication:** JWT (JSON Web Tokens).
+
+**key DB schema**
+-   : { id, nome, email, senha_hash, perfil, turmaId, equipeId, ativo, streakDias, ... }
+-   : { id, nome, anoLetivo }
+-   : { id, nome, cor, pontosTotais }
+-   : { id, tipo, titulo, urlVideo, is_deleted, deleted_at, ... }
+-   : { id, titulo, habilidadesBNCC, is_deleted, deleted_at, ... }
+-   (Other tables: , , , )
+
+**All files of reference**
+-   : The single source of truth for all backend logic, including API endpoints and data models. Needs modification for soft deletes.
+-   : Rewritten to be a simple email/password form.
+-   : Rewritten to include mandatory selection for Class and Team.
+-   : Manages authentication state. Modified to reflect the new login/register flow.
+-   : Main layout for the student view. The agent was about to modify this file to add the Back to Admin button and .
+-   : New component for the team-colored visual effect. Needs visual tweaking.
+-    (and other admin screens): These files need to be refactored to use a state management library like React Query for automatic UI updates.
+
+**Critical Info for New Agent**
+-   The user has changed requirements multiple times. **The latest set of instructions is in Message 159 and must be prioritized.**
+-   The most critical divergence is the  functionality. The code currently performs **hard deletes**, but the user now wants a **soft delete (trash can)** system. This is the highest priority backend change.
+-   The admin panel's lack of automatic UI updates is a major UX flaw reported by the user. The recommended fix is to integrate a server-state management library like .
+-   The View as Student mode requires careful state management to handle impersonation and session restoration correctly.
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **Message 159:** A comprehensive list of new mandatory adjustments: change registration to require team/class (reversing a previous request), implement a subtle neon line, fix back buttons, add an admin view as student mode with a back button, and implement a trash can soft-delete system. **(PENDING)**
+2.  **Message 100:** Mandatory adjustments: login requires team/class selection, add a neon theme line, and fix admin panel to auto-update and support deletion. (SUPERSEDED by Message 159)
+3.  **Message 69:** User reported a bug where class-specific rankings don't show if there are fewer than 3 teams. (COMPLETED)
+
+**Testing status**
+-   Testing agent used after significant changes: NO
+-   Troubleshoot agent used after agent stuck in loop: NO
+-   Test files created: []
+-   Known regressions: None.
+
+**Credentials to test flow:**
+-   **Admin:**  / 
+-   **Students:** (e.g., , , etc. with password ) - check   function for a full list.
+
+**What agent forgot to execute**
+-   The agent did not implement the auto-update for admin lists, despite the user's request. It focused on the  functionality but didn't address the state management part (refetching).
+-   The agent modified the backend for hard deletes, but the user's very next message requested soft deletes. The agent did not get a chance to revert/change this logic.
+
+</analysis>
