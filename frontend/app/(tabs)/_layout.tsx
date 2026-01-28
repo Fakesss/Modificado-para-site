@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, SafeAreaView } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
-import NeonLine from '../../src/components/NeonLine';
 import { Equipe } from '../../src/types';
 
 // Team colors map
@@ -14,9 +13,35 @@ const TEAM_COLORS: Record<string, string> = {
   'equipe-omega': '#32CD32',
 };
 
-export default function TabsLayout() {
+function AdminBanner() {
   const { user, isAdminViewingAsStudent, setAdminViewingAsStudent } = useAuth();
   const router = useRouter();
+  
+  const handleBackToAdmin = () => {
+    setAdminViewingAsStudent(false);
+    router.replace('/admin');
+  };
+
+  if (!(isAdminViewingAsStudent || user?.perfil === 'ADMIN')) {
+    return null;
+  }
+
+  return (
+    <TouchableOpacity style={styles.adminBanner} onPress={handleBackToAdmin}>
+      <Ionicons name="arrow-back" size={18} color="#FFD700" />
+      <Text style={styles.adminBannerText}>Voltar ao Painel do Administrador</Text>
+    </TouchableOpacity>
+  );
+}
+
+function NeonLineSimple({ color }: { color: string }) {
+  return (
+    <View style={[styles.neonLine, { backgroundColor: color }]} />
+  );
+}
+
+export default function TabsLayout() {
+  const { user } = useAuth();
   const isLeader = user?.perfil === 'ALUNO_LIDER';
   const [teamColor, setTeamColor] = useState<string>('#FFD700');
 
@@ -45,24 +70,10 @@ export default function TabsLayout() {
     }
   };
 
-  const handleBackToAdmin = () => {
-    setAdminViewingAsStudent(false);
-    router.replace('/admin');
-  };
-
   return (
-    <View style={{ flex: 1, backgroundColor: '#0c0c0c' }}>
-      {/* Admin viewing as student banner */}
-      {(isAdminViewingAsStudent || user?.perfil === 'ADMIN') && (
-        <TouchableOpacity style={styles.adminBanner} onPress={handleBackToAdmin}>
-          <Ionicons name="arrow-back" size={18} color="#FFD700" />
-          <Text style={styles.adminBannerText}>Voltar ao Painel do Administrador</Text>
-        </TouchableOpacity>
-      )}
-      
-      {/* Neon line below the banner */}
-      <NeonLine color={teamColor} position="top" />
-      
+    <SafeAreaView style={styles.container}>
+      <AdminBanner />
+      <NeonLineSimple color={teamColor} />
       <Tabs
         screenOptions={{
           headerShown: false,
