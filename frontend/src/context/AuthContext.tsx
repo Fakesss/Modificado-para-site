@@ -77,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
     setIsPreviewMode(false);
+    setIsAdminViewingAsStudent(false);
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('user');
   };
@@ -88,15 +89,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await AsyncStorage.setItem('user', JSON.stringify(userData));
     } catch (error) {
       console.error('Error refreshing user:', error);
-    }
-  };
-
-  const updateUserTeamInfo = async (turmaId: string, equipeId: string) => {
-    try {
-      await api.updateUsuarioSelf({ turmaId, equipeId });
-      await refreshUser();
-    } catch (error) {
-      console.error('Error updating team info:', error);
     }
   };
 
@@ -115,13 +107,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token,
         isLoading,
         isPreviewMode,
+        isAdminViewingAsStudent,
         login,
         register,
         logout,
         refreshUser,
         enterPreviewMode,
         exitPreviewMode,
-        updateUserTeamInfo,
+        setAdminViewingAsStudent,
       }}
     >
       {children}
