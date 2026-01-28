@@ -191,6 +191,17 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/lixeira')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#E74C3C' + '30' }]}>
+            <Ionicons name="trash" size={24} color="#E74C3C" />
+          </View>
+          <View style={styles.menuInfo}>
+            <Text style={styles.menuTitle}>Lixeira</Text>
+            <Text style={styles.menuDescription}>Itens excluídos (7 dias para restaurar)</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+
         {/* Go to Student View */}
         <TouchableOpacity
           style={styles.studentViewButton}
