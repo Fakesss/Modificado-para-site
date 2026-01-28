@@ -8,12 +8,13 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isPreviewMode: boolean;
-  login: (email: string, senha: string) => Promise<void>;
+  login: (email: string, senha: string, turmaId?: string, equipeId?: string) => Promise<void>;
   register: (nome: string, email: string, senha: string, turmaId?: string, equipeId?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   enterPreviewMode: () => void;
   exitPreviewMode: () => void;
+  updateUserTeamInfo: (turmaId: string, equipeId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -54,8 +55,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, senha: string) => {
+  const login = async (email: string, senha: string, turmaId?: string, equipeId?: string) => {
     const data = await api.login(email, senha);
+    
+    // If user provided turma/equipe at login, update their profile
+    if (turmaId || equipeId) {
+      try {
+        const updateData: any = {};
+        if (turmaId) updateData.turmaId = turmaId;
+        if (equipeId) updateData.equipeId = equipeId;
+        await api.updateUsuarioSelf(updateData);
+        // Refresh to get updated data
+        const updatedUser = await api.getMe();
+        setToken(data.access_token);
+        setUser(updatedUser);
+        await AsyncStorage.setItem('token', data.access_token);
+        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+        return;
+      } catch (error) {
+        console.error('Error updating user team info:', error);
+      }
+    }
+    
     setToken(data.access_token);
     setUser(data.usuario);
     await AsyncStorage.setItem('token', data.access_token);
@@ -88,6 +109,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateUserTeamInfo = async (turmaId: string, equipeId: string) => {
+    try {
+      await api.updateUsuarioSelf({ turmaId, equipeId });
+      await refreshUser();
+    } catch (error) {
+      console.error('Error updating team info:', error);
+    }
+  };
+
   const enterPreviewMode = () => {
     setIsPreviewMode(true);
   };
@@ -109,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshUser,
         enterPreviewMode,
         exitPreviewMode,
+        updateUserTeamInfo,
       }}
     >
       {children}
