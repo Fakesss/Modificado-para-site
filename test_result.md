@@ -253,16 +253,11 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Soft Delete - Conteudos"
-    - "Soft Delete - Exercicios"
-    - "API Lixeira - Listar itens deletados"
-    - "API Lixeira - Restaurar item"
-    - "API Lixeira - Deletar permanentemente"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -292,3 +287,55 @@ agent_communication:
       - Admin: danielprofessormatematica@gmail.com / Daniel123*
       
       Por favor, teste o backend primeiro com os endpoints da lixeira.
+  - agent: "testing"
+    message: |
+      ✅ TESTE COMPLETO DA LIXEIRA (SOFT DELETE) REALIZADO COM SUCESSO!
+      
+      TODOS OS ENDPOINTS TESTADOS E FUNCIONANDO:
+      
+      🔐 Autenticação Admin: ✅ FUNCIONANDO
+      - Login com danielprofessormatematica@gmail.com / Daniel123* OK
+      
+      📚 Soft Delete Conteúdos: ✅ FUNCIONANDO
+      - DELETE /api/conteudos/{id} faz soft delete (is_deleted=true, deleted_at timestamp)
+      - Conteúdos deletados são filtrados de GET /api/conteudos
+      - Itens aparecem corretamente em GET /api/admin/lixeira
+      
+      📝 Soft Delete Exercícios: ✅ FUNCIONANDO  
+      - DELETE /api/exercicios/{id} faz soft delete (is_deleted=true, deleted_at timestamp)
+      - Exercícios deletados são filtrados de GET /api/exercicios
+      - Itens aparecem corretamente em GET /api/admin/lixeira
+      
+      🗂️ API Lixeira - Listagem: ✅ FUNCIONANDO
+      - GET /api/admin/lixeira lista todos os itens soft-deleted
+      - Mostra tipo (CONTEUDO/EXERCICIO), título, subtipo, data exclusão
+      - Calcula corretamente dias restantes (7 dias para expirar)
+      
+      ♻️ API Lixeira - Restauração: ✅ FUNCIONANDO
+      - POST /api/admin/lixeira/{id}/restaurar?tipo=CONTEUDO restaura conteúdos
+      - POST /api/admin/lixeira/{id}/restaurar?tipo=EXERCICIO restaura exercícios
+      - Itens restaurados voltam para listagens regulares
+      - Remove is_deleted e deleted_at corretamente
+      
+      💀 API Lixeira - Exclusão Permanente: ✅ FUNCIONANDO
+      - DELETE /api/admin/lixeira/{id}?tipo=CONTEUDO exclui permanentemente
+      - DELETE /api/admin/lixeira/{id}?tipo=EXERCICIO exclui permanentemente
+      - Remove dados relacionados (progresso vídeos, questões, submissões)
+      - Itens somem completamente do sistema
+      
+      🧹 API Lixeira - Limpeza Automática: ✅ FUNCIONANDO
+      - POST /api/admin/lixeira/limpar-expirados funciona corretamente
+      - Remove itens com mais de 7 dias na lixeira
+      - Retorna contagem de itens removidos
+      
+      FLUXO COMPLETO TESTADO:
+      1. ✅ Login admin
+      2. ✅ Criação de conteúdo teste
+      3. ✅ Soft delete (move para lixeira)
+      4. ✅ Verificação que não aparece na lista regular
+      5. ✅ Verificação que aparece na lixeira
+      6. ✅ Restauração (volta para lista regular)
+      7. ✅ Exclusão permanente (some completamente)
+      8. ✅ Limpeza de itens expirados
+      
+      SISTEMA DE LIXEIRA TOTALMENTE FUNCIONAL! 🎉
