@@ -562,7 +562,7 @@ async def delete_usuario(user_id: str, current_user: dict = Depends(require_admi
 
 @api_router.get("/conteudos")
 async def get_conteudos(categoria: Optional[str] = None, turmaId: Optional[str] = None):
-    query = {"ativo": True}
+    query = {"ativo": True, "is_deleted": {"$ne": True}}
     if categoria:
         query["abaCategoria"] = categoria
     if turmaId:
