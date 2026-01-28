@@ -25,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isAdminViewingAsStudent, setIsAdminViewingAsStudent] = useState(false);
 
   useEffect(() => {
     loadStoredAuth();
