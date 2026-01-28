@@ -150,6 +150,9 @@ class Exercicio(BaseModel):
     equipeId: Optional[str] = None
     pontosPorQuestao: int = 1
     criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    # Soft delete fields
+    is_deleted: bool = False
+    deleted_at: Optional[str] = None
 
 class ExercicioCreate(BaseModel):
     titulo: str
