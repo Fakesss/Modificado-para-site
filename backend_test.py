@@ -11,7 +11,7 @@ from datetime import datetime
 import uuid
 
 # Configuration
-BASE_URL = "https://matemat-rank.preview.emergentagent.com/api"
+BASE_URL = "https://code-shipper-1.preview.emergentagent.com/api"
 ADMIN_EMAIL = "danielprofessormatematica@gmail.com"
 ADMIN_PASSWORD = "Daniel123*"
 
