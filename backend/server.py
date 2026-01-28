@@ -98,6 +98,9 @@ class Conteudo(BaseModel):
     turmaId: Optional[str] = None
     ativo: bool = True
     criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    # Soft delete fields
+    is_deleted: bool = False
+    deleted_at: Optional[str] = None
 
 class ConteudoCreate(BaseModel):
     tipo: str
