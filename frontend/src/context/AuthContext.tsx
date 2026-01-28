@@ -100,6 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsPreviewMode(false);
   };
 
+  const handleSetAdminViewingAsStudent = (viewing: boolean) => {
+    setIsAdminViewingAsStudent(viewing);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -114,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshUser,
         enterPreviewMode,
         exitPreviewMode,
-        setAdminViewingAsStudent,
+        setAdminViewingAsStudent: handleSetAdminViewingAsStudent,
       }}
     >
       {children}
