@@ -125,58 +125,107 @@ export default function Ranking() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
         }
       >
-        {/* Podium for top 3 */}
-        {ranking.length >= 3 && (
-          <View style={styles.podiumContainer}>
-            {/* 2nd place */}
-            <View style={styles.podiumItem}>
-              <View style={[styles.podiumBadge, { backgroundColor: ranking[1].cor }]}>
-                <Text style={styles.podiumBadgeText}>{ranking[1].nome}</Text>
-              </View>
-              <View style={[styles.podium, styles.podium2, { backgroundColor: ranking[1].cor + '40' }]}>
-                <View style={[styles.positionCircle, { backgroundColor: ranking[1].cor }]}>
-                  <Text style={styles.positionText}>2º</Text>
+        {/* Podium - shows even with 1 or 2 teams */}
+        <View style={styles.podiumContainer}>
+          {/* 2nd place */}
+          <View style={styles.podiumItem}>
+            {ranking.length >= 2 ? (
+              <>
+                <View style={[styles.podiumBadge, { backgroundColor: ranking[1].cor }]}>
+                  <Text style={styles.podiumBadgeText}>{ranking[1].nome}</Text>
                 </View>
-                <Ionicons name="medal" size={28} color={ranking[1].cor} />
-                <Text style={[styles.podiumPoints, { color: ranking[1].cor }]}>
-                  {ranking[1].pontosTotais} pts
-                </Text>
-              </View>
-            </View>
-
-            {/* 1st place */}
-            <View style={styles.podiumItem}>
-              <View style={[styles.podiumBadge, { backgroundColor: ranking[0].cor }]}>
-                <Text style={styles.podiumBadgeText}>{ranking[0].nome}</Text>
-              </View>
-              <View style={[styles.podium, styles.podium1, { backgroundColor: ranking[0].cor + '40' }]}>
-                <View style={[styles.positionCircle, { backgroundColor: ranking[0].cor }]}>
-                  <Text style={styles.positionText}>1º</Text>
+                <View style={[styles.podium, styles.podium2, { backgroundColor: ranking[1].cor + '40' }]}>
+                  <View style={[styles.positionCircle, { backgroundColor: ranking[1].cor }]}>
+                    <Text style={styles.positionText}>2º</Text>
+                  </View>
+                  <Ionicons name="medal" size={28} color={ranking[1].cor} />
+                  <Text style={[styles.podiumPoints, { color: ranking[1].cor }]}>
+                    {ranking[1].pontosTotais} pts
+                  </Text>
                 </View>
-                <Ionicons name="trophy" size={36} color={ranking[0].cor} />
-                <Text style={[styles.podiumPoints, { color: ranking[0].cor }]}>
-                  {ranking[0].pontosTotais} pts
-                </Text>
-              </View>
-            </View>
-
-            {/* 3rd place */}
-            <View style={styles.podiumItem}>
-              <View style={[styles.podiumBadge, { backgroundColor: ranking[2].cor }]}>
-                <Text style={styles.podiumBadgeText}>{ranking[2].nome}</Text>
-              </View>
-              <View style={[styles.podium, styles.podium3, { backgroundColor: ranking[2].cor + '40' }]}>
-                <View style={[styles.positionCircle, { backgroundColor: ranking[2].cor }]}>
-                  <Text style={styles.positionText}>3º</Text>
+              </>
+            ) : (
+              <>
+                <View style={[styles.podiumBadge, { backgroundColor: '#333' }]}>
+                  <Text style={styles.podiumBadgeText}>-</Text>
                 </View>
-                <Ionicons name="medal" size={24} color={ranking[2].cor} />
-                <Text style={[styles.podiumPoints, { color: ranking[2].cor }]}>
-                  {ranking[2].pontosTotais} pts
-                </Text>
-              </View>
-            </View>
+                <View style={[styles.podium, styles.podium2, { backgroundColor: '#33333340' }]}>
+                  <View style={[styles.positionCircle, { backgroundColor: '#333' }]}>
+                    <Text style={styles.positionText}>2º</Text>
+                  </View>
+                  <Ionicons name="medal-outline" size={28} color="#555" />
+                  <Text style={[styles.podiumPoints, { color: '#555' }]}>- pts</Text>
+                </View>
+              </>
+            )}
           </View>
-        )}
+
+          {/* 1st place */}
+          <View style={styles.podiumItem}>
+            {ranking.length >= 1 ? (
+              <>
+                <View style={[styles.podiumBadge, { backgroundColor: ranking[0].cor }]}>
+                  <Text style={styles.podiumBadgeText}>{ranking[0].nome}</Text>
+                </View>
+                <View style={[styles.podium, styles.podium1, { backgroundColor: ranking[0].cor + '40' }]}>
+                  <View style={[styles.positionCircle, { backgroundColor: ranking[0].cor }]}>
+                    <Text style={styles.positionText}>1º</Text>
+                  </View>
+                  <Ionicons name="trophy" size={36} color={ranking[0].cor} />
+                  <Text style={[styles.podiumPoints, { color: ranking[0].cor }]}>
+                    {ranking[0].pontosTotais} pts
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={[styles.podiumBadge, { backgroundColor: '#333' }]}>
+                  <Text style={styles.podiumBadgeText}>-</Text>
+                </View>
+                <View style={[styles.podium, styles.podium1, { backgroundColor: '#33333340' }]}>
+                  <View style={[styles.positionCircle, { backgroundColor: '#333' }]}>
+                    <Text style={styles.positionText}>1º</Text>
+                  </View>
+                  <Ionicons name="trophy-outline" size={36} color="#555" />
+                  <Text style={[styles.podiumPoints, { color: '#555' }]}>- pts</Text>
+                </View>
+              </>
+            )}
+          </View>
+
+          {/* 3rd place */}
+          <View style={styles.podiumItem}>
+            {ranking.length >= 3 ? (
+              <>
+                <View style={[styles.podiumBadge, { backgroundColor: ranking[2].cor }]}>
+                  <Text style={styles.podiumBadgeText}>{ranking[2].nome}</Text>
+                </View>
+                <View style={[styles.podium, styles.podium3, { backgroundColor: ranking[2].cor + '40' }]}>
+                  <View style={[styles.positionCircle, { backgroundColor: ranking[2].cor }]}>
+                    <Text style={styles.positionText}>3º</Text>
+                  </View>
+                  <Ionicons name="medal" size={24} color={ranking[2].cor} />
+                  <Text style={[styles.podiumPoints, { color: ranking[2].cor }]}>
+                    {ranking[2].pontosTotais} pts
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={[styles.podiumBadge, { backgroundColor: '#333' }]}>
+                  <Text style={styles.podiumBadgeText}>-</Text>
+                </View>
+                <View style={[styles.podium, styles.podium3, { backgroundColor: '#33333340' }]}>
+                  <View style={[styles.positionCircle, { backgroundColor: '#333' }]}>
+                    <Text style={styles.positionText}>3º</Text>
+                  </View>
+                  <Ionicons name="medal-outline" size={24} color="#555" />
+                  <Text style={[styles.podiumPoints, { color: '#555' }]}>- pts</Text>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
 
         {/* Full ranking list */}
         <Text style={styles.sectionTitle}>Classificação Completa</Text>
