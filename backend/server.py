@@ -1047,6 +1047,139 @@ async def get_relatorio_usuarios(current_user: dict = Depends(require_admin)):
     
     return report
 
+# ============== LIXEIRA (TRASH) ROUTES ==============
+
+@api_router.get("/admin/lixeira")
+async def get_lixeira(current_user: dict = Depends(require_admin)):
+    """Get all soft-deleted items (trash)"""
+    # Get deleted conteudos
+    conteudos = await db.conteudos.find({"is_deleted": True}).to_list(1000)
+    
+    # Get deleted exercicios
+    exercicios = await db.exercicios.find({"is_deleted": True}).to_list(1000)
+    
+    # Calculate days until permanent deletion (7 days from deleted_at)
+    items = []
+    
+    for c in conteudos:
+        deleted_at = datetime.fromisoformat(c.get("deleted_at", datetime.utcnow().isoformat()))
+        days_remaining = 7 - (datetime.utcnow() - deleted_at).days
+        items.append({
+            "id": c["id"],
+            "tipo": "CONTEUDO",
+            "titulo": c["titulo"],
+            "subtipo": c.get("tipo", ""),
+            "deleted_at": c.get("deleted_at"),
+            "dias_restantes": max(0, days_remaining)
+        })
+    
+    for e in exercicios:
+        deleted_at = datetime.fromisoformat(e.get("deleted_at", datetime.utcnow().isoformat()))
+        days_remaining = 7 - (datetime.utcnow() - deleted_at).days
+        items.append({
+            "id": e["id"],
+            "tipo": "EXERCICIO",
+            "titulo": e["titulo"],
+            "subtipo": e.get("modoCriacao", ""),
+            "deleted_at": e.get("deleted_at"),
+            "dias_restantes": max(0, days_remaining)
+        })
+    
+    # Sort by deleted_at descending (most recent first)
+    items.sort(key=lambda x: x.get("deleted_at", ""), reverse=True)
+    
+    return items
+
+@api_router.post("/admin/lixeira/{item_id}/restaurar")
+async def restaurar_item(item_id: str, tipo: str, current_user: dict = Depends(require_admin)):
+    """Restore a soft-deleted item from trash"""
+    if tipo == "CONTEUDO":
+        result = await db.conteudos.update_one(
+            {"id": item_id, "is_deleted": True},
+            {"$set": {"is_deleted": False, "deleted_at": None}}
+        )
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="Conteúdo não encontrado na lixeira")
+        return {"message": "Conteúdo restaurado com sucesso"}
+    
+    elif tipo == "EXERCICIO":
+        result = await db.exercicios.update_one(
+            {"id": item_id, "is_deleted": True},
+            {"$set": {"is_deleted": False, "deleted_at": None}}
+        )
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="Exercício não encontrado na lixeira")
+        return {"message": "Exercício restaurado com sucesso"}
+    
+    else:
+        raise HTTPException(status_code=400, detail="Tipo inválido")
+
+@api_router.delete("/admin/lixeira/{item_id}")
+async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depends(require_admin)):
+    """Permanently delete an item from trash"""
+    if tipo == "CONTEUDO":
+        # Delete related progress first
+        await db.progresso_video.delete_many({"conteudoId": item_id})
+        # Permanently delete
+        result = await db.conteudos.delete_one({"id": item_id, "is_deleted": True})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Conteúdo não encontrado na lixeira")
+        return {"message": "Conteúdo excluído permanentemente"}
+    
+    elif tipo == "EXERCICIO":
+        # Delete related questions
+        await db.questoes.delete_many({"exercicioId": item_id})
+        # Delete related submissions
+        await db.submissoes.delete_many({"exercicioId": item_id})
+        # Permanently delete
+        result = await db.exercicios.delete_one({"id": item_id, "is_deleted": True})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Exercício não encontrado na lixeira")
+        return {"message": "Exercício excluído permanentemente"}
+    
+    else:
+        raise HTTPException(status_code=400, detail="Tipo inválido")
+
+@api_router.post("/admin/lixeira/limpar-expirados")
+async def limpar_itens_expirados(current_user: dict = Depends(require_admin)):
+    """Permanently delete all items that have been in trash for more than 7 days"""
+    cutoff_date = (datetime.utcnow() - timedelta(days=7)).isoformat()
+    
+    # Delete expired conteudos
+    expired_conteudos = await db.conteudos.find({
+        "is_deleted": True,
+        "deleted_at": {"$lt": cutoff_date}
+    }).to_list(1000)
+    
+    for c in expired_conteudos:
+        await db.progresso_video.delete_many({"conteudoId": c["id"]})
+    
+    result_conteudos = await db.conteudos.delete_many({
+        "is_deleted": True,
+        "deleted_at": {"$lt": cutoff_date}
+    })
+    
+    # Delete expired exercicios
+    expired_exercicios = await db.exercicios.find({
+        "is_deleted": True,
+        "deleted_at": {"$lt": cutoff_date}
+    }).to_list(1000)
+    
+    for e in expired_exercicios:
+        await db.questoes.delete_many({"exercicioId": e["id"]})
+        await db.submissoes.delete_many({"exercicioId": e["id"]})
+    
+    result_exercicios = await db.exercicios.delete_many({
+        "is_deleted": True,
+        "deleted_at": {"$lt": cutoff_date}
+    })
+    
+    return {
+        "message": "Itens expirados removidos",
+        "conteudos_removidos": result_conteudos.deleted_count,
+        "exercicios_removidos": result_exercicios.deleted_count
+    }
+
 # ============== SEED DATA ==============
 
 @api_router.post("/seed")
