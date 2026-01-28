@@ -56,9 +56,12 @@ export default function Register() {
     }
   };
 
+  // Cadastro só pode ser feito se turma E equipe estiverem selecionadas
+  const canRegister = nome && email && senha && confirmarSenha && turmaId && equipeId;
+
   const handleRegister = async () => {
-    if (!nome || !email || !senha || !confirmarSenha) {
-      Alert.alert('Erro', 'Preencha todos os campos');
+    if (!canRegister) {
+      Alert.alert('Erro', 'Preencha todos os campos obrigatórios');
       return;
     }
 
@@ -74,7 +77,7 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await register(nome.trim(), email.trim(), senha, turmaId || undefined, equipeId || undefined);
+      await register(nome.trim(), email.trim(), senha, turmaId, equipeId);
       // Navigation will happen in useEffect
     } catch (error: any) {
       const message = error.response?.data?.detail || 'Erro ao cadastrar';
@@ -108,7 +111,7 @@ export default function Register() {
               <Ionicons name="person-outline" size={24} color="#888" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Nome completo"
+                placeholder="Nome completo *"
                 placeholderTextColor="#666"
                 value={nome}
                 onChangeText={setNome}
@@ -119,7 +122,7 @@ export default function Register() {
               <Ionicons name="mail-outline" size={24} color="#888" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Email"
+                placeholder="Email *"
                 placeholderTextColor="#666"
                 value={email}
                 onChangeText={setEmail}
@@ -133,7 +136,7 @@ export default function Register() {
               <Ionicons name="lock-closed-outline" size={24} color="#888" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Senha"
+                placeholder="Senha *"
                 placeholderTextColor="#666"
                 value={senha}
                 onChangeText={setSenha}
@@ -152,7 +155,7 @@ export default function Register() {
               <Ionicons name="lock-closed-outline" size={24} color="#888" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Confirmar senha"
+                placeholder="Confirmar senha *"
                 placeholderTextColor="#666"
                 value={confirmarSenha}
                 onChangeText={setConfirmarSenha}
@@ -160,8 +163,9 @@ export default function Register() {
               />
             </View>
 
-            <Text style={styles.sectionTitle}>Turma (opcional)</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectContainer}>
+            {/* Seleção de Turma - OBRIGATÓRIO */}
+            <Text style={styles.sectionTitle}>Selecione sua Série/Turma *</Text>
+            <View style={styles.selectGrid}>
               {turmas.map((turma) => (
                 <TouchableOpacity
                   key={turma.id}
@@ -169,7 +173,7 @@ export default function Register() {
                     styles.selectOption,
                     turmaId === turma.id && styles.selectOptionActive,
                   ]}
-                  onPress={() => setTurmaId(turmaId === turma.id ? '' : turma.id)}
+                  onPress={() => setTurmaId(turma.id)}
                 >
                   <Text style={[
                     styles.selectText,
@@ -177,10 +181,11 @@ export default function Register() {
                   ]}>{turma.nome}</Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </View>
 
-            <Text style={styles.sectionTitle}>Equipe (opcional)</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectContainer}>
+            {/* Seleção de Equipe - OBRIGATÓRIO */}
+            <Text style={styles.sectionTitle}>Selecione sua Equipe *</Text>
+            <View style={styles.selectGrid}>
               {equipes.map((equipe) => (
                 <TouchableOpacity
                   key={equipe.id}
@@ -189,7 +194,7 @@ export default function Register() {
                     { borderColor: equipe.cor },
                     equipeId === equipe.id && { backgroundColor: equipe.cor },
                   ]}
-                  onPress={() => setEquipeId(equipeId === equipe.id ? '' : equipe.id)}
+                  onPress={() => setEquipeId(equipe.id)}
                 >
                   <Text style={[
                     styles.selectText,
@@ -197,12 +202,22 @@ export default function Register() {
                   ]}>{equipe.nome}</Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </View>
+
+            {/* Aviso se não selecionou turma/equipe */}
+            {(!turmaId || !equipeId) && (
+              <View style={styles.warningContainer}>
+                <Ionicons name="warning" size={16} color="#FFD700" />
+                <Text style={styles.warningText}>
+                  Turma e equipe são obrigatórios para cadastro
+                </Text>
+              </View>
+            )}
 
             <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
+              style={[styles.button, (!canRegister || loading) && styles.buttonDisabled]}
               onPress={handleRegister}
-              disabled={loading}
+              disabled={!canRegister || loading}
             >
               {loading ? (
                 <ActivityIndicator color="#000" />
@@ -245,8 +260,8 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 32,
+    marginTop: 10,
+    marginBottom: 24,
   },
   title: {
     fontSize: 28,
@@ -255,7 +270,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   form: {
-    gap: 16,
+    gap: 12,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -275,20 +290,25 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   sectionTitle: {
-    color: '#888',
+    color: '#FFD700',
     fontSize: 14,
-    marginTop: 8,
+    fontWeight: '600',
+    marginTop: 16,
+    marginBottom: 8,
   },
-  selectContainer: {
+  selectGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
   selectOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: '#333',
-    marginRight: 10,
+    minWidth: 80,
+    alignItems: 'center',
   },
   selectOptionActive: {
     backgroundColor: '#FFD700',
@@ -301,6 +321,21 @@ const styles = StyleSheet.create({
   selectTextActive: {
     color: '#000',
   },
+  warningContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFD70020',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 8,
+    marginTop: 8,
+  },
+  warningText: {
+    color: '#FFD700',
+    fontSize: 13,
+    flex: 1,
+  },
   button: {
     backgroundColor: '#FFD700',
     borderRadius: 12,
@@ -309,7 +344,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.4,
   },
   buttonText: {
     color: '#000',
