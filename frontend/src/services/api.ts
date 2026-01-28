@@ -226,4 +226,25 @@ export const deleteQuestao = async (id: string) => {
   return response.data;
 };
 
+// Lixeira (Trash)
+export const getLixeira = async () => {
+  const response = await api.get('/admin/lixeira');
+  return response.data;
+};
+
+export const restaurarItem = async (id: string, tipo: string) => {
+  const response = await api.post(`/admin/lixeira/${id}/restaurar?tipo=${tipo}`);
+  return response.data;
+};
+
+export const deletePermanente = async (id: string, tipo: string) => {
+  const response = await api.delete(`/admin/lixeira/${id}?tipo=${tipo}`);
+  return response.data;
+};
+
+export const limparItensExpirados = async () => {
+  const response = await api.post('/admin/lixeira/limpar-expirados');
+  return response.data;
+};
+
 export default api;
