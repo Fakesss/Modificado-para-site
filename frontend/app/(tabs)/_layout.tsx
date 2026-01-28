@@ -51,10 +51,7 @@ export default function TabsLayout() {
   };
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* Neon line at the top */}
-      <NeonLine color={teamColor} position="top" />
-      
+    <View style={{ flex: 1, backgroundColor: '#0c0c0c' }}>
       {/* Admin viewing as student banner */}
       {(isAdminViewingAsStudent || user?.perfil === 'ADMIN') && (
         <TouchableOpacity style={styles.adminBanner} onPress={handleBackToAdmin}>
@@ -62,6 +59,9 @@ export default function TabsLayout() {
           <Text style={styles.adminBannerText}>Voltar ao Painel do Administrador</Text>
         </TouchableOpacity>
       )}
+      
+      {/* Neon line below the banner */}
+      <NeonLine color={teamColor} position="top" />
       
       <Tabs
         screenOptions={{
