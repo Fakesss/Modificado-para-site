@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
-import { Tabs } from 'expo-router';
+import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
@@ -15,7 +15,8 @@ const TEAM_COLORS: Record<string, string> = {
 };
 
 export default function TabsLayout() {
-  const { user } = useAuth();
+  const { user, isAdminViewingAsStudent, setAdminViewingAsStudent } = useAuth();
+  const router = useRouter();
   const isLeader = user?.perfil === 'ALUNO_LIDER';
   const [teamColor, setTeamColor] = useState<string>('#FFD700');
 
@@ -44,10 +45,23 @@ export default function TabsLayout() {
     }
   };
 
+  const handleBackToAdmin = () => {
+    setAdminViewingAsStudent(false);
+    router.replace('/admin');
+  };
+
   return (
     <View style={{ flex: 1 }}>
       {/* Neon line at the top */}
       <NeonLine color={teamColor} position="top" />
+      
+      {/* Admin viewing as student banner */}
+      {(isAdminViewingAsStudent || user?.perfil === 'ADMIN') && (
+        <TouchableOpacity style={styles.adminBanner} onPress={handleBackToAdmin}>
+          <Ionicons name="arrow-back" size={18} color="#FFD700" />
+          <Text style={styles.adminBannerText}>Voltar ao Painel do Administrador</Text>
+        </TouchableOpacity>
+      )}
       
       <Tabs
         screenOptions={{
@@ -128,3 +142,22 @@ export default function TabsLayout() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  adminBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a2e',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFD70040',
+  },
+  adminBannerText: {
+    color: '#FFD700',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+});
