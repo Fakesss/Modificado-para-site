@@ -289,7 +289,7 @@ def calculate_streak(last_login: Optional[str], current_streak: int) -> tuple:
         else:
             # Streak broken, reset to 1
             return 1, today.isoformat()
-    except:
+    except Exception:
         return 1, today.isoformat()
 
 # ============== AUTH ROUTES ==============
