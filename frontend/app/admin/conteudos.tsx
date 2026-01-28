@@ -105,19 +105,20 @@ export default function AdminConteudos() {
 
   const handleDelete = async (conteudoId: string) => {
     Alert.alert(
-      'Confirmar exclusão',
-      'Deseja realmente excluir este conteúdo?',
+      'Mover para Lixeira',
+      'Deseja mover este conteúdo para a lixeira? Você terá 7 dias para restaurá-lo.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Excluir',
+          text: 'Mover',
           style: 'destructive',
           onPress: async () => {
             try {
               await api.deleteConteudo(conteudoId);
+              Alert.alert('Sucesso', 'Conteúdo movido para a lixeira');
               loadData();
             } catch (error) {
-              Alert.alert('Erro', 'Erro ao excluir conteúdo');
+              Alert.alert('Erro', 'Erro ao mover conteúdo');
             }
           },
         },
