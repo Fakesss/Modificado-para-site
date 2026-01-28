@@ -101,3 +101,176 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  Aplicativo "Ranking Matemática – Equipes" - Sistema de gamificação para estudos de matemática.
+  Fase atual: Implementação da funcionalidade de Lixeira (Soft Delete) para conteúdos e exercícios.
+  - Soft delete: mover itens para lixeira em vez de deletar permanentemente
+  - Restauração: permite restaurar itens da lixeira
+  - Exclusão automática: itens expiram após 7 dias na lixeira
+  - Modal de confirmação antes de qualquer exclusão
+
+backend:
+  - task: "Soft Delete - Conteudos"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implementado soft delete para conteúdos - campos is_deleted e deleted_at adicionados ao modelo"
+
+  - task: "Soft Delete - Exercicios"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implementado soft delete para exercícios - campos is_deleted e deleted_at adicionados ao modelo"
+
+  - task: "API Lixeira - Listar itens deletados"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Endpoint GET /api/admin/lixeira criado para listar itens na lixeira"
+
+  - task: "API Lixeira - Restaurar item"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Endpoint POST /api/admin/lixeira/{id}/restaurar criado"
+
+  - task: "API Lixeira - Deletar permanentemente"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Endpoint DELETE /api/admin/lixeira/{id} criado para exclusão permanente"
+
+  - task: "API Lixeira - Limpar itens expirados"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Endpoint POST /api/admin/lixeira/limpar-expirados criado para limpar itens com mais de 7 dias"
+
+frontend:
+  - task: "Tela Lixeira Admin"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/admin/lixeira.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Tela de lixeira criada com listagem, restauração e exclusão permanente"
+
+  - task: "Modal confirmação delete conteúdos"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/admin/conteudos.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Mensagem de confirmação atualizada para indicar soft delete"
+
+  - task: "Modal confirmação delete exercícios"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/admin/exercicios.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Mensagem de confirmação atualizada para indicar soft delete"
+
+  - task: "Botão Lixeira no menu admin"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/app/admin/index.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Botão de acesso à lixeira adicionado ao painel admin"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Soft Delete - Conteudos"
+    - "Soft Delete - Exercicios"
+    - "API Lixeira - Listar itens deletados"
+    - "API Lixeira - Restaurar item"
+    - "API Lixeira - Deletar permanentemente"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Implementei a funcionalidade completa de Lixeira (Soft Delete):
+      
+      BACKEND:
+      1. Modelos Conteudo e Exercicio agora têm campos is_deleted e deleted_at
+      2. DELETE /api/conteudos/{id} e DELETE /api/exercicios/{id} agora fazem soft delete
+      3. GET /api/conteudos e GET /api/exercicios filtram itens deletados
+      4. Novos endpoints da lixeira:
+         - GET /api/admin/lixeira - lista itens deletados
+         - POST /api/admin/lixeira/{id}/restaurar?tipo=CONTEUDO|EXERCICIO - restaura item
+         - DELETE /api/admin/lixeira/{id}?tipo=CONTEUDO|EXERCICIO - exclui permanentemente
+         - POST /api/admin/lixeira/limpar-expirados - limpa itens com mais de 7 dias
+      
+      FRONTEND:
+      1. Nova tela /admin/lixeira com listagem de itens deletados
+      2. Modal de confirmação antes de deletar ou restaurar
+      3. Indicador de dias restantes até exclusão automática
+      4. Botão de acesso à lixeira no menu principal do admin
+      
+      CREDENCIAIS PARA TESTE:
+      - Admin: danielprofessormatematica@gmail.com / Daniel123*
+      
+      Por favor, teste o backend primeiro com os endpoints da lixeira.
