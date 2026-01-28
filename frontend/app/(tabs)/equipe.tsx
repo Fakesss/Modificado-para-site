@@ -45,7 +45,7 @@ export default function EquipeScreen() {
         api.getRankingAlunosEquipe(user.equipeId),
       ]);
       
-      const userEquipe = equipesData.find((e: Equipe) => e.id === user.equipeId);
+      const userEquipe = equipesData.find((e: EquipeType) => e.id === user.equipeId);
       setEquipe(userEquipe || null);
       setAlunos(alunosData);
     } catch (error) {
