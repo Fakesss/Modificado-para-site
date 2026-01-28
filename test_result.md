@@ -113,75 +113,93 @@ user_problem_statement: |
 backend:
   - task: "Soft Delete - Conteudos"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implementado soft delete para conteúdos - campos is_deleted e deleted_at adicionados ao modelo"
+      - working: true
+        agent: "testing"
+        comment: "TESTADO E FUNCIONANDO: DELETE /api/conteudos/{id} faz soft delete corretamente, move item para lixeira com is_deleted=true e deleted_at timestamp. Conteúdos deletados são filtrados da listagem regular GET /api/conteudos."
 
   - task: "Soft Delete - Exercicios"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implementado soft delete para exercícios - campos is_deleted e deleted_at adicionados ao modelo"
+      - working: true
+        agent: "testing"
+        comment: "TESTADO E FUNCIONANDO: DELETE /api/exercicios/{id} faz soft delete corretamente, move item para lixeira com is_deleted=true e deleted_at timestamp. Exercícios deletados são filtrados da listagem regular GET /api/exercicios."
 
   - task: "API Lixeira - Listar itens deletados"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Endpoint GET /api/admin/lixeira criado para listar itens na lixeira"
+      - working: true
+        agent: "testing"
+        comment: "TESTADO E FUNCIONANDO: GET /api/admin/lixeira lista corretamente todos os itens soft-deleted (conteúdos e exercícios), mostra tipo, título, subtipo, data de exclusão e dias restantes até exclusão automática (7 dias)."
 
   - task: "API Lixeira - Restaurar item"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Endpoint POST /api/admin/lixeira/{id}/restaurar criado"
+      - working: true
+        agent: "testing"
+        comment: "TESTADO E FUNCIONANDO: POST /api/admin/lixeira/{id}/restaurar?tipo=CONTEUDO e ?tipo=EXERCICIO restauram itens corretamente, removendo is_deleted e deleted_at. Itens restaurados voltam para as listagens regulares."
 
   - task: "API Lixeira - Deletar permanentemente"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Endpoint DELETE /api/admin/lixeira/{id} criado para exclusão permanente"
+      - working: true
+        agent: "testing"
+        comment: "TESTADO E FUNCIONANDO: DELETE /api/admin/lixeira/{id}?tipo=CONTEUDO e ?tipo=EXERCICIO fazem exclusão permanente corretamente. Para conteúdos, remove progresso de vídeos relacionados. Para exercícios, remove questões e submissões relacionadas."
 
   - task: "API Lixeira - Limpar itens expirados"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Endpoint POST /api/admin/lixeira/limpar-expirados criado para limpar itens com mais de 7 dias"
+      - working: true
+        agent: "testing"
+        comment: "TESTADO E FUNCIONANDO: POST /api/admin/lixeira/limpar-expirados remove automaticamente itens que estão na lixeira há mais de 7 dias, retorna contagem de itens removidos (conteúdos e exercícios)."
 
 frontend:
   - task: "Tela Lixeira Admin"
