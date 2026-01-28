@@ -41,16 +41,18 @@ export default function NeonLine({ color, position = 'top' }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
+    position: 'relative',
     left: 0,
     right: 0,
     height: 3,
     zIndex: 1000,
+    width: '100%',
   },
   top: {
-    top: 0,
+    // removed position: absolute
   },
   bottom: {
+    position: 'absolute',
     bottom: 0,
   },
   glowOuter: {
