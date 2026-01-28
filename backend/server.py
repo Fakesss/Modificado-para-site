@@ -698,7 +698,7 @@ async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
 
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    query = {"ativo": True}
+    query = {"ativo": True, "is_deleted": {"$ne": True}}
     if turmaId:
         query["$or"] = [{"turmaId": turmaId}, {"turmaId": None}]
     
