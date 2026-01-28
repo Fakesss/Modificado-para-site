@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
-import { Equipe } from '../../src/types';
+import { Equipe as EquipeType } from '../../src/types';
 
 interface AlunoRanking {
   id: string;
@@ -27,9 +27,9 @@ interface BNCCAnalysis {
   facilidades: { habilidade: string; acertos: number }[];
 }
 
-export default function Equipe() {
+export default function EquipeScreen() {
   const { user } = useAuth();
-  const [equipe, setEquipe] = useState<Equipe | null>(null);
+  const [equipe, setEquipe] = useState<EquipeType | null>(null);
   const [alunos, setAlunos] = useState<AlunoRanking[]>([]);
   const [selectedAluno, setSelectedAluno] = useState<string | null>(null);
   const [bnccAnalysis, setBnccAnalysis] = useState<BNCCAnalysis | null>(null);
