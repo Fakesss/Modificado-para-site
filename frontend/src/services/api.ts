@@ -172,6 +172,12 @@ export const deleteUsuario = async (id: string) => {
   return response.data;
 };
 
+// Self update (for updating own turma/equipe)
+export const updateUsuarioSelf = async (data: any) => {
+  const response = await api.put('/auth/me', data);
+  return response.data;
+};
+
 // Admin - Reports
 export const getRelatorioGeral = async () => {
   const response = await api.get('/relatorios/geral');
