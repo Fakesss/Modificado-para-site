@@ -44,19 +44,20 @@ export default function AdminExercicios() {
 
   const handleDelete = async (exercicioId: string) => {
     Alert.alert(
-      'Confirmar exclusão',
-      'Deseja realmente excluir este exercício?',
+      'Mover para Lixeira',
+      'Deseja mover este exercício para a lixeira? Você terá 7 dias para restaurá-lo.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Excluir',
+          text: 'Mover',
           style: 'destructive',
           onPress: async () => {
             try {
               await api.deleteExercicio(exercicioId);
+              Alert.alert('Sucesso', 'Exercício movido para a lixeira');
               loadData();
             } catch (error) {
-              Alert.alert('Erro', 'Erro ao excluir exercício');
+              Alert.alert('Erro', 'Erro ao mover exercício');
             }
           },
         },
