@@ -459,35 +459,36 @@ async def get_ranking_geral():
 @api_router.get("/ranking/turma/{turma_id}")
 async def get_ranking_por_turma(turma_id: str):
     """Get ranking of teams filtered by turma"""
-    # Get users from this turma grouped by equipe
+    # Optimized query: Single aggregation pipeline with $lookup to join equipes
     pipeline = [
         {"$match": {"turmaId": turma_id, "ativo": True}},
         {"$group": {
             "_id": "$equipeId",
             "totalPontos": {"$sum": "$pontosTotais"}
-        }}
+        }},
+        {"$lookup": {
+            "from": "equipes",
+            "localField": "_id",
+            "foreignField": "id",
+            "as": "equipe"
+        }},
+        {"$unwind": "$equipe"},
+        {"$project": {
+            "id": "$equipe.id",
+            "nome": "$equipe.nome",
+            "cor": "$equipe.cor",
+            "pontosTotais": "$totalPontos"
+        }},
+        {"$sort": {"pontosTotais": -1}}
     ]
     
     results = await db.usuarios.aggregate(pipeline).to_list(100)
     
-    ranking = []
-    for r in results:
-        if r["_id"]:
-            equipe = await db.equipes.find_one({"id": r["_id"]})
-            if equipe:
-                ranking.append({
-                    "id": equipe["id"],
-                    "nome": equipe["nome"],
-                    "cor": equipe["cor"],
-                    "pontosTotais": r["totalPontos"]
-                })
-    
-    ranking.sort(key=lambda x: x["pontosTotais"], reverse=True)
-    
-    for i, r in enumerate(ranking):
+    # Add position
+    for i, r in enumerate(results):
         r["posicao"] = i + 1
     
-    return ranking
+    return results
 
 @api_router.get("/ranking/alunos/{equipe_id}")
 async def get_ranking_alunos_equipe(equipe_id: str, current_user: dict = Depends(get_current_user)):
