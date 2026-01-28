@@ -150,17 +150,21 @@ export default function TabsLayout() {
           />
         )}
       </Tabs>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0c0c0c',
+  },
   adminBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#1a1a2e',
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     gap: 8,
     borderBottomWidth: 1,
@@ -170,5 +174,10 @@ const styles = StyleSheet.create({
     color: '#FFD700',
     fontSize: 14,
     fontWeight: '600',
+  },
+  neonLine: {
+    height: 2,
+    width: '100%',
+    opacity: 0.6,
   },
 });
