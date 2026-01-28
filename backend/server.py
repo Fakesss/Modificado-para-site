@@ -545,8 +545,12 @@ async def update_usuario(user_id: str, update_data: UsuarioUpdate, current_user:
 
 @api_router.delete("/usuarios/{user_id}")
 async def delete_usuario(user_id: str, current_user: dict = Depends(require_admin)):
-    await db.usuarios.update_one({"id": user_id}, {"$set": {"ativo": False}})
-    return {"message": "Usuário desativado"}
+    # Prevent deleting yourself
+    if user_id == current_user["id"]:
+        raise HTTPException(status_code=400, detail="Não é possível excluir a si mesmo")
+    # Permanent delete
+    await db.usuarios.delete_one({"id": user_id})
+    return {"message": "Usuário excluído permanentemente"}
 
 # ============== CONTEUDO ROUTES ==============
 
