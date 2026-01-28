@@ -585,11 +585,12 @@ async def update_conteudo(conteudo_id: str, conteudo_data: dict, current_user: d
 
 @api_router.delete("/conteudos/{conteudo_id}")
 async def delete_conteudo(conteudo_id: str, current_user: dict = Depends(require_admin)):
-    # Also delete related progress
-    await db.progresso_video.delete_many({"conteudoId": conteudo_id})
-    # Permanent delete
-    await db.conteudos.delete_one({"id": conteudo_id})
-    return {"message": "Conteúdo excluído permanentemente"}
+    # Soft delete - move to trash
+    await db.conteudos.update_one(
+        {"id": conteudo_id},
+        {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}}
+    )
+    return {"message": "Conteúdo movido para a lixeira"}
 
 # ============== VIDEO PROGRESS ROUTES ==============
 
