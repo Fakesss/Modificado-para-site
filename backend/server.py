@@ -761,13 +761,12 @@ async def update_exercicio(exercicio_id: str, exercicio_data: dict, current_user
 
 @api_router.delete("/exercicios/{exercicio_id}")
 async def delete_exercicio(exercicio_id: str, current_user: dict = Depends(require_admin)):
-    # Delete related questions
-    await db.questoes.delete_many({"exercicioId": exercicio_id})
-    # Delete related submissions
-    await db.submissoes.delete_many({"exercicioId": exercicio_id})
-    # Permanent delete
-    await db.exercicios.delete_one({"id": exercicio_id})
-    return {"message": "Exercício excluído permanentemente"}
+    # Soft delete - move to trash
+    await db.exercicios.update_one(
+        {"id": exercicio_id},
+        {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}}
+    )
+    return {"message": "Exercício movido para a lixeira"}
 
 # ============== QUESTAO ROUTES ==============
 
