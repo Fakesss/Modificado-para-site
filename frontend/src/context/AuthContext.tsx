@@ -8,13 +8,14 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isPreviewMode: boolean;
-  login: (email: string, senha: string, turmaId?: string, equipeId?: string) => Promise<void>;
+  isAdminViewingAsStudent: boolean;
+  login: (email: string, senha: string) => Promise<void>;
   register: (nome: string, email: string, senha: string, turmaId?: string, equipeId?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   enterPreviewMode: () => void;
   exitPreviewMode: () => void;
-  updateUserTeamInfo: (turmaId: string, equipeId: string) => Promise<void>;
+  setAdminViewingAsStudent: (viewing: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
