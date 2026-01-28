@@ -353,6 +353,21 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     user_dict = {k: v for k, v in current_user.items() if k not in ['senha', '_id']}
     return user_dict
 
+@api_router.put("/auth/me")
+async def update_me(update_data: dict, current_user: dict = Depends(get_current_user)):
+    """Allow users to update their own turma and equipe"""
+    allowed_fields = ["turmaId", "equipeId"]
+    update_dict = {k: v for k, v in update_data.items() if k in allowed_fields}
+    
+    if update_dict:
+        await db.usuarios.update_one(
+            {"id": current_user["id"]},
+            {"$set": update_dict}
+        )
+    
+    usuario = await db.usuarios.find_one({"id": current_user["id"]})
+    return {k: v for k, v in usuario.items() if k not in ['senha', '_id']}
+
 # ============== TURMA ROUTES ==============
 
 @api_router.get("/turmas")
