@@ -425,34 +425,36 @@ async def update_equipe(equipe_id: str, equipe_data: dict, current_user: dict = 
 @api_router.get("/ranking/geral")
 async def get_ranking_geral():
     """Get general ranking of all teams"""
-    equipes = await db.equipes.find().to_list(100)
+    # Optimized query: Single aggregation pipeline with $lookup to join equipes
+    pipeline = [
+        {"$match": {"ativo": True}},
+        {"$group": {
+            "_id": "$equipeId",
+            "totalPontos": {"$sum": "$pontosTotais"}
+        }},
+        {"$lookup": {
+            "from": "equipes",
+            "localField": "_id",
+            "foreignField": "id",
+            "as": "equipe"
+        }},
+        {"$unwind": "$equipe"},
+        {"$project": {
+            "id": "$equipe.id",
+            "nome": "$equipe.nome",
+            "cor": "$equipe.cor",
+            "pontosTotais": "$totalPontos"
+        }},
+        {"$sort": {"pontosTotais": -1}}
+    ]
     
-    # Calculate total points for each team
-    ranking = []
-    for equipe in equipes:
-        # Sum points from all users in this team
-        pipeline = [
-            {"$match": {"equipeId": equipe["id"], "ativo": True}},
-            {"$group": {"_id": None, "totalPontos": {"$sum": "$pontosTotais"}}}
-        ]
-        result = await db.usuarios.aggregate(pipeline).to_list(1)
-        total_pontos = result[0]["totalPontos"] if result else 0
-        
-        ranking.append({
-            "id": equipe["id"],
-            "nome": equipe["nome"],
-            "cor": equipe["cor"],
-            "pontosTotais": total_pontos
-        })
-    
-    # Sort by points descending
-    ranking.sort(key=lambda x: x["pontosTotais"], reverse=True)
+    results = await db.usuarios.aggregate(pipeline).to_list(100)
     
     # Add position
-    for i, r in enumerate(ranking):
+    for i, r in enumerate(results):
         r["posicao"] = i + 1
     
-    return ranking
+    return results
 
 @api_router.get("/ranking/turma/{turma_id}")
 async def get_ranking_por_turma(turma_id: str):
