@@ -8,14 +8,20 @@ interface Props {
   loading?: boolean;
 }
 
+// Placeholder for empty positions
+const EMPTY_ITEM = { id: 'empty', nome: '-', cor: '#333', pontosTotais: 0, posicao: 0 };
+
 export default function RankingHeader({ ranking, loading }: Props) {
-  // Sort by position and take top 3
-  const sortedRanking = [...ranking].sort((a, b) => a.posicao - b.posicao).slice(0, 3);
+  // Sort by position
+  const sortedRanking = [...ranking].sort((a, b) => a.posicao - b.posicao);
   
-  // Reorder for display: 2nd, 1st, 3rd
-  const displayOrder = sortedRanking.length >= 3 
-    ? [sortedRanking[1], sortedRanking[0], sortedRanking[2]]
-    : sortedRanking;
+  // Get first 3 or use placeholders
+  const first = sortedRanking[0] || { ...EMPTY_ITEM, posicao: 1 };
+  const second = sortedRanking[1] || { ...EMPTY_ITEM, posicao: 2 };
+  const third = sortedRanking[2] || { ...EMPTY_ITEM, posicao: 3 };
+  
+  // Display order: 2nd, 1st, 3rd
+  const displayOrder = [second, first, third];
 
   if (loading) {
     return (
@@ -30,11 +36,12 @@ export default function RankingHeader({ ranking, loading }: Props) {
       <Text style={styles.title}>Ranking das Equipes</Text>
       <View style={styles.podiumContainer}>
         {displayOrder.map((item, index) => {
-          const isFirst = item?.posicao === 1;
-          const podiumHeight = isFirst ? 100 : item?.posicao === 2 ? 80 : 60;
+          const isFirst = item.posicao === 1;
+          const isEmpty = item.id === 'empty';
+          const podiumHeight = isFirst ? 100 : item.posicao === 2 ? 80 : 60;
           
-          return item ? (
-            <View key={item.id} style={styles.podiumItem}>
+          return (
+            <View key={`${item.id}-${index}`} style={styles.podiumItem}>
               <View style={[styles.badge, { backgroundColor: item.cor }]}>
                 <Text style={styles.badgeText}>{item.nome}</Text>
               </View>
@@ -43,16 +50,16 @@ export default function RankingHeader({ ranking, loading }: Props) {
                   <Text style={styles.positionText}>{item.posicao}º</Text>
                 </View>
                 <Ionicons 
-                  name={isFirst ? 'trophy' : 'medal'} 
+                  name={isEmpty ? (isFirst ? 'trophy-outline' : 'medal-outline') : (isFirst ? 'trophy' : 'medal')} 
                   size={isFirst ? 32 : 24} 
-                  color={item.cor} 
+                  color={isEmpty ? '#555' : item.cor} 
                 />
-                <Text style={[styles.points, { color: item.cor }]}>
-                  {item.pontosTotais} pts
+                <Text style={[styles.points, { color: isEmpty ? '#555' : item.cor }]}>
+                  {isEmpty ? '- pts' : `${item.pontosTotais} pts`}
                 </Text>
               </View>
             </View>
-          ) : null;
+          );
         })}
       </View>
     </View>
