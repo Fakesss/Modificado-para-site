@@ -7,7 +7,6 @@ import {
   TextInput,
   Animated,
   Alert,
-  ScrollView,
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +15,11 @@ import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 
 const { width, height } = Dimensions.get('window');
+const GAME_AREA_HEIGHT = height * 0.55;
+const MAX_OPERACOES = 3;
+const VELOCIDADE_BASE = 15000; // 15 segundos para cair
+const SPAWN_INTERVAL = 4000; // 4 segundos entre spawns
+const QUESTAO_ESPECIAL_CHANCE = 0.15; // 15% de chance
 
 interface Operacao {
   id: string;
@@ -25,20 +29,9 @@ interface Operacao {
   resposta: number;
   y: Animated.Value;
   speed: number;
+  posX: number;
+  especial: boolean;
 }
-
-interface PowerUp {
-  id: string;
-  tipo: 'eliminar' | 'congelar' | 'escudo';
-  icone: string;
-  nome: string;
-}
-
-const POWER_UPS: PowerUp[] = [
-  { id: 'eliminar', tipo: 'eliminar', icone: 'close-circle', nome: 'Eliminar 1' },
-  { id: 'congelar', tipo: 'congelar', icone: 'snow', nome: 'Congelar 2s' },
-  { id: 'escudo', tipo: 'escudo', icone: 'shield', nome: 'Escudo' },
-];
 
 export default function Jogo() {
   const { user } = useAuth();
@@ -53,41 +46,58 @@ export default function Jogo() {
   const [resposta, setResposta] = useState('');
   const [dificuldade, setDificuldade] = useState(1);
   const [velocidade, setVelocidade] = useState(1);
-  const [congelado, setCongelado] = useState(false);
-  const [temEscudo, setTemEscudo] = useState(false);
   const [acertos, setAcertos] = useState(0);
   const [erros, setErros] = useState(0);
+  const [errosConsecutivos, setErrosConsecutivos] = useState(0);
   const [tempoRespostas, setTempoRespostas] = useState<number[]>([]);
+  const [pausado, setPausado] = useState(false);
   
-  // Power-ups
-  const [powerUpsDisponiveis, setPowerUpsDisponiveis] = useState({
-    eliminar: 2,
-    congelar: 1,
-    escudo: 1,
-  });
+  // Power-up único
+  const [powerUpDisponivel, setPowerUpDisponivel] = useState(false);
+  const [powerUpTipo, setPowerUpTipo] = useState<'eliminar' | null>(null);
   
   // Recordes
   const [recordeSingle, setRecordeSingle] = useState(0);
   const [recordeMulti, setRecordeMulti] = useState(0);
   
+  // Refs
   const gameLoop = useRef<any>(null);
+  const spawnTimer = useRef<any>(null);
   const inputRef = useRef<TextInput>(null);
   const inicioResposta = useRef<number>(Date.now());
+  const posXUsadas = useRef<number[]>([]);
+  const assistenciaTimer = useRef<any>(null);
 
   useEffect(() => {
     carregarRecordes();
   }, []);
 
   useEffect(() => {
-    if (tela === 'jogo') {
+    if (tela === 'jogo' && !pausado) {
       iniciarJogo();
       return () => {
-        if (gameLoop.current) {
-          clearInterval(gameLoop.current);
-        }
+        limparTimers();
       };
     }
-  }, [tela]);
+  }, [tela, pausado]);
+
+  useEffect(() => {
+    if (tela === 'jogo' && !pausado) {
+      inputRef.current?.focus();
+      iniciarAssistenciaInteligente();
+    }
+    return () => {
+      if (assistenciaTimer.current) {
+        clearInterval(assistenciaTimer.current);
+      }
+    };
+  }, [tela, pausado, operacoes, errosConsecutivos]);
+
+  const limparTimers = () => {
+    if (gameLoop.current) clearInterval(gameLoop.current);
+    if (spawnTimer.current) clearInterval(spawnTimer.current);
+    if (assistenciaTimer.current) clearInterval(assistenciaTimer.current);
+  };
 
   const carregarRecordes = async () => {
     try {
@@ -99,16 +109,37 @@ export default function Jogo() {
     }
   };
 
+  const gerarPosicaoX = (): number => {
+    const padding = 20;
+    const cardWidth = 150;
+    const maxPos = width - cardWidth - padding;
+    let tentativas = 0;
+    let posX: number;
+    
+    do {
+      posX = padding + Math.random() * (maxPos - padding);
+      tentativas++;
+      if (tentativas > 10) break; // Evitar loop infinito
+    } while (posXUsadas.current.some(usado => Math.abs(usado - posX) < cardWidth + 10));
+    
+    posXUsadas.current.push(posX);
+    if (posXUsadas.current.length > 5) {
+      posXUsadas.current.shift();
+    }
+    
+    return posX;
+  };
+
   const gerarOperacao = (): Operacao => {
     const operadores: Array<'+' | '-' | '×' | '÷'> = ['+', '-', '×', '÷'];
     const operador = operadores[Math.floor(Math.random() * operadores.length)];
+    const especial = Math.random() < QUESTAO_ESPECIAL_CHANCE;
     
     let num1: number;
     let num2: number;
     let resposta: number;
     
-    // Gerar números baseado na dificuldade
-    const maxNum = Math.min(5 + dificuldade * 5, 100);
+    const maxNum = Math.min(10 + dificuldade * 3, 50);
     
     switch (operador) {
       case '+':
@@ -140,95 +171,125 @@ export default function Jogo() {
       operador,
       resposta,
       y: new Animated.Value(-100),
-      speed: 0.5 + velocidade * 0.3,
+      speed: VELOCIDADE_BASE / (1 + velocidade * 0.2),
+      posX: gerarPosicaoX(),
+      especial,
     };
   };
 
   const iniciarJogo = () => {
+    if (operacoes.length > 0) return; // Já iniciado
+    
     setVidas(10);
     setPontos(0);
     setRodada(1);
     setAcertos(0);
     setErros(0);
+    setErrosConsecutivos(0);
     setTempoRespostas([]);
     setDificuldade(1);
     setVelocidade(1);
-    setPowerUpsDisponiveis({ eliminar: 2, congelar: 1, escudo: 1 });
-    setTemEscudo(false);
-    setCongelado(false);
+    setPowerUpDisponivel(false);
+    setPowerUpTipo(null);
+    posXUsadas.current = [];
     
-    // Criar operações iniciais
-    const ops = Array.from({ length: 3 }, () => gerarOperacao());
-    setOperacoes(ops);
+    // Spawnar primeira operação
+    const primeiraOp = gerarOperacao();
+    setOperacoes([primeiraOp]);
+    animarQueda(primeiraOp);
     
-    // Animar operações
-    ops.forEach((op) => {
-      Animated.timing(op.y, {
-        toValue: height,
-        duration: 8000 / op.speed,
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) {
-          // Operação saiu da tela sem resposta
-          perderVida(op.id);
+    // Loop de spawn
+    spawnTimer.current = setInterval(() => {
+      setOperacoes((ops) => {
+        if (ops.length < MAX_OPERACOES) {
+          const novaOp = gerarOperacao();
+          animarQueda(novaOp);
+          return [...ops, novaOp];
         }
+        return ops;
       });
-    });
-    
-    // Loop para adicionar novas operações
-    gameLoop.current = setInterval(() => {
-      if (!congelado) {
-        setOperacoes((ops) => {
-          if (ops.length < 5) {
-            const novaOp = gerarOperacao();
-            Animated.timing(novaOp.y, {
-              toValue: height,
-              duration: 8000 / novaOp.speed,
-              useNativeDriver: true,
-            }).start(({ finished }) => {
-              if (finished) {
-                perderVida(novaOp.id);
-              }
-            });
-            return [...ops, novaOp];
-          }
-          return ops;
-        });
-      }
-    }, 3000);
+    }, SPAWN_INTERVAL);
     
     inicioResposta.current = Date.now();
   };
 
+  const animarQueda = (op: Operacao) => {
+    Animated.timing(op.y, {
+      toValue: GAME_AREA_HEIGHT + 100,
+      duration: op.speed,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        perderVida(op.id);
+      }
+    });
+  };
+
+  const iniciarAssistenciaInteligente = () => {
+    if (assistenciaTimer.current) clearInterval(assistenciaTimer.current);
+    
+    assistenciaTimer.current = setInterval(() => {
+      // Verificar se precisa usar power-up automaticamente
+      if (powerUpDisponivel && powerUpTipo) {
+        const tempoDecorrido = Date.now() - inicioResposta.current;
+        const muitasOperacoes = operacoes.length >= MAX_OPERACOES;
+        const demorando = tempoDecorrido > 8000;
+        const errandoMuito = errosConsecutivos >= 2;
+        
+        if (muitasOperacoes || demorando || errandoMuito) {
+          usarPowerUpAutomatico();
+        }
+      }
+    }, 2000);
+  };
+
+  const usarPowerUpAutomatico = () => {
+    if (!powerUpDisponivel || !powerUpTipo) return;
+    
+    if (powerUpTipo === 'eliminar' && operacoes.length > 0) {
+      // Eliminar a operação mais próxima do fim (maior y)
+      const opMaisProxima = operacoes.reduce((prev, curr) => {
+        const prevY = (prev.y as any)._value || 0;
+        const currY = (curr.y as any)._value || 0;
+        return currY > prevY ? curr : prev;
+      });
+      
+      setOperacoes((ops) => ops.filter((op) => op.id !== opMaisProxima.id));
+      setPowerUpDisponivel(false);
+      setPowerUpTipo(null);
+      
+      Alert.alert('💥 Power-Up!', 'Uma operação foi eliminada automaticamente!');
+    }
+  };
+
   const verificarResposta = () => {
     const respostaNum = parseInt(resposta);
-    if (isNaN(respostaNum)) return;
+    if (isNaN(respostaNum) || resposta === '') return;
     
     const tempoResposta = Date.now() - inicioResposta.current;
-    
     const operacaoCorreta = operacoes.find((op) => op.resposta === respostaNum);
     
     if (operacaoCorreta) {
       // ACERTOU!
-      const bonus = tempoResposta < 3000 ? 20 : 10;
+      const bonus = tempoResposta < 3000 ? 20 : 0;
       setPontos((p) => p + 10 + bonus);
       setAcertos((a) => a + 1);
+      setErrosConsecutivos(0);
       setTempoRespostas((t) => [...t, tempoResposta]);
       
-      // Remover operação
-      setOperacoes((ops) => ops.filter((op) => op.id !== operacaoCorreta.id));
+      // Ganhar power-up se for questão especial
+      if (operacaoCorreta.especial && !powerUpDisponivel) {
+        setPowerUpDisponivel(true);
+        setPowerUpTipo('eliminar');
+        Alert.alert('⭐ Questão Especial!', 'Power-up obtido! Será usado automaticamente quando necessário.');
+      }
       
-      // Feedback visual
-      Alert.alert('✓', `+${10 + bonus} pontos!`, [{ text: 'OK' }], { cancelable: true });
+      setOperacoes((ops) => ops.filter((op) => op.id !== operacaoCorreta.id));
     } else {
       // ERROU!
       setErros((e) => e + 1);
-      if (temEscudo) {
-        setTemEscudo(false);
-        Alert.alert('🛡️', 'Escudo usado! Vida preservada.');
-      } else {
-        perderVida();
-      }
+      setErrosConsecutivos((e) => e + 1);
+      perderVida();
     }
     
     setResposta('');
@@ -237,14 +298,6 @@ export default function Jogo() {
   };
 
   const perderVida = (operacaoId?: string) => {
-    if (temEscudo) {
-      setTemEscudo(false);
-      if (operacaoId) {
-        setOperacoes((ops) => ops.filter((op) => op.id !== operacaoId));
-      }
-      return;
-    }
-    
     setVidas((v) => {
       const novasVidas = v - 1;
       if (novasVidas <= 0) {
@@ -252,44 +305,17 @@ export default function Jogo() {
       }
       return novasVidas;
     });
-    setPontos((p) => Math.max(0, p - 5)); // Penalidade
+    setPontos((p) => Math.max(0, p - 5));
     
     if (operacaoId) {
       setOperacoes((ops) => ops.filter((op) => op.id !== operacaoId));
     }
   };
 
-  const usarPowerUp = (tipo: 'eliminar' | 'congelar' | 'escudo') => {
-    if (powerUpsDisponiveis[tipo] <= 0) return;
-    
-    setPowerUpsDisponiveis((p) => ({ ...p, [tipo]: p[tipo] - 1 }));
-    
-    switch (tipo) {
-      case 'eliminar':
-        if (operacoes.length > 0) {
-          const opRemover = operacoes[0];
-          setOperacoes((ops) => ops.filter((op) => op.id !== opRemover.id));
-          Alert.alert('💥', 'Uma operação foi eliminada!');
-        }
-        break;
-      case 'congelar':
-        setCongelado(true);
-        setTimeout(() => setCongelado(false), 2000);
-        Alert.alert('❄️', 'Congelado por 2 segundos!');
-        break;
-      case 'escudo':
-        setTemEscudo(true);
-        Alert.alert('🛡️', 'Escudo ativado! Próximo erro não conta.');
-        break;
-    }
-  };
-
   const finalizarJogo = async () => {
-    if (gameLoop.current) {
-      clearInterval(gameLoop.current);
-    }
+    limparTimers();
+    setOperacoes([]);
     
-    // Atualizar recorde
     let novoRecorde = false;
     if (modo === 'single' && pontos > recordeSingle) {
       setRecordeSingle(pontos);
@@ -299,7 +325,6 @@ export default function Jogo() {
       novoRecorde = true;
     }
     
-    // Salvar recorde no backend
     try {
       await api.salvarRecordeJogo(modo === 'single' ? 'singleplayer' : 'multiplayer', pontos);
     } catch (error) {
@@ -313,29 +338,14 @@ export default function Jogo() {
     }
   };
 
-  const ajustarDificuldade = () => {
-    const taxaAcerto = acertos / (acertos + erros || 1);
-    const tempoMedio = tempoRespostas.reduce((a, b) => a + b, 0) / (tempoRespostas.length || 1);
-    
-    if (modo === 'single') {
-      // Singleplayer: ajuste adaptativo
-      if (taxaAcerto > 0.8 && tempoMedio < 4000) {
-        setDificuldade((d) => Math.min(d + 0.5, 10));
-        setVelocidade((v) => Math.min(v + 0.2, 3));
-      } else if (taxaAcerto < 0.5 || tempoMedio > 8000) {
-        setDificuldade((d) => Math.max(d - 0.3, 1));
-        setVelocidade((v) => Math.max(v - 0.1, 1));
-      }
+  const pressionarTecla = (tecla: string) => {
+    if (tecla === 'enviar') {
+      verificarResposta();
+    } else if (tecla === 'apagar') {
+      setResposta((r) => r.slice(0, -1));
     } else {
-      // Multiplayer: progressão fixa
-      setDificuldade((d) => Math.min(d + 0.3, 10));
-      setVelocidade((v) => Math.min(v + 0.15, 3));
+      setResposta((r) => r + tecla);
     }
-    
-    setRodada((r) => r + 1);
-    setAcertos(0);
-    setErros(0);
-    setTempoRespostas([]);
   };
 
   if (tela === 'menu') {
@@ -361,39 +371,20 @@ export default function Jogo() {
             </View>
           </View>
 
-          <View style={styles.modoContainer}>
-            <TouchableOpacity
-              style={[styles.modoButton, modo === 'single' && styles.modoButtonActive]}
-              onPress={() => setModo('single')}
-            >
-              <Ionicons name="person" size={32} color={modo === 'single' ? '#000' : '#fff'} />
-              <Text style={[styles.modoText, modo === 'single' && { color: '#000' }]}>Solo</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.modoButton, styles.modoButtonDisabled]}
-              disabled
-            >
-              <Ionicons name="people" size={32} color="#666" />
-              <Text style={[styles.modoText, { color: '#666' }]}>Multiplayer</Text>
-              <Text style={styles.emBreveText}>Em breve</Text>
-            </TouchableOpacity>
-          </View>
-
           <TouchableOpacity
             style={styles.iniciarButton}
             onPress={() => setTela('jogo')}
           >
             <Ionicons name="play" size={24} color="#000" />
-            <Text style={styles.iniciarButtonText}>Iniciar Jogo</Text>
+            <Text style={styles.iniciarButtonText}>Iniciar Jogo Solo</Text>
           </TouchableOpacity>
 
           <View style={styles.instrucoes}>
             <Text style={styles.instrucoesTitle}>Como Jogar:</Text>
             <Text style={styles.instrucoesText}>• Resolva as operações que caem</Text>
-            <Text style={styles.instrucoesText}>• Digite a resposta e confirme</Text>
-            <Text style={styles.instrucoesText}>• Use power-ups para ajudar</Text>
-            <Text style={styles.instrucoesText}>• Não deixe cair ou erre demais!</Text>
+            <Text style={styles.instrucoesText}>• Use o teclado na tela para responder</Text>
+            <Text style={styles.instrucoesText}>• Questões especiais ⭐ dão power-ups</Text>
+            <Text style={styles.instrucoesText}>• Power-ups são usados automaticamente</Text>
           </View>
         </View>
       </SafeAreaView>
@@ -456,10 +447,6 @@ export default function Jogo() {
       <View style={styles.gameHeader}>
         <View style={styles.gameStats}>
           <View style={styles.statItem}>
-            <Ionicons name="heart" size={20} color="#FF4444" />
-            <Text style={styles.statText}>{vidas}</Text>
-          </View>
-          <View style={styles.statItem}>
             <Ionicons name="star" size={20} color="#FFD700" />
             <Text style={styles.statText}>{pontos}</Text>
           </View>
@@ -468,27 +455,52 @@ export default function Jogo() {
             <Text style={styles.statText}>R{rodada}</Text>
           </View>
         </View>
+        
+        {/* Power-up indicator */}
+        {powerUpDisponivel && (
+          <View style={styles.powerUpIndicator}>
+            <Ionicons name="flash" size={16} color="#FFD700" />
+          </View>
+        )}
+        
         <TouchableOpacity onPress={() => {
-          if (gameLoop.current) clearInterval(gameLoop.current);
+          limparTimers();
           setTela('menu');
         }}>
           <Ionicons name="close" size={28} color="#fff" />
         </TouchableOpacity>
       </View>
 
+      {/* Vidas - discreto */}
+      <View style={styles.vidasContainer}>
+        {Array.from({ length: 10 }).map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.vidaMarca,
+              i < vidas ? styles.vidaAtiva : styles.vidaInativa,
+            ]}
+          />
+        ))}
+      </View>
+
       {/* Área de jogo */}
-      <View style={styles.gameArea}>
+      <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
         {operacoes.map((op) => (
           <Animated.View
             key={op.id}
             style={[
               styles.operacaoCard,
+              op.especial && styles.operacaoEspecial,
               {
                 transform: [{ translateY: op.y }],
-                left: Math.random() * (width - 150),
+                left: op.posX,
               },
             ]}
           >
+            {op.especial && (
+              <Ionicons name="star" size={16} color="#FFD700" style={styles.estrelaEspecial} />
+            )}
             <Text style={styles.operacaoText}>
               {op.num1} {op.operador} {op.num2} = ?
             </Text>
@@ -496,41 +508,78 @@ export default function Jogo() {
         ))}
       </View>
 
-      {/* Power-ups */}
-      <View style={styles.powerUpsContainer}>
-        {POWER_UPS.map((pu) => (
-          <TouchableOpacity
-            key={pu.id}
-            style={[
-              styles.powerUpButton,
-              powerUpsDisponiveis[pu.tipo] <= 0 && styles.powerUpButtonDisabled,
-            ]}
-            onPress={() => usarPowerUp(pu.tipo)}
-            disabled={powerUpsDisponiveis[pu.tipo] <= 0}
-          >
-            <Ionicons name={pu.icone as any} size={24} color="#fff" />
-            <Text style={styles.powerUpCount}>{powerUpsDisponiveis[pu.tipo]}</Text>
-          </TouchableOpacity>
-        ))}
+      {/* Display de resposta */}
+      <View style={styles.displayContainer}>
+        <Text style={styles.displayText}>{resposta || '0'}</Text>
       </View>
 
-      {/* Input de resposta */}
-      <View style={styles.inputContainer}>
-        <TextInput
-          ref={inputRef}
-          style={styles.input}
-          value={resposta}
-          onChangeText={setResposta}
-          keyboardType="numeric"
-          placeholder="Digite a resposta"
-          placeholderTextColor="#666"
-          autoFocus
-          onSubmitEditing={verificarResposta}
-        />
-        <TouchableOpacity style={styles.enviarButton} onPress={verificarResposta}>
-          <Ionicons name="arrow-forward" size={24} color="#000" />
-        </TouchableOpacity>
+      {/* Teclado numérico */}
+      <View style={styles.tecladoContainer}>
+        <View style={styles.tecladoRow}>
+          {['7', '8', '9'].map((num) => (
+            <TouchableOpacity
+              key={num}
+              style={styles.tecla}
+              onPress={() => pressionarTecla(num)}
+            >
+              <Text style={styles.teclaText}>{num}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.tecladoRow}>
+          {['4', '5', '6'].map((num) => (
+            <TouchableOpacity
+              key={num}
+              style={styles.tecla}
+              onPress={() => pressionarTecla(num)}
+            >
+              <Text style={styles.teclaText}>{num}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.tecladoRow}>
+          {['1', '2', '3'].map((num) => (
+            <TouchableOpacity
+              key={num}
+              style={styles.tecla}
+              onPress={() => pressionarTecla(num)}
+            >
+              <Text style={styles.teclaText}>{num}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.tecladoRow}>
+          <TouchableOpacity
+            style={[styles.tecla, styles.teclaApagar]}
+            onPress={() => pressionarTecla('apagar')}
+          >
+            <Ionicons name="backspace" size={24} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.tecla}
+            onPress={() => pressionarTecla('0')}
+          >
+            <Text style={styles.teclaText}>0</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tecla, styles.teclaEnviar]}
+            onPress={() => pressionarTecla('enviar')}
+          >
+            <Ionicons name="checkmark" size={28} color="#000" />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Input invisível para teclado físico */}
+      <TextInput
+        ref={inputRef}
+        style={styles.hiddenInput}
+        value={resposta}
+        onChangeText={setResposta}
+        keyboardType="numeric"
+        autoFocus
+        onSubmitEditing={verificarResposta}
+      />
     </SafeAreaView>
   );
 }
@@ -583,35 +632,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 4,
   },
-  modoContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 30,
-  },
-  modoButton: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-    padding: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  modoButtonActive: {
-    backgroundColor: '#FFD700',
-  },
-  modoButtonDisabled: {
-    opacity: 0.5,
-  },
-  modoText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 8,
-  },
-  emBreveText: {
-    color: '#666',
-    fontSize: 12,
-    marginTop: 4,
-  },
   iniciarButton: {
     flexDirection: 'row',
     backgroundColor: '#32CD32',
@@ -648,6 +668,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
+    paddingBottom: 8,
   },
   gameStats: {
     flexDirection: 'row',
@@ -663,9 +684,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  powerUpIndicator: {
+    backgroundColor: '#FFD700' + '30',
+    padding: 8,
+    borderRadius: 8,
+  },
+  vidasContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  vidaMarca: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  vidaAtiva: {
+    backgroundColor: '#FF4444',
+  },
+  vidaInativa: {
+    backgroundColor: '#333',
+  },
   gameArea: {
-    flex: 1,
     position: 'relative',
+    backgroundColor: '#0a0a0a',
   },
   operacaoCard: {
     position: 'absolute',
@@ -674,55 +718,67 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     minWidth: 150,
   },
+  operacaoEspecial: {
+    backgroundColor: '#FFD700',
+    borderWidth: 2,
+    borderColor: '#FFF',
+  },
+  estrelaEspecial: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+  },
   operacaoText: {
     color: '#fff',
     fontSize: 20,
     fontWeight: 'bold',
     textAlign: 'center',
   },
-  powerUpsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 12,
-    padding: 16,
-  },
-  powerUpButton: {
+  displayContainer: {
     backgroundColor: '#1a1a2e',
-    padding: 12,
+    padding: 16,
+    marginHorizontal: 16,
+    marginVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
-    minWidth: 60,
   },
-  powerUpButtonDisabled: {
-    opacity: 0.3,
-  },
-  powerUpCount: {
-    color: '#FFD700',
-    fontSize: 14,
+  displayText: {
+    color: '#fff',
+    fontSize: 32,
     fontWeight: 'bold',
-    marginTop: 4,
   },
-  inputContainer: {
-    flexDirection: 'row',
+  tecladoContainer: {
     padding: 16,
-    gap: 12,
+    gap: 8,
   },
-  input: {
-    flex: 1,
+  tecladoRow: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  tecla: {
     backgroundColor: '#1a1a2e',
+    width: 70,
+    height: 60,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  teclaText: {
     color: '#fff',
     fontSize: 24,
     fontWeight: 'bold',
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    textAlign: 'center',
   },
-  enviarButton: {
+  teclaApagar: {
+    backgroundColor: '#E74C3C',
+  },
+  teclaEnviar: {
     backgroundColor: '#32CD32',
-    width: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 12,
+  },
+  hiddenInput: {
+    position: 'absolute',
+    left: -9999,
+    opacity: 0,
   },
   resultadoContainer: {
     flex: 1,
