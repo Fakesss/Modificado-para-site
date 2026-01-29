@@ -475,7 +475,6 @@ export default function Jogo() {
     
     setResposta('');
     inicioResposta.current = Date.now();
-    inputRef.current?.focus();
   };
 
   const iniciarAssistenciaInteligente = () => {
