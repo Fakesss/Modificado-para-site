@@ -509,6 +509,73 @@ export default function Jogo() {
     mostrarMensagem(`💥 Power-up: ${operacoesVisiveis.length} operações eliminadas!`, 1500);
   };
 
+  const pausarJogo = () => {
+    // Pausar todas as animações das operações
+    operacoes.forEach(op => {
+      op.y.stopAnimation();
+    });
+    limparTimers();
+    setPausado(true);
+    setModalPausaVisivel(true);
+  };
+
+  const continuarJogo = () => {
+    setPausado(false);
+    setModalPausaVisivel(false);
+    
+    // Reiniciar animações das operações existentes
+    operacoes.forEach(op => {
+      const currentY = (op.y as any)._value || 0;
+      const remainingDistance = GAME_AREA_HEIGHT + 100 - currentY;
+      const remainingTime = (remainingDistance / (GAME_AREA_HEIGHT + 200)) * op.speed;
+      
+      Animated.timing(op.y, {
+        toValue: GAME_AREA_HEIGHT + 100,
+        duration: remainingTime,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) perderVida(op.id);
+      });
+    });
+    
+    // Reiniciar spawn timer
+    spawnTimer.current = setInterval(() => {
+      setOperacoes((ops) => {
+        if (ops.length < MAX_OPERACOES) {
+          const novaOp = gerarOperacao();
+          animarQueda(novaOp);
+          return [...ops, novaOp];
+        }
+        return ops;
+      });
+    }, SPAWN_INTERVAL);
+    
+    inicioResposta.current = Date.now();
+    inputRef.current?.focus();
+  };
+
+  const sairDoJogo = () => {
+    limparTimers();
+    setOperacoes([]);
+    setVidas(10);
+    setPontos(0);
+    setRodada(1);
+    setAcertosRodada(0);
+    setMetaRodada(10);
+    setAcertos(0);
+    setErros(0);
+    setErrosConsecutivos(0);
+    setTempoRespostas([]);
+    setDificuldade(1);
+    setVelocidade(1);
+    setPowerUpDisponivel(false);
+    setPowerUpTipo(null);
+    setPausado(false);
+    setModalPausaVisivel(false);
+    posXUsadas.current = [];
+    setTela('menu');
+  };
+
   const perderVida = (operacaoId?: string) => {
     setVidas((v) => {
       const novasVidas = v - 1;
