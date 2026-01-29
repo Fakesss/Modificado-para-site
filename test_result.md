@@ -201,6 +201,36 @@ backend:
         agent: "testing"
         comment: "TESTADO E FUNCIONANDO: POST /api/admin/lixeira/limpar-expirados remove automaticamente itens que estão na lixeira há mais de 7 dias, retorna contagem de itens removidos (conteúdos e exercícios)."
 
+  - task: "Otimização Ranking Geral - N+1 Query Fix"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Otimizado GET /api/ranking/geral com agregação MongoDB $lookup para eliminar N+1 queries"
+      - working: true
+        agent: "testing"
+        comment: "TESTADO E FUNCIONANDO: GET /api/ranking/geral retorna ranking de todas as equipes com estrutura correta (id, nome, cor, pontosTotais, posicao), ordenado por pontosTotais decrescente. Agregação otimizada funcionando corretamente."
+
+  - task: "Otimização Ranking por Turma - N+1 Query Fix"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Otimizado GET /api/ranking/turma/{turma_id} com agregação MongoDB $lookup para eliminar N+1 queries"
+      - working: true
+        agent: "testing"
+        comment: "TESTADO E FUNCIONANDO: GET /api/ranking/turma/{turma_id} retorna ranking de equipes filtrado por turma com estrutura correta (id, nome, cor, pontosTotais, posicao), ordenado por pontosTotais decrescente. Testado para todas as 4 turmas (6º, 7º, 8º, 9º Ano). Agregação otimizada funcionando corretamente."
+
 frontend:
   - task: "Tela Lixeira Admin"
     implemented: true
