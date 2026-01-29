@@ -73,8 +73,10 @@ export default function Jogo() {
   const [powerUpTipo, setPowerUpTipo] = useState<'eliminar' | null>(null);
   const [recordeSingle, setRecordeSingle] = useState(0);
   const [recordeMulti, setRecordeMulti] = useState(0);
+  const [modalPausaVisivel, setModalPausaVisivel] = useState(false);
   
   const gameLoop = useRef<any>(null);
+  const appStateRef = useRef(AppState.currentState);
   const spawnTimer = useRef<any>(null);
   const inputRef = useRef<TextInput>(null);
   const inicioResposta = useRef<number>(Date.now());
