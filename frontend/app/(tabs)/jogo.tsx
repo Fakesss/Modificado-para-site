@@ -882,6 +882,62 @@ export default function Jogo() {
         autoFocus
         onSubmitEditing={verificarResposta}
       />
+
+      {/* Modal de Pausa */}
+      <Modal
+        visible={modalPausaVisivel}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={continuarJogo}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalPausaContainer}>
+            <View style={styles.modalPausaHeader}>
+              <Ionicons name="pause-circle" size={64} color="#FFD700" />
+              <Text style={styles.modalPausaTitulo}>Jogo Pausado</Text>
+            </View>
+            
+            <View style={styles.modalPausaStats}>
+              <View style={styles.pausaStatItem}>
+                <Text style={styles.pausaStatValor}>{pontos}</Text>
+                <Text style={styles.pausaStatLabel}>Pontos</Text>
+              </View>
+              <View style={styles.pausaStatDivider} />
+              <View style={styles.pausaStatItem}>
+                <Text style={styles.pausaStatValor}>R{rodada}</Text>
+                <Text style={styles.pausaStatLabel}>Rodada</Text>
+              </View>
+              <View style={styles.pausaStatDivider} />
+              <View style={styles.pausaStatItem}>
+                <Text style={styles.pausaStatValor}>{vidas}</Text>
+                <Text style={styles.pausaStatLabel}>Vidas</Text>
+              </View>
+            </View>
+            
+            <View style={styles.modalPausaBotoes}>
+              <TouchableOpacity 
+                style={styles.continuarButton} 
+                onPress={continuarJogo}
+              >
+                <Ionicons name="play" size={24} color="#000" />
+                <Text style={styles.continuarButtonText}>Continuar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.sairButton} 
+                onPress={sairDoJogo}
+              >
+                <Ionicons name="exit" size={24} color="#fff" />
+                <Text style={styles.sairButtonText}>Sair do Jogo</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={styles.pausaAviso}>
+              ⚠️ Se você sair da aba, o jogo será reiniciado!
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
