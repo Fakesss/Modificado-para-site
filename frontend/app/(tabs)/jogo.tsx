@@ -45,6 +45,8 @@ export default function Jogo() {
   const [vidas, setVidas] = useState(10);
   const [pontos, setPontos] = useState(0);
   const [rodada, setRodada] = useState(1);
+  const [acertosRodada, setAcertosRodada] = useState(0);
+  const [metaRodada, setMetaRodada] = useState(10);
   const [resposta, setResposta] = useState('');
   const [dificuldade, setDificuldade] = useState(1);
   const [velocidade, setVelocidade] = useState(1);
