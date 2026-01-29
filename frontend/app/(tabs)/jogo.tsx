@@ -31,6 +31,18 @@ interface Operacao {
   speed: number;
   posX: number;
   especial: boolean;
+  opacity?: Animated.Value;
+  scale?: Animated.Value;
+}
+
+interface Laser {
+  id: string;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  color: string;
+  animValue: Animated.Value;
 }
 
 export default function Jogo() {
