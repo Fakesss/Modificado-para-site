@@ -27,12 +27,14 @@ const GAME_AREA_HEIGHT = height * 0.45;
 const MAX_OPERACOES = 5;
 const VELOCIDADE_BASE = 15000;
 const SPAWN_INTERVAL = 2500;
-const QUESTAO_ESPECIAL_CHANCE = 0.15;
+const QUESTAO_ESPECIAL_CHANCE = 0.12;
+const QUESTAO_CONGELAMENTO_CHANCE = 0.05; // 5% chance - mais raro
 const CARD_WIDTH = 105;
 const CARD_HEIGHT = 38;
 const MIN_SPACING_X = CARD_WIDTH + 12;
 const MIN_SPACING_Y = CARD_HEIGHT + 25;
-const POLLING_INTERVAL = 1000; // Poll every second for multiplayer sync
+const POLLING_INTERVAL = 1000;
+const FREEZE_DURATION = 3000; // 3 segundos de congelamento
 
 const gerarChaveQuestao = (num1: number, operador: string, num2: number) => 
   `${num1}${operador}${num2}`;
@@ -47,6 +49,7 @@ interface Operacao {
   speed: number;
   posX: number;
   especial: boolean;
+  congelamento: boolean; // Novo power-up
   opacity: Animated.Value;
   scale: Animated.Value;
   chave: string;
@@ -60,6 +63,7 @@ interface MultiplayerPlayer {
   isReady: boolean;
   isHost: boolean;
   isConnected: boolean;
+  isBot?: boolean;
 }
 
 interface GameRoom {
@@ -83,7 +87,7 @@ interface VoiceMessage {
 export default function Jogo() {
   const { user } = useAuth();
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado' | 'lobby' | 'salas'>('menu');
-  const [modo, setModo] = useState<'single' | 'multi'>('single');
+  const [modo, setModo] = useState<'single' | 'multi' | 'bot'>('single');
   
   // Game state
   const [operacoes, setOperacoes] = useState<Operacao[]>([]);
@@ -101,6 +105,11 @@ export default function Jogo() {
   const [tempoRespostas, setTempoRespostas] = useState<number[]>([]);
   const [pausado, setPausado] = useState(false);
   
+  // Freeze power-up
+  const [congelado, setCongelado] = useState(false);
+  const [tempoCongelamento, setTempoCongelamento] = useState(0);
+  const freezeTimerRef = useRef<any>(null);
+  
   // Non-repeat questions
   const [questoesUsadasRodada, setQuestoesUsadasRodada] = useState<Set<string>>(new Set());
   const [questoesErradasRodada, setQuestoesErradasRodada] = useState<Set<string>>(new Set());
@@ -111,6 +120,7 @@ export default function Jogo() {
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const laserAnim = useRef(new Animated.Value(0)).current;
   const feedbackAnim = useRef(new Animated.Value(0)).current;
+  const freezeAnim = useRef(new Animated.Value(0)).current;
   
   const [powerUpDisponivel, setPowerUpDisponivel] = useState(false);
   const [powerUpTipo, setPowerUpTipo] = useState<'eliminar' | null>(null);
@@ -131,6 +141,11 @@ export default function Jogo() {
   const [countdown, setCountdown] = useState(3);
   const [isReady, setIsReady] = useState(false);
   
+  // Bot state
+  const [botPontos, setBotPontos] = useState(0);
+  const [botVidas, setBotVidas] = useState(10);
+  const botIntervalRef = useRef<any>(null);
+  
   // Voice Chat
   const [isRecording, setIsRecording] = useState(false);
   const [voiceMessages, setVoiceMessages] = useState<VoiceMessage[]>([]);
@@ -148,6 +163,12 @@ export default function Jogo() {
   const jogoEmAndamentoRef = useRef(false);
   const jogoPausadoRef = useRef(false);
   const multiplayerPollRef = useRef<any>(null);
+  const rodadaRef = useRef(1);
+
+  // Update rodadaRef when rodada changes
+  useEffect(() => {
+    rodadaRef.current = rodada;
+  }, [rodada]);
 
   // ==================== MUSIC ====================
   useEffect(() => {
@@ -188,6 +209,7 @@ export default function Jogo() {
         pauseMusic();
         stopMultiplayerPolling();
         stopVoicePolling();
+        stopBotSimulation();
         
         if (jogoEmAndamentoRef.current && !jogoPausadoRef.current) {
           resetGame();
@@ -207,7 +229,6 @@ export default function Jogo() {
           return;
         }
       }
-      // Simple looping background music
       const { sound } = await Audio.Sound.createAsync(
         { uri: 'https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3' },
         { isLooping: true, volume: musicaMuted ? 0 : musicaVolume, shouldPlay: true }
@@ -246,6 +267,36 @@ export default function Jogo() {
     }
   };
 
+  // ==================== BOT SIMULATION ====================
+  const startBotSimulation = () => {
+    setBotPontos(0);
+    setBotVidas(10);
+    
+    // Bot "joga" automaticamente - simula acertos e erros
+    botIntervalRef.current = setInterval(() => {
+      // Bot tem 70% de chance de acertar
+      if (Math.random() < 0.7) {
+        setBotPontos(p => p + 10 + (Math.random() > 0.5 ? 20 : 0)); // Bonus às vezes
+      } else {
+        setBotVidas(v => {
+          const nv = v - 1;
+          if (nv <= 0) {
+            // Bot perdeu
+            stopBotSimulation();
+          }
+          return Math.max(0, nv);
+        });
+      }
+    }, 2000 + Math.random() * 2000); // Responde a cada 2-4 segundos
+  };
+
+  const stopBotSimulation = () => {
+    if (botIntervalRef.current) {
+      clearInterval(botIntervalRef.current);
+      botIntervalRef.current = null;
+    }
+  };
+
   // ==================== VOICE CHAT ====================
   const startRecording = async () => {
     if (!currentRoom) return;
@@ -256,9 +307,7 @@ export default function Jogo() {
       );
       recordingRef.current = recording;
       setIsRecording(true);
-    } catch (e) {
-      console.log('Erro ao iniciar gravação:', e);
-    }
+    } catch (e) {}
   };
 
   const stopRecording = async () => {
@@ -270,7 +319,6 @@ export default function Jogo() {
       recordingRef.current = null;
       
       if (uri) {
-        // Convert to base64 and send
         const response = await fetch(uri);
         const blob = await response.blob();
         const reader = new FileReader();
@@ -280,9 +328,7 @@ export default function Jogo() {
         };
         reader.readAsDataURL(blob);
       }
-    } catch (e) {
-      console.log('Erro ao parar gravação:', e);
-    }
+    } catch (e) {}
   };
 
   const playVoiceMessage = async (audioBase64: string) => {
@@ -293,13 +339,9 @@ export default function Jogo() {
       );
       await sound.playAsync();
       sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          sound.unloadAsync();
-        }
+        if (status.isLoaded && status.didJustFinish) sound.unloadAsync();
       });
-    } catch (e) {
-      console.log('Erro ao reproduzir voz:', e);
-    }
+    } catch (e) {}
   };
 
   const startVoicePolling = () => {
@@ -310,9 +352,7 @@ export default function Jogo() {
         const data = await api.getVoiceMessages(currentRoom.id, lastVoiceTimestamp || undefined);
         if (data.voiceMessages && data.voiceMessages.length > 0) {
           for (const msg of data.voiceMessages) {
-            if (msg.senderId !== user?.id) {
-              playVoiceMessage(msg.audioBase64);
-            }
+            if (msg.senderId !== user?.id) playVoiceMessage(msg.audioBase64);
           }
           setVoiceMessages(prev => [...prev, ...data.voiceMessages]);
           setLastVoiceTimestamp(data.voiceMessages[data.voiceMessages.length - 1].timestamp);
@@ -322,10 +362,7 @@ export default function Jogo() {
   };
 
   const stopVoicePolling = () => {
-    if (voicePollRef.current) {
-      clearInterval(voicePollRef.current);
-      voicePollRef.current = null;
-    }
+    if (voicePollRef.current) { clearInterval(voicePollRef.current); voicePollRef.current = null; }
   };
 
   // ==================== MULTIPLAYER ====================
@@ -339,6 +376,14 @@ export default function Jogo() {
     } catch (e) {
       Alert.alert('Erro', 'Não foi possível criar a sala');
     }
+  };
+
+  const iniciarJogoComBot = () => {
+    setModo('bot');
+    setBotPontos(0);
+    setBotVidas(10);
+    setTela('jogo');
+    startBotSimulation();
   };
 
   const entrarSala = async (roomId?: string) => {
@@ -407,10 +452,7 @@ export default function Jogo() {
   };
 
   const stopMultiplayerPolling = () => {
-    if (multiplayerPollRef.current) {
-      clearInterval(multiplayerPollRef.current);
-      multiplayerPollRef.current = null;
-    }
+    if (multiplayerPollRef.current) { clearInterval(multiplayerPollRef.current); multiplayerPollRef.current = null; }
   };
 
   const sairSala = async () => {
@@ -433,13 +475,71 @@ export default function Jogo() {
     } catch (e) {}
   };
 
-  // Sync pontos periodically in multiplayer
   useEffect(() => {
     if (modo === 'multi' && tela === 'jogo') {
       const syncInterval = setInterval(syncPontosMultiplayer, 1500);
       return () => clearInterval(syncInterval);
     }
   }, [modo, tela, pontos, vidas]);
+
+  // ==================== FREEZE POWER-UP ====================
+  const ativarCongelamento = () => {
+    setCongelado(true);
+    setTempoCongelamento(3);
+    
+    // Parar todas as animações
+    operacoes.forEach(op => op.y.stopAnimation());
+    
+    // Animação de congelamento na tela
+    freezeAnim.setValue(0);
+    Animated.timing(freezeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+    
+    mostrarMensagem('❄️ CONGELADO!', 1000);
+    
+    // Countdown visual
+    let tempo = 3;
+    freezeTimerRef.current = setInterval(() => {
+      tempo--;
+      setTempoCongelamento(tempo);
+      if (tempo <= 0) {
+        clearInterval(freezeTimerRef.current);
+        descongelar();
+      }
+    }, 1000);
+  };
+
+  const descongelar = () => {
+    setCongelado(false);
+    setTempoCongelamento(0);
+    
+    // Animação de descongelamento
+    Animated.timing(freezeAnim, {
+      toValue: 0,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+    
+    // Retomar operações com lentidão inicial (velocidade 50% mais lenta)
+    operacoes.forEach(op => {
+      const curY = (op.y as any)._value || 0;
+      const remDist = GAME_AREA_HEIGHT + 100 - curY;
+      const remTime = (remDist / (GAME_AREA_HEIGHT + 200)) * op.speed * 1.5; // 50% mais lento
+      
+      Animated.timing(op.y, {
+        toValue: GAME_AREA_HEIGHT + 100,
+        duration: remTime,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) perderVida(op.id);
+      });
+    });
+    
+    mostrarMensagem('🔥 Operações voltando...', 1500);
+  };
 
   // ==================== GAME LOGIC ====================
   useEffect(() => {
@@ -484,10 +584,12 @@ export default function Jogo() {
     if (gameLoop.current) clearInterval(gameLoop.current);
     if (spawnTimer.current) clearInterval(spawnTimer.current);
     if (assistenciaTimer.current) clearInterval(assistenciaTimer.current);
+    if (freezeTimerRef.current) clearInterval(freezeTimerRef.current);
   };
 
   const resetGame = () => {
     limparTimers();
+    stopBotSimulation();
     setOperacoes([]);
     setVidas(10);
     setPontos(0);
@@ -504,9 +606,13 @@ export default function Jogo() {
     setPowerUpTipo(null);
     setPausado(false);
     setModalPausaVisivel(false);
+    setCongelado(false);
+    setTempoCongelamento(0);
     setQuestoesUsadasRodada(new Set());
     setQuestoesErradasRodada(new Set());
     operacoesAtuaisRef.current = [];
+    setBotPontos(0);
+    setBotVidas(10);
   };
 
   const carregarRecordes = async () => {
@@ -529,8 +635,9 @@ export default function Jogo() {
     setMetaRodada(calcularMetaRodada(nr));
     setQuestoesUsadasRodada(new Set());
     setQuestoesErradasRodada(new Set());
-    setDificuldade(d => Math.min(d + 0.5, 15));
-    setVelocidade(v => Math.min(v + 0.3, 5));
+    // Aumentar dificuldade mais agressivamente
+    setDificuldade(d => Math.min(d + 1, 20));
+    setVelocidade(v => Math.min(v + 0.4, 6));
     mostrarMensagem(`🎉 Rodada ${nr}!`, 2000);
   };
 
@@ -553,39 +660,55 @@ export default function Jogo() {
     return padding + Math.random() * (width - CARD_WIDTH - padding * 2);
   };
 
+  // Geração de operações com dificuldade progressiva por rodada
   const gerarOperacao = (): Operacao | null => {
     const ops: Array<'+' | '-' | '×' | '÷'> = ['+', '-', '×', '÷'];
-    const especial = Math.random() < QUESTAO_ESPECIAL_CHANCE;
+    const currentRodada = rodadaRef.current;
+    
+    // Determinar tipo de power-up
+    const isCongelamento = currentRodada >= 3 && Math.random() < QUESTAO_CONGELAMENTO_CHANCE;
+    const isEspecial = !isCongelamento && Math.random() < QUESTAO_ESPECIAL_CHANCE;
     
     for (let t = 0; t < 50; t++) {
       const op = ops[Math.floor(Math.random() * ops.length)];
-      const minN = Math.max(1, Math.floor(dificuldade / 2));
-      const maxN = Math.min(10 + Math.floor(dificuldade * 4), 99);
-      const maxM = Math.min(2 + Math.floor(dificuldade), 15);
+      
+      // Calcular ranges baseados na rodada (dificuldade progressiva)
+      // Rodada 1: números pequenos, Rodada 10+: números grandes
+      const baseMin = Math.min(1 + Math.floor(currentRodada / 2), 10);
+      const baseMax = Math.min(10 + currentRodada * 5, 99);
+      const multMax = Math.min(2 + currentRodada, 15);
       
       let n1: number, n2: number, res: number;
       
       switch (op) {
         case '+':
-          n1 = Math.floor(Math.random() * maxN) + minN;
-          n2 = Math.floor(Math.random() * maxN) + minN;
+          // Rodada 1: 1-15, Rodada 5: 5-35, Rodada 10: 10-60
+          n1 = Math.floor(Math.random() * (baseMax - baseMin)) + baseMin;
+          n2 = Math.floor(Math.random() * (baseMax - baseMin)) + baseMin;
           res = n1 + n2;
           break;
+          
         case '-':
-          n1 = Math.floor(Math.random() * maxN) + minN + 10;
-          n2 = Math.floor(Math.random() * Math.min(n1 - 1, maxN)) + 1;
+          // Garantir subtração positiva com números maiores conforme rodada
+          n1 = Math.floor(Math.random() * baseMax) + baseMin + 10;
+          n2 = Math.floor(Math.random() * Math.min(n1 - 1, baseMax / 2)) + 1;
           res = n1 - n2;
           break;
+          
         case '×':
-          n1 = Math.floor(Math.random() * maxM) + 2;
-          n2 = Math.floor(Math.random() * maxM) + 2;
+          // Rodada 1: até 5x5, Rodada 5: até 10x10, Rodada 10: até 15x15
+          n1 = Math.floor(Math.random() * multMax) + 2;
+          n2 = Math.floor(Math.random() * multMax) + 2;
           res = n1 * n2;
           break;
+          
         case '÷':
-          n2 = Math.floor(Math.random() * maxM) + 2;
-          res = Math.floor(Math.random() * maxM) + 1;
+          // Divisões com números maiores conforme rodada
+          n2 = Math.floor(Math.random() * multMax) + 2;
+          res = Math.floor(Math.random() * multMax) + 1;
           n1 = n2 * res;
           break;
+          
         default:
           n1 = 1; n2 = 1; res = 2;
       }
@@ -602,7 +725,9 @@ export default function Jogo() {
         num1: n1, num2: n2, operador: op, resposta: res,
         y: new Animated.Value(-100),
         speed: VELOCIDADE_BASE / (1 + velocidade * 0.2),
-        posX, especial,
+        posX,
+        especial: isEspecial,
+        congelamento: isCongelamento,
         opacity: new Animated.Value(1),
         scale: new Animated.Value(1),
         chave,
@@ -615,6 +740,10 @@ export default function Jogo() {
     if (operacoes.length > 0) return;
     resetGame();
     
+    if (modo === 'bot') {
+      startBotSimulation();
+    }
+    
     const inicial: Operacao[] = [];
     for (let i = 0; i < 3; i++) {
       const op = gerarOperacao();
@@ -624,6 +753,7 @@ export default function Jogo() {
     inicial.forEach(op => animarQueda(op));
     
     spawnTimer.current = setInterval(() => {
+      if (congelado) return; // Não spawnar durante congelamento
       setOperacoes(ops => {
         if (ops.length < MAX_OPERACOES) {
           const nova = gerarOperacao();
@@ -638,6 +768,8 @@ export default function Jogo() {
   };
 
   const animarQueda = (op: Operacao) => {
+    if (congelado) return; // Não animar se congelado
+    
     op.y.addListener(({ value }) => {
       const ref = operacoesAtuaisRef.current.find(o => o.posX === op.posX);
       if (ref) ref.y = value;
@@ -669,7 +801,7 @@ export default function Jogo() {
     if (acertou && targetOp) {
       const tX = targetOp.posX + CARD_WIDTH / 2;
       const tY = (targetOp.y as any)._value || 100;
-      setLaserAtivo({ x: tX, y: tY, cor: '#32CD32' });
+      setLaserAtivo({ x: tX, y: tY, cor: targetOp.congelamento ? '#00BFFF' : '#32CD32' });
       laserAnim.setValue(0);
       Animated.timing(laserAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start(() => {
         Animated.parallel([
@@ -693,6 +825,8 @@ export default function Jogo() {
   };
 
   const verificarResposta = () => {
+    if (congelado) return; // Não aceitar resposta durante congelamento
+    
     const resN = parseInt(resposta);
     if (isNaN(resN) || resposta === '') return;
     
@@ -715,13 +849,21 @@ export default function Jogo() {
       setTempoRespostas(t => [...t, tempo]);
       dispararLaser(opCorreta, true);
       
-      if (opCorreta.especial && !powerUpDisponivel) {
+      // Verificar power-ups
+      if (opCorreta.congelamento) {
+        // Ativar congelamento
+        setTimeout(() => {
+          setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id));
+          ativarCongelamento();
+        }, 500);
+      } else if (opCorreta.especial && !powerUpDisponivel) {
         setPowerUpDisponivel(true);
         setPowerUpTipo('eliminar');
         mostrarMensagem('⭐ Power-up!');
+        setTimeout(() => setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id)), 500);
+      } else {
+        setTimeout(() => setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id)), 500);
       }
-      
-      setTimeout(() => setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id)), 500);
     } else {
       setErros(e => e + 1);
       setErrosConsecutivos(e => e + 1);
@@ -741,7 +883,7 @@ export default function Jogo() {
   const iniciarAssistenciaInteligente = () => {
     if (assistenciaTimer.current) clearInterval(assistenciaTimer.current);
     assistenciaTimer.current = setInterval(() => {
-      if (powerUpDisponivel && powerUpTipo) {
+      if (powerUpDisponivel && powerUpTipo && !congelado) {
         const tempo = Date.now() - inicioResposta.current;
         if (operacoes.length >= MAX_OPERACOES || tempo > 8000 || errosConsecutivos >= 2) {
           usarPowerUp();
@@ -751,7 +893,7 @@ export default function Jogo() {
   };
 
   const usarPowerUp = () => {
-    if (!powerUpDisponivel || operacoes.length === 0) return;
+    if (!powerUpDisponivel || operacoes.length === 0 || congelado) return;
     const visiveis = operacoes.filter(op => {
       const y = (op.y as any)._value || 0;
       return y >= 0 && y < GAME_AREA_HEIGHT;
@@ -784,15 +926,18 @@ export default function Jogo() {
     setPausado(false);
     setModalPausaVisivel(false);
     
-    operacoes.forEach(op => {
-      const curY = (op.y as any)._value || 0;
-      const remDist = GAME_AREA_HEIGHT + 100 - curY;
-      const remTime = (remDist / (GAME_AREA_HEIGHT + 200)) * op.speed;
-      Animated.timing(op.y, { toValue: GAME_AREA_HEIGHT + 100, duration: remTime, useNativeDriver: true })
-        .start(({ finished }) => { if (finished) perderVida(op.id); });
-    });
+    if (!congelado) {
+      operacoes.forEach(op => {
+        const curY = (op.y as any)._value || 0;
+        const remDist = GAME_AREA_HEIGHT + 100 - curY;
+        const remTime = (remDist / (GAME_AREA_HEIGHT + 200)) * op.speed;
+        Animated.timing(op.y, { toValue: GAME_AREA_HEIGHT + 100, duration: remTime, useNativeDriver: true })
+          .start(({ finished }) => { if (finished) perderVida(op.id); });
+      });
+    }
     
     spawnTimer.current = setInterval(() => {
+      if (congelado) return;
       setOperacoes(ops => {
         if (ops.length < MAX_OPERACOES) {
           const nova = gerarOperacao();
@@ -807,9 +952,8 @@ export default function Jogo() {
 
   const sairDoJogo = () => {
     resetGame();
-    if (modo === 'multi' && currentRoom) {
-      sairSala();
-    }
+    stopBotSimulation();
+    if (modo === 'multi' && currentRoom) sairSala();
     setModo('single');
     setTela('menu');
   };
@@ -832,6 +976,7 @@ export default function Jogo() {
 
   const finalizarJogo = async () => {
     limparTimers();
+    stopBotSimulation();
     setOperacoes([]);
     
     let novoRec = false;
@@ -851,10 +996,13 @@ export default function Jogo() {
   };
 
   const pressionarTecla = (tecla: string) => {
+    if (congelado) return;
     if (tecla === 'enviar') verificarResposta();
     else if (tecla === 'apagar') setResposta(r => r.slice(0, -1));
     else setResposta(r => r + tecla);
   };
+
+  const isAdmin = user?.perfil === 'ADMIN';
 
   // ==================== RENDER ====================
   
@@ -913,12 +1061,21 @@ export default function Jogo() {
             <TouchableOpacity style={styles.salasButton} onPress={() => { carregarSalas(); setTela('salas'); }}>
               <Text style={styles.salasButtonText}>Ver Salas Disponíveis</Text>
             </TouchableOpacity>
+
+            {/* Botão para Admin jogar com Bot */}
+            {isAdmin && (
+              <TouchableOpacity style={styles.botButton} onPress={iniciarJogoComBot}>
+                <Ionicons name="hardware-chip" size={20} color="#000" />
+                <Text style={styles.botButtonText}>🤖 Jogar vs Bot (Admin)</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.instrucoes}>
             <Text style={styles.instrucoesTitle}>Como Jogar:</Text>
             <Text style={styles.instrucoesText}>• Resolva as operações antes de caírem</Text>
-            <Text style={styles.instrucoesText}>• Questões ⭐ dão power-ups</Text>
+            <Text style={styles.instrucoesText}>• ⭐ Questões douradas = Power-up eliminar</Text>
+            <Text style={styles.instrucoesText}>• ❄️ Questões azuis = Congelamento (R3+)</Text>
             <Text style={styles.instrucoesText}>• No multiplayer: chat de voz!</Text>
           </View>
         </ScrollView>
@@ -996,7 +1153,6 @@ export default function Jogo() {
             ))}
           </View>
 
-          {/* Voice Chat */}
           <View style={styles.voiceSection}>
             <Text style={styles.voiceTitle}>🎤 Chat de Voz</Text>
             <TouchableOpacity 
@@ -1047,13 +1203,35 @@ export default function Jogo() {
   if (tela === 'resultado') {
     const winner = currentRoom?.winner;
     const isWinner = winner?.id === user?.id;
+    const venceuBot = modo === 'bot' && vidas > 0 && botVidas <= 0;
+    const perdeuBot = modo === 'bot' && vidas <= 0;
     
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.resultadoContainer}>
           <Text style={styles.resultadoTitle}>
-            {modo === 'multi' ? (isWinner ? '🏆 Você Venceu!' : '😔 Fim de Jogo') : 'Fim de Jogo!'}
+            {modo === 'bot' 
+              ? (venceuBot ? '🏆 Você Venceu o Bot!' : perdeuBot ? '🤖 Bot Venceu!' : 'Fim de Jogo!')
+              : modo === 'multi' 
+                ? (isWinner ? '🏆 Você Venceu!' : '😔 Fim de Jogo') 
+                : 'Fim de Jogo!'}
           </Text>
+          
+          {modo === 'bot' && (
+            <View style={styles.botResultContainer}>
+              <View style={[styles.botResultCard, vidas > botVidas && styles.winnerHighlight]}>
+                <Text style={styles.botResultLabel}>Você</Text>
+                <Text style={styles.botResultPoints}>{pontos} pts</Text>
+                <Text style={styles.botResultVidas}>{vidas} ❤️</Text>
+              </View>
+              <Text style={styles.vsText}>VS</Text>
+              <View style={[styles.botResultCard, botVidas > vidas && styles.winnerHighlight]}>
+                <Text style={styles.botResultLabel}>🤖 Bot</Text>
+                <Text style={styles.botResultPoints}>{botPontos} pts</Text>
+                <Text style={styles.botResultVidas}>{botVidas} ❤️</Text>
+              </View>
+            </View>
+          )}
           
           {modo === 'multi' && winner && (
             <View style={styles.winnerCard}>
@@ -1063,10 +1241,12 @@ export default function Jogo() {
             </View>
           )}
           
-          <View style={styles.resultadoCard}>
-            <Text style={styles.resultadoPontos}>{pontos}</Text>
-            <Text style={styles.resultadoLabel}>Seus Pontos</Text>
-          </View>
+          {modo === 'single' && (
+            <View style={styles.resultadoCard}>
+              <Text style={styles.resultadoPontos}>{pontos}</Text>
+              <Text style={styles.resultadoLabel}>Seus Pontos</Text>
+            </View>
+          )}
           
           <View style={styles.estatisticas}>
             <View style={styles.estatItem}>
@@ -1136,8 +1316,7 @@ export default function Jogo() {
             <Ionicons name={musicaMuted ? "volume-mute" : "volume-high"} size={16} color="#888" />
           </TouchableOpacity>
           
-          {/* Voice button in multiplayer */}
-          {modo === 'multi' && currentRoom && (
+          {(modo === 'multi' || modo === 'bot') && currentRoom && (
             <TouchableOpacity 
               style={[styles.voiceHeaderButton, isRecording && styles.voiceHeaderRecording]}
               onPressIn={startRecording}
@@ -1153,7 +1332,30 @@ export default function Jogo() {
         </View>
       </View>
 
-      {/* Multiplayer scores */}
+      {/* Bot/Multiplayer scores */}
+      {modo === 'bot' && (
+        <View style={styles.multiScores}>
+          <View style={[styles.multiScoreItem, styles.multiScoreYou]}>
+            <Text style={styles.multiScoreName}>Você</Text>
+            <Text style={styles.multiScorePoints}>{pontos}</Text>
+            <View style={styles.multiScoreVidas}>
+              {Array.from({length: 3}).map((_, i) => (
+                <View key={i} style={[styles.miniVida, i < Math.ceil(vidas/3) ? styles.miniVidaAtiva : styles.miniVidaInativa]} />
+              ))}
+            </View>
+          </View>
+          <View style={styles.multiScoreItem}>
+            <Text style={styles.multiScoreName}>🤖 Bot</Text>
+            <Text style={styles.multiScorePoints}>{botPontos}</Text>
+            <View style={styles.multiScoreVidas}>
+              {Array.from({length: 3}).map((_, i) => (
+                <View key={i} style={[styles.miniVida, i < Math.ceil(botVidas/3) ? styles.miniVidaAtiva : styles.miniVidaInativa]} />
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
+
       {modo === 'multi' && currentRoom && (
         <View style={styles.multiScores}>
           {currentRoom.players.map(p => (
@@ -1176,15 +1378,24 @@ export default function Jogo() {
         ))}
       </View>
 
-      <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
+      {/* Freeze overlay */}
+      {congelado && (
+        <Animated.View style={[styles.freezeOverlay, { opacity: freezeAnim }]}>
+          <Text style={styles.freezeText}>❄️ {tempoCongelamento}s</Text>
+        </Animated.View>
+      )}
+
+      <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }, congelado && styles.gameAreaFrozen]}>
         {operacoes.map((op) => (
           <Animated.View key={op.id} style={[
             styles.operacaoCard,
             op.especial && styles.operacaoEspecial,
+            op.congelamento && styles.operacaoCongelamento,
             { transform: [{ translateY: op.y }, { scale: op.scale }], left: op.posX, opacity: op.opacity }
           ]}>
             {op.especial && <Ionicons name="star" size={9} color="#FFD700" style={styles.estrelaEspecial} />}
-            <Text style={[styles.operacaoText, op.especial && { color: '#000' }]}>
+            {op.congelamento && <Ionicons name="snow" size={9} color="#fff" style={styles.estrelaEspecial} />}
+            <Text style={[styles.operacaoText, op.especial && { color: '#000' }, op.congelamento && { color: '#fff' }]}>
               {op.num1} {op.operador} {op.num2}
             </Text>
           </Animated.View>
@@ -1205,28 +1416,28 @@ export default function Jogo() {
         </Animated.View>
       )}
 
-      <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}>
+      <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }, congelado && styles.displayFrozen]}>
         <Text style={styles.displayText}>{resposta || '0'}</Text>
       </Animated.View>
 
-      <View style={styles.tecladoContainer}>
+      <View style={[styles.tecladoContainer, congelado && styles.tecladoFrozen]}>
         {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
           <View key={i} style={styles.tecladoRow}>
             {row.map(num => (
-              <TouchableOpacity key={num} style={styles.tecla} onPress={() => pressionarTecla(num)}>
+              <TouchableOpacity key={num} style={[styles.tecla, congelado && styles.teclaFrozen]} onPress={() => pressionarTecla(num)} disabled={congelado}>
                 <Text style={styles.teclaText}>{num}</Text>
               </TouchableOpacity>
             ))}
           </View>
         ))}
         <View style={styles.tecladoRow}>
-          <TouchableOpacity style={[styles.tecla, styles.teclaApagar]} onPress={() => pressionarTecla('apagar')}>
+          <TouchableOpacity style={[styles.tecla, styles.teclaApagar, congelado && styles.teclaFrozen]} onPress={() => pressionarTecla('apagar')} disabled={congelado}>
             <Ionicons name="backspace" size={16} color="#fff" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.tecla} onPress={() => pressionarTecla('0')}>
+          <TouchableOpacity style={[styles.tecla, congelado && styles.teclaFrozen]} onPress={() => pressionarTecla('0')} disabled={congelado}>
             <Text style={styles.teclaText}>0</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.tecla, styles.teclaEnviar]} onPress={() => pressionarTecla('enviar')}>
+          <TouchableOpacity style={[styles.tecla, styles.teclaEnviar, congelado && styles.teclaFrozen]} onPress={() => pressionarTecla('enviar')} disabled={congelado}>
             <Ionicons name="checkmark" size={20} color="#000" />
           </TouchableOpacity>
         </View>
@@ -1310,6 +1521,8 @@ const styles = StyleSheet.create({
   joinButton: { backgroundColor: '#32CD32', padding: 10, borderRadius: 8, justifyContent: 'center' },
   salasButton: { alignItems: 'center', padding: 8 },
   salasButtonText: { color: '#FFD700', fontSize: 13 },
+  botButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10 },
+  botButtonText: { color: '#000', fontSize: 14, fontWeight: 'bold' },
   instrucoes: { backgroundColor: '#1a1a2e', padding: 12, borderRadius: 10, marginTop: 14, marginBottom: 20 },
   instrucoesTitle: { color: '#fff', fontSize: 14, fontWeight: 'bold', marginBottom: 8 },
   instrucoesText: { color: '#888', fontSize: 12, marginBottom: 4 },
@@ -1380,9 +1593,19 @@ const styles = StyleSheet.create({
   vidaMarca: { width: 6, height: 6, borderRadius: 3 },
   vidaAtiva: { backgroundColor: '#FF4444' },
   vidaInativa: { backgroundColor: '#333' },
+  
+  // Freeze
+  freezeOverlay: { position: 'absolute', top: 80, alignSelf: 'center', backgroundColor: '#00BFFF', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, zIndex: 100 },
+  freezeText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+  gameAreaFrozen: { borderWidth: 2, borderColor: '#00BFFF' },
+  displayFrozen: { borderWidth: 2, borderColor: '#00BFFF' },
+  tecladoFrozen: { opacity: 0.5 },
+  teclaFrozen: { backgroundColor: '#333' },
+  
   gameArea: { flex: 1, position: 'relative', backgroundColor: '#0a0a0a' },
   operacaoCard: { position: 'absolute', backgroundColor: '#4169E1', paddingVertical: 7, paddingHorizontal: 8, borderRadius: 8, minWidth: CARD_WIDTH, maxWidth: CARD_WIDTH },
   operacaoEspecial: { backgroundColor: '#FFD700', borderWidth: 2, borderColor: '#FFF' },
+  operacaoCongelamento: { backgroundColor: '#00BFFF', borderWidth: 2, borderColor: '#fff' },
   estrelaEspecial: { position: 'absolute', top: 2, right: 2 },
   operacaoText: { color: '#fff', fontSize: 13, fontWeight: 'bold', textAlign: 'center' },
   laser: { position: 'absolute', width: 3, height: height },
@@ -1399,7 +1622,14 @@ const styles = StyleSheet.create({
   
   // Resultado
   resultadoContainer: { flex: 1, padding: 18, justifyContent: 'center', alignItems: 'center' },
-  resultadoTitle: { fontSize: 26, fontWeight: 'bold', color: '#fff', marginBottom: 20 },
+  resultadoTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 20, textAlign: 'center' },
+  botResultContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 10 },
+  botResultCard: { backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, alignItems: 'center', minWidth: 100 },
+  winnerHighlight: { borderWidth: 2, borderColor: '#FFD700' },
+  botResultLabel: { color: '#888', fontSize: 12, marginBottom: 4 },
+  botResultPoints: { color: '#FFD700', fontSize: 24, fontWeight: 'bold' },
+  botResultVidas: { color: '#FF4444', fontSize: 14, marginTop: 4 },
+  vsText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
   winnerCard: { backgroundColor: '#FFD70020', padding: 20, borderRadius: 14, alignItems: 'center', marginBottom: 16, borderWidth: 2, borderColor: '#FFD700' },
   winnerName: { color: '#FFD700', fontSize: 20, fontWeight: 'bold', marginTop: 8 },
   winnerPoints: { color: '#fff', fontSize: 16 },
