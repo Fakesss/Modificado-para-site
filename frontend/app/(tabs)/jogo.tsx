@@ -577,7 +577,6 @@ export default function Jogo() {
     }, SPAWN_INTERVAL);
     
     inicioResposta.current = Date.now();
-    inputRef.current?.focus();
   };
 
   const sairDoJogo = () => {
