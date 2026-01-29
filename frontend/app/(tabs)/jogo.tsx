@@ -898,16 +898,6 @@ export default function Jogo() {
         </View>
       </View>
 
-      <TextInput
-        ref={inputRef}
-        style={styles.hiddenInput}
-        value={resposta}
-        onChangeText={setResposta}
-        keyboardType="numeric"
-        autoFocus
-        onSubmitEditing={verificarResposta}
-      />
-
       {/* Overlay de Pausa */}
       {modalPausaVisivel && (
         <View style={styles.modalOverlay}>
