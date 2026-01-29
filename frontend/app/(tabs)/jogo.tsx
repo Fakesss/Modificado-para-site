@@ -406,51 +406,42 @@ export default function Jogo() {
   const usarPowerUpAutomatico = () => {
     if (!powerUpDisponivel || !powerUpTipo || operacoes.length === 0) return;
     
-    // Filtrar apenas operações visíveis na tela (Y entre 0 e altura da área de jogo)
+    // Filtrar apenas operações visíveis na tela
     const operacoesVisiveis = operacoes.filter(op => {
       const yValue = (op.y as any)._value || 0;
       return yValue >= 0 && yValue < GAME_AREA_HEIGHT;
     });
     
-    if (operacoesVisiveis.length === 0) {
-      // Se não há operações visíveis, não usar power-up
-      return;
-    }
+    if (operacoesVisiveis.length === 0) return;
     
-    // Pegar a operação mais próxima do fim (maior Y, mas ainda visível)
-    const opMaisProxima = operacoesVisiveis.reduce((prev, curr) => {
-      const prevY = (prev.y as any)._value || 0;
-      const currY = (curr.y as any)._value || 0;
-      return currY > prevY ? curr : prev;
+    // ELIMINAR TODAS AS OPERAÇÕES VISÍVEIS
+    operacoesVisiveis.forEach(op => {
+      op.y.stopAnimation();
+      
+      Animated.sequence([
+        Animated.timing(op.scale, {
+          toValue: 1.3,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(op.opacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
     });
     
-    // Parar animação
-    opMaisProxima.y.stopAnimation();
-    
-    // Efeito visual: pulsar antes de remover
-    Animated.sequence([
-      Animated.timing(opMaisProxima.scale, {
-        toValue: 1.3,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opMaisProxima.scale, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opMaisProxima.opacity, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setOperacoes((ops) => ops.filter((op) => op.id !== opMaisProxima.id));
-    });
+    // Remover todas após animação
+    setTimeout(() => {
+      setOperacoes((ops) => 
+        ops.filter((op) => !operacoesVisiveis.find(ov => ov.id === op.id))
+      );
+    }, 500);
     
     setPowerUpDisponivel(false);
     setPowerUpTipo(null);
-    mostrarMensagem('💥 Power-up ativado: Operação eliminada!', 1500);
+    mostrarMensagem(`💥 Power-up: ${operacoesVisiveis.length} operações eliminadas!`, 1500);
   };
 
   const perderVida = (operacaoId?: string) => {
