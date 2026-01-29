@@ -78,6 +78,17 @@ export default function Jogo() {
   const posXUsadas = useRef<number[]>([]);
   const assistenciaTimer = useRef<any>(null);
   const displayRef = useRef<any>(null);
+  const jogoEmAndamentoRef = useRef(false);
+  const jogoPausadoRef = useRef(false);
+
+  // Atualizar refs quando estados mudam
+  useEffect(() => {
+    jogoEmAndamentoRef.current = tela === 'jogo';
+  }, [tela]);
+
+  useEffect(() => {
+    jogoPausadoRef.current = pausado || modalPausaVisivel;
+  }, [pausado, modalPausaVisivel]);
 
   // Detectar quando o usuário sai da aba do jogo (troca de tab)
   useFocusEffect(
@@ -85,10 +96,12 @@ export default function Jogo() {
       // Quando a tela ganha foco - não faz nada especial
       return () => {
         // Quando a tela perde foco (usuário saiu da aba)
-        // Só reseta se o jogo NÃO estiver pausado
-        if (tela === 'jogo' && !pausado && !modalPausaVisivel) {
+        // Só reseta se o jogo estiver em andamento E NÃO estiver pausado
+        if (jogoEmAndamentoRef.current && !jogoPausadoRef.current) {
           // Resetar o jogo completamente
-          limparTimers();
+          if (gameLoop.current) clearInterval(gameLoop.current);
+          if (spawnTimer.current) clearInterval(spawnTimer.current);
+          if (assistenciaTimer.current) clearInterval(assistenciaTimer.current);
           setOperacoes([]);
           setVidas(10);
           setPontos(0);
@@ -109,7 +122,7 @@ export default function Jogo() {
           setTela('menu');
         }
       };
-    }, [tela, pausado, modalPausaVisivel])
+    }, [])
   );
 
   useEffect(() => {
