@@ -407,6 +407,9 @@ export default function Jogo() {
       return currY > prevY ? curr : prev;
     });
     
+    // Parar animação
+    opMaisProxima.y.stopAnimation();
+    
     // Efeito visual: pulsar antes de remover
     Animated.sequence([
       Animated.timing(opMaisProxima.scale, {
