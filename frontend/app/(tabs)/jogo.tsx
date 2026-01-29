@@ -112,6 +112,32 @@ export default function Jogo() {
     }
   };
 
+  const calcularMetaRodada = (numRodada: number): number => {
+    const metas: { [key: number]: number } = {
+      1: 10, 2: 12, 3: 15, 4: 20, 5: 25,
+      6: 30, 7: 40, 8: 45, 9: 55, 10: 70
+    };
+    
+    if (numRodada <= 10) {
+      return metas[numRodada];
+    }
+    // Após rodada 10: aumenta 10 a cada rodada
+    return 70 + (numRodada - 10) * 10;
+  };
+
+  const avancarRodada = () => {
+    const novaRodada = rodada + 1;
+    setRodada(novaRodada);
+    setAcertosRodada(0);
+    setMetaRodada(calcularMetaRodada(novaRodada));
+    
+    // Aumentar dificuldade e velocidade
+    setDificuldade((d) => Math.min(d + 0.5, 15));
+    setVelocidade((v) => Math.min(v + 0.3, 5));
+    
+    mostrarMensagem(`🎉 Rodada ${novaRodada}! Meta: ${calcularMetaRodada(novaRodada)} acertos`, 2500);
+  };
+
   const gerarPosicaoX = (): number => {
     const padding = 20;
     const cardWidth = 140;
