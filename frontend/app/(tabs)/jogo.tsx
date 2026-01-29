@@ -270,7 +270,9 @@ export default function Jogo() {
     const operacaoCorreta = operacoes.find((op) => op.resposta === respostaNum);
     
     if (operacaoCorreta) {
-      // ACERTOU!
+      // ACERTOU! - PARAR A ANIMAÇÃO
+      operacaoCorreta.y.stopAnimation();
+      
       const bonus = tempoResposta < 3000 ? 20 : 0;
       setPontos((p) => p + 10 + bonus);
       setAcertos((a) => a + 1);
@@ -284,12 +286,20 @@ export default function Jogo() {
         Alert.alert('⭐ Questão Especial!', 'Power-up obtido! Será usado automaticamente quando necessário.');
       }
       
+      // Remover operação da lista
       setOperacoes((ops) => ops.filter((op) => op.id !== operacaoCorreta.id));
     } else {
-      // ERROU!
+      // ERROU! - Perde vida
       setErros((e) => e + 1);
       setErrosConsecutivos((e) => e + 1);
-      perderVida();
+      setVidas((v) => {
+        const novasVidas = v - 1;
+        if (novasVidas <= 0) {
+          finalizarJogo();
+        }
+        return novasVidas;
+      });
+      setPontos((p) => Math.max(0, p - 5));
     }
     
     setResposta('');
