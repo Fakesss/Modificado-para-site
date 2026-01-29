@@ -206,6 +206,8 @@ export default function Jogo() {
     setVidas(10);
     setPontos(0);
     setRodada(1);
+    setAcertosRodada(0);
+    setMetaRodada(10);
     setAcertos(0);
     setErros(0);
     setErrosConsecutivos(0);
@@ -232,6 +234,7 @@ export default function Jogo() {
     }, SPAWN_INTERVAL);
     
     inicioResposta.current = Date.now();
+    mostrarMensagem('🎮 Rodada 1! Meta: 10 acertos', 2000);
   };
 
   const animarQueda = (op: Operacao) => {
