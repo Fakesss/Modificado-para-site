@@ -355,7 +355,8 @@ export default function Jogo() {
       if (operacaoCorreta.especial && !powerUpDisponivel) {
         setPowerUpDisponivel(true);
         setPowerUpTipo('eliminar');
-        mostrarMensagem('⭐ Power-up obtido: Eliminar Operação!');\n      }
+        mostrarMensagem('⭐ Power-up obtido: Eliminar Operação!');
+      }
       
       // Remover após animação
       setTimeout(() => {
