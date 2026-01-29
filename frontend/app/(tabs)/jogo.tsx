@@ -402,7 +402,19 @@ export default function Jogo() {
   const usarPowerUpAutomatico = () => {
     if (!powerUpDisponivel || !powerUpTipo || operacoes.length === 0) return;
     
-    const opMaisProxima = operacoes.reduce((prev, curr) => {
+    // Filtrar apenas operações visíveis na tela (Y entre 0 e altura da área de jogo)
+    const operacoesVisiveis = operacoes.filter(op => {
+      const yValue = (op.y as any)._value || 0;
+      return yValue >= 0 && yValue < GAME_AREA_HEIGHT;
+    });
+    
+    if (operacoesVisiveis.length === 0) {
+      // Se não há operações visíveis, não usar power-up
+      return;
+    }
+    
+    // Pegar a operação mais próxima do fim (maior Y, mas ainda visível)
+    const opMaisProxima = operacoesVisiveis.reduce((prev, curr) => {
       const prevY = (prev.y as any)._value || 0;
       const currY = (curr.y as any)._value || 0;
       return currY > prevY ? curr : prev;
