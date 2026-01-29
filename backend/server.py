@@ -66,6 +66,8 @@ class Usuario(BaseModel):
     streakDias: int = 0
     streakUltimoLoginData: Optional[str] = None
     pontosTotais: int = 0
+    recordeJogoSingle: int = 0
+    recordeJogoMulti: int = 0
     criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 class UsuarioCreate(BaseModel):
