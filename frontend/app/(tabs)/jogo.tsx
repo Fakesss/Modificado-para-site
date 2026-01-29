@@ -577,10 +577,12 @@ export default function Jogo() {
             <Text style={styles.statText}>{pontos}</Text>
           </View>
           <View style={styles.statItem}>
-            <Ionicons name="layers" size={18} color="#4169E1" />
-            <Text style={styles.statText}>R{rodada}</Text>
+            <Ionicons name="trophy" size={18} color="#4169E1" />
+            <Text style={styles.statText}>{acertosRodada}/{metaRodada}</Text>
           </View>
         </View>
+        
+        <Text style={styles.rodadaText}>R{rodada}</Text>
         
         {powerUpDisponivel && (
           <View style={styles.powerUpIndicator}>
