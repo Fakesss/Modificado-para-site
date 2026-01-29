@@ -1371,6 +1371,318 @@ async def salvar_recorde_jogo(
     
     return {"message": "Pontuação salva", "recorde": pontos}
 
+# ============== MULTIPLAYER GAME ROUTES ==============
+
+# In-memory storage for active game rooms (for MVP - could use Redis in production)
+active_rooms: Dict[str, Dict[str, Any]] = {}
+
+class CreateRoomRequest(BaseModel):
+    maxPlayers: int = 2
+
+class JoinRoomRequest(BaseModel):
+    roomId: str
+
+@api_router.post("/jogo/multiplayer/criar-sala")
+async def criar_sala_multiplayer(
+    data: CreateRoomRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new multiplayer game room"""
+    room_id = f"sala_{uuid.uuid4().hex[:8]}"
+    
+    room = {
+        "id": room_id,
+        "hostId": current_user["id"],
+        "hostNome": current_user["nome"],
+        "maxPlayers": data.maxPlayers,
+        "players": [{
+            "id": current_user["id"],
+            "nome": current_user["nome"],
+            "pontos": 0,
+            "vidas": 10,
+            "isReady": False,
+            "isHost": True,
+            "isConnected": True
+        }],
+        "status": "waiting",  # waiting, countdown, playing, finished
+        "currentRound": 1,
+        "createdAt": datetime.utcnow().isoformat(),
+        "voiceMessages": []  # Store voice messages for playback
+    }
+    
+    active_rooms[room_id] = room
+    
+    # Also save to database for persistence
+    await db.game_rooms.insert_one(room)
+    
+    return {"roomId": room_id, "room": room}
+
+@api_router.post("/jogo/multiplayer/entrar-sala")
+async def entrar_sala_multiplayer(
+    data: JoinRoomRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Join an existing multiplayer game room"""
+    room_id = data.roomId
+    
+    # Check in-memory first
+    if room_id not in active_rooms:
+        # Try to load from database
+        db_room = await db.game_rooms.find_one({"id": room_id})
+        if not db_room:
+            raise HTTPException(status_code=404, detail="Sala não encontrada")
+        active_rooms[room_id] = {k: v for k, v in db_room.items() if k != '_id'}
+    
+    room = active_rooms[room_id]
+    
+    if room["status"] != "waiting":
+        raise HTTPException(status_code=400, detail="Sala já está em jogo")
+    
+    if len(room["players"]) >= room["maxPlayers"]:
+        raise HTTPException(status_code=400, detail="Sala está cheia")
+    
+    # Check if player already in room
+    if any(p["id"] == current_user["id"] for p in room["players"]):
+        return {"roomId": room_id, "room": room}
+    
+    # Add player
+    new_player = {
+        "id": current_user["id"],
+        "nome": current_user["nome"],
+        "pontos": 0,
+        "vidas": 10,
+        "isReady": False,
+        "isHost": False,
+        "isConnected": True
+    }
+    room["players"].append(new_player)
+    
+    # Update database
+    await db.game_rooms.update_one(
+        {"id": room_id},
+        {"$set": {"players": room["players"]}}
+    )
+    
+    return {"roomId": room_id, "room": room}
+
+@api_router.get("/jogo/multiplayer/sala/{room_id}")
+async def get_sala_multiplayer(
+    room_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get room status"""
+    if room_id in active_rooms:
+        return active_rooms[room_id]
+    
+    db_room = await db.game_rooms.find_one({"id": room_id})
+    if not db_room:
+        raise HTTPException(status_code=404, detail="Sala não encontrada")
+    
+    room = {k: v for k, v in db_room.items() if k != '_id'}
+    active_rooms[room_id] = room
+    return room
+
+@api_router.post("/jogo/multiplayer/sala/{room_id}/ready")
+async def set_player_ready(
+    room_id: str,
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Set player ready status"""
+    if room_id not in active_rooms:
+        raise HTTPException(status_code=404, detail="Sala não encontrada")
+    
+    room = active_rooms[room_id]
+    is_ready = data.get("ready", True)
+    
+    for player in room["players"]:
+        if player["id"] == current_user["id"]:
+            player["isReady"] = is_ready
+            break
+    
+    # Update database
+    await db.game_rooms.update_one(
+        {"id": room_id},
+        {"$set": {"players": room["players"]}}
+    )
+    
+    return {"room": room}
+
+@api_router.post("/jogo/multiplayer/sala/{room_id}/iniciar")
+async def iniciar_jogo_multiplayer(
+    room_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Start the multiplayer game (host only)"""
+    if room_id not in active_rooms:
+        raise HTTPException(status_code=404, detail="Sala não encontrada")
+    
+    room = active_rooms[room_id]
+    
+    if room["hostId"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Apenas o host pode iniciar o jogo")
+    
+    if len(room["players"]) < 2:
+        raise HTTPException(status_code=400, detail="Precisa de pelo menos 2 jogadores")
+    
+    if not all(p["isReady"] or p["isHost"] for p in room["players"]):
+        raise HTTPException(status_code=400, detail="Todos os jogadores precisam estar prontos")
+    
+    room["status"] = "countdown"
+    
+    # Update database
+    await db.game_rooms.update_one(
+        {"id": room_id},
+        {"$set": {"status": "countdown"}}
+    )
+    
+    return {"room": room, "message": "Jogo iniciando em 3 segundos!"}
+
+@api_router.post("/jogo/multiplayer/sala/{room_id}/atualizar-pontos")
+async def atualizar_pontos_multiplayer(
+    room_id: str,
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update player score in real-time"""
+    if room_id not in active_rooms:
+        raise HTTPException(status_code=404, detail="Sala não encontrada")
+    
+    room = active_rooms[room_id]
+    pontos = data.get("pontos", 0)
+    vidas = data.get("vidas", 10)
+    
+    for player in room["players"]:
+        if player["id"] == current_user["id"]:
+            player["pontos"] = pontos
+            player["vidas"] = vidas
+            break
+    
+    # Check for winner
+    alive_players = [p for p in room["players"] if p["vidas"] > 0]
+    if len(alive_players) <= 1 and room["status"] == "playing":
+        room["status"] = "finished"
+        if alive_players:
+            room["winner"] = alive_players[0]
+        else:
+            # All dead - highest score wins
+            room["winner"] = max(room["players"], key=lambda p: p["pontos"])
+        
+        # Save multiplayer record for winner
+        winner = room["winner"]
+        await db.usuarios.update_one(
+            {"id": winner["id"]},
+            {"$max": {"recordeJogoMulti": winner["pontos"]}}
+        )
+    
+    # Update database
+    await db.game_rooms.update_one(
+        {"id": room_id},
+        {"$set": {"players": room["players"], "status": room["status"]}}
+    )
+    
+    return {"room": room}
+
+@api_router.post("/jogo/multiplayer/sala/{room_id}/voice")
+async def enviar_voice_message(
+    room_id: str,
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Send a voice message to the room"""
+    if room_id not in active_rooms:
+        raise HTTPException(status_code=404, detail="Sala não encontrada")
+    
+    room = active_rooms[room_id]
+    
+    voice_message = {
+        "id": str(uuid.uuid4()),
+        "senderId": current_user["id"],
+        "senderNome": current_user["nome"],
+        "audioBase64": data.get("audioBase64", ""),
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    
+    if "voiceMessages" not in room:
+        room["voiceMessages"] = []
+    
+    room["voiceMessages"].append(voice_message)
+    
+    # Keep only last 50 messages
+    if len(room["voiceMessages"]) > 50:
+        room["voiceMessages"] = room["voiceMessages"][-50:]
+    
+    return {"message": "Mensagem de voz enviada", "voiceMessage": voice_message}
+
+@api_router.get("/jogo/multiplayer/sala/{room_id}/voice")
+async def get_voice_messages(
+    room_id: str,
+    since: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get voice messages from the room"""
+    if room_id not in active_rooms:
+        raise HTTPException(status_code=404, detail="Sala não encontrada")
+    
+    room = active_rooms[room_id]
+    messages = room.get("voiceMessages", [])
+    
+    if since:
+        messages = [m for m in messages if m["timestamp"] > since]
+    
+    return {"voiceMessages": messages}
+
+@api_router.post("/jogo/multiplayer/sala/{room_id}/sair")
+async def sair_sala_multiplayer(
+    room_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Leave the multiplayer room"""
+    if room_id not in active_rooms:
+        return {"message": "Sala não encontrada ou já encerrada"}
+    
+    room = active_rooms[room_id]
+    
+    # Remove player
+    room["players"] = [p for p in room["players"] if p["id"] != current_user["id"]]
+    
+    # If host left, assign new host or close room
+    if room["hostId"] == current_user["id"]:
+        if room["players"]:
+            room["hostId"] = room["players"][0]["id"]
+            room["players"][0]["isHost"] = True
+        else:
+            # No players left, remove room
+            del active_rooms[room_id]
+            await db.game_rooms.delete_one({"id": room_id})
+            return {"message": "Sala encerrada"}
+    
+    # Update database
+    await db.game_rooms.update_one(
+        {"id": room_id},
+        {"$set": {"players": room["players"], "hostId": room["hostId"]}}
+    )
+    
+    return {"message": "Você saiu da sala", "room": room}
+
+@api_router.get("/jogo/multiplayer/salas-disponiveis")
+async def listar_salas_disponiveis(
+    current_user: dict = Depends(get_current_user)
+):
+    """List available rooms to join"""
+    available_rooms = []
+    
+    for room_id, room in active_rooms.items():
+        if room["status"] == "waiting" and len(room["players"]) < room["maxPlayers"]:
+            available_rooms.append({
+                "id": room["id"],
+                "hostNome": room.get("hostNome", "Host"),
+                "players": len(room["players"]),
+                "maxPlayers": room["maxPlayers"]
+            })
+    
+    return {"rooms": available_rooms}
+
 # ============== MAIN APP SETUP ==============
 
 app.include_router(api_router)
