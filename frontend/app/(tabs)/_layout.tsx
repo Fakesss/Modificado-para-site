@@ -112,11 +112,11 @@ export default function TabsLayout() {
           }}
         />
         <Tabs.Screen
-          name="videos"
+          name="conteudos"
           options={{
-            title: 'Vídeos',
+            title: 'Conteúdos',
             tabBarIcon: ({ color, size }) => (
-              <Ionicons name="play-circle" size={size} color={color} />
+              <Ionicons name="folder-open" size={size} color={color} />
             ),
           }}
         />
@@ -127,6 +127,12 @@ export default function TabsLayout() {
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="document-text" size={size} color={color} />
             ),
+          }}
+        />
+        <Tabs.Screen
+          name="videos"
+          options={{
+            href: null,
           }}
         />
         <Tabs.Screen
