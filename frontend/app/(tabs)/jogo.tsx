@@ -149,17 +149,34 @@ export default function Jogo() {
     const padding = 20;
     const cardWidth = 140;
     const maxPos = width - cardWidth - padding;
+    const minEspacamento = cardWidth + 20; // Espaço mínimo entre operações
     let tentativas = 0;
     let posX: number;
     
     do {
       posX = padding + Math.random() * (maxPos - padding);
       tentativas++;
-      if (tentativas > 10) break;
-    } while (posXUsadas.current.some(usado => Math.abs(usado - posX) < cardWidth + 10));
+      
+      // Se tentou muitas vezes, limpar histórico
+      if (tentativas > 15) {
+        posXUsadas.current = [];
+        tentativas = 0;
+      }
+      
+      // Verificar se tem espaço suficiente
+      const temEspaco = !posXUsadas.current.some(usado => 
+        Math.abs(usado - posX) < minEspacamento
+      );
+      
+      if (temEspaco) break;
+      
+    } while (tentativas < 20);
     
     posXUsadas.current.push(posX);
-    if (posXUsadas.current.length > 5) posXUsadas.current.shift();
+    // Manter apenas últimas 8 posições
+    if (posXUsadas.current.length > 8) {
+      posXUsadas.current.shift();
+    }
     
     return posX;
   };
