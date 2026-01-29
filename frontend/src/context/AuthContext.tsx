@@ -46,8 +46,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(userData);
           await AsyncStorage.setItem('user', JSON.stringify(userData));
         } catch (error) {
-          // Token might be expired
-          await logout();
+          // Token might be expired or invalid (SECRET_KEY changed) - clear it silently
+          await AsyncStorage.removeItem('token');
+          await AsyncStorage.removeItem('user');
+          setToken(null);
+          setUser(null);
+          // Don't call logout() to avoid clearing other state unnecessarily
         }
       }
     } catch (error) {
