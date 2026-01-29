@@ -218,10 +218,12 @@ export default function Jogo() {
     setPowerUpTipo(null);
     posXUsadas.current = [];
     
-    const primeiraOp = gerarOperacao();
-    setOperacoes([primeiraOp]);
-    animarQueda(primeiraOp);
+    // Iniciar com 3 operações simultâneas
+    const operacoesIniciais = Array.from({ length: 3 }, () => gerarOperacao());
+    setOperacoes(operacoesIniciais);
+    operacoesIniciais.forEach(op => animarQueda(op));
     
+    // Loop de spawn
     spawnTimer.current = setInterval(() => {
       setOperacoes((ops) => {
         if (ops.length < MAX_OPERACOES) {
