@@ -731,11 +731,8 @@ export default function Jogo() {
           </View>
         )}
         
-        <TouchableOpacity onPress={() => {
-          limparTimers();
-          setTela('menu');
-        }}>
-          <Ionicons name="close" size={24} color="#fff" />
+        <TouchableOpacity onPress={pausarJogo}>
+          <Ionicons name="pause" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
 
