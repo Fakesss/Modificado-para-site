@@ -166,7 +166,6 @@ export default function Jogo() {
 
   useEffect(() => {
     if (tela === 'jogo') {
-      inputRef.current?.focus();
       iniciarAssistenciaInteligente();
     }
     return () => {
