@@ -337,6 +337,14 @@ export default function Jogo() {
       const bonus = tempoResposta < 3000 ? 20 : 0;
       setPontos((p) => p + 10 + bonus);
       setAcertos((a) => a + 1);
+      setAcertosRodada((a) => {
+        const novosAcertos = a + 1;
+        // Verificar se completou a rodada
+        if (novosAcertos >= metaRodada) {
+          avancarRodada();
+        }
+        return novosAcertos;
+      });
       setErrosConsecutivos(0);
       setTempoRespostas((t) => [...t, tempoResposta]);
       
@@ -347,8 +355,7 @@ export default function Jogo() {
       if (operacaoCorreta.especial && !powerUpDisponivel) {
         setPowerUpDisponivel(true);
         setPowerUpTipo('eliminar');
-        mostrarMensagem('⭐ Power-up obtido: Eliminar Operação!');
-      }
+        mostrarMensagem('⭐ Power-up obtido: Eliminar Operação!');\n      }
       
       // Remover após animação
       setTimeout(() => {
