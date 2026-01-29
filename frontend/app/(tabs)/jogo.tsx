@@ -768,6 +768,7 @@ const styles = StyleSheet.create({
   gameStats: { flexDirection: 'row', gap: 16 },
   statItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   statText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  rodadaText: { color: '#4169E1', fontSize: 18, fontWeight: 'bold' },
   powerUpIndicator: { backgroundColor: '#FFD700' + '30', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 },
   powerUpText: { color: '#FFD700', fontSize: 12, fontWeight: 'bold' },
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingHorizontal: 16, paddingVertical: 6 },
