@@ -1384,13 +1384,6 @@ export default function Jogo() {
         ))}
       </View>
 
-      {/* Freeze overlay */}
-      {congelado && (
-        <Animated.View style={[styles.freezeOverlay, { opacity: freezeAnim }]}>
-          <Text style={styles.freezeText}>❄️ {tempoCongelamento}s</Text>
-        </Animated.View>
-      )}
-
       <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }, congelado && styles.gameAreaFrozen]}>
         {operacoes.map((op) => (
           <Animated.View key={op.id} style={[
