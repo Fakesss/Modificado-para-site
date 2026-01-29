@@ -43,6 +43,7 @@ export default function Jogo() {
   
   const [operacoes, setOperacoes] = useState<Operacao[]>([]);
   const [vidas, setVidas] = useState(10);
+  const [vidasAnterior, setVidasAnterior] = useState(10);
   const [pontos, setPontos] = useState(0);
   const [rodada, setRodada] = useState(1);
   const [acertosRodada, setAcertosRodada] = useState(0);
@@ -54,6 +55,7 @@ export default function Jogo() {
   const [erros, setErros] = useState(0);
   const [errosConsecutivos, setErrosConsecutivos] = useState(0);
   const [tempoRespostas, setTempoRespostas] = useState<number[]>([]);
+  const [pausado, setPausado] = useState(false);
   
   // Feedback visual
   const [laserAtivo, setLaserAtivo] = useState<{ x: number; y: number; cor: string; targetId?: string } | null>(null);
