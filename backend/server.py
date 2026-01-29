@@ -1335,6 +1335,42 @@ async def seed_data():
     
     return {"message": "Dados iniciais criados com sucesso!"}
 
+# ============== JOGO ROUTES ==============
+
+@api_router.get("/jogo/recordes")
+async def get_recordes_jogo(current_user: dict = Depends(get_current_user)):
+    """Get game high scores for current user"""
+    return {
+        "singleplayer": current_user.get("recordeJogoSingle", 0),
+        "multiplayer": current_user.get("recordeJogoMulti", 0)
+    }
+
+@api_router.post("/jogo/recorde")
+async def salvar_recorde_jogo(
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Save game high score"""
+    modo = data.get("modo")  # 'singleplayer' or 'multiplayer'
+    pontos = data.get("pontos", 0)
+    
+    if modo == "singleplayer":
+        if pontos > current_user.get("recordeJogoSingle", 0):
+            await db.usuarios.update_one(
+                {"id": current_user["id"]},
+                {"$set": {"recordeJogoSingle": pontos}}
+            )
+            return {"message": "Novo recorde singleplayer!", "recorde": pontos}
+    elif modo == "multiplayer":
+        if pontos > current_user.get("recordeJogoMulti", 0):
+            await db.usuarios.update_one(
+                {"id": current_user["id"]},
+                {"$set": {"recordeJogoMulti": pontos}}
+            )
+            return {"message": "Novo recorde multiplayer!", "recorde": pontos}
+    
+    return {"message": "Pontuação salva", "recorde": pontos}
+
 # ============== MAIN APP SETUP ==============
 
 app.include_router(api_router)
