@@ -138,6 +138,17 @@ export default function TabsLayout() {
             ),
           }}
         />
+        <Tabs.Screen
+          name="jogo"
+          options={{
+            title: 'Jogo',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="game-controller" size={size} color={color} />
+            ),
+            tabBarBadge: '🧪',
+            tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 },
+          }}
+        />
         {isLeader && (
           <Tabs.Screen
             name="equipe"
