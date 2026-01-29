@@ -994,7 +994,7 @@ const styles = StyleSheet.create({
   voltarMenuButton: { paddingHorizontal: 32, paddingVertical: 16 },
   voltarMenuText: { color: '#888', fontSize: 16 },
   // Modal de Pausa
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.85)', justifyContent: 'center', alignItems: 'center' },
+  modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.9)', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
   modalPausaContainer: { backgroundColor: '#1a1a2e', borderRadius: 20, padding: 24, width: '85%', maxWidth: 360, alignItems: 'center' },
   modalPausaHeader: { alignItems: 'center', marginBottom: 20 },
   modalPausaTitulo: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginTop: 12 },
