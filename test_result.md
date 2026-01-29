@@ -280,6 +280,21 @@ frontend:
         agent: "main"
         comment: "Botão de acesso à lixeira adicionado ao painel admin"
 
+  - task: "Fix Login após fechar app"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/context/AuthContext.tsx"
+    stuck_count: 0
+    priority: "critical"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "user"
+        comment: "Usuário reportou: Login funcionou na instalação inicial, mas após fechar o app, o login falha mesmo com credenciais corretas. Limpar cache e reinstalar não resolveu."
+      - working: true
+        agent: "main"
+        comment: "CORRIGIDO: O problema era causado pela mudança do SECRET_KEY que invalidou todos os tokens JWT antigos. O AuthContext tentava revalidar o token armazenado e fazia logout automático quando falhava. Agora o sistema limpa tokens inválidos silenciosamente sem forçar logout, permitindo que o usuário faça login normalmente."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
