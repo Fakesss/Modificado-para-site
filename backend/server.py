@@ -1410,12 +1410,12 @@ async def criar_sala_multiplayer(
         "voiceMessages": []  # Store voice messages for playback
     }
     
-    active_rooms[room_id] = room
+    active_rooms[room_id] = room.copy()
     
-    # Also save to database for persistence
-    await db.game_rooms.insert_one(room)
+    # Also save to database for persistence (without returning MongoDB _id)
+    await db.game_rooms.insert_one(room.copy())
     
-    return {"roomId": room_id, "room": room}
+    return {"roomId": room_id, "room": active_rooms[room_id]}
 
 @api_router.post("/jogo/multiplayer/entrar-sala")
 async def entrar_sala_multiplayer(
