@@ -994,7 +994,6 @@ const styles = StyleSheet.create({
   teclaText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
   teclaApagar: { backgroundColor: '#E74C3C' },
   teclaEnviar: { backgroundColor: '#32CD32' },
-  hiddenInput: { position: 'absolute', left: -9999, opacity: 0, height: 0 },
   resultadoContainer: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center' },
   resultadoTitle: { fontSize: 32, fontWeight: 'bold', color: '#fff', marginBottom: 30 },
   resultadoCard: { backgroundColor: '#1a1a2e', padding: 40, borderRadius: 20, alignItems: 'center', marginBottom: 30 },
