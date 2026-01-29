@@ -453,15 +453,15 @@ export default function Jogo() {
 
   // TELA DE JOGO
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.gameHeader}>
         <View style={styles.gameStats}>
           <View style={styles.statItem}>
-            <Ionicons name="star" size={20} color="#FFD700" />
+            <Ionicons name="star" size={18} color="#FFD700" />
             <Text style={styles.statText}>{pontos}</Text>
           </View>
           <View style={styles.statItem}>
-            <Ionicons name="layers" size={20} color="#4169E1" />
+            <Ionicons name="layers" size={18} color="#4169E1" />
             <Text style={styles.statText}>R{rodada}</Text>
           </View>
         </View>
@@ -469,7 +469,7 @@ export default function Jogo() {
         {/* Power-up indicator */}
         {powerUpDisponivel && (
           <View style={styles.powerUpIndicator}>
-            <Ionicons name="flash" size={16} color="#FFD700" />
+            <Ionicons name="flash" size={14} color="#FFD700" />
           </View>
         )}
         
@@ -477,7 +477,7 @@ export default function Jogo() {
           limparTimers();
           setTela('menu');
         }}>
-          <Ionicons name="close" size={28} color="#fff" />
+          <Ionicons name="close" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
 
@@ -509,7 +509,7 @@ export default function Jogo() {
             ]}
           >
             {op.especial && (
-              <Ionicons name="star" size={16} color="#FFD700" style={styles.estrelaEspecial} />
+              <Ionicons name="star" size={14} color="#FFD700" style={styles.estrelaEspecial} />
             )}
             <Text style={styles.operacaoText}>
               {op.num1} {op.operador} {op.num2} = ?
@@ -523,7 +523,7 @@ export default function Jogo() {
         <Text style={styles.displayText}>{resposta || '0'}</Text>
       </View>
 
-      {/* Teclado numérico */}
+      {/* Teclado numérico - COMPACTO */}
       <View style={styles.tecladoContainer}>
         <View style={styles.tecladoRow}>
           {['7', '8', '9'].map((num) => (
@@ -563,7 +563,7 @@ export default function Jogo() {
             style={[styles.tecla, styles.teclaApagar]}
             onPress={() => pressionarTecla('apagar')}
           >
-            <Ionicons name="backspace" size={24} color="#fff" />
+            <Ionicons name="backspace" size={20} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.tecla}
@@ -575,7 +575,7 @@ export default function Jogo() {
             style={[styles.tecla, styles.teclaEnviar]}
             onPress={() => pressionarTecla('enviar')}
           >
-            <Ionicons name="checkmark" size={28} color="#000" />
+            <Ionicons name="checkmark" size={24} color="#000" />
           </TouchableOpacity>
         </View>
       </View>
