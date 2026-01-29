@@ -258,4 +258,59 @@ export const salvarRecordeJogo = async (modo: string, pontos: number) => {
   return response.data;
 };
 
+// ============== MULTIPLAYER ==============
+
+export const criarSalaMultiplayer = async (maxPlayers: number = 2) => {
+  const response = await api.post('/jogo/multiplayer/criar-sala', { maxPlayers });
+  return response.data;
+};
+
+export const entrarSalaMultiplayer = async (roomId: string) => {
+  const response = await api.post('/jogo/multiplayer/entrar-sala', { roomId });
+  return response.data;
+};
+
+export const getSalaMultiplayer = async (roomId: string) => {
+  const response = await api.get(`/jogo/multiplayer/sala/${roomId}`);
+  return response.data;
+};
+
+export const setPlayerReady = async (roomId: string, ready: boolean) => {
+  const response = await api.post(`/jogo/multiplayer/sala/${roomId}/ready`, { ready });
+  return response.data;
+};
+
+export const iniciarJogoMultiplayer = async (roomId: string) => {
+  const response = await api.post(`/jogo/multiplayer/sala/${roomId}/iniciar`);
+  return response.data;
+};
+
+export const atualizarPontosMultiplayer = async (roomId: string, pontos: number, vidas: number) => {
+  const response = await api.post(`/jogo/multiplayer/sala/${roomId}/atualizar-pontos`, { pontos, vidas });
+  return response.data;
+};
+
+export const enviarVoiceMessage = async (roomId: string, audioBase64: string) => {
+  const response = await api.post(`/jogo/multiplayer/sala/${roomId}/voice`, { audioBase64 });
+  return response.data;
+};
+
+export const getVoiceMessages = async (roomId: string, since?: string) => {
+  const url = since 
+    ? `/jogo/multiplayer/sala/${roomId}/voice?since=${since}`
+    : `/jogo/multiplayer/sala/${roomId}/voice`;
+  const response = await api.get(url);
+  return response.data;
+};
+
+export const sairSalaMultiplayer = async (roomId: string) => {
+  const response = await api.post(`/jogo/multiplayer/sala/${roomId}/sair`);
+  return response.data;
+};
+
+export const listarSalasDisponiveis = async () => {
+  const response = await api.get('/jogo/multiplayer/salas-disponiveis');
+  return response.data;
+};
+
 export default api;
