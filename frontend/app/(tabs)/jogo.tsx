@@ -64,6 +64,12 @@ export default function Jogo() {
   const [tempoRespostas, setTempoRespostas] = useState<number[]>([]);
   const [pausado, setPausado] = useState(false);
   
+  // Feedback visual
+  const [lasers, setLasers] = useState<Laser[]>([]);
+  const [feedbackErro, setFeedbackErro] = useState(false);
+  const [mensagemPowerUp, setMensagemPowerUp] = useState<string | null>(null);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  
   // Power-up único
   const [powerUpDisponivel, setPowerUpDisponivel] = useState(false);
   const [powerUpTipo, setPowerUpTipo] = useState<'eliminar' | null>(null);
