@@ -247,4 +247,15 @@ export const limparItensExpirados = async () => {
   return response.data;
 };
 
+// Jogo
+export const getRecordesJogo = async () => {
+  const response = await api.get('/jogo/recordes');
+  return response.data;
+};
+
+export const salvarRecordeJogo = async (modo: string, pontos: number) => {
+  const response = await api.post('/jogo/recorde', { modo, pontos });
+  return response.data;
+};
+
 export default api;
