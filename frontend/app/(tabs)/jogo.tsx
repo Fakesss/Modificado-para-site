@@ -883,13 +883,8 @@ export default function Jogo() {
         onSubmitEditing={verificarResposta}
       />
 
-      {/* Modal de Pausa */}
-      <Modal
-        visible={modalPausaVisivel}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={continuarJogo}
-      >
+      {/* Overlay de Pausa */}
+      {modalPausaVisivel && (
         <View style={styles.modalOverlay}>
           <View style={styles.modalPausaContainer}>
             <View style={styles.modalPausaHeader}>
@@ -937,7 +932,7 @@ export default function Jogo() {
             </Text>
           </View>
         </View>
-      </Modal>
+      )}
     </SafeAreaView>
   );
 }
