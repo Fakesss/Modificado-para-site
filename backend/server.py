@@ -20,10 +20,10 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get('DB_NAME', 'ranking_matematica')]
+db = client[os.environ['DB_NAME']]
 
 # JWT Settings
-SECRET_KEY = os.environ.get('SECRET_KEY', 'ranking-matematica-secret-key-2024')
+SECRET_KEY = os.environ['SECRET_KEY']
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
