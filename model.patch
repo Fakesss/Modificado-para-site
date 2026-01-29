@@ -1,298 +1,303 @@
 diff --git a/model.patch b/model.patch
-index a841f6a..e69de29 100644
+index fc65a04..e69de29 100644
 --- a/model.patch
 +++ b/model.patch
-@@ -1,293 +0,0 @@
+@@ -1,298 +0,0 @@
 -diff --git a/model.patch b/model.patch
--index a5ed977..e69de29 100644
+-index a841f6a..e69de29 100644
 ---- a/model.patch
 -+++ b/model.patch
--@@ -1,288 +0,0 @@
+-@@ -1,293 +0,0 @@
 --diff --git a/model.patch b/model.patch
---index f0c6405..e69de29 100644
+--index a5ed977..e69de29 100644
 ----- a/model.patch
 --+++ b/model.patch
---@@ -1,194 +0,0 @@
+--@@ -1,288 +0,0 @@
 ---diff --git a/model.patch b/model.patch
----index b71c070..e69de29 100644
+---index f0c6405..e69de29 100644
 ------ a/model.patch
 ---+++ b/model.patch
----@@ -1,189 +0,0 @@
-----diff --git a/test_result.md b/test_result.md
-----index e270c37..549bec8 100644
-------- a/test_result.md
-----+++ b/test_result.md
-----@@ -113,75 +113,93 @@ user_problem_statement: |
----- backend:
-----   - task: "Soft Delete - Conteudos"
-----     implemented: true
------    working: "NA"
-----+    working: true
-----     file: "/app/backend/server.py"
-----     stuck_count: 0
-----     priority: "high"
------    needs_retesting: true
-----+    needs_retesting: false
-----     status_history:
-----       - working: "NA"
-----         agent: "main"
-----         comment: "Implementado soft delete para conteúdos - campos is_deleted e deleted_at adicionados ao modelo"
-----+      - working: true
-----+        agent: "testing"
-----+        comment: "TESTADO E FUNCIONANDO: DELETE /api/conteudos/{id} faz soft delete corretamente, move item para lixeira com is_deleted=true e deleted_at timestamp. Conteúdos deletados são filtrados da listagem regular GET /api/conteudos."
----- 
-----   - task: "Soft Delete - Exercicios"
-----     implemented: true
------    working: "NA"
-----+    working: true
-----     file: "/app/backend/server.py"
-----     stuck_count: 0
-----     priority: "high"
------    needs_retesting: true
-----+    needs_retesting: false
-----     status_history:
-----       - working: "NA"
-----         agent: "main"
-----         comment: "Implementado soft delete para exercícios - campos is_deleted e deleted_at adicionados ao modelo"
-----+      - working: true
-----+        agent: "testing"
-----+        comment: "TESTADO E FUNCIONANDO: DELETE /api/exercicios/{id} faz soft delete corretamente, move item para lixeira com is_deleted=true e deleted_at timestamp. Exercícios deletados são filtrados da listagem regular GET /api/exercicios."
----- 
-----   - task: "API Lixeira - Listar itens deletados"
-----     implemented: true
------    working: "NA"
-----+    working: true
-----     file: "/app/backend/server.py"
-----     stuck_count: 0
-----     priority: "high"
------    needs_retesting: true
-----+    needs_retesting: false
-----     status_history:
-----       - working: "NA"
-----         agent: "main"
-----         comment: "Endpoint GET /api/admin/lixeira criado para listar itens na lixeira"
-----+      - working: true
-----+        agent: "testing"
-----+        comment: "TESTADO E FUNCIONANDO: GET /api/admin/lixeira lista corretamente todos os itens soft-deleted (conteúdos e exercícios), mostra tipo, título, subtipo, data de exclusão e dias restantes até exclusão automática (7 dias)."
----- 
-----   - task: "API Lixeira - Restaurar item"
-----     implemented: true
------    working: "NA"
-----+    working: true
-----     file: "/app/backend/server.py"
-----     stuck_count: 0
-----     priority: "high"
------    needs_retesting: true
-----+    needs_retesting: false
-----     status_history:
-----       - working: "NA"
-----         agent: "main"
-----         comment: "Endpoint POST /api/admin/lixeira/{id}/restaurar criado"
-----+      - working: true
-----+        agent: "testing"
-----+        comment: "TESTADO E FUNCIONANDO: POST /api/admin/lixeira/{id}/restaurar?tipo=CONTEUDO e ?tipo=EXERCICIO restauram itens corretamente, removendo is_deleted e deleted_at. Itens restaurados voltam para as listagens regulares."
----- 
-----   - task: "API Lixeira - Deletar permanentemente"
-----     implemented: true
------    working: "NA"
-----+    working: true
-----     file: "/app/backend/server.py"
-----     stuck_count: 0
-----     priority: "high"
------    needs_retesting: true
-----+    needs_retesting: false
-----     status_history:
-----       - working: "NA"
-----         agent: "main"
-----         comment: "Endpoint DELETE /api/admin/lixeira/{id} criado para exclusão permanente"
-----+      - working: true
-----+        agent: "testing"
-----+        comment: "TESTADO E FUNCIONANDO: DELETE /api/admin/lixeira/{id}?tipo=CONTEUDO e ?tipo=EXERCICIO fazem exclusão permanente corretamente. Para conteúdos, remove progresso de vídeos relacionados. Para exercícios, remove questões e submissões relacionadas."
----- 
-----   - task: "API Lixeira - Limpar itens expirados"
-----     implemented: true
------    working: "NA"
-----+    working: true
-----     file: "/app/backend/server.py"
-----     stuck_count: 0
-----     priority: "high"
------    needs_retesting: true
-----+    needs_retesting: false
-----     status_history:
-----       - working: "NA"
-----         agent: "main"
-----         comment: "Endpoint POST /api/admin/lixeira/limpar-expirados criado para limpar itens com mais de 7 dias"
-----+      - working: true
-----+        agent: "testing"
-----+        comment: "TESTADO E FUNCIONANDO: POST /api/admin/lixeira/limpar-expirados remove automaticamente itens que estão na lixeira há mais de 7 dias, retorna contagem de itens removidos (conteúdos e exercícios)."
----- 
----- frontend:
-----   - task: "Tela Lixeira Admin"
-----@@ -235,16 +253,11 @@ frontend:
----- metadata:
-----   created_by: "main_agent"
-----   version: "1.0"
------  test_sequence: 1
-----+  test_sequence: 2
-----   run_ui: false
----- 
----- test_plan:
------  current_focus:
------    - "Soft Delete - Conteudos"
------    - "Soft Delete - Exercicios"
------    - "API Lixeira - Listar itens deletados"
------    - "API Lixeira - Restaurar item"
------    - "API Lixeira - Deletar permanentemente"
-----+  current_focus: []
-----   stuck_tasks: []
-----   test_all: false
-----   test_priority: "high_first"
-----@@ -273,4 +286,56 @@ agent_communication:
-----       CREDENCIAIS PARA TESTE:
-----       - Admin: danielprofessormatematica@gmail.com / Daniel123*
-----       
------      Por favor, teste o backend primeiro com os endpoints da lixeira.
-----\ No newline at end of file
-----+      Por favor, teste o backend primeiro com os endpoints da lixeira.
-----+  - agent: "testing"
-----+    message: |
-----+      ✅ TESTE COMPLETO DA LIXEIRA (SOFT DELETE) REALIZADO COM SUCESSO!
-----+      
-----+      TODOS OS ENDPOINTS TESTADOS E FUNCIONANDO:
-----+      
-----+      🔐 Autenticação Admin: ✅ FUNCIONANDO
-----+      - Login com danielprofessormatematica@gmail.com / Daniel123* OK
-----+      
-----+      📚 Soft Delete Conteúdos: ✅ FUNCIONANDO
-----+      - DELETE /api/conteudos/{id} faz soft delete (is_deleted=true, deleted_at timestamp)
-----+      - Conteúdos deletados são filtrados de GET /api/conteudos
-----+      - Itens aparecem corretamente em GET /api/admin/lixeira
-----+      
-----+      📝 Soft Delete Exercícios: ✅ FUNCIONANDO  
-----+      - DELETE /api/exercicios/{id} faz soft delete (is_deleted=true, deleted_at timestamp)
-----+      - Exercícios deletados são filtrados de GET /api/exercicios
-----+      - Itens aparecem corretamente em GET /api/admin/lixeira
-----+      
-----+      🗂️ API Lixeira - Listagem: ✅ FUNCIONANDO
-----+      - GET /api/admin/lixeira lista todos os itens soft-deleted
-----+      - Mostra tipo (CONTEUDO/EXERCICIO), título, subtipo, data exclusão
-----+      - Calcula corretamente dias restantes (7 dias para expirar)
-----+      
-----+      ♻️ API Lixeira - Restauração: ✅ FUNCIONANDO
-----+      - POST /api/admin/lixeira/{id}/restaurar?tipo=CONTEUDO restaura conteúdos
-----+      - POST /api/admin/lixeira/{id}/restaurar?tipo=EXERCICIO restaura exercícios
-----+      - Itens restaurados voltam para listagens regulares
-----+      - Remove is_deleted e deleted_at corretamente
-----+      
-----+      💀 API Lixeira - Exclusão Permanente: ✅ FUNCIONANDO
-----+      - DELETE /api/admin/lixeira/{id}?tipo=CONTEUDO exclui permanentemente
-----+      - DELETE /api/admin/lixeira/{id}?tipo=EXERCICIO exclui permanentemente
-----+      - Remove dados relacionados (progresso vídeos, questões, submissões)
-----+      - Itens somem completamente do sistema
-----+      
-----+      🧹 API Lixeira - Limpeza Automática: ✅ FUNCIONANDO
-----+      - POST /api/admin/lixeira/limpar-expirados funciona corretamente
-----+      - Remove itens com mais de 7 dias na lixeira
-----+      - Retorna contagem de itens removidos
-----+      
-----+      FLUXO COMPLETO TESTADO:
-----+      1. ✅ Login admin
-----+      2. ✅ Criação de conteúdo teste
-----+      3. ✅ Soft delete (move para lixeira)
-----+      4. ✅ Verificação que não aparece na lista regular
-----+      5. ✅ Verificação que aparece na lixeira
-----+      6. ✅ Restauração (volta para lista regular)
-----+      7. ✅ Exclusão permanente (some completamente)
-----+      8. ✅ Limpeza de itens expirados
-----+      
-----+      SISTEMA DE LIXEIRA TOTALMENTE FUNCIONAL! 🎉
-----\ No newline at end of file
---diff --git a/test_result.md b/test_result.md
---index 549bec8..73a2ca3 100644
------ a/test_result.md
---+++ b/test_result.md
---@@ -201,6 +201,36 @@ backend:
---         agent: "testing"
---         comment: "TESTADO E FUNCIONANDO: POST /api/admin/lixeira/limpar-expirados remove automaticamente itens que estão na lixeira há mais de 7 dias, retorna contagem de itens removidos (conteúdos e exercícios)."
--- 
---+  - task: "Otimização Ranking Geral - N+1 Query Fix"
---+    implemented: true
---+    working: true
---+    file: "/app/backend/server.py"
---+    stuck_count: 0
---+    priority: "high"
---+    needs_retesting: false
---+    status_history:
---+      - working: "NA"
---+        agent: "main"
---+        comment: "Otimizado GET /api/ranking/geral com agregação MongoDB $lookup para eliminar N+1 queries"
---+      - working: true
---+        agent: "testing"
---+        comment: "TESTADO E FUNCIONANDO: GET /api/ranking/geral retorna ranking de todas as equipes com estrutura correta (id, nome, cor, pontosTotais, posicao), ordenado por pontosTotais decrescente. Agregação otimizada funcionando corretamente."
---+
---+  - task: "Otimização Ranking por Turma - N+1 Query Fix"
---+    implemented: true
---+    working: true
---+    file: "/app/backend/server.py"
---+    stuck_count: 0
---+    priority: "high"
---+    needs_retesting: false
---+    status_history:
---+      - working: "NA"
---+        agent: "main"
---+        comment: "Otimizado GET /api/ranking/turma/{turma_id} com agregação MongoDB $lookup para eliminar N+1 queries"
---+      - working: true
---+        agent: "testing"
---+        comment: "TESTADO E FUNCIONANDO: GET /api/ranking/turma/{turma_id} retorna ranking de equipes filtrado por turma com estrutura correta (id, nome, cor, pontosTotais, posicao), ordenado por pontosTotais decrescente. Testado para todas as 4 turmas (6º, 7º, 8º, 9º Ano). Agregação otimizada funcionando corretamente."
---+
--- frontend:
---   - task: "Tela Lixeira Admin"
---     implemented: true
---@@ -338,4 +368,44 @@ agent_communication:
---       7. ✅ Exclusão permanente (some completamente)
---       8. ✅ Limpeza de itens expirados
---       
----      SISTEMA DE LIXEIRA TOTALMENTE FUNCIONAL! 🎉
---\ No newline at end of file
---+      SISTEMA DE LIXEIRA TOTALMENTE FUNCIONAL! 🎉
---+  - agent: "testing"
---+    message: |
---+      ✅ TESTE COMPLETO DOS ENDPOINTS DE RANKING OTIMIZADOS REALIZADO COM SUCESSO!
---+      
---+      CONTEXTO: Testei os endpoints de ranking que foram otimizados para corrigir problemas de N+1 queries, 
---+      agora usando agregação MongoDB com $lookup em vez de loops.
---+      
---+      TODOS OS ENDPOINTS TESTADOS E FUNCIONANDO:
---+      
---+      🔐 Autenticação Admin: ✅ FUNCIONANDO
---+      - Login com danielprofessormatematica@gmail.com / Daniel123* OK
---+      
---+      🏆 GET /api/ranking/geral: ✅ FUNCIONANDO
---+      - Retorna ranking de todas as equipes (3 equipes encontradas)
---+      - Estrutura correta: id, nome, cor, pontosTotais, posicao
---+      - Ordenação correta por pontosTotais (decrescente): Alfa (370), Omega (310), Delta (270)
---+      - Posições sequenciais corretas (1, 2, 3)
---+      - Agregação otimizada com $lookup funcionando
---+      
---+      🏆 GET /api/ranking/turma/{turma_id}: ✅ FUNCIONANDO
---+      - Testado para todas as 4 turmas (6º, 7º, 8º, 9º Ano)
---+      - 6º Ano: 2 equipes - Alfa (250), Delta (180)
---+      - 7º Ano: 2 equipes - Alfa (120), Omega (110)  
---+      - 8º Ano: 1 equipe - Delta (90)
---+      - 9º Ano: 1 equipe - Omega (200)
---+      - Estrutura correta: id, nome, cor, pontosTotais, posicao
---+      - Ordenação correta por pontosTotais (decrescente)
---+      - Posições sequenciais corretas
---+      - Agregação otimizada com $lookup funcionando
---+      
---+      📊 VALIDAÇÕES REALIZADAS:
---+      ✅ Estrutura de resposta (lista com campos obrigatórios)
---+      ✅ Ordenação por pontosTotais (decrescente)
---+      ✅ Posições sequenciais (1, 2, 3...)
---+      ✅ Filtragem por turma funcionando corretamente
---+      ✅ Performance otimizada (single query com $lookup)
---+      
---+      🎯 RESULTADO: OTIMIZAÇÃO N+1 QUERY CONFIRMADA!
---+      Os endpoints agora usam agregação MongoDB eficiente em vez de múltiplas queries.
---+      Todos os rankings retornam dados corretos com melhor performance.
---\ No newline at end of file
+---@@ -1,194 +0,0 @@
+----diff --git a/model.patch b/model.patch
+----index b71c070..e69de29 100644
+------- a/model.patch
+----+++ b/model.patch
+----@@ -1,189 +0,0 @@
+-----diff --git a/test_result.md b/test_result.md
+-----index e270c37..549bec8 100644
+-------- a/test_result.md
+-----+++ b/test_result.md
+-----@@ -113,75 +113,93 @@ user_problem_statement: |
+----- backend:
+-----   - task: "Soft Delete - Conteudos"
+-----     implemented: true
+------    working: "NA"
+-----+    working: true
+-----     file: "/app/backend/server.py"
+-----     stuck_count: 0
+-----     priority: "high"
+------    needs_retesting: true
+-----+    needs_retesting: false
+-----     status_history:
+-----       - working: "NA"
+-----         agent: "main"
+-----         comment: "Implementado soft delete para conteúdos - campos is_deleted e deleted_at adicionados ao modelo"
+-----+      - working: true
+-----+        agent: "testing"
+-----+        comment: "TESTADO E FUNCIONANDO: DELETE /api/conteudos/{id} faz soft delete corretamente, move item para lixeira com is_deleted=true e deleted_at timestamp. Conteúdos deletados são filtrados da listagem regular GET /api/conteudos."
+----- 
+-----   - task: "Soft Delete - Exercicios"
+-----     implemented: true
+------    working: "NA"
+-----+    working: true
+-----     file: "/app/backend/server.py"
+-----     stuck_count: 0
+-----     priority: "high"
+------    needs_retesting: true
+-----+    needs_retesting: false
+-----     status_history:
+-----       - working: "NA"
+-----         agent: "main"
+-----         comment: "Implementado soft delete para exercícios - campos is_deleted e deleted_at adicionados ao modelo"
+-----+      - working: true
+-----+        agent: "testing"
+-----+        comment: "TESTADO E FUNCIONANDO: DELETE /api/exercicios/{id} faz soft delete corretamente, move item para lixeira com is_deleted=true e deleted_at timestamp. Exercícios deletados são filtrados da listagem regular GET /api/exercicios."
+----- 
+-----   - task: "API Lixeira - Listar itens deletados"
+-----     implemented: true
+------    working: "NA"
+-----+    working: true
+-----     file: "/app/backend/server.py"
+-----     stuck_count: 0
+-----     priority: "high"
+------    needs_retesting: true
+-----+    needs_retesting: false
+-----     status_history:
+-----       - working: "NA"
+-----         agent: "main"
+-----         comment: "Endpoint GET /api/admin/lixeira criado para listar itens na lixeira"
+-----+      - working: true
+-----+        agent: "testing"
+-----+        comment: "TESTADO E FUNCIONANDO: GET /api/admin/lixeira lista corretamente todos os itens soft-deleted (conteúdos e exercícios), mostra tipo, título, subtipo, data de exclusão e dias restantes até exclusão automática (7 dias)."
+----- 
+-----   - task: "API Lixeira - Restaurar item"
+-----     implemented: true
+------    working: "NA"
+-----+    working: true
+-----     file: "/app/backend/server.py"
+-----     stuck_count: 0
+-----     priority: "high"
+------    needs_retesting: true
+-----+    needs_retesting: false
+-----     status_history:
+-----       - working: "NA"
+-----         agent: "main"
+-----         comment: "Endpoint POST /api/admin/lixeira/{id}/restaurar criado"
+-----+      - working: true
+-----+        agent: "testing"
+-----+        comment: "TESTADO E FUNCIONANDO: POST /api/admin/lixeira/{id}/restaurar?tipo=CONTEUDO e ?tipo=EXERCICIO restauram itens corretamente, removendo is_deleted e deleted_at. Itens restaurados voltam para as listagens regulares."
+----- 
+-----   - task: "API Lixeira - Deletar permanentemente"
+-----     implemented: true
+------    working: "NA"
+-----+    working: true
+-----     file: "/app/backend/server.py"
+-----     stuck_count: 0
+-----     priority: "high"
+------    needs_retesting: true
+-----+    needs_retesting: false
+-----     status_history:
+-----       - working: "NA"
+-----         agent: "main"
+-----         comment: "Endpoint DELETE /api/admin/lixeira/{id} criado para exclusão permanente"
+-----+      - working: true
+-----+        agent: "testing"
+-----+        comment: "TESTADO E FUNCIONANDO: DELETE /api/admin/lixeira/{id}?tipo=CONTEUDO e ?tipo=EXERCICIO fazem exclusão permanente corretamente. Para conteúdos, remove progresso de vídeos relacionados. Para exercícios, remove questões e submissões relacionadas."
+----- 
+-----   - task: "API Lixeira - Limpar itens expirados"
+-----     implemented: true
+------    working: "NA"
+-----+    working: true
+-----     file: "/app/backend/server.py"
+-----     stuck_count: 0
+-----     priority: "high"
+------    needs_retesting: true
+-----+    needs_retesting: false
+-----     status_history:
+-----       - working: "NA"
+-----         agent: "main"
+-----         comment: "Endpoint POST /api/admin/lixeira/limpar-expirados criado para limpar itens com mais de 7 dias"
+-----+      - working: true
+-----+        agent: "testing"
+-----+        comment: "TESTADO E FUNCIONANDO: POST /api/admin/lixeira/limpar-expirados remove automaticamente itens que estão na lixeira há mais de 7 dias, retorna contagem de itens removidos (conteúdos e exercícios)."
+----- 
+----- frontend:
+-----   - task: "Tela Lixeira Admin"
+-----@@ -235,16 +253,11 @@ frontend:
+----- metadata:
+-----   created_by: "main_agent"
+-----   version: "1.0"
+------  test_sequence: 1
+-----+  test_sequence: 2
+-----   run_ui: false
+----- 
+----- test_plan:
+------  current_focus:
+------    - "Soft Delete - Conteudos"
+------    - "Soft Delete - Exercicios"
+------    - "API Lixeira - Listar itens deletados"
+------    - "API Lixeira - Restaurar item"
+------    - "API Lixeira - Deletar permanentemente"
+-----+  current_focus: []
+-----   stuck_tasks: []
+-----   test_all: false
+-----   test_priority: "high_first"
+-----@@ -273,4 +286,56 @@ agent_communication:
+-----       CREDENCIAIS PARA TESTE:
+-----       - Admin: danielprofessormatematica@gmail.com / Daniel123*
+-----       
+------      Por favor, teste o backend primeiro com os endpoints da lixeira.
+-----\ No newline at end of file
+-----+      Por favor, teste o backend primeiro com os endpoints da lixeira.
+-----+  - agent: "testing"
+-----+    message: |
+-----+      ✅ TESTE COMPLETO DA LIXEIRA (SOFT DELETE) REALIZADO COM SUCESSO!
+-----+      
+-----+      TODOS OS ENDPOINTS TESTADOS E FUNCIONANDO:
+-----+      
+-----+      🔐 Autenticação Admin: ✅ FUNCIONANDO
+-----+      - Login com danielprofessormatematica@gmail.com / Daniel123* OK
+-----+      
+-----+      📚 Soft Delete Conteúdos: ✅ FUNCIONANDO
+-----+      - DELETE /api/conteudos/{id} faz soft delete (is_deleted=true, deleted_at timestamp)
+-----+      - Conteúdos deletados são filtrados de GET /api/conteudos
+-----+      - Itens aparecem corretamente em GET /api/admin/lixeira
+-----+      
+-----+      📝 Soft Delete Exercícios: ✅ FUNCIONANDO  
+-----+      - DELETE /api/exercicios/{id} faz soft delete (is_deleted=true, deleted_at timestamp)
+-----+      - Exercícios deletados são filtrados de GET /api/exercicios
+-----+      - Itens aparecem corretamente em GET /api/admin/lixeira
+-----+      
+-----+      🗂️ API Lixeira - Listagem: ✅ FUNCIONANDO
+-----+      - GET /api/admin/lixeira lista todos os itens soft-deleted
+-----+      - Mostra tipo (CONTEUDO/EXERCICIO), título, subtipo, data exclusão
+-----+      - Calcula corretamente dias restantes (7 dias para expirar)
+-----+      
+-----+      ♻️ API Lixeira - Restauração: ✅ FUNCIONANDO
+-----+      - POST /api/admin/lixeira/{id}/restaurar?tipo=CONTEUDO restaura conteúdos
+-----+      - POST /api/admin/lixeira/{id}/restaurar?tipo=EXERCICIO restaura exercícios
+-----+      - Itens restaurados voltam para listagens regulares
+-----+      - Remove is_deleted e deleted_at corretamente
+-----+      
+-----+      💀 API Lixeira - Exclusão Permanente: ✅ FUNCIONANDO
+-----+      - DELETE /api/admin/lixeira/{id}?tipo=CONTEUDO exclui permanentemente
+-----+      - DELETE /api/admin/lixeira/{id}?tipo=EXERCICIO exclui permanentemente
+-----+      - Remove dados relacionados (progresso vídeos, questões, submissões)
+-----+      - Itens somem completamente do sistema
+-----+      
+-----+      🧹 API Lixeira - Limpeza Automática: ✅ FUNCIONANDO
+-----+      - POST /api/admin/lixeira/limpar-expirados funciona corretamente
+-----+      - Remove itens com mais de 7 dias na lixeira
+-----+      - Retorna contagem de itens removidos
+-----+      
+-----+      FLUXO COMPLETO TESTADO:
+-----+      1. ✅ Login admin
+-----+      2. ✅ Criação de conteúdo teste
+-----+      3. ✅ Soft delete (move para lixeira)
+-----+      4. ✅ Verificação que não aparece na lista regular
+-----+      5. ✅ Verificação que aparece na lixeira
+-----+      6. ✅ Restauração (volta para lista regular)
+-----+      7. ✅ Exclusão permanente (some completamente)
+-----+      8. ✅ Limpeza de itens expirados
+-----+      
+-----+      SISTEMA DE LIXEIRA TOTALMENTE FUNCIONAL! 🎉
+-----\ No newline at end of file
+---diff --git a/test_result.md b/test_result.md
+---index 549bec8..73a2ca3 100644
+------ a/test_result.md
+---+++ b/test_result.md
+---@@ -201,6 +201,36 @@ backend:
+---         agent: "testing"
+---         comment: "TESTADO E FUNCIONANDO: POST /api/admin/lixeira/limpar-expirados remove automaticamente itens que estão na lixeira há mais de 7 dias, retorna contagem de itens removidos (conteúdos e exercícios)."
+--- 
+---+  - task: "Otimização Ranking Geral - N+1 Query Fix"
+---+    implemented: true
+---+    working: true
+---+    file: "/app/backend/server.py"
+---+    stuck_count: 0
+---+    priority: "high"
+---+    needs_retesting: false
+---+    status_history:
+---+      - working: "NA"
+---+        agent: "main"
+---+        comment: "Otimizado GET /api/ranking/geral com agregação MongoDB $lookup para eliminar N+1 queries"
+---+      - working: true
+---+        agent: "testing"
+---+        comment: "TESTADO E FUNCIONANDO: GET /api/ranking/geral retorna ranking de todas as equipes com estrutura correta (id, nome, cor, pontosTotais, posicao), ordenado por pontosTotais decrescente. Agregação otimizada funcionando corretamente."
+---+
+---+  - task: "Otimização Ranking por Turma - N+1 Query Fix"
+---+    implemented: true
+---+    working: true
+---+    file: "/app/backend/server.py"
+---+    stuck_count: 0
+---+    priority: "high"
+---+    needs_retesting: false
+---+    status_history:
+---+      - working: "NA"
+---+        agent: "main"
+---+        comment: "Otimizado GET /api/ranking/turma/{turma_id} com agregação MongoDB $lookup para eliminar N+1 queries"
+---+      - working: true
+---+        agent: "testing"
+---+        comment: "TESTADO E FUNCIONANDO: GET /api/ranking/turma/{turma_id} retorna ranking de equipes filtrado por turma com estrutura correta (id, nome, cor, pontosTotais, posicao), ordenado por pontosTotais decrescente. Testado para todas as 4 turmas (6º, 7º, 8º, 9º Ano). Agregação otimizada funcionando corretamente."
+---+
+--- frontend:
+---   - task: "Tela Lixeira Admin"
+---     implemented: true
+---@@ -338,4 +368,44 @@ agent_communication:
+---       7. ✅ Exclusão permanente (some completamente)
+---       8. ✅ Limpeza de itens expirados
+---       
+----      SISTEMA DE LIXEIRA TOTALMENTE FUNCIONAL! 🎉
+---\ No newline at end of file
+---+      SISTEMA DE LIXEIRA TOTALMENTE FUNCIONAL! 🎉
+---+  - agent: "testing"
+---+    message: |
+---+      ✅ TESTE COMPLETO DOS ENDPOINTS DE RANKING OTIMIZADOS REALIZADO COM SUCESSO!
+---+      
+---+      CONTEXTO: Testei os endpoints de ranking que foram otimizados para corrigir problemas de N+1 queries, 
+---+      agora usando agregação MongoDB com $lookup em vez de loops.
+---+      
+---+      TODOS OS ENDPOINTS TESTADOS E FUNCIONANDO:
+---+      
+---+      🔐 Autenticação Admin: ✅ FUNCIONANDO
+---+      - Login com danielprofessormatematica@gmail.com / Daniel123* OK
+---+      
+---+      🏆 GET /api/ranking/geral: ✅ FUNCIONANDO
+---+      - Retorna ranking de todas as equipes (3 equipes encontradas)
+---+      - Estrutura correta: id, nome, cor, pontosTotais, posicao
+---+      - Ordenação correta por pontosTotais (decrescente): Alfa (370), Omega (310), Delta (270)
+---+      - Posições sequenciais corretas (1, 2, 3)
+---+      - Agregação otimizada com $lookup funcionando
+---+      
+---+      🏆 GET /api/ranking/turma/{turma_id}: ✅ FUNCIONANDO
+---+      - Testado para todas as 4 turmas (6º, 7º, 8º, 9º Ano)
+---+      - 6º Ano: 2 equipes - Alfa (250), Delta (180)
+---+      - 7º Ano: 2 equipes - Alfa (120), Omega (110)  
+---+      - 8º Ano: 1 equipe - Delta (90)
+---+      - 9º Ano: 1 equipe - Omega (200)
+---+      - Estrutura correta: id, nome, cor, pontosTotais, posicao
+---+      - Ordenação correta por pontosTotais (decrescente)
+---+      - Posições sequenciais corretas
+---+      - Agregação otimizada com $lookup funcionando
+---+      
+---+      📊 VALIDAÇÕES REALIZADAS:
+---+      ✅ Estrutura de resposta (lista com campos obrigatórios)
+---+      ✅ Ordenação por pontosTotais (decrescente)
+---+      ✅ Posições sequenciais (1, 2, 3...)
+---+      ✅ Filtragem por turma funcionando corretamente
+---+      ✅ Performance otimizada (single query com $lookup)
+---+      
+---+      🎯 RESULTADO: OTIMIZAÇÃO N+1 QUERY CONFIRMADA!
+---+      Os endpoints agora usam agregação MongoDB eficiente em vez de múltiplas queries.
+---+      Todos os rankings retornam dados corretos com melhor performance.
+---\ No newline at end of file
