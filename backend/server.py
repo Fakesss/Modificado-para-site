@@ -68,6 +68,8 @@ class Usuario(BaseModel):
     pontosTotais: int = 0
     recordeJogoSingle: int = 0
     recordeJogoMulti: int = 0
+    ultimoVisto: Optional[str] = None  # Timestamp do último acesso
+    online: bool = False  # Se está online agora
     criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 class UsuarioCreate(BaseModel):
