@@ -17,9 +17,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.5;
-const MAX_OPERACOES = 3;
+const MAX_OPERACOES = 5; // Aumentar para 5 operações simultâneas
 const VELOCIDADE_BASE = 15000;
-const SPAWN_INTERVAL = 4000;
+const SPAWN_INTERVAL = 2500; // Reduzir para 2.5 segundos (mais rápido)
 const QUESTAO_ESPECIAL_CHANCE = 0.15;
 
 interface Operacao {
