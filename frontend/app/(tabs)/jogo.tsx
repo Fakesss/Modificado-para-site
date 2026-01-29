@@ -74,11 +74,43 @@ export default function Jogo() {
   const gameLoop = useRef<any>(null);
   const appStateRef = useRef(AppState.currentState);
   const spawnTimer = useRef<any>(null);
-  const inputRef = useRef<TextInput>(null);
   const inicioResposta = useRef<number>(Date.now());
   const posXUsadas = useRef<number[]>([]);
   const assistenciaTimer = useRef<any>(null);
   const displayRef = useRef<any>(null);
+
+  // Detectar quando o usuário sai da aba do jogo (troca de tab)
+  useFocusEffect(
+    useCallback(() => {
+      // Quando a tela ganha foco - não faz nada especial
+      return () => {
+        // Quando a tela perde foco (usuário saiu da aba)
+        // Só reseta se o jogo NÃO estiver pausado
+        if (tela === 'jogo' && !pausado && !modalPausaVisivel) {
+          // Resetar o jogo completamente
+          limparTimers();
+          setOperacoes([]);
+          setVidas(10);
+          setPontos(0);
+          setRodada(1);
+          setAcertosRodada(0);
+          setMetaRodada(10);
+          setAcertos(0);
+          setErros(0);
+          setErrosConsecutivos(0);
+          setTempoRespostas([]);
+          setDificuldade(1);
+          setVelocidade(1);
+          setPowerUpDisponivel(false);
+          setPowerUpTipo(null);
+          setPausado(false);
+          setModalPausaVisivel(false);
+          posXUsadas.current = [];
+          setTela('menu');
+        }
+      };
+    }, [tela, pausado, modalPausaVisivel])
+  );
 
   useEffect(() => {
     carregarRecordes();
