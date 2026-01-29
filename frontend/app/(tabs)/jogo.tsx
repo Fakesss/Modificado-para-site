@@ -1359,9 +1359,15 @@ export default function Jogo() {
       {modo === 'multi' && currentRoom && (
         <View style={styles.multiScores}>
           {currentRoom.players.map(p => (
-            <View key={p.id} style={[styles.multiScoreItem, p.id === user?.id && styles.multiScoreYou]}>
-              <Text style={styles.multiScoreName} numberOfLines={1}>{p.nome.split(' ')[0]}</Text>
-              <Text style={styles.multiScorePoints}>{p.pontos}</Text>
+            <View key={p.id} style={[
+              styles.multiScoreItem, 
+              p.id === user?.id && styles.multiScoreYou,
+              p.vidas <= 0 && styles.multiScoreDead
+            ]}>
+              <Text style={[styles.multiScoreName, p.vidas <= 0 && styles.deadText]} numberOfLines={1}>
+                {p.nome.split(' ')[0]} {p.vidas <= 0 && '💀'}
+              </Text>
+              <Text style={[styles.multiScorePoints, p.vidas <= 0 && styles.deadText]}>{p.pontos}</Text>
               <View style={styles.multiScoreVidas}>
                 {Array.from({length: 3}).map((_, i) => (
                   <View key={i} style={[styles.miniVida, i < Math.ceil(p.vidas/3) ? styles.miniVidaAtiva : styles.miniVidaInativa]} />
