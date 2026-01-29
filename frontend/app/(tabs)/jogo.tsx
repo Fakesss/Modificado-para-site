@@ -1,14 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   Animated,
   Alert,
   Dimensions,
-  Modal,
   AppState,
   AppStateStatus,
 } from 'react-native';
@@ -16,9 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Audio } from 'expo-av';
-import io, { Socket } from 'socket.io-client';
+import { useFocusEffect } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.5;
