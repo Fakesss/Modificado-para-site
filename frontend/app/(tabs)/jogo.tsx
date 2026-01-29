@@ -88,6 +88,47 @@ export default function Jogo() {
     carregarRecordes();
   }, []);
 
+  // Detectar quando o usuário sai da aba/app e resetar o jogo
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, [tela]);
+
+  const handleAppStateChange = (nextAppState: AppStateStatus) => {
+    // Se o usuário saiu do app (foi para background) durante o jogo
+    if (
+      appStateRef.current === 'active' &&
+      (nextAppState === 'background' || nextAppState === 'inactive') &&
+      tela === 'jogo'
+    ) {
+      // Resetar o jogo completamente
+      limparTimers();
+      setOperacoes([]);
+      setVidas(10);
+      setPontos(0);
+      setRodada(1);
+      setAcertosRodada(0);
+      setMetaRodada(10);
+      setAcertos(0);
+      setErros(0);
+      setErrosConsecutivos(0);
+      setTempoRespostas([]);
+      setDificuldade(1);
+      setVelocidade(1);
+      setPowerUpDisponivel(false);
+      setPowerUpTipo(null);
+      setPausado(false);
+      setModalPausaVisivel(false);
+      posXUsadas.current = [];
+      
+      // Voltar ao menu
+      setTela('menu');
+    }
+    appStateRef.current = nextAppState;
+  };
+
   useEffect(() => {
     if (tela === 'jogo') {
       iniciarJogo();
