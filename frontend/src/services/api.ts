@@ -1,7 +1,8 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+// Alteramos a linha abaixo para o seu novo endereço do Render
+const API_URL = 'https://modificado-para-site-1.onrender.com';
 
 const api = axios.create({
   baseURL: `${API_URL}/api`,
