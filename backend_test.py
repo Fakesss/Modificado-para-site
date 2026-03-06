@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any, Optional
 
 # Configuration
-BASE_URL = "https://game-pause-options.preview.emergentagent.com/api"
+BASE_URL = "https://render-deploy-fix-1.preview.emergentagent.com/api"
 ADMIN_EMAIL = "danielprofessormatematica@gmail.com"
 ADMIN_PASSWORD = "Daniel123*"
 
