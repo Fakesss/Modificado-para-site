@@ -2,15 +2,18 @@ import os
 from pymongo import MongoClient
 from datetime import datetime
 
-# Pega o link do seu MongoDB que você configurou no Render
-mongo_uri = os.getenv("MONGODB_URI")
+# 1. Pega o link do seu MongoDB (AGORA COM O NOME CERTO: MONGO_URL)
+mongo_uri = os.getenv("MONGO_URL")
 client = MongoClient(mongo_uri)
-db = client.get_database()
+
+# 2. Pega o nome do banco das suas variáveis (meubanco)
+db_name = os.getenv("DB_NAME", "meubanco") 
+db = client[db_name]
 
 def seed_data():
-    print("Iniciando cadastro de turmas e admin...")
+    print(f"Iniciando cadastro no banco: {db_name}...")
     
-    # 1. Cria as Turmas (Para você conseguir se cadastrar depois se quiser)
+    # Criar turmas
     turmas_iniciais = [
         {"nome": "6º Ano", "created_at": datetime.now()},
         {"nome": "7º Ano", "created_at": datetime.now()},
@@ -18,25 +21,27 @@ def seed_data():
         {"nome": "9º Ano", "created_at": datetime.now()}
     ]
     
-    # Insere as turmas se a coleção estiver vazia
     if db.turmas.count_documents({}) == 0:
         db.turmas.insert_many(turmas_iniciais)
-        print("Turmas criadas com sucesso!")
+        print("✅ Turmas criadas com sucesso!")
+    else:
+        print("ℹ️ As turmas já existem no banco.")
 
-    # 2. Cria o seu usuário de ADMIN (Coloque seu e-mail e senha abaixo)
-    # IMPORTANTE: Troque 'seu@email.com' e 'suasenha' pelos seus dados reais
+    # Criar admin
     admin_user = {
         "nome": "Administrador",
         "email": "danielprofessormatematica@gmail.com", 
-        "senha": "Daniel123*", # O ideal é que a senha fosse criptografada, mas para entrar agora, use assim.
+        "senha": "Daniel123*", 
         "role": "admin",
         "created_at": datetime.now()
     }
 
-    # Insere o admin se ele não existir
     if db.usuarios.count_documents({"email": admin_user["email"]}) == 0:
         db.usuarios.insert_one(admin_user)
-        print(f"Usuário admin {admin_user['email']} criado!")
+        print(f"✅ Usuário admin {admin_user['email']} criado!")
+    else:
+        print("ℹ️ O usuário admin já existe.")
 
+# ESSA LINHA ABAIXO É O QUE FAZ O SCRIPT FUNCIONAR DE VERDADE:
 if __name__ == "__main__":
     seed_data()
