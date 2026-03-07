@@ -47,12 +47,10 @@ export default function TabsLayout() {
 
   useEffect(() => {
     if (user?.equipeId) {
-      // Use predefined colors or fetch from API
       const color = TEAM_COLORS[user.equipeId];
       if (color) {
         setTeamColor(color);
       } else {
-        // Fetch team color from API
         loadTeamColor();
       }
     }
@@ -155,17 +153,18 @@ export default function TabsLayout() {
             tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 },
           }}
         />
-        {isLeader && (
-          <Tabs.Screen
-            name="equipe"
-            options={{
-              title: 'Equipe',
-              tabBarIcon: ({ color, size }) => (
-                <Ionicons name="people" size={size} color={color} />
-              ),
-            }}
-          />
-        )}
+        
+        {/* FIX: Retiramos a verificação solta. Usamos o href para esconder a aba */}
+        <Tabs.Screen
+          name="equipe"
+          options={{
+            title: 'Equipe',
+            href: isLeader ? undefined : null,
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="people" size={size} color={color} />
+            ),
+          }}
+        />
       </Tabs>
     </SafeAreaView>
   );
