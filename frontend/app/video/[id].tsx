@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,9 +9,6 @@ import { Conteudo, ProgressoVideo } from '../../src/types';
 export default function VideoPlayer() {
   const params = useLocalSearchParams();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
-  
-  // FIX: Monitora o tamanho da tela em tempo real para não quebrar ao Maximizar
-  const { width } = useWindowDimensions();
   
   const router = useRouter();
   const [video, setVideo] = useState<Conteudo | null>(null);
@@ -76,7 +73,7 @@ export default function VideoPlayer() {
     };
   }, [youtubeId]);
 
-  // 🧠 Cérebro Matemático Blindado (Sua lógica original intacta)
+  // 🧠 Cérebro Matemático Blindado
   useEffect(() => {
     const safeCurrent = Math.floor(Number(currentTime) || 0);
     const safeDuration = Math.floor(Number(duration) || 0);
@@ -206,9 +203,6 @@ export default function VideoPlayer() {
     );
   }
 
-  // Define a altura baseada na tela atual
-  const playerHeight = width > 600 ? 400 : width * 0.5625;
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -221,13 +215,13 @@ export default function VideoPlayer() {
         <View style={{ width: 24 }} />
       </View>
 
-      <View style={[styles.playerContainer, { height: playerHeight }]}>
+      <View style={styles.playerContainer}>
         {youtubeId ? (
           <iframe
             ref={iframeRef}
             style={{ width: '100%', height: '100%', borderWidth: 0 }}
             src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0&modestbranding=1&enablejsapi=1&start=${startTime}`}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           />
         ) : (
@@ -299,6 +293,7 @@ export default function VideoPlayer() {
   );
 }
 
+const { width } = Dimensions.get('window');
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0c' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -308,7 +303,7 @@ const styles = StyleSheet.create({
   backButtonText: { color: '#000', fontWeight: 'bold' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   headerTitle: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center', marginHorizontal: 16 },
-  playerContainer: { width: '100%', backgroundColor: '#000' }, // Altura agora é dinâmica
+  playerContainer: { width: '100%', height: width > 600 ? 400 : width * 0.5625, backgroundColor: '#000' },
   noVideo: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   noVideoText: { color: '#666', marginTop: 12, fontSize: 16 },
   infoContainer: { padding: 16 },
