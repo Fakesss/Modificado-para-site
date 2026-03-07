@@ -7,10 +7,12 @@ import {
   Animated,
   Dimensions,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
+import * as api from '../../src/services/api';
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.50; 
@@ -18,6 +20,7 @@ const CARD_WIDTH = 105;
 const NUM_LANES = 3; 
 const LANE_WIDTH = width / NUM_LANES;
 
+// Botão especial "Piano" (sem delay)
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
   return (
     <TouchableOpacity
@@ -35,12 +38,19 @@ const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
 
 export default function Jogo() {
   const { user } = useAuth();
-  const isAdmin = user?.perfil === 'ADMIN';
-
+  
+  // Estados de Navegação e Modo
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
-  const [modo, setModo] = useState<'single' | 'bot'>('single');
+  const [modo, setModo] = useState<'single' | 'bot' | 'missao'>('single');
   const [modoMatematica, setModoMatematica] = useState('misto');
   
+  // Estados das Missões
+  const [missoesDisponiveis, setMissoesDisponiveis] = useState<any[]>([]);
+  const [missaoAtual, setMissaoAtual] = useState<any>(null);
+  const [filaQuestõesMissao, setFilaQuestoesMissao] = useState<any[]>([]);
+  const [loadingMissoes, setLoadingMissoes] = useState(false);
+
+  // Game state
   const [operacoes, setOperacoes] = useState<any[]>([]);
   const [vidas, setVidas] = useState(10);
   const [pontos, setPontos] = useState(0);
@@ -51,18 +61,22 @@ export default function Jogo() {
   const [powerUpDisponivel, setPowerUpDisponivel] = useState(false);
   const [pausado, setPausado] = useState(false); 
   
+  // Bot State
   const [botPontos, setBotPontos] = useState(0);
   const [laserAtivo, setLaserAtivo] = useState<{ x: number; y: number; cor: string } | null>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   
+  // Refs
   const spawnTimer = useRef<any>(null);
   const botTimer = useRef<any>(null);
   const operacoesAtuaisRef = useRef<{lane: number, y: number, chave: string}[]>([]);
   const operacoesListRef = useRef<any[]>([]); 
   const rodadaRef = useRef(1);
   const jogoPausadoRef = useRef(false); 
+  const filaQuestoesRef = useRef<any[]>([]); // Para controlar a fila da missão sem renderizar
   
+  // IA de Dificuldade
   const desempenhoOcultoRef = useRef(0); 
   const questoesAcertadasRef = useRef<Set<string>>(new Set()); 
   const ultimasRespostasRef = useRef<number[]>([]); 
@@ -70,6 +84,25 @@ export default function Jogo() {
 
   useEffect(() => { rodadaRef.current = rodada; }, [rodada]);
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
+
+  // Carrega as missões quando abre o menu
+  useEffect(() => {
+    if (tela === 'menu') {
+      carregarMissoes();
+    }
+  }, [tela]);
+
+  const carregarMissoes = async () => {
+    setLoadingMissoes(true);
+    try {
+      const data = await api.getMissoesDisponiveis();
+      setMissoesDisponiveis(data || []);
+    } catch (error) {
+      console.log('Erro ao carregar missões');
+    } finally {
+      setLoadingMissoes(false);
+    }
+  };
 
   const resetGame = () => {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
@@ -89,11 +122,15 @@ export default function Jogo() {
     ultimasRespostasRef.current = [];
     desempenhoOcultoRef.current = 0;
     setResposta('');
+    setMissaoAtual(null);
+    setFilaQuestoesMissao([]);
+    filaQuestoesRef.current = [];
   };
 
   const calcularMetaRodada = (r: number) => r <= 10 ? 10 + (r * 2) : 30 + (r * 5);
 
   const avancarRodada = () => {
+    // No modo missão não tem rodadas infinitas, mas mantemos o contador visual
     const nr = rodada + 1;
     setRodada(nr);
     setAcertosRodada(0);
@@ -110,7 +147,36 @@ export default function Jogo() {
     return pistasDisponiveis[Math.floor(Math.random() * pistasDisponiveis.length)];
   };
 
+  // ==================== GERADOR DE QUESTÕES ====================
   const gerarOperacao = () => {
+    // 🚨 LÓGICA HÍBRIDA: Se for missão, pega da fila. Se não, usa IA.
+    if (modo === 'missao') {
+      if (filaQuestoesRef.current.length === 0) return null; // Acabaram as questões da missão!
+      
+      const questaoDaMissao = filaQuestoesRef.current.shift(); // Pega a primeira e remove da fila
+      
+      const laneSelecionada = obterPistaLivre();
+      const posX = (laneSelecionada * LANE_WIDTH) + (LANE_WIDTH - CARD_WIDTH) / 2;
+      operacoesAtuaisRef.current.push({ lane: laneSelecionada, y: 0, chave: questaoDaMissao.id });
+
+      // Configuração para questão personalizada
+      return {
+        id: Math.random().toString(), // ID único para a animação
+        num1: 0, num2: 0, operador: '', // Campos legado (ignorar)
+        resposta: questaoDaMissao.resposta, // Resposta definida pelo professor
+        textoTela: questaoDaMissao.texto,   // Texto definido pelo professor (ex: "2+2")
+        y: new Animated.Value(0),
+        speed: 10000, // Velocidade fixa confortável para missões
+        posX,
+        lane: laneSelecionada,
+        especial: false,
+        opacity: new Animated.Value(1),
+        scale: new Animated.Value(1),
+        chave: questaoDaMissao.id
+      };
+    }
+
+    // --- MODO INFINITO (IA ORIGINAL) ---
     const currentRodada = rodadaRef.current;
     const desempenho = desempenhoOcultoRef.current; 
     let opsPermitidas = ['+'];
@@ -143,40 +209,21 @@ export default function Jogo() {
       let n1=0, n2: number | string = 0, res=0, texto='';
       
       switch (op) {
-        case '+': 
-          n1 = Math.floor(Math.random() * numMaximo) + 1; n2 = Math.floor(Math.random() * numMaximo) + 1; res = n1 + (n2 as number); texto = `${n1} + ${n2}`; 
-          break;
-        case '-': 
-          n1 = Math.floor(Math.random() * (numMaximo * 1.5)) + 5; n2 = Math.floor(Math.random() * n1) + 1; res = n1 - (n2 as number); texto = `${n1} - ${n2}`; 
-          break;
-        case '×': 
-          n1 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; res = n1 * (n2 as number); texto = `${n1} × ${n2}`; 
-          break;
-        case '÷': 
-          n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; res = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 1; n1 = (n2 as number) * res; texto = `${n1} ÷ ${n2}`; 
-          break;
+        case '+': n1 = Math.floor(Math.random() * numMaximo) + 1; n2 = Math.floor(Math.random() * numMaximo) + 1; res = n1 + (n2 as number); texto = `${n1} + ${n2}`; break;
+        case '-': n1 = Math.floor(Math.random() * (numMaximo * 1.5)) + 5; n2 = Math.floor(Math.random() * n1) + 1; res = n1 - (n2 as number); texto = `${n1} - ${n2}`; break;
+        case '×': n1 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; res = n1 * (n2 as number); texto = `${n1} × ${n2}`; break;
+        case '÷': n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; res = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 1; n1 = (n2 as number) * res; texto = `${n1} ÷ ${n2}`; break;
         case '^': {
           let maxExp = 2;
           n1 = Math.floor(Math.random() * Math.min(multMaximo, 6)) + 2; 
-          if (n1 === 2) maxExp = 5; 
-          else if (n1 === 3) maxExp = 4; 
-          else if (n1 <= 5) maxExp = 3; 
-          else maxExp = 2; 
-
+          if (n1 === 2) maxExp = 5; else if (n1 === 3) maxExp = 4; else if (n1 <= 5) maxExp = 3; else maxExp = 2; 
           n2 = Math.floor(Math.random() * (maxExp - 1)) + 2; 
           res = Math.pow(n1, n2); 
-          if (n2 <= 4 && Math.random() > 0.5) {
-            texto = Array(n2).fill(n1).join('×');
-          } else {
-            const superscripts: {[key: number]: string} = { 2: '²', 3: '³', 4: '⁴', 5: '⁵' };
-            texto = `${n1}${superscripts[n2] || '^' + n2}`;
-          }
+          if (n2 <= 4 && Math.random() > 0.5) texto = Array(n2).fill(n1).join('×');
+          else { const ss: any = { 2: '²', 3: '³', 4: '⁴', 5: '⁵' }; texto = `${n1}${ss[n2] || '^' + n2}`; }
           break;
         }
-        case '√': 
-          res = Math.floor(Math.random() * Math.min(multMaximo + expansaoEmergencia, 20)) + 2; 
-          n1 = res * res; n2 = ''; texto = `√${n1}`; 
-          break;
+        case '√': res = Math.floor(Math.random() * Math.min(multMaximo + expansaoEmergencia, 20)) + 2; n1 = res * res; n2 = ''; texto = `√${n1}`; break;
         default: n1 = 1; n2 = 1; res = 2; texto = '1+1';
       }
       
@@ -213,11 +260,19 @@ export default function Jogo() {
     return null;
   };
 
+  // Spawner Unificado
   const iniciarSpawner = () => {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
 
     const loopSpawner = () => {
       if (!jogoPausadoRef.current) {
+        // Se for missão, verifica se ainda tem questões na tela ou na fila
+        if (modo === 'missao' && filaQuestoesRef.current.length === 0 && operacoesListRef.current.length === 0) {
+          // MISSÃO CUMPRIDA! (Acabaram as questões)
+          setTimeout(() => setTela('resultado'), 1000);
+          return;
+        }
+
         const maxOps = Math.min(8, 3 + Math.floor(rodadaRef.current / 3) + Math.floor(desempenhoOcultoRef.current / 3));
         
         if (operacoesListRef.current.length < maxOps) {
@@ -228,18 +283,29 @@ export default function Jogo() {
           }
         }
       }
+      
       const spawnInterval = Math.max(1200, 3500 - (rodadaRef.current * 150) - (desempenhoOcultoRef.current * 150));
       spawnTimer.current = setTimeout(loopSpawner, spawnInterval);
     };
     loopSpawner();
   };
 
-  const iniciarJogo = (modoEscolhido: 'single' | 'bot') => {
+  const iniciarJogo = (modoEscolhido: 'single' | 'bot' | 'missao', missaoDados?: any) => {
     resetGame();
     setModo(modoEscolhido);
     setTela('jogo');
     inicioRespostaRef.current = Date.now();
     
+    // Configuração Específica de Missão
+    if (modoEscolhido === 'missao' && missaoDados) {
+      setMissaoAtual(missaoDados);
+      // Cria uma cópia das questões para consumir
+      const questoesParaJogar = [...missaoDados.questoes]; 
+      setFilaQuestoesMissao(questoesParaJogar);
+      filaQuestoesRef.current = questoesParaJogar;
+    }
+
+    // Spawn Inicial
     const inicial: any[] = [];
     const opInicial = gerarOperacao();
     if (opInicial) inicial.push(opInicial);
@@ -249,6 +315,7 @@ export default function Jogo() {
     
     iniciarSpawner();
 
+    // Bot apenas no modo Bot
     if (modoEscolhido === 'bot') {
       botTimer.current = setInterval(() => {
         if (jogoPausadoRef.current) return;
@@ -262,7 +329,6 @@ export default function Jogo() {
           const alvo = alvosValidos[0];
           alvo.y.stopAnimation();
           dispararLaser(alvo, true, 'bot');
-          
           setTimeout(() => {
             setOperacoes(curr => curr.filter(o => o.id !== alvo.id));
             operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== alvo.chave);
@@ -341,7 +407,6 @@ export default function Jogo() {
 
   const verificarResposta = () => {
     if (jogoPausadoRef.current) return;
-    
     const resN = parseInt(resposta);
     if (isNaN(resN) || resposta === '') return;
     
@@ -364,7 +429,6 @@ export default function Jogo() {
       });
       
       if (opCorreta.especial && !powerUpDisponivel) setPowerUpDisponivel(true);
-      
       dispararLaser(opCorreta, true, 'player');
       setTimeout(() => { setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id)); }, 350);
     } else {
@@ -402,7 +466,6 @@ export default function Jogo() {
       }
       return nv;
     });
-
     if (opId) {
       setOperacoes(ops => {
         const op = ops.find(o => o.id === opId);
@@ -419,6 +482,8 @@ export default function Jogo() {
     else setResposta(r => r + tecla);
   };
 
+  // ==================== RENDERIZADORES ====================
+
   if (tela === 'menu') {
     return (
       <SafeAreaView style={styles.container}>
@@ -430,7 +495,30 @@ export default function Jogo() {
               <Text style={styles.menuSubtitle}>Treinamento Adaptativo</Text>
             </View>
 
-            <Text style={styles.sectionLabel}>Escolha a Matéria:</Text>
+            {/* 🚨 NOVA SEÇÃO: MISSÕES DO PROFESSOR */}
+            {missoesDisponiveis.length > 0 && (
+              <View style={{width: '100%', marginBottom: 20}}>
+                <Text style={styles.sectionLabel}>🎯 Missões do Professor:</Text>
+                {missoesDisponiveis.map((missao, index) => (
+                  <TouchableOpacity 
+                    key={missao.id || index}
+                    style={styles.missaoCard}
+                    onPress={() => iniciarJogo('missao', missao)}
+                  >
+                    <View style={styles.missaoIcon}>
+                      <Ionicons name="trophy" size={24} color="#FFF" />
+                    </View>
+                    <View style={{flex: 1}}>
+                      <Text style={styles.missaoTitle}>{missao.titulo}</Text>
+                      <Text style={styles.missaoSub}>{missao.questoes?.length} Questões</Text>
+                    </View>
+                    <Ionicons name="play-circle" size={32} color="#FFF" />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            <Text style={styles.sectionLabel}>Modo Arcade (Infinito):</Text>
             <View style={styles.modosGrid}>
               {[
                 { id: 'misto', name: 'Jornada (Misto)', color: '#FFD700' },
@@ -468,10 +556,12 @@ export default function Jogo() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.resultadoContainer}>
-          <Text style={styles.resultadoTitle}>{modo === 'bot' && botPontos > pontos ? '🤖 O Bot Venceu!' : 'Fim de Treino!'}</Text>
+          <Text style={styles.resultadoTitle}>
+            {modo === 'missao' ? '🎯 Missão Cumprida!' : (modo === 'bot' && botPontos > pontos ? '🤖 O Bot Venceu!' : 'Fim de Treino!')}
+          </Text>
           <View style={styles.resultadoCard}>
             <Text style={styles.resultadoPontos}>{pontos}</Text>
-            <Text style={styles.resultadoLabel}>Seus Pontos (Rodada {rodada})</Text>
+            <Text style={styles.resultadoLabel}>Pontos Totais</Text>
           </View>
           {modo === 'bot' && (
              <View style={[styles.resultadoCard, { backgroundColor: '#FF00FF20', padding: 20, marginBottom: 30 }]}>
@@ -479,12 +569,9 @@ export default function Jogo() {
                <Text style={styles.resultadoLabel}>Pontos do Bot</Text>
              </View>
           )}
-          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => iniciarJogo(modo)}>
-            <Ionicons name="refresh" size={22} color="#000" />
-            <Text style={styles.jogarNovamenteText}>Tentar Novamente</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.voltarMenuButton} onPress={() => setTela('menu')}>
-            <Text style={styles.voltarMenuText}>Voltar ao Menu</Text>
+          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => setTela('menu')}>
+            <Ionicons name="home" size={22} color="#000" />
+            <Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -580,12 +667,10 @@ export default function Jogo() {
             <Ionicons name="pause-circle" size={64} color="#FFD700" />
             <Text style={styles.modalPausaTitulo}>Jogo Pausado</Text>
             <Text style={styles.modalPausaSub}>Respire fundo!</Text>
-
             <TouchableOpacity style={styles.continuarButton} onPress={continuarJogo}>
               <Ionicons name="play" size={22} color="#000" />
               <Text style={styles.continuarButtonText}>Continuar</Text>
             </TouchableOpacity>
-            
             <TouchableOpacity style={styles.sairButton} onPress={sairDoJogo}>
               <Ionicons name="exit" size={22} color="#fff" />
               <Text style={styles.sairButtonText}>Sair para o Menu</Text>
@@ -593,7 +678,6 @@ export default function Jogo() {
           </View>
         </View>
       )}
-
     </SafeAreaView>
   );
 }
@@ -609,6 +693,13 @@ const styles = StyleSheet.create({
   modosGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginBottom: 20 },
   modoCardItem: { backgroundColor: '#1a1a2e', paddingVertical: 12, paddingHorizontal: 5, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent', minWidth: '30%' },
   modoTextItem: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  
+  // 🚨 ESTILOS DAS MISSÕES
+  missaoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF69B4', padding: 15, borderRadius: 16, marginBottom: 10, width: '100%', elevation: 3 },
+  missaoIcon: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 15 },
+  missaoTitle: { color: '#fff', fontSize: 18, fontWeight: '900' },
+  missaoSub: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '600' },
+
   iniciarButton: { flexDirection: 'row', backgroundColor: '#32CD32', padding: 18, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', marginBottom: 10 },
   iniciarButtonText: { color: '#000', fontSize: 18, fontWeight: '900' },
   botButton: { flexDirection: 'row', backgroundColor: '#FF00FF', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, width: '100%' },
