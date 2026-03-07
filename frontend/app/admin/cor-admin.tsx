@@ -10,7 +10,11 @@ import { Equipe } from '../../src/types';
 export default function CorAdmin() {
   const router = useRouter();
   const [equipes, setEquipes] = useState<Equipe[]>([]);
-  const [customColor, setCustomColor] = useState('#FFD700');
+  
+  // Separamos a cor que está salva da cor que você está digitando
+  const [savedColor, setSavedColor] = useState('#FFD700');
+  const [typedColor, setTypedColor] = useState('#FFD700');
+  
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,14 +23,13 @@ export default function CorAdmin() {
 
   const carregarDados = async () => {
     try {
-      // Puxa as equipes do banco
       const data = await api.getEquipes();
       setEquipes(data);
 
-      // Verifica se o Admin já tem uma cor salva no celular
-      const savedColor = await AsyncStorage.getItem('adminPreviewColor');
-      if (savedColor) {
-        setCustomColor(savedColor);
+      const corSalva = await AsyncStorage.getItem('adminPreviewColor');
+      if (corSalva) {
+        setSavedColor(corSalva);
+        setTypedColor(corSalva); // O campo de digitar já começa com a cor salva
       }
     } catch (error) {
       console.log('Erro ao carregar dados', error);
@@ -36,9 +39,15 @@ export default function CorAdmin() {
   };
 
   const salvarCor = async (cor: string) => {
+    if (!cor || cor.length < 4) {
+      Alert.alert('Aviso', 'Digite um código HEX válido (ex: #FF0000)');
+      return;
+    }
+
     try {
       await AsyncStorage.setItem('adminPreviewColor', cor);
-      setCustomColor(cor);
+      setSavedColor(cor);
+      setTypedColor(cor);
       Alert.alert('Sucesso', 'Sua cor de visualização foi atualizada! Volte e clique em "Ver como aluno".');
     } catch (error) {
       Alert.alert('Erro', 'Não foi possível salvar sua cor.');
@@ -68,15 +77,16 @@ export default function CorAdmin() {
           Escolha como o aplicativo deve ficar quando você clicar em "Ver como aluno".
         </Text>
 
-        {/* Cor Atual do Admin */}
-        <View style={[styles.card, { borderColor: customColor }]}>
-          <Text style={styles.label}>Sua Cor Atual</Text>
+        {/* 1. MOSTRA A COR OFICIAL SALVA */}
+        <View style={[styles.card, { borderColor: savedColor }]}>
+          <Text style={styles.label}>Sua Cor Atual (Em uso)</Text>
           <View style={styles.currentView}>
-            <View style={[styles.colorPreviewLarge, { backgroundColor: customColor }]} />
-            <Text style={styles.hexText}>{customColor}</Text>
+            <View style={[styles.colorPreviewLarge, { backgroundColor: savedColor }]} />
+            <Text style={styles.hexText}>{savedColor}</Text>
           </View>
         </View>
 
+        {/* 2. BOTÕES RÁPIDOS DAS EQUIPES */}
         <Text style={styles.sectionTitle}>Opção 1: Usar cor de uma Equipe</Text>
         {equipes.map((equipe) => (
           <TouchableOpacity 
@@ -89,22 +99,33 @@ export default function CorAdmin() {
           </TouchableOpacity>
         ))}
 
+        {/* 3. CAMPO DIGITÁVEL COM PRÉVIA EM TEMPO REAL */}
         <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Opção 2: Cor Exclusiva (HEX)</Text>
-        <View style={styles.customInputContainer}>
-          <TextInput
-            style={styles.input}
-            value={customColor}
-            onChangeText={setCustomColor}
-            placeholder="#FFFFFF"
-            placeholderTextColor="#666"
-            autoCapitalize="characters"
-            maxLength={7}
-          />
+        <View style={styles.customColorCard}>
+          <Text style={styles.inputLabel}>Digite o código HEX:</Text>
+          
+          <View style={styles.inputRow}>
+            {/* Bolinha que muda de cor ao vivo enquanto você digita */}
+            <View style={[styles.realTimePreview, { backgroundColor: typedColor }]} />
+            
+            <TextInput
+              style={styles.input}
+              value={typedColor}
+              onChangeText={setTypedColor}
+              placeholder="#FFFFFF"
+              placeholderTextColor="#666"
+              autoCapitalize="characters"
+              maxLength={7}
+            />
+          </View>
+
+          {/* Botão de salvar agora fica embaixo, largo e impossível de sumir */}
           <TouchableOpacity 
-            style={styles.saveCustomButton}
-            onPress={() => salvarCor(customColor)}
+            style={styles.saveCustomButtonFull}
+            onPress={() => salvarCor(typedColor)}
           >
-            <Text style={styles.saveCustomButtonText}>Salvar Cor</Text>
+            <Ionicons name="save-outline" size={20} color="#000" />
+            <Text style={styles.saveCustomButtonText}>Salvar Cor Exclusiva</Text>
           </TouchableOpacity>
         </View>
 
@@ -120,17 +141,24 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   content: { padding: 16 },
   subtitle: { color: '#888', marginBottom: 20, fontSize: 14 },
+  
   card: { backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, marginBottom: 24, borderWidth: 1 },
   label: { color: '#fff', fontSize: 14, marginBottom: 12, fontWeight: 'bold' },
   currentView: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   colorPreviewLarge: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#fff' },
   hexText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#fff', marginBottom: 12 },
   teamButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#333' },
   colorPreview: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, borderColor: '#fff', marginRight: 12 },
   teamButtonText: { color: '#fff', fontSize: 16 },
-  customInputContainer: { flexDirection: 'row', gap: 12 },
-  input: { flex: 1, backgroundColor: '#1a1a2e', color: '#fff', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#333', fontSize: 16 },
-  saveCustomButton: { backgroundColor: '#FFD700', paddingHorizontal: 20, justifyContent: 'center', alignItems: 'center', borderRadius: 12 },
+  
+  customColorCard: { backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#333' },
+  inputLabel: { color: '#888', fontSize: 14, marginBottom: 8 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  realTimePreview: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: '#fff' },
+  input: { flex: 1, backgroundColor: '#0c0c0c', color: '#fff', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#444', fontSize: 16 },
+  
+  saveCustomButtonFull: { backgroundColor: '#FFD700', flexDirection: 'row', paddingVertical: 14, justifyContent: 'center', alignItems: 'center', borderRadius: 12, gap: 8 },
   saveCustomButtonText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
 });
