@@ -8,7 +8,6 @@ import { Conteudo, ProgressoVideo } from '../../src/types';
 
 export default function VideoPlayer() {
   const params = useLocalSearchParams();
-  // Blindagem 1: Garante que o ID é uma string e não um array quebrado
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   
   const router = useRouter();
@@ -26,7 +25,9 @@ export default function VideoPlayer() {
   const [watchedPercentage, setWatchedPercentage] = useState(0);
   
   const lastUpdateRef = useRef(0);
+  const iframeRef = useRef<any>(null);
 
+  // 🔎 Regex que aceita vídeos normais e SHORTS
   const getYouTubeId = (url: string) => {
     if (!url) return null;
     const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ \s]{11})/;
@@ -40,50 +41,39 @@ export default function VideoPlayer() {
     if (id) loadVideo();
   }, [id]);
 
+  // 📻 CANAL DE RÁDIO COM O YOUTUBE (Sem injeção de script = Sem erro 500 na Vercel)
   useEffect(() => {
-    if (Platform.OS !== 'web' || !youtubeId || loading) return;
+    if (Platform.OS !== 'web' || !youtubeId) return;
 
-    let player: any;
-    let timer: any;
-    const win = window as any;
-
-    const setupPlayer = () => {
-      if (!win.YT || !win.YT.Player) return;
-      
-      player = new win.YT.Player('yt-player-container', {
-        videoId: youtubeId,
-        playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1, start: startTime },
-        events: {
-          onReady: () => {
-            timer = setInterval(() => {
-              if (player && player.getCurrentTime) {
-                const curr = player.getCurrentTime() || 0;
-                const dur = player.getDuration() || 0;
-                setCurrentTime(curr);
-                setDuration(dur);
-              }
-            }, 1000);
-          }
+    // Escuta as respostas do YouTube
+    const handleMessage = (event: any) => {
+      if (event.origin !== 'https://www.youtube.com') return;
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === 'infoDelivery' && data.info) {
+          if (data.info.currentTime) setCurrentTime(data.info.currentTime);
+          if (data.info.duration) setDuration(data.info.duration);
         }
-      });
+      } catch (e) {}
     };
 
-    if (!win.YT) {
-      const tag = document.createElement('script');
-      tag.src = "https://www.youtube.com/iframe_api";
-      document.head.appendChild(tag);
-      win.onYouTubeIframeAPIReady = setupPlayer;
-    } else {
-      setTimeout(setupPlayer, 200);
-    }
+    window.addEventListener('message', handleMessage);
+
+    // Pergunta o tempo exato para o YouTube a cada 1 segundo (Salva vídeos curtos de 30s)
+    const timer = setInterval(() => {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'getCurrentTime', args: [] }), 'https://www.youtube.com');
+        iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'getDuration', args: [] }), 'https://www.youtube.com');
+      }
+    }, 1000);
 
     return () => {
+      window.removeEventListener('message', handleMessage);
       clearInterval(timer);
-      if (player && player.destroy) player.destroy();
     };
-  }, [youtubeId, startTime, loading]);
+  }, [youtubeId]);
 
-  // Blindagem 2: Cérebro Matemático anti-Erro 500
+  // 🧠 Cérebro Matemático Blindado
   useEffect(() => {
     const safeCurrent = Math.floor(Number(currentTime) || 0);
     const safeDuration = Math.floor(Number(duration) || 0);
@@ -96,7 +86,7 @@ export default function VideoPlayer() {
         setCanComplete(true);
       }
 
-      // Regra de Ouro: Só comunica com o servidor após 5 segundos de vídeo E se o tempo andou
+      // Só envia dados pro servidor APÓS 5 segundos de vídeo pra não bugar
       if (safeCurrent >= 5 && (safeCurrent - lastUpdateRef.current >= 5 || percentage >= 90)) {
         if (safeCurrent > lastUpdateRef.current) {
            lastUpdateRef.current = safeCurrent;
@@ -137,7 +127,7 @@ export default function VideoPlayer() {
             }
           }
         } catch (error) {
-          // Vídeo novo
+          // Vídeo novo, sem progresso ainda
         }
       }
     } catch (error) {
@@ -158,7 +148,6 @@ export default function VideoPlayer() {
         if (window.alert) window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
       }
     } catch (error) {
-      // Falha silenciosa: ignora para não engatilhar a tela 404 da Vercel
       console.log('Sincronização pendente...');
     }
   };
@@ -228,7 +217,13 @@ export default function VideoPlayer() {
 
       <View style={styles.playerContainer}>
         {youtubeId ? (
-          <div id="yt-player-container" style={{ width: '100%', height: '100%' }} />
+          <iframe
+            ref={iframeRef}
+            style={{ width: '100%', height: '100%', borderWidth: 0 }}
+            src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0&modestbranding=1&enablejsapi=1&start=${startTime}`}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
         ) : (
           <View style={styles.noVideo}>
             <Ionicons name="videocam-off" size={48} color="#666" />
