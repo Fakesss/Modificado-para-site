@@ -38,17 +38,26 @@ export default function Login() {
 
   const handleLogin = async () => {
     if (!email || !senha) {
-      Alert.alert('Erro', 'Preencha email e senha');
+      Alert.alert('Aviso', 'Por favor, preencha seu e-mail e senha.');
       return;
     }
 
     setLoading(true);
     try {
-      await login(email.trim(), senha);
-      // Navigation will happen in useEffect
+      // Aqui está a mágica: transforma o e-mail todo em minúsculo e corta espaços invisíveis nas pontas
+      const emailPadronizado = email.toLowerCase().trim();
+      const senhaPadronizada = senha.trim();
+
+      await login(emailPadronizado, senhaPadronizada);
+      // A navegação acontece no useEffect quando o 'user' é atualizado
     } catch (error: any) {
-      const message = error.response?.data?.detail || 'Erro ao fazer login';
-      Alert.alert('Erro', message);
+      // Filtro para dar uma mensagem amigável de erro de senha
+      const statusErro = error.response?.status;
+      if (statusErro === 401 || statusErro === 400 || statusErro === 404) {
+        Alert.alert('Acesso Negado', 'E-mail ou senha incorretos. Tente novamente.');
+      } else {
+        Alert.alert('Erro de Conexão', 'Não foi possível conectar ao servidor. Verifique sua internet.');
+      }
     } finally {
       setLoading(false);
     }
@@ -94,7 +103,7 @@ export default function Login() {
               <Ionicons name="mail-outline" size={24} color="#888" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Email"
+                placeholder="E-mail"
                 placeholderTextColor="#666"
                 value={email}
                 onChangeText={setEmail}
@@ -113,6 +122,7 @@ export default function Login() {
                 value={senha}
                 onChangeText={setSenha}
                 secureTextEntry={!showPassword}
+                autoCapitalize="none"
               />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                 <Ionicons
