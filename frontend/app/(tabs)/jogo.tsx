@@ -136,7 +136,7 @@ export default function Jogo() {
         default: n1 = 1; n2 = 1; res = 2; texto = '1+1';
       }
       
-      const chave = gerarChaveQuestao(n1, op, n2);
+      const chave = `${n1}${op}${n2}`;
       const jaAcertou = questoesAcertadasRef.current.has(chave);
       const estaNaTela = operacoesAtuaisRef.current.some(o => o.chave === chave);
       
@@ -171,13 +171,11 @@ export default function Jogo() {
       if (!jogoPausadoRef.current) {
         const maxOps = Math.min(8, 3 + Math.floor(rodadaRef.current / 3) + Math.floor(desempenhoOcultoRef.current / 3));
         
-        // Compara com a referência segura para não bugar
         if (operacoesListRef.current.length < maxOps) {
           const nova = gerarOperacao();
           if (nova) { 
             setOperacoes(ops => [...ops, nova]);
-            // 🚨 SOLUÇÃO DO LIMBO: O setTimeout de 50ms garante que o celular desenhou a caixa ANTES dela começar a cair
-            setTimeout(() => animarQueda(nova), 50);
+            setTimeout(() => animarQueda(nova), 50); // Garante a criação na tela antes de cair
           }
         }
       }
@@ -200,7 +198,6 @@ export default function Jogo() {
     }
     setOperacoes(inicial);
     
-    // Anima as 3 iniciais também com o atraso de segurança
     setTimeout(() => {
       inicial.forEach(op => animarQueda(op));
     }, 50);
@@ -229,10 +226,10 @@ export default function Jogo() {
     }
   };
 
-  const animarQueda = (op: any) => {
+  const animarQueda = (op: any, duracaoPersonalizada?: number) => {
     if (jogoPausadoRef.current) return;
     
-    op.y.removeAllListeners(); // Evita duplicação de rastreio de colisão
+    op.y.removeAllListeners(); 
     op.y.addListener(({ value }: { value: number }) => {
       const ref = operacoesAtuaisRef.current.find(o => o.chave === op.chave);
       if (ref) ref.y = value;
@@ -240,18 +237,17 @@ export default function Jogo() {
     
     Animated.timing(op.y, {
       toValue: GAME_AREA_HEIGHT + 50,
-      duration: op.speed,
-      useNativeDriver: true, // Faz a queda ser fluída a 60fps sem travar o app
+      duration: duracaoPersonalizada || op.speed,
+      useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) perderVida(op.id, true); 
     });
   };
 
-  // 🚨 SISTEMA DE PAUSA SEGURO (MATA A TELA BRANCA)
+  // 🚨 SISTEMA DE PAUSA (AGORA FUNCIONA E NÃO TRAVA O CONTINUAR)
   const pausarJogo = () => {
     jogoPausadoRef.current = true;
     setPausado(true);
-    // Para todas as animações imediatamente
     operacoesListRef.current.forEach(op => op.y.stopAnimation());
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
   };
@@ -260,13 +256,15 @@ export default function Jogo() {
     jogoPausadoRef.current = false;
     setPausado(false);
     
-    // Religa a animação de onde ela estava. 
-    // O React Native retoma sozinho, sem precisarmos fazer cálculos que travam o app!
     operacoesListRef.current.forEach(op => {
-      animarQueda(op);
+      const posAtual = (op.y as any)._value || 0;
+      const distanciaRestante = (GAME_AREA_HEIGHT + 50) - posAtual;
+      const tempoRestante = (distanciaRestante / (GAME_AREA_HEIGHT + 50)) * op.speed;
+      
+      animarQueda(op, Math.max(tempoRestante, 500));
     });
     
-    iniciarSpawner(); // Religa a esteira
+    iniciarSpawner(); 
   };
 
   const sairDoJogo = () => {
@@ -492,7 +490,7 @@ export default function Jogo() {
         ))}
       </View>
 
-      {/* ÁREA DO JOGO COM ALTURA FIXA E OVERFLOW HIDDEN */}
+      {/* 🚨 ÁREA DO JOGO COM LARGURA 100% (FIM DO MISTÉRIO DAS CONTAS INVISÍVEIS) 🚨 */}
       <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
         {operacoes.map((op) => (
           <Animated.View key={op.id} style={[
@@ -615,8 +613,10 @@ const styles = StyleSheet.create({
   vidaAtiva: { backgroundColor: '#FF4444' },
   vidaInativa: { backgroundColor: '#333' },
   
-  gameArea: { position: 'relative', backgroundColor: '#0a0a0a', overflow: 'hidden' },
-  operacaoCard: { position: 'absolute', backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center', zIndex: 10 },
+  // 🚨 AQUI ESTÁ A CORREÇÃO: width: '100%' PARA IMPEDIR A LARGURA ZERO
+  gameArea: { position: 'relative', width: '100%', flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
+  // 🚨 AQUI ESTÁ A CORREÇÃO: top: 0 PARA A CONTA NÃO NASCER NO LIMBO
+  operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
   estrelaEspecial: { position: 'absolute', top: -8, right: -4, backgroundColor: '#FFF', borderRadius: 10, padding: 2 },
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
