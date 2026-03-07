@@ -50,8 +50,30 @@ export default function Login() {
       await login(emailPadronizado, senhaPadronizada);
       
     } catch (error: any) {
-      // 🚨 AGORA SIM! Como o api.ts (que arrumamos antes) já traduziu o erro, nós só mostramos na tela!
-      Alert.alert('Acesso Negado', error.message || 'Não foi possível fazer o login.');
+      // 🚨 FORÇA BRUTA: Caçador de erros implacável
+      console.log("O erro que chegou foi:", error); // Isso ajuda a ver o erro nos logs do Expo
+      
+      let mensagemErro = 'Não foi possível fazer o login. Verifique sua conexão.';
+
+      // Tenta ler o erro de todas as formas que existem na programação:
+      if (error?.response?.status === 401 || error?.response?.status === 400 || error?.response?.status === 404) {
+        mensagemErro = 'E-mail ou senha incorretos. Tente novamente.';
+      } else if (error?.response?.data?.detail) {
+        mensagemErro = error.response.data.detail;
+      } else if (error?.message) {
+        mensagemErro = error.message;
+      } else if (typeof error === 'string') {
+        mensagemErro = error;
+      }
+
+      // Se a mensagem for aquele erro feio em inglês, a gente traduz na marra
+      if (mensagemErro.includes('Request failed with status code 401') || mensagemErro.includes('401')) {
+         mensagemErro = 'E-mail ou senha incorretos. Tente novamente.';
+      }
+
+      // Dispara o alerta na tela!
+      Alert.alert('Acesso Negado', mensagemErro);
+      
     } finally {
       setLoading(false);
     }
