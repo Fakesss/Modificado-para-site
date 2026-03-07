@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,6 @@ import * as api from '../../src/services/api';
 import { Conteudo } from '../../src/types';
 
 export default function VideoPlayer() {
-  // 1. HOOKS (Sempre no topo)
   const [isMounted, setIsMounted] = useState(false);
   const params = useLocalSearchParams();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -19,7 +18,6 @@ export default function VideoPlayer() {
   const [completed, setCompleted] = useState(false);
   const [pointsEarned, setPointsEarned] = useState(0);
 
-  // 2. ATIVA O KILL SWITCH
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -65,7 +63,7 @@ export default function VideoPlayer() {
     }
 
     try {
-      // Simula a conclusão enviando o tempo total (300s)
+      // Força o salvamento simulando conclusão sem consultar o YouTube
       const result = await api.updateProgressoVideo(id as string, 300, 300);
       setCompleted(true);
       setPointsEarned(result.pontosGerados);
@@ -73,13 +71,11 @@ export default function VideoPlayer() {
       if (typeof window !== 'undefined' && window.alert) window.alert(`Parabéns! Você ganhou ${result.pontosGerados} pontos!`);
       router.back();
     } catch (error) {
-      if (typeof window !== 'undefined' && window.alert) window.alert('Erro ao marcar como concluído. Tente novamente.');
+      if (typeof window !== 'undefined' && window.alert) window.alert('Erro ao marcar como concluído.');
     }
   };
 
-  // 🚨 O KILL SWITCH DA VERCEL
-  // Se a Vercel tentar processar a página no servidor, ela esbarra aqui e manda uma tela vazia.
-  // Isso IMPEDE o Erro 500 no Android.
+  // 🛡️ Impede a Vercel de travar no servidor (Erro 500 de SSR)
   if (!isMounted) {
     return <View style={styles.container} />;
   }
@@ -123,7 +119,8 @@ export default function VideoPlayer() {
       </View>
 
       <View style={styles.playerContainer}>
-        {youtubeId && Platform.OS === 'web' ? (
+        {youtubeId ? (
+          // O IFRAME BLINDADO: Sem travas de Platform, roda em qualquer Android nativo ou Web
           <iframe
             style={{ width: '100%', height: '100%', borderWidth: 0 }}
             src={`https://www.youtube.com/embed/${youtubeId}?rel=0&modestbranding=1&playsinline=1&origin=${appOrigin}`}
@@ -171,6 +168,10 @@ export default function VideoPlayer() {
           {completed ? 'Vídeo Concluído - Voltar' : 'Marcar como Concluído'}
         </Text>
       </TouchableOpacity>
+
+      {/* RASTREADOR DE VERSÃO - Para garantir que o Android não está puxando cache velho */}
+      <Text style={{ color: '#333', fontSize: 10, textAlign: 'center', marginTop: 10 }}>v3</Text>
+
     </SafeAreaView>
   );
 }
@@ -184,7 +185,6 @@ const styles = StyleSheet.create({
   backButtonText: { color: '#000', fontWeight: 'bold' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   headerTitle: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center', marginHorizontal: 16 },
-  // Usando aspect-ratio puro. Impossível quebrar no Android ao girar a tela.
   playerContainer: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' },
   noVideo: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   noVideoText: { color: '#666', marginTop: 12, fontSize: 16 },
