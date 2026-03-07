@@ -12,7 +12,6 @@ export default function AdminEquipes() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  // Estados temporários para edição
   const [edits, setEdits] = useState<Record<string, { nome: string; cor: string }>>({});
 
   useEffect(() => {
@@ -24,7 +23,6 @@ export default function AdminEquipes() {
       const data = await api.getEquipes();
       setEquipes(data);
       
-      // Prepara o estado de edição com os dados atuais
       const initialEdits: Record<string, { nome: string; cor: string }> = {};
       data.forEach((eq: Equipe) => {
         initialEdits[eq.id] = { nome: eq.nome, cor: eq.cor || '#FFFFFF' };
@@ -44,15 +42,15 @@ export default function AdminEquipes() {
       return;
     }
 
-    setSavingId(id);
+    setSavingId(id); // 🟢 Liga a bolinha do botão
     try {
       await api.updateEquipe(id, { nome: dadosEditados.nome, cor: dadosEditados.cor });
       Alert.alert('Sucesso', 'Equipe atualizada com sucesso!');
-      await loadEquipes(); // Recarrega para garantir sincronia com banco
+      await loadEquipes(); 
     } catch (error) {
       Alert.alert('Erro', 'Falha ao atualizar a equipe. Verifique sua conexão.');
     } finally {
-      setLoading(null);
+      setSavingId(null); // 🔴 FIX: Desliga a bolinha do botão corretamente!
     }
   };
 
