@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,15 +9,17 @@ import {
   Modal,
   Alert,
   FlatList,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as api from '../../src/services/api'; // Importando sua API real
 
 // Interfaces
 interface Questao {
   id: string;
-  texto: string; // Ex: "2 + 2" ou "2³"
+  texto: string;
   resposta: number;
 }
 
@@ -25,69 +27,73 @@ interface Missao {
   id: string;
   titulo: string;
   alvoTipo: 'GERAL' | 'TURMA' | 'INDIVIDUAL';
-  alvoNome: string; // Nome amigável (ex: "Todos", "Turma Delta", "João")
-  alvoId: string;   // ID real para o banco de dados
+  alvoNome: string;
+  alvoId: string;
   questoes: Questao[];
 }
-
-// MOCKS (Dados de exemplo - substitua pela chamada da API depois)
-const MOCK_TURMAS = [
-  { id: 't1', nome: 'Turma Delta' },
-  { id: 't2', nome: 'Turma Ômega' },
-  { id: 't3', nome: 'Líderes' },
-];
-
-const MOCK_ALUNOS = [
-  { id: 'a1', nome: 'João Silva', email: 'joao@email.com' },
-  { id: 'a2', nome: 'Maria Souza', email: 'maria@email.com' },
-  { id: 'a3', nome: 'Pedro Alvo', email: 'pedro@email.com' },
-];
 
 export default function GerenciarJogosAdmin() {
   const router = useRouter();
   
-  // Lista de Missões Ativas na memória (Mock)
-  const [missoes, setMissoes] = useState<Missao[]>([
-    {
-      id: '1',
-      titulo: 'Desafio de Multiplicação Avançada',
-      alvoTipo: 'TURMA',
-      alvoNome: 'Turma Delta',
-      alvoId: 't1',
-      questoes: [{ id: 'q1', texto: '12 × 12', resposta: 144 }, { id: 'q2', texto: '15 × 5', resposta: 75 }]
-    }
-  ]);
+  // Estados de Dados Reais
+  const [listaTurmas, setListaTurmas] = useState<any[]>([]);
+  const [listaAlunos, setListaAlunos] = useState<any[]>([]);
+  const [loadingDados, setLoadingDados] = useState(false);
 
-  // Estados do Modal de Criação
+  // Lista de Missões (Ainda local, mas pronta para conectar no futuro)
+  const [missoes, setMissoes] = useState<Missao[]>([]);
+
+  // Estados do Modal e Criação
   const [modalVisivel, setModalVisivel] = useState(false);
   const [tituloMissao, setTituloMissao] = useState('');
   const [alvoTipo, setAlvoTipo] = useState<'GERAL' | 'TURMA' | 'INDIVIDUAL'>('GERAL');
   const [alvoSelecionado, setAlvoSelecionado] = useState<{id: string, nome: string} | null>(null);
   const [questoesTemporarias, setQuestoesTemporarias] = useState<Questao[]>([]);
 
-  // Estados dos Modais de Seleção (Turma/Aluno)
+  // Modais e Inputs
   const [modalSelecaoVisivel, setModalSelecaoVisivel] = useState(false);
+  const [entradaConta, setEntradaConta] = useState('');
+  const [entradaResposta, setEntradaResposta] = useState('');
 
-  // Estados da Nova Entrada Simples de Questão
-  const [entradaConta, setEntradaConta] = useState(''); // Ex: "2^3"
-  const [entradaResposta, setEntradaResposta] = useState(''); // Ex: "8"
+  // 🔄 CARREGAR DADOS REAIS DO BANCO AO ABRIR O MODAL
+  useEffect(() => {
+    if (modalVisivel) {
+      carregarDados();
+    }
+  }, [modalVisivel]);
 
-  // Função para processar a digitação manual e transformar em questão
+  const carregarDados = async () => {
+    setLoadingDados(true);
+    try {
+      // Tenta buscar turmas reais
+      const turmasData = await api.getTurmas(); // Verifique se essa função existe no seu api.ts
+      setListaTurmas(turmasData || []);
+
+      // Tenta buscar alunos reais
+      const usuariosData = await api.getUsuarios(); // Verifique o nome correto no api.ts
+      // Filtra apenas quem é ALUNO
+      const apenasAlunos = usuariosData?.filter((u: any) => u.perfil === 'ALUNO') || [];
+      setListaAlunos(apenasAlunos);
+
+    } catch (error) {
+      console.log('Erro ao carregar dados:', error);
+      // Se der erro, mantém vazio para não quebrar o app
+    } finally {
+      setLoadingDados(false);
+    }
+  };
+
   const processarEAdicionarQuestao = () => {
     if (!entradaConta || !entradaResposta) {
-      Alert.alert('Erro', 'Digite a conta (ex: 2*3) e a resposta!');
+      Alert.alert('Erro', 'Digite a conta e a resposta!');
       return;
     }
 
-    // Limpa espaços em branco
     let contaLimpa = entradaConta.replace(/\s+/g, '');
-    
-    // Formatação visual inteligente
     let textoVisual = contaLimpa
-      .replace(/\*/g, ' × ') // Troca * por ×
-      .replace(/\//g, ' ÷ '); // Troca / por ÷
+      .replace(/\*/g, ' × ')
+      .replace(/\//g, ' ÷ ');
     
-    // Trata potência (substitui ^ por sobrescrito se for baixo)
     if (contaLimpa.includes('^')) {
       const partes = contaLimpa.split('^');
       const superscripts: {[key: string]: string} = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵' };
@@ -132,7 +138,7 @@ export default function GerenciarJogosAdmin() {
 
     setMissoes([novaMissao, ...missoes]);
     fecharModalPrincipal();
-    Alert.alert('Sucesso', 'Jogo personalizado criado com sucesso!');
+    Alert.alert('Sucesso', 'Jogo enviado para os alunos!');
   };
 
   const fecharModalPrincipal = () => {
@@ -146,16 +152,13 @@ export default function GerenciarJogosAdmin() {
   };
 
   const confirmarDeletarMissao = (id: string) => {
-    Alert.alert('Apagar Jogo', 'Tem certeza que deseja excluir esta missão permanentemente?', [
+    Alert.alert('Apagar Jogo', 'Tem certeza?', [
       { text: 'Cancelar', style: 'cancel' },
-      // 🚨 AGORA FUNCIONA: O botão de apagar deleta da lista na memória
-      { text: 'Apagar', style: 'destructive', onPress: () => {
-        setMissoes(prev => prev.filter(m => m.id !== id));
-      }}
+      { text: 'Apagar', style: 'destructive', onPress: () => setMissoes(prev => prev.filter(m => m.id !== id)) }
     ]);
   };
 
-  // Renderização de cada item da lista de seleção (Turma/Aluno)
+  // Renderização da lista de Turmas/Alunos
   const renderItemSelecao = ({ item }: any) => (
     <TouchableOpacity style={styles.itemSelecao} onPress={() => {
       setAlvoSelecionado({ id: item.id, nome: item.nome });
@@ -163,7 +166,9 @@ export default function GerenciarJogosAdmin() {
     }}>
       <View>
         <Text style={styles.txtItemSelecaoNome}>{item.nome}</Text>
-        {item.email && <Text style={styles.txtItemSelecaoEmail}>{item.email}</Text>}
+        {/* Se for aluno mostra email, se for turma mostra serie se tiver */}
+        {alvoTipo === 'INDIVIDUAL' && item.email && <Text style={styles.txtItemSelecaoInfo}>{item.email}</Text>}
+        {alvoTipo === 'TURMA' && item.serie && <Text style={styles.txtItemSelecaoInfo}>{item.serie}</Text>}
       </View>
       <Ionicons name="chevron-forward" size={20} color="#666" />
     </TouchableOpacity>
@@ -171,7 +176,6 @@ export default function GerenciarJogosAdmin() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header padrão */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#FFD700" />
@@ -187,6 +191,10 @@ export default function GerenciarJogosAdmin() {
 
         <Text style={styles.sectionLabel}>Missões Ativas ({missoes.length})</Text>
 
+        {missoes.length === 0 && (
+          <Text style={styles.emptyText}>Nenhum jogo criado ainda.</Text>
+        )}
+
         {missoes.map(missao => (
           <View key={missao.id} style={styles.cardMissao}>
             <View style={styles.cardInfo}>
@@ -194,15 +202,14 @@ export default function GerenciarJogosAdmin() {
               <View style={styles.tagsRow}>
                 <View style={styles.tagTarget}>
                   <Ionicons name={missao.alvoTipo === 'INDIVIDUAL' ? "person" : "people"} size={14} color="#4169E1" />
-                  <Text style={styles.tagTargetText}>{missao.alvoNome}</Text>
+                  <Text style={styles.tagTargetText} numberOfLines={1}>{missao.alvoNome}</Text>
                 </View>
                 <View style={styles.tagCount}>
                   <Ionicons name="list" size={14} color="#32CD32" />
-                  <Text style={styles.tagCountText}>{missao.questoes.length} Questões</Text>
+                  <Text style={styles.tagCountText}>{missao.questoes.length} Q.</Text>
                 </View>
               </View>
             </View>
-            {/* 🚨 BOTÃO DE APAGAR: Agora com a função de deletar ativa */}
             <TouchableOpacity style={styles.btnApagarCard} onPress={() => confirmarDeletarMissao(missao.id)}>
               <Ionicons name="trash" size={20} color="#FF4444" />
             </TouchableOpacity>
@@ -210,7 +217,7 @@ export default function GerenciarJogosAdmin() {
         ))}
       </ScrollView>
 
-      {/* ==================== MODAL PRINCIPAL DE CRIAÇÃO ==================== */}
+      {/* ==================== MODAL PRINCIPAL ==================== */}
       <Modal visible={modalVisivel} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.modalPrincipal}>
           <View style={styles.modalHeader}>
@@ -224,7 +231,7 @@ export default function GerenciarJogosAdmin() {
             <Text style={styles.fieldLabel}>1. Título do Jogo:</Text>
             <TextInput 
               style={styles.inputSimplificado} 
-              placeholder="Ex: Reforço de Tabuada do 7..." 
+              placeholder="Ex: Treino de Tabuada..." 
               placeholderTextColor="#555"
               value={tituloMissao}
               onChangeText={setTituloMissao}
@@ -232,24 +239,32 @@ export default function GerenciarJogosAdmin() {
 
             <Text style={styles.fieldLabel}>2. Destinatário:</Text>
             <View style={styles.rowSegmented}>
-              {(['GERAL', 'TURMA', 'INDIVIDUAL'] as const).map(tipo => (
-                <TouchableOpacity 
-                  key={tipo} 
-                  style={[styles.btnSegmented, alvoTipo === tipo && styles.btnSegmentedAtivo]}
-                  onPress={() => {
-                    setAlvoTipo(tipo);
-                    setAlvoSelecionado(null); // Reseta seleção anterior
-                  }}
-                >
-                  <Text style={[styles.txtSegmented, alvoTipo === tipo && { color: '#000' }]}>{tipo}</Text>
-                </TouchableOpacity>
-              ))}
+              <TouchableOpacity 
+                style={[styles.btnSegmented, alvoTipo === 'GERAL' && styles.btnSegmentedAtivo]}
+                onPress={() => { setAlvoTipo('GERAL'); setAlvoSelecionado(null); }}
+              >
+                <Text style={[styles.txtSegmented, alvoTipo === 'GERAL' && { color: '#000' }]}>TODOS</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.btnSegmented, alvoTipo === 'TURMA' && styles.btnSegmentedAtivo]}
+                onPress={() => { setAlvoTipo('TURMA'); setAlvoSelecionado(null); }}
+              >
+                <Text style={[styles.txtSegmented, alvoTipo === 'TURMA' && { color: '#000' }]}>TURMA</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.btnSegmented, alvoTipo === 'INDIVIDUAL' && styles.btnSegmentedAtivo]}
+                onPress={() => { setAlvoTipo('INDIVIDUAL'); setAlvoSelecionado(null); }}
+              >
+                <Text style={[styles.txtSegmented, alvoTipo === 'INDIVIDUAL' && { color: '#000' }]}>ALUNO</Text>
+              </TouchableOpacity>
             </View>
 
-            {/* Campo de Seleção Inteligente (Lista ao invés de digitação) */}
+            {/* Seletor de Alvo (Abre Lista) */}
             {alvoTipo !== 'GERAL' && (
               <TouchableOpacity style={styles.seletorAlvo} onPress={() => setModalSelecaoVisivel(true)}>
-                <Ionicons name={alvoTipo === 'TURMA' ? "business" : "person-add"} size={20} color="#888" />
+                <Ionicons name={alvoTipo === 'TURMA' ? "business" : "person"} size={20} color="#888" />
                 <Text style={[styles.txtSeletorAlvo, alvoSelecionado && { color: '#fff' }]}>
                   {alvoSelecionado ? alvoSelecionado.nome : (alvoTipo === 'TURMA' ? "Selecionar Turma..." : "Selecionar Aluno...")}
                 </Text>
@@ -259,14 +274,15 @@ export default function GerenciarJogosAdmin() {
 
             <View style={styles.divisorModal} />
 
-            <Text style={styles.fieldLabel}>3. Adicionar Questões (Entrada Rápida):</Text>
+            <Text style={styles.fieldLabel}>3. Adicionar Questões:</Text>
             
-            {/* 🚨 NOVA ÁREA DE CRIAÇÃO: Input único e simples */}
+            {/* 🚨 CORREÇÃO DO LAYOUT VAZADO: Flexbox ajustado para não quebrar */}
             <View style={styles.painelEntradaRapida}>
-              <Text style={styles.helperText}>Use * para ×, / para ÷ e ^ para potência.</Text>
+              <Text style={styles.helperText}>Use * para multiplicar, / dividir, ^ potência</Text>
               <View style={styles.rowInputsRapidos}>
+                {/* O Input da conta ocupa todo espaço disponivel */}
                 <TextInput 
-                  style={[styles.inputAcao, { flex: 2 }]} 
+                  style={styles.inputConta} 
                   placeholder="Conta (ex: 7*8)" 
                   placeholderTextColor="#555"
                   value={entradaConta}
@@ -274,8 +290,9 @@ export default function GerenciarJogosAdmin() {
                   autoCapitalize="none"
                 />
                 <Text style={styles.txtIgualModal}>=</Text>
+                {/* O Input da resposta tem largura FIXA para não vazar */}
                 <TextInput 
-                  style={[styles.inputAcao, { flex: 1, borderColor: '#32CD32' }]} 
+                  style={styles.inputResp} 
                   placeholder="Resp" 
                   placeholderTextColor="#555"
                   keyboardType="numeric"
@@ -289,7 +306,6 @@ export default function GerenciarJogosAdmin() {
               </TouchableOpacity>
             </View>
 
-            {/* Lista visual das questões adicionadas */}
             {questoesTemporarias.map((q, i) => (
               <View key={q.id} style={styles.itemQuestaoVisual}>
                 <Text style={styles.txtQuestaoVisual}>{i + 1}.   {q.texto}  =  <Text style={{color: '#32CD32', fontWeight: 'bold'}}>{q.resposta}</Text></Text>
@@ -299,36 +315,47 @@ export default function GerenciarJogosAdmin() {
               </View>
             ))}
 
-            {/* Botão Final de Publicação */}
             {questoesTemporarias.length > 0 && (
               <TouchableOpacity style={styles.btnPublicarFinal} onPress={salvarMissaoFinal}>
                 <Ionicons name="cloud-upload" size={22} color="#000" />
-                <Text style={styles.txtPublicarFinal}>PUBLICAR JOGO COMPLETO</Text>
+                <Text style={styles.txtPublicarFinal}>PUBLICAR JOGO</Text>
               </TouchableOpacity>
             )}
-            <View style={{height: 50}} /> {/* Espaçador inferior */}
+            <View style={{height: 50}} /> 
 
           </ScrollView>
         </SafeAreaView>
       </Modal>
 
-      {/* ==================== MODAL SECUNDÁRIO DE SELEÇÃO (LISTA) ==================== */}
+      {/* ==================== MODAL DE SELEÇÃO (DADOS REAIS) ==================== */}
       <Modal visible={modalSelecaoVisivel} animationType="fade" transparent={true}>
         <View style={styles.overlaySelecao}>
           <View style={styles.containerSelecao}>
             <View style={styles.headerSelecao}>
-              <Text style={styles.titleSelecao}>{alvoTipo === 'TURMA' ? "Escolha a Turma" : "Escolha o Aluno"}</Text>
+              <Text style={styles.titleSelecao}>
+                {alvoTipo === 'TURMA' ? "Escolha a Turma" : "Escolha o Aluno"}
+              </Text>
               <TouchableOpacity onPress={() => setModalSelecaoVisivel(false)}>
                 <Ionicons name="close-circle" size={26} color="#FF4444" />
               </TouchableOpacity>
             </View>
-            <FlatList
-              data={alvoTipo === 'TURMA' ? MOCK_TURMAS : MOCK_ALUNOS}
-              keyExtractor={(item) => item.id}
-              renderItem={renderItemSelecao}
-              contentContainerStyle={{ padding: 15 }}
-              ItemSeparatorComponent={() => <View style={{height: 1, backgroundColor: '#222'}} />}
-            />
+            
+            {loadingDados ? (
+              <ActivityIndicator size="large" color="#FFD700" style={{marginTop: 50}} />
+            ) : (
+              <FlatList
+                data={alvoTipo === 'TURMA' ? listaTurmas : listaAlunos}
+                keyExtractor={(item) => String(item.id)}
+                renderItem={renderItemSelecao}
+                contentContainerStyle={{ padding: 15 }}
+                ItemSeparatorComponent={() => <View style={{height: 1, backgroundColor: '#222'}} />}
+                ListEmptyComponent={
+                  <Text style={{color: '#666', textAlign: 'center', marginTop: 20}}>
+                    Nenhum {alvoTipo === 'TURMA' ? 'turma' : 'aluno'} encontrado.
+                  </Text>
+                }
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -338,7 +365,6 @@ export default function GerenciarJogosAdmin() {
 }
 
 const styles = StyleSheet.create({
-  // Estilos da Tela Principal
   container: { flex: 1, backgroundColor: '#0a0a0a' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderColor: '#1a1a1a' },
   backBtn: { marginRight: 15 },
@@ -347,17 +373,19 @@ const styles = StyleSheet.create({
   btnCriarPrincipal: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 25, elevation: 3 },
   txtBtnCriarPrincipal: { color: '#000', fontSize: 15, fontWeight: '900' },
   sectionLabel: { color: '#666', fontSize: 13, fontWeight: 'bold', marginBottom: 12, textTransform: 'uppercase' },
+  emptyText: { color: '#444', textAlign: 'center', marginTop: 20, fontStyle: 'italic' },
+  
   cardMissao: { backgroundColor: '#12121e', padding: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#1a1a1a' },
   cardInfo: { flex: 1 },
   missaoTituloCard: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
   tagsRow: { flexDirection: 'row', gap: 8 },
-  tagTarget: { backgroundColor: '#4169E120', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  tagTarget: { backgroundColor: '#4169E120', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '60%' },
   tagTargetText: { color: '#4169E1', fontSize: 11, fontWeight: 'bold' },
   tagCount: { backgroundColor: '#32CD3220', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 4 },
   tagCountText: { color: '#32CD32', fontSize: 11, fontWeight: 'bold' },
   btnApagarCard: { padding: 8, backgroundColor: '#FF444415', borderRadius: 8, marginLeft: 10 },
 
-  // Estilos do Modal Principal (Construtor)
+  // Estilos do Modal
   modalPrincipal: { flex: 1, backgroundColor: '#080808' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderColor: '#1a1a1a' },
   modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
@@ -368,16 +396,23 @@ const styles = StyleSheet.create({
   btnSegmented: { flex: 1, padding: 12, backgroundColor: '#12121e', borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#222' },
   btnSegmentedAtivo: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
   txtSegmented: { color: '#666', fontWeight: 'bold', fontSize: 11 },
+  
   seletorAlvo: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#12121e', padding: 14, borderRadius: 10, borderWidth: 1, borderColor: '#222', gap: 10 },
   txtSeletorAlvo: { flex: 1, color: '#555', fontSize: 14, fontWeight: '600' },
+  
   divisorModal: { height: 1, backgroundColor: '#1a1a1a', marginVertical: 25 },
 
-  // 🚨 Estilos da NOVA ÁREA DE ENTRADA RÁPIDA
+  // CORREÇÃO DO LAYOUT VAZADO
   painelEntradaRapida: { backgroundColor: '#12121e', padding: 15, borderRadius: 12, borderWidth: 1, borderColor: '#2a2a2a', marginBottom: 20 },
   helperText: { color: '#555', fontSize: 11, marginBottom: 10, textAlign: 'center', fontStyle: 'italic' },
-  rowInputsRapidos: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
-  inputAcao: { backgroundColor: '#080808', color: '#fff', height: 45, borderRadius: 8, paddingHorizontal: 12, fontSize: 15, fontWeight: '600', borderWidth: 1, borderColor: '#333' },
+  rowInputsRapidos: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, justifyContent: 'space-between' },
+  
+  // O Input Conta pega o espaço restante (flex: 1)
+  inputConta: { flex: 1, backgroundColor: '#080808', color: '#fff', height: 45, borderRadius: 8, paddingHorizontal: 12, fontSize: 15, fontWeight: '600', borderWidth: 1, borderColor: '#333' },
   txtIgualModal: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  // O Input Resp tem largura fixa para não sumir da tela
+  inputResp: { width: 80, backgroundColor: '#080808', color: '#fff', height: 45, borderRadius: 8, paddingHorizontal: 12, fontSize: 15, fontWeight: '600', borderWidth: 1, borderColor: '#32CD32', textAlign: 'center' },
+  
   btnConfirmarQuestao: { backgroundColor: '#FFD700', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, borderRadius: 8 },
   txtConfirmarQuestao: { color: '#000', fontWeight: 'bold', fontSize: 13 },
 
@@ -386,12 +421,12 @@ const styles = StyleSheet.create({
   btnPublicarFinal: { flexDirection: 'row', backgroundColor: '#32CD32', padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 30 },
   txtPublicarFinal: { color: '#000', fontSize: 16, fontWeight: '900' },
 
-  // Estilos do Modal de Seleção (Lista)
+  // Modal Seleção
   overlaySelecao: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center' },
   containerSelecao: { width: '85%', height: '70%', backgroundColor: '#12121e', borderRadius: 16, borderWidth: 1, borderColor: '#333', overflow: 'hidden' },
   headerSelecao: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderColor: '#333', backgroundColor: '#1a1a2e' },
   titleSelecao: { color: '#fff', fontSize: 17, fontWeight: 'bold' },
   itemSelecao: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 15, paddingHorizontal: 5 },
   txtItemSelecaoNome: { color: '#fff', fontSize: 15, fontWeight: '600', marginBottom: 2 },
-  txtItemSelecaoEmail: { color: '#666', fontSize: 12 },
+  txtItemSelecaoInfo: { color: '#666', fontSize: 12 },
 });
