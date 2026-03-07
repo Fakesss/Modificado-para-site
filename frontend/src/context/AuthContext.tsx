@@ -40,18 +40,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(storedToken);
         setUser(JSON.parse(storedUser));
         
-        // Refresh user data
+        // Refresh user data silenciosamente no fundo
         try {
           const userData = await api.getMe();
           setUser(userData);
           await AsyncStorage.setItem('user', JSON.stringify(userData));
-        } catch (error) {
-          // Token might be expired or invalid (SECRET_KEY changed) - clear it silently
-          await AsyncStorage.removeItem('token');
-          await AsyncStorage.removeItem('user');
-          setToken(null);
-          setUser(null);
-          // Don't call logout() to avoid clearing other state unnecessarily
+        } catch (error: any) {
+          console.log("Aviso: Servidor dormindo ou falha de rede. Usando cache do usuário.");
+          // SÓ joga o login fora se o servidor acordar e disser que expirou (Erro 401)
+          if (error.response && error.response.status === 401) {
+            await AsyncStorage.removeItem('token');
+            await AsyncStorage.removeItem('user');
+            setToken(null);
+            setUser(null);
+          }
         }
       }
     } catch (error) {
