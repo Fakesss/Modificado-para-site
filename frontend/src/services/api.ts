@@ -378,4 +378,3 @@ export const getMissoesDisponiveis = async () => {
 };
 
 export default api;
-export default api;
