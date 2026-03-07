@@ -191,7 +191,6 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
-        {/* NOVO BOTÃO: GERENCIAR EQUIPES */}
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/equipes')}>
           <View style={[styles.menuIcon, { backgroundColor: '#FF8C00' + '30' }]}>
             <Ionicons name="color-palette" size={24} color="#FF8C00" />
@@ -202,6 +201,19 @@ export default function AdminHome() {
           </View>
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
+
+        {/* ---------------- AQUI ESTÁ O BOTÃO DO PASSO 3 ---------------- */}
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/cor-admin')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#00CED1' + '30' }]}>
+            <Ionicons name="color-wand" size={24} color="#00CED1" />
+          </View>
+          <View style={styles.menuInfo}>
+            <Text style={styles.menuTitle}>Cor da Prévia</Text>
+            <Text style={styles.menuDescription}>Escolher sua cor para "Ver como aluno"</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+        {/* ---------------------------------------------------------------- */}
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/lixeira')}>
           <View style={[styles.menuIcon, { backgroundColor: '#E74C3C' + '30' }]}>
