@@ -20,19 +20,19 @@ export default function Jogo() {
   // Estados Visuais
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [pontos, setPontos] = useState(0);
-  const [vidas, setVidas] = useState(10);
+  const [vidas, setVidas] = useState(5); 
   const [resposta, setResposta] = useState('');
-  const [operacoes, setOperacoes] = useState<any[]>([]); // O que está na tela
+  const [operacoes, setOperacoes] = useState<any[]>([]); 
   const [powerUpDisponivel, setPowerUpDisponivel] = useState(false);
   const [missoesDisponiveis, setMissoesDisponiveis] = useState<any[]>([]);
   const [modoMatematica, setModoMatematica] = useState('misto');
   
-  // Refs de Controle (O "Cérebro" do Jogo)
-  // Usamos Refs para tudo que precisa ser instantâneo e não pode esperar o React renderizar
+  // Refs de Controle
   const modoRef = useRef<'single' | 'bot' | 'missao'>('single'); 
+  const modoMatematicaRef = useRef('misto'); 
   const missaoAtualRef = useRef<any>(null);
   const filaQuestoesRef = useRef<any[]>([]); 
-  const questoesEmJogoRef = useRef(0); // 🚨 CORREÇÃO DO BUG DE 0 PONTOS: Conta quantas estão voando ou nascendo
+  const questoesEmJogoRef = useRef(0);
   
   const operacoesAtuaisRef = useRef<any[]>([]);
   const operacoesListRef = useRef<any[]>([]); 
@@ -40,7 +40,6 @@ export default function Jogo() {
   const jogoPausadoRef = useRef(false); 
   const jogoAtivoRef = useRef(false);
   
-  // Animações e Timers
   const spawnTimer = useRef<any>(null);
   const botTimer = useRef<any>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
@@ -51,14 +50,13 @@ export default function Jogo() {
   // IA Arcade
   const desempenhoOcultoRef = useRef(0); 
   const questoesAcertadasRef = useRef<Set<string>>(new Set()); 
+  const ultimasRespostasRef = useRef<number[]>([]); 
   const inicioRespostaRef = useRef<number>(Date.now()); 
 
-  // Sincroniza Refs com State para renderização
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
+  useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
 
-  // ==================== CICLO DE VIDA ====================
-
-  // Carrega missões sempre que entra no menu
+  // Carrega configurações ao abrir o menu
   useEffect(() => {
     if (tela === 'menu') carregarMissoes();
   }, [tela]);
@@ -72,10 +70,9 @@ export default function Jogo() {
     } catch (e) {}
   };
 
-  // Monitor de Fim de Jogo (Vitória na Missão)
+  // Monitor de Vitória (Apenas Missão)
   useEffect(() => {
     if (modoRef.current === 'missao' && jogoAtivoRef.current) {
-      // Condição de Vitória: Fila vazia E Nenhuma questão voando/nascendo
       if (filaQuestoesRef.current.length === 0 && questoesEmJogoRef.current === 0 && operacoes.length === 0) {
         finalizarMissaoComSucesso();
       }
@@ -85,21 +82,15 @@ export default function Jogo() {
   const finalizarMissaoComSucesso = async () => {
     if (!jogoAtivoRef.current) return;
     jogoAtivoRef.current = false;
-    
     if(spawnTimer.current) clearTimeout(spawnTimer.current);
     
-    // Salva conclusão
-    if(missaoAtualRef.current?.id) {
-      await api.concluirMissao(missaoAtualRef.current.id);
-    }
-    
+    if(missaoAtualRef.current?.id) await api.concluirMissao(missaoAtualRef.current.id);
     setTimeout(() => setTela('resultado'), 500);
   };
 
   // ==================== LÓGICA DO JOGO ====================
 
-  const iniciarJogo = (modoEscolhido: 'single' | 'bot' | 'missao', missaoDados?: any) => {
-    // 1. RESET TOTAL (Limpa tudo antes de começar)
+  const iniciarJogo = async (modoEscolhido: 'single' | 'bot' | 'missao', missaoDados?: any) => {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     if (botTimer.current) clearInterval(botTimer.current);
     
@@ -109,65 +100,54 @@ export default function Jogo() {
     setPowerUpDisponivel(false);
     setBotPontos(0);
     
-    // Reseta Refs
     operacoesAtuaisRef.current = [];
     questoesAcertadasRef.current.clear();
     desempenhoOcultoRef.current = 0;
     questoesEmJogoRef.current = 0;
     jogoPausadoRef.current = false;
     jogoAtivoRef.current = true;
+    rodadaRef.current = 1;
     
-    // 2. CONFIGURA O MODO
-    modoRef.current = modoEscolhido; // Usa Ref para garantir leitura imediata
+    modoRef.current = modoEscolhido;
     inicioRespostaRef.current = Date.now();
 
+    // 🚨 CONFIGURAÇÃO DE VIDAS E QUESTÕES
     if (modoEscolhido === 'missao' && missaoDados) {
       missaoAtualRef.current = missaoDados;
-      
-      // 🚨 CORREÇÃO DAS VIDAS: Aplica as vidas da missão
+      // Vidas da Missão
       setVidas(missaoDados.vidas ? Number(missaoDados.vidas) : 5);
       
-      // Prepara a fila
       const copia = missaoDados.questoes.map((q: any) => ({...q, id: q.id || Math.random().toString()}));
       filaQuestoesRef.current = copia;
     } else {
-      // Modo Arcade
-      setVidas(10);
+      // 🚨 MODO ARCADE: Pega as vidas do ADMIN
       missaoAtualRef.current = null;
       filaQuestoesRef.current = [];
+      const config = await api.getConfiguracaoJogo();
+      setVidas(config.vidasPadrao || 5);
     }
 
     setTela('jogo');
 
-    // 3. SPAWN INICIAL
     setTimeout(() => {
       spawnarQuestao();
       iniciarLoopSpawner();
     }, 100);
 
-    // Bot
     if (modoEscolhido === 'bot') iniciarBot();
   };
 
   const iniciarLoopSpawner = () => {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
-    
     const loop = () => {
       if (!jogoPausadoRef.current && jogoAtivoRef.current) {
-        
-        // Se for missão e acabou a fila, não faz nada (espera o useEffect detectar o fim)
         if (modoRef.current === 'missao' && filaQuestoesRef.current.length === 0) {
           // Idle
         } else {
-          // Limite de questões na tela
           const maxOps = Math.min(8, 3 + Math.floor(pontos / 500)); 
-          if (operacoesListRef.current.length < maxOps) {
-            spawnarQuestao();
-          }
+          if (operacoesListRef.current.length < maxOps) spawnarQuestao();
         }
       }
-      
-      // Ritmo do spawn
       const delay = Math.max(1200, 3000 - (pontos * 2));
       spawnTimer.current = setTimeout(loop, delay);
     };
@@ -177,19 +157,15 @@ export default function Jogo() {
   const spawnarQuestao = () => {
     let novaOp = null;
 
-    // --- GERADOR MISSÃO ---
     if (modoRef.current === 'missao') {
       if (filaQuestoesRef.current.length === 0) return;
-      
       const questao = filaQuestoesRef.current.shift();
       if (!questao) return;
-
-      questoesEmJogoRef.current += 1; // 🚨 Marca que tem uma questão "viva"
-
+      questoesEmJogoRef.current += 1;
       novaOp = criarObjetoAnimado(questao.texto, questao.resposta, questao.id, 10000);
     } 
-    // --- GERADOR ARCADE ---
     else {
+      // ARCADE: Chama o gerador complexo
       const dados = gerarDadosArcade();
       if (!dados) return;
       questoesEmJogoRef.current += 1;
@@ -198,64 +174,107 @@ export default function Jogo() {
 
     if (novaOp) {
       setOperacoes(prev => [...prev, novaOp]);
-      // Inicia animação após renderizar
       setTimeout(() => animarQueda(novaOp), 50);
     }
   };
 
+  // 🚨 RESTAURAÇÃO: Lógica Matemática Completa
+  const gerarDadosArcade = () => {
+    const rodada = rodadaRef.current;
+    const desempenho = desempenhoOcultoRef.current;
+    
+    let opsPermitidas = ['+'];
+    const modoAtual = modoMatematicaRef.current; 
+
+    if (modoAtual === 'misto') {
+      if (rodada >= 2) opsPermitidas.push('-');
+      if (rodada >= 4) opsPermitidas.push('×');
+      if (rodada >= 6) opsPermitidas.push('÷');
+      if (rodada >= 8) opsPermitidas.push('^');
+      if (rodada >= 10) opsPermitidas.push('√');
+    } else {
+      if (modoAtual === 'soma') opsPermitidas = ['+'];
+      else if (modoAtual === 'subtracao') opsPermitidas = ['-'];
+      else if (modoAtual === 'multiplicacao') opsPermitidas = ['×'];
+      else if (modoAtual === 'divisao') opsPermitidas = ['÷'];
+      else if (modoAtual === 'potenciacao') opsPermitidas = ['^'];
+      else if (modoAtual === 'radiciacao') opsPermitidas = ['√'];
+    }
+
+    const bonus = Math.floor(desempenho/2);
+    let numMax = 10 + (rodada * 3) + bonus;
+    let multMax = 3 + Math.floor(rodada/2);
+
+    for (let t = 0; t < 50; t++) {
+      const op = opsPermitidas[Math.floor(Math.random() * opsPermitidas.length)];
+      let n1=0, n2:any=0, res=0, txt='';
+
+      switch(op) {
+        case '+': n1=r(numMax)+1; n2=r(numMax)+1; res=n1+n2; txt=`${n1} + ${n2}`; break;
+        case '-': n1=r(numMax*1.5)+5; n2=r(n1)+1; res=n1-n2; txt=`${n1} - ${n2}`; break;
+        case '×': n1=r(multMax)+2; n2=r(multMax)+2; res=n1*n2; txt=`${n1} × ${n2}`; break;
+        case '÷': n2=r(multMax)+2; res=r(multMax)+1; n1=n2*res; txt=`${n1} ÷ ${n2}`; break;
+        case '^': {
+          let bases = [2,3,4,5]; 
+          n1 = bases[r(bases.length)];
+          let maxExp = n1===2?5 : n1===3?3 : 2;
+          n2 = r(maxExp-1)+2; 
+          res = Math.pow(n1, n2);
+          const ss:any = {2:'²',3:'³',4:'⁴',5:'⁵'};
+          txt = `${n1}${ss[n2]||'^'+n2}`;
+          break;
+        }
+        case '√': res=r(multMax+3)+2; n1=res*res; n2=''; txt=`√${n1}`; break;
+      }
+
+      const chave = `${n1}${op}${n2}`;
+      if (ultimasRespostasRef.current.includes(res)) continue;
+      if (operacoesAtuaisRef.current.some(o => o.chave === chave)) continue;
+
+      ultimasRespostasRef.current.push(res);
+      if(ultimasRespostasRef.current.length > 4) ultimasRespostasRef.current.shift();
+
+      return {
+        texto: txt, resposta: res, chave,
+        speed: Math.max(3000, 8000 - (rodada * 300))
+      };
+    }
+    return null; 
+  };
+
+  const r = (max: number) => Math.floor(Math.random() * max);
+
   const criarObjetoAnimado = (texto: string, resposta: number, chave: string, velocidade: number) => {
     const lane = obterPistaLivre();
     const posX = (lane * LANE_WIDTH) + (LANE_WIDTH - CARD_WIDTH) / 2;
-    
     const id = Math.random().toString();
-    operacoesAtuaisRef.current.push({ lane, y: 0, chave: id }); // Usa ID unico na ref visual
+    operacoesAtuaisRef.current.push({ lane, y: 0, chave: id });
 
     return {
-      id, 
-      chaveOriginal: chave,
-      resposta, 
-      textoTela: texto,
-      y: new Animated.Value(0),
-      speed: velocidade,
-      posX, 
-      lane, 
-      especial: Math.random() < 0.1,
-      opacity: new Animated.Value(1), 
-      scale: new Animated.Value(1)
+      id, chaveOriginal: chave, resposta, textoTela: texto,
+      y: new Animated.Value(0), speed: velocidade, posX, lane, 
+      especial: Math.random() < 0.1, opacity: new Animated.Value(1), scale: new Animated.Value(1)
     };
   };
 
   const animarQueda = (op: any) => {
     if (!jogoAtivoRef.current) return;
-    
     op.y.addListener(({ value }: any) => {
       const ref = operacoesAtuaisRef.current.find(o => o.chave === op.id);
       if (ref) ref.y = value;
     });
-
     Animated.timing(op.y, {
-      toValue: GAME_AREA_HEIGHT + 50,
-      duration: op.speed,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) {
-        processarErro(op.id);
-      }
-    });
+      toValue: GAME_AREA_HEIGHT + 50, duration: op.speed, useNativeDriver: true,
+    }).start(({ finished }) => { if (finished) processarErro(op.id); });
   };
 
   const processarErro = (opId: string) => {
-    questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1); // Remove da contagem
-    
+    questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
     setVidas(v => {
       const nv = v - 1;
-      if (nv <= 0) {
-        gameOver();
-      }
+      if (nv <= 0) gameOver();
       return nv;
     });
-
-    // Remove visualmente
     setOperacoes(prev => prev.filter(o => o.id !== opId));
     operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== opId);
   };
@@ -276,34 +295,29 @@ export default function Jogo() {
     const alvo = operacoes.find(op => op.resposta === val);
 
     if (alvo) {
-      // ACERTOU
       alvo.y.stopAnimation();
       questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
       
-      // Pontuação
       const ptsBase = modoRef.current === 'missao' ? 10 : 10;
-      setPontos(p => p + ptsBase);
+      setPontos(p => {
+        const novo = p + ptsBase;
+        if (modoRef.current !== 'missao' && Math.floor(novo/50) > Math.floor(p/50)) {
+          rodadaRef.current += 1;
+          desempenhoOcultoRef.current += 1;
+        }
+        return novo;
+      });
 
-      // PowerUp
       if (alvo.especial && !powerUpDisponivel) setPowerUpDisponivel(true);
-
-      // Remove Visual
       dispararLaser(alvo, true);
       operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== alvo.id);
-      
-      setTimeout(() => {
-        setOperacoes(prev => prev.filter(o => o.id !== alvo.id));
-      }, 300);
-
+      setTimeout(() => { setOperacoes(prev => prev.filter(o => o.id !== alvo.id)); }, 300);
     } else {
-      // ERROU (Penalidade)
       dispararLaser(null, false);
-      processarErro('nenhum'); // Tira vida sem remover questão (ou tira vida geral)
+      processarErro('nenhum'); 
     }
     setResposta('');
   };
-
-  // --- HELPERS E UTILITÁRIOS ---
 
   const obterPistaLivre = (): number => {
     const pistas = [0, 1, 2].filter(p => {
@@ -311,19 +325,6 @@ export default function Jogo() {
       return !op || op.y > GAME_AREA_HEIGHT * 0.25;
     });
     return pistas.length > 0 ? pistas[Math.floor(Math.random() * pistas.length)] : Math.floor(Math.random() * 3);
-  };
-
-  const gerarDadosArcade = () => {
-    // Lógica simplificada de Arcade para economizar espaço e focar no fix
-    // (Pode usar a lógica completa do arquivo anterior aqui se desejar)
-    const n1 = Math.floor(Math.random()*10)+1;
-    const n2 = Math.floor(Math.random()*10)+1;
-    return {
-      texto: `${n1} + ${n2}`,
-      resposta: n1 + n2,
-      chave: `${n1}+${n2}`,
-      speed: Math.max(2000, 5000 - (pontos * 5))
-    };
   };
 
   const iniciarBot = () => {
@@ -345,10 +346,8 @@ export default function Jogo() {
     const cor = acertou ? '#32CD32' : '#FF4444';
     const x = acertou ? alvo.posX + CARD_WIDTH/2 : width/2;
     const y = acertou ? (alvo.y as any)._value : GAME_AREA_HEIGHT * 0.2;
-    
     setLaserAtivo({ x, y, cor });
     laserAnim.setValue(0);
-    
     Animated.parallel([
       Animated.timing(laserAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
       ...(acertou ? [
@@ -356,7 +355,6 @@ export default function Jogo() {
         Animated.timing(alvo.opacity, { toValue: 0, duration: 150, useNativeDriver: true })
       ] : [])
     ]).start(() => setLaserAtivo(null));
-
     if (!acertou) {
       Animated.sequence([
         Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
@@ -377,7 +375,6 @@ export default function Jogo() {
   };
 
   // --- RENDER ---
-
   if (tela === 'menu') {
     return (
       <SafeAreaView style={styles.container}>
@@ -386,6 +383,7 @@ export default function Jogo() {
             <View style={styles.menuHeader}>
               <Ionicons name="game-controller" size={56} color="#FFD700" />
               <Text style={styles.menuTitle}>Matemática Turbo</Text>
+              <Text style={styles.menuSubtitle}>Treinamento Adaptativo</Text>
             </View>
 
             {missoesDisponiveis.length > 0 && (
@@ -396,7 +394,7 @@ export default function Jogo() {
                     <View style={styles.missaoIcon}><Ionicons name="trophy" size={24} color="#FFF" /></View>
                     <View style={{flex: 1}}>
                       <Text style={styles.missaoTitle}>{missao.titulo}</Text>
-                      <Text style={styles.missaoSub}>{missao.questoes?.length} Questões • {missao.recompensa || 10} Pts • {missao.vidas || 5} Vidas</Text>
+                      <Text style={styles.missaoSub}>{missao.questoes?.length} Questões • {missao.recompensa} Pts • {missao.vidas} Vidas</Text>
                     </View>
                     <Ionicons name="play-circle" size={32} color="#FFF" />
                   </TouchableOpacity>
@@ -404,8 +402,33 @@ export default function Jogo() {
               </View>
             )}
 
-            <Text style={styles.sectionLabel}>Modo Arcade:</Text>
-            <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}><Text style={styles.iniciarButtonText}>JOGAR SOLO</Text></TouchableOpacity>
+            <Text style={styles.sectionLabel}>Modo Arcade (Infinito):</Text>
+            
+            {/* GRID DE MODOS RESTAURADO */}
+            <View style={styles.modosGrid}>
+              {[
+                { id: 'misto', name: 'Jornada (Misto)', color: '#FFD700' },
+                { id: 'soma', name: 'Soma (+)', color: '#32CD32' },
+                { id: 'subtracao', name: 'Subtração (-)', color: '#FF4444' },
+                { id: 'multiplicacao', name: 'Multiplicação (×)', color: '#4169E1' },
+                { id: 'divisao', name: 'Divisão (÷)', color: '#9B59B6' },
+                { id: 'potenciacao', name: 'Potências (^)', color: '#FF8C00' },
+                { id: 'radiciacao', name: 'Raízes (√)', color: '#00CED1' },
+              ].map(m => (
+                <TouchableOpacity 
+                  key={m.id} 
+                  style={[styles.modoCardItem, modoMatematica === m.id && { borderColor: m.color, borderWidth: 2 }]}
+                  onPress={() => setModoMatematica(m.id)}
+                >
+                  <Text style={styles.modoTextItem}>{m.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}>
+              <Ionicons name="play" size={24} color="#000" />
+              <Text style={styles.iniciarButtonText}>JOGAR ARCADE</Text>
+            </TouchableOpacity>
           </ScrollView>
         </View>
       </SafeAreaView>
@@ -415,27 +438,13 @@ export default function Jogo() {
   if (tela === 'resultado') {
     const isMissao = modoRef.current === 'missao';
     const venceu = isMissao && vidas > 0;
-    
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.resultadoContainer}>
           <Text style={styles.resultadoTitle}>{venceu ? '🎯 Missão Cumprida!' : 'Fim de Jogo!'}</Text>
-          
-          {venceu && (
-            <View style={[styles.resultadoCard, {backgroundColor: '#32CD3220'}]}>
-              <Text style={[styles.resultadoPontos, {color: '#32CD32', fontSize: 32}]}>+{missaoAtualRef.current?.recompensa || 0} Pts Bônus</Text>
-            </View>
-          )}
-
-          <View style={styles.resultadoCard}>
-            <Text style={styles.resultadoPontos}>{pontos}</Text>
-            <Text style={styles.resultadoLabel}>Pontos Totais</Text>
-          </View>
-
-          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => setTela('menu')}>
-            <Ionicons name="home" size={22} color="#000" />
-            <Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text>
-          </TouchableOpacity>
+          {venceu && <View style={[styles.resultadoCard, {backgroundColor: '#32CD3220'}]}><Text style={[styles.resultadoPontos, {color: '#32CD32', fontSize:32}]}>+{missaoAtualRef.current?.recompensa} Pts Bônus</Text></View>}
+          <View style={styles.resultadoCard}><Text style={styles.resultadoPontos}>{pontos}</Text><Text style={styles.resultadoLabel}>Pontos Totais</Text></View>
+          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => setTela('menu')}><Ionicons name="home" size={22} color="#000" /><Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -444,72 +453,27 @@ export default function Jogo() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.gameHeader}>
-        <View style={styles.headerStatsGroup}>
-          <Ionicons name="star" size={18} color="#FFD700" />
-          <Text style={styles.statTextScore}>{pontos}</Text>
-        </View>
-        <TouchableOpacity onPress={() => setTela('menu')} style={styles.btnPausaIcone}>
-          <Ionicons name="close" size={26} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.headerStatsGroup}><Ionicons name="star" size={18} color="#FFD700" /><Text style={styles.statTextScore}>{pontos}</Text></View>
+        <TouchableOpacity onPress={() => setTela('menu')} style={styles.btnPausaIcone}><Ionicons name="close" size={26} color="#fff" /></TouchableOpacity>
       </View>
-
-      <View style={styles.vidasContainer}>
-        {Array.from({ length: Math.max(0, vidas) }).map((_, i) => (
-          <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />
-        ))}
-      </View>
-
+      <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />)}</View>
       <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
         {operacoes.map((op) => (
-          <Animated.View key={op.id} style={[
-            styles.operacaoCard, op.especial && styles.operacaoEspecial,
-            { transform: [{ translateY: op.y }, { scale: op.scale }], left: op.posX, opacity: op.opacity }
-          ]}>
+          <Animated.View key={op.id} style={[styles.operacaoCard, op.especial && styles.operacaoEspecial, { transform: [{ translateY: op.y }, { scale: op.scale }], left: op.posX, opacity: op.opacity }]}>
             <Text style={[styles.operacaoText, op.especial && { color: '#000' }]}>{op.textoTela}</Text>
           </Animated.View>
         ))}
-        {laserAtivo && (
-          <Animated.View style={[
-            styles.laser,
-            { opacity: laserAnim, transform: [{ translateY: laserAnim.interpolate({ inputRange: [0, 1], outputRange: [height, laserAtivo.y] }) }],
-              left: laserAtivo.x - 2, backgroundColor: laserAtivo.cor }
-          ]} />
-        )}
+        {laserAtivo && <Animated.View style={[styles.laser, { opacity: laserAnim, transform: [{ translateY: laserAnim.interpolate({ inputRange: [0, 1], outputRange: [height, laserAtivo.y] }) }], left: laserAtivo.x - 2, backgroundColor: laserAtivo.cor }]} />}
       </View>
-
       <View style={styles.bottomPanel}>
-        <View style={styles.powerUpContainer}>
-          {powerUpDisponivel && (
-            <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}>
-              <Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}>
-          <Text style={styles.displayText}>{resposta || ' '}</Text>
-        </Animated.View>
-
+        <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
+        <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
         <View style={styles.tecladoContainer}>
-          {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
-            <View key={i} style={styles.tecladoRow}>
-              {row.map(num => (
-                <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r + v)}>
-                  <Text style={styles.teclaText}>{num}</Text>
-                </BotaoTeclado>
-              ))}
-            </View>
-          ))}
+          {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => <View key={i} style={styles.tecladoRow}>{row.map(num => <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>{num}</Text></BotaoTeclado>)}</View>)}
           <View style={styles.tecladoRow}>
-            <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}>
-              <Ionicons name="close" size={26} color="#fff" />
-            </BotaoTeclado>
-            <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r + v)}>
-              <Text style={styles.teclaText}>0</Text>
-            </BotaoTeclado>
-            <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}>
-              <Ionicons name="checkmark" size={30} color="#fff" />
-            </BotaoTeclado>
+            <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}><Ionicons name="close" size={26} color="#fff" /></BotaoTeclado>
+            <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>0</Text></BotaoTeclado>
+            <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}><Ionicons name="checkmark" size={30} color="#fff" /></BotaoTeclado>
           </View>
         </View>
       </View>
@@ -529,11 +493,17 @@ const styles = StyleSheet.create({
   missaoIcon: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 15 },
   missaoTitle: { color: '#fff', fontSize: 18, fontWeight: '900' },
   missaoSub: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600' },
+  modosGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginBottom: 20 },
+  modoCardItem: { backgroundColor: '#1a1a2e', paddingVertical: 12, paddingHorizontal: 5, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent', minWidth: '30%' },
+  modoTextItem: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
   iniciarButton: { flexDirection: 'row', backgroundColor: '#32CD32', padding: 18, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', marginBottom: 10 },
   iniciarButtonText: { color: '#000', fontSize: 18, fontWeight: '900' },
+  botButton: { flexDirection: 'row', backgroundColor: '#FF00FF', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, width: '100%' },
+  botButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
   gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
   headerStatsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  statTextMeta: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   headerRightGroup: { flexDirection: 'row', alignItems: 'center' },
   btnPausaIcone: { padding: 4, marginLeft: 10 },
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingBottom: 10, height: 20 },
