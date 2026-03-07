@@ -7,12 +7,12 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  Platform, // Importação crucial!
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { WebView } from 'react-native-webview';
+// 🚨 ARRANCAMOS A IMPORTAÇÃO DO WEBVIEW DAQUI!
 import * as api from '../../src/services/api';
 import { Conteudo, ProgressoVideo } from '../../src/types';
 
@@ -23,43 +23,41 @@ export default function VideoPlayer() {
   const [progress, setProgress] = useState<ProgressoVideo | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState(300); // 5 minutos por padrão
   const [completed, setCompleted] = useState(false);
   const [pointsEarned, setPointsEarned] = useState(0);
   const [canComplete, setCanComplete] = useState(false);
   const [watchedPercentage, setWatchedPercentage] = useState(0);
   const lastUpdateRef = useRef(0);
-  const webViewRef = useRef<any>(null);
 
   useEffect(() => {
     loadVideo();
   }, [id]);
 
-  // Se for Web, a gente usa a API do YouTube direto no componente
+  // 🚀 CRONÔMETRO INTELIGENTE: Salva no banco a cada 10 seg e anda a % sozinha
   useEffect(() => {
-    if (Platform.OS === 'web' && video && !completed) {
-      const youtubeId = getYouTubeId(video.urlVideo || '');
-      if (youtubeId) {
-        // Simulação de progresso para a Web (já que o iframe simples bloqueia o tempo real)
-        // Isso permite que o aluno vá ganhando % aos poucos se estiver no navegador
-        const timer = setInterval(() => {
-           setWatchedPercentage((prev) => {
-             const newPercentage = prev + 5; // Aumenta 5% a cada ciclo
-             if (newPercentage >= 90 && !canComplete) {
-               setCanComplete(true);
-             }
-             return newPercentage > 100 ? 100 : newPercentage;
-           });
-           
-           setCurrentTime((prev) => prev + 15); // Simula 15 seg
-           setDuration(300); // Simula 5 min
-        }, 15000); // A cada 15 segundos simula que assistiu um pouco
+    if (video && !completed) {
+      const timer = setInterval(() => {
+         setCurrentTime((prevTime) => {
+            const newTime = prevTime + 10;
+            
+            const percentage = (newTime / duration) * 100;
+            setWatchedPercentage(percentage > 100 ? 100 : percentage);
+            
+            if (percentage >= 90 && !canComplete) {
+              setCanComplete(true);
+            }
 
-        return () => clearInterval(timer);
-      }
+            // Avisa o servidor (Render) a cada 10s para NÃO PERDER o progresso!
+            updateProgress(newTime, duration);
+
+            return newTime;
+         });
+      }, 10000);
+
+      return () => clearInterval(timer);
     }
-  }, [Platform.OS, video, completed, canComplete]);
-
+  }, [video, completed, canComplete, duration]);
 
   const loadVideo = async () => {
     try {
@@ -71,61 +69,43 @@ export default function VideoPlayer() {
         try {
           const progressData = await api.getProgressoVideo(videoData.id);
           setProgress(progressData);
-          setCompleted(progressData?.concluido || false);
-          setPointsEarned(progressData?.pontosGerados || 0);
-          if (progressData?.concluido) {
-            setCanComplete(true);
-            setWatchedPercentage(100);
+          
+          // 🧠 PUXA DA MEMÓRIA DE ONDE O ALUNO PAROU!
+          if (progressData) {
+            const tempoSalvo = progressData.tempoAssistidoSeg || 0;
+            const duracaoSalva = progressData.duracaoSeg || 300;
+            
+            setCurrentTime(tempoSalvo);
+            setDuration(duracaoSalva);
+            setWatchedPercentage((tempoSalvo / duracaoSalva) * 100);
+            lastUpdateRef.current = tempoSalvo;
+            
+            setCompleted(progressData.concluido || false);
+            setPointsEarned(progressData.pontosGerados || 0);
+            
+            if (progressData.concluido) {
+              setCanComplete(true);
+              setWatchedPercentage(100);
+            } else if ((tempoSalvo / duracaoSalva) * 100 >= 90) {
+              setCanComplete(true);
+            }
           }
         } catch (error) {
-          // No progress yet
+          // Sem progresso anterior
         }
       }
     } catch (error) {
       console.error('Error loading video:', error);
-      if (Platform.OS !== 'web') {
-        Alert.alert('Erro', 'Não foi possível carregar o vídeo.');
-      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleWebViewMessage = (event: any) => {
-    if (Platform.OS === 'web') return; // Ignora se for web
-
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      
-      if (data.type === 'timeupdate') {
-        const currentSec = data.currentTime;
-        const totalSec = data.duration;
-        
-        setCurrentTime(currentSec);
-        setDuration(totalSec);
-        
-        if (totalSec > 0) {
-          const percentage = (currentSec / totalSec) * 100;
-          setWatchedPercentage(percentage);
-          
-          if (percentage >= 90 && !canComplete) {
-            setCanComplete(true);
-          }
-        }
-        
-        if (currentSec - lastUpdateRef.current >= 10) {
-          updateProgress(currentSec, totalSec);
-        }
-      } else if (data.type === 'error') {
-        Alert.alert('Erro no Player', 'Problema ao reproduzir o vídeo.');
-      }
-    } catch (error) {
-      console.error('Error parsing webview message:', error);
-    }
-  };
-
   const updateProgress = async (watchedSeconds: number, totalDuration: number) => {
+    // Evita travar a internet se não andou o vídeo
+    if (watchedSeconds <= lastUpdateRef.current && watchedSeconds !== 0) return;
     lastUpdateRef.current = watchedSeconds;
+
     try {
       const result = await api.updateProgressoVideo(id as string, watchedSeconds, totalDuration);
       if (result.concluido && !completed) {
@@ -134,7 +114,7 @@ export default function VideoPlayer() {
         if (Platform.OS === 'web') {
            window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
         } else {
-           Alert.alert('Parabéns!', `Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`, [{ text: 'OK' }]);
+           Alert.alert('Parabéns!', `Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
         }
       }
     } catch (error) {
@@ -149,7 +129,7 @@ export default function VideoPlayer() {
     }
 
     if (!canComplete) {
-      const msg = `Você precisa assistir pelo menos 90% do vídeo para marcá-lo como concluído. Progresso atual: ${Math.round(watchedPercentage)}%`;
+      const msg = `Assista pelo menos 90% do vídeo. Progresso atual: ${Math.round(watchedPercentage)}%`;
       if (Platform.OS === 'web') { window.alert(msg); } else { Alert.alert('Atenção', msg); }
       return;
     }
@@ -158,7 +138,7 @@ export default function VideoPlayer() {
       const result = await api.updateProgressoVideo(
         id as string,
         Math.max(currentTime, duration * 0.9),
-        duration || 300
+        duration
       );
       setCompleted(true);
       setPointsEarned(result.pontosGerados);
@@ -209,50 +189,6 @@ export default function VideoPlayer() {
 
   const youtubeId = video.urlVideo ? getYouTubeId(video.urlVideo) : null;
 
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          * { margin: 0; padding: 0; }
-          body { background: #000; }
-          #player { width: 100vw; height: 100vh; }
-        </style>
-      </head>
-      <body>
-        <div id="player"></div>
-        <script>
-          var tag = document.createElement('script');
-          tag.src = "https://www.youtube.com/iframe_api";
-          var firstScriptTag = document.getElementsByTagName('script')[0];
-          firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-          
-          var player;
-          function onYouTubeIframeAPIReady() {
-            player = new YT.Player('player', {
-              videoId: '${youtubeId}',
-              playerVars: { 'autoplay': 1, 'rel': 0, 'modestbranding': 1, 'playsinline': 1 },
-              events: { 'onReady': onPlayerReady }
-            });
-          }
-          
-          function onPlayerReady(event) {
-            setInterval(function() {
-              if (player && player.getCurrentTime) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                  type: 'timeupdate',
-                  currentTime: player.getCurrentTime(),
-                  duration: player.getDuration()
-                }));
-              }
-            }, 1000);
-          }
-        </script>
-      </body>
-    </html>
-  `;
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -267,28 +203,15 @@ export default function VideoPlayer() {
 
       <View style={styles.playerContainer}>
         {youtubeId ? (
-          Platform.OS === 'web' ? (
-            // Player nativo para Web (iframe puro)
-            <iframe
-              width="100%"
-              height="100%"
-              src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0&modestbranding=1`}
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          ) : (
-            // Player nativo para Celular (WebView)
-            <WebView
-              ref={webViewRef}
-              style={styles.player}
-              source={{ html: htmlContent }}
-              allowsFullscreenVideo
-              mediaPlaybackRequiresUserAction={false}
-              javaScriptEnabled
-              onMessage={handleWebViewMessage}
-            />
-          )
+          // Usamos o Iframe de internet puro 100% das vezes (Adeus erro vermelho!)
+          <iframe
+            width="100%"
+            height="100%"
+            src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0&modestbranding=1`}
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
         ) : (
           <View style={styles.noVideo}>
             <Ionicons name="videocam-off" size={48} color="#666" />
