@@ -7,9 +7,11 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  BackHandler,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
@@ -24,6 +26,37 @@ export default function Home() {
   const [equipe, setEquipe] = useState<Equipe | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // 🚨 NOVA FUNÇÃO: PERGUNTAR ANTES DE SAIR DO APP
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        Alert.alert(
+          'Sair do aplicativo',
+          'Você tem certeza que deseja sair?',
+          [
+            {
+              text: 'Ficar',
+              style: 'cancel',
+              onPress: () => null,
+            },
+            {
+              text: 'Sair',
+              style: 'destructive',
+              onPress: () => BackHandler.exitApp(),
+            },
+          ]
+        );
+        return true; // Isso bloqueia a ação padrão (que seria fechar na hora)
+      };
+
+      // Adiciona o espião do botão voltar quando a tela abre
+      BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      // Remove o espião quando a tela fecha (para não bugar outras telas)
+      return () => BackHandler.removeEventListener('hardwareBackPress', onBackPress);
+    }, [])
+  );
 
   const loadData = useCallback(async () => {
     try {
