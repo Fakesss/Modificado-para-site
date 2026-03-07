@@ -64,19 +64,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, senha: string) => {
-    const data = await api.login(email, senha);
-    setToken(data.access_token);
-    setUser(data.usuario);
-    await AsyncStorage.setItem('token', data.access_token);
-    await AsyncStorage.setItem('user', JSON.stringify(data.usuario));
+    try {
+      const data = await api.login(email, senha);
+      setToken(data.access_token);
+      setUser(data.usuario);
+      await AsyncStorage.setItem('token', data.access_token);
+      await AsyncStorage.setItem('user', JSON.stringify(data.usuario));
+    } catch (error: any) {
+      console.error("AuthContext capturou erro no Login:", error);
+      throw error; // 📢 O megafone: Joga o erro para a tela de Login ouvir!
+    }
   };
 
   const register = async (nome: string, email: string, senha: string, turmaId?: string, equipeId?: string) => {
-    const data = await api.register(nome, email, senha, turmaId, equipeId);
-    setToken(data.access_token);
-    setUser(data.usuario);
-    await AsyncStorage.setItem('token', data.access_token);
-    await AsyncStorage.setItem('user', JSON.stringify(data.usuario));
+    try {
+      const data = await api.register(nome, email, senha, turmaId, equipeId);
+      setToken(data.access_token);
+      setUser(data.usuario);
+      await AsyncStorage.setItem('token', data.access_token);
+      await AsyncStorage.setItem('user', JSON.stringify(data.usuario));
+    } catch (error: any) {
+      console.error("AuthContext capturou erro no Registro:", error);
+      throw error; // 📢 O megafone: Joga o erro para a tela de Registro ouvir!
+    }
   };
 
   const logout = async () => {
