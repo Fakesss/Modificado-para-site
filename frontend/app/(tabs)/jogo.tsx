@@ -18,15 +18,13 @@ const CARD_WIDTH = 105;
 const NUM_LANES = 3; 
 const LANE_WIDTH = width / NUM_LANES;
 
-// 🚨 O BOTÃO ANTI-TRAVA: Lê o toque no vidro e ignora a trava de gestos do Android
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
   return (
     <TouchableOpacity
       activeOpacity={0.5}
       style={[styles.tecla, styleExtra]}
-      // onTouchStart atira no milissegundo exato do toque, independente de outros dedos na tela!
       onTouchStart={(e) => {
-        e.stopPropagation(); // Impede o Android de interferir
+        e.stopPropagation(); 
         onPress(valor);
       }}
     >
@@ -68,9 +66,10 @@ export default function Jogo() {
   const rodadaRef = useRef(1);
   const jogoPausadoRef = useRef(false); 
   
-  // IA de Dificuldade
+  // IA de Dificuldade e Anti-Repetição
   const desempenhoOcultoRef = useRef(0); 
-  const questoesAcertadasRef = useRef<Set<string>>(new Set()); 
+  const questoesAcertadasRef = useRef<Set<string>>(new Set()); // Memoriza as contas já feitas
+  const ultimasRespostasRef = useRef<number[]>([]); // Memoriza os últimos resultados
   const inicioRespostaRef = useRef<number>(Date.now()); 
 
   useEffect(() => { rodadaRef.current = rodada; }, [rodada]);
@@ -91,6 +90,7 @@ export default function Jogo() {
     jogoPausadoRef.current = false;
     operacoesAtuaisRef.current = [];
     questoesAcertadasRef.current.clear();
+    ultimasRespostasRef.current = [];
     desempenhoOcultoRef.current = 0;
     setResposta('');
   };
@@ -120,8 +120,8 @@ export default function Jogo() {
     let opsPermitidas = ['+'];
     
     const bonusDesempenho = Math.floor(desempenho / 3); 
-    let numMaximo = 10 + (currentRodada * 3) + bonusDesempenho; 
-    let multMaximo = 3 + Math.floor(currentRodada / 2) + Math.floor(bonusDesempenho / 2); 
+    let numMaximoBase = 10 + (currentRodada * 3) + bonusDesempenho; 
+    let multMaximoBase = 4 + Math.floor(currentRodada / 2) + Math.floor(bonusDesempenho / 2); 
 
     if (modoMatematica === 'misto') {
       if (currentRodada >= 3) opsPermitidas.push('-');
@@ -135,29 +135,93 @@ export default function Jogo() {
                        modoMatematica === 'multiplicacao' ? '×' :
                        modoMatematica === 'divisao' ? '÷' :
                        modoMatematica === 'potenciacao' ? '^' : '√'];
-      numMaximo = 10 + (currentRodada * 4);
-      multMaximo = 3 + Math.floor(currentRodada / 2);
+      numMaximoBase = 10 + (currentRodada * 4);
     }
 
-    for (let t = 0; t < 50; t++) {
+    // 🚨 IA ANTI-REPETIÇÃO: 60 tentativas para achar uma conta inédita
+    for (let t = 0; t < 60; t++) {
+      // Se já tentou mais de 20 vezes, começa a injetar dificuldade extra para "desbloquear" novos números inéditos
+      const expansaoEmergencia = t > 20 ? Math.floor((t - 20) / 4) : 0;
+      const numMaximo = numMaximoBase + (expansaoEmergencia * 5);
+      const multMaximo = multMaximoBase + (expansaoEmergencia * 2);
+
       const op = opsPermitidas[Math.floor(Math.random() * opsPermitidas.length)];
       let n1=0, n2: number | string = 0, res=0, texto='';
       
       switch (op) {
-        case '+': n1 = Math.floor(Math.random() * numMaximo) + 1; n2 = Math.floor(Math.random() * numMaximo) + 1; res = n1 + (n2 as number); texto = `${n1} + ${n2}`; break;
-        case '-': n1 = Math.floor(Math.random() * (numMaximo * 1.5)) + 5; n2 = Math.floor(Math.random() * n1) + 1; res = n1 - (n2 as number); texto = `${n1} - ${n2}`; break;
-        case '×': n1 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; res = n1 * (n2 as number); texto = `${n1} × ${n2}`; break;
-        case '÷': n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; res = Math.floor(Math.random() * Math.min(multMaximo, 10)) + 1; n1 = (n2 as number) * res; texto = `${n1} ÷ ${n2}`; break;
-        case '^': n1 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; n2 = 2; res = n1 * n1; texto = `${n1}²`; break;
-        case '√': res = Math.floor(Math.random() * Math.min(multMaximo, 15)) + 2; n1 = res * res; n2 = ''; texto = `√${n1}`; break;
+        case '+': 
+          n1 = Math.floor(Math.random() * numMaximo) + 1; 
+          n2 = Math.floor(Math.random() * numMaximo) + 1; 
+          res = n1 + (n2 as number); 
+          texto = `${n1} + ${n2}`; 
+          break;
+        case '-': 
+          n1 = Math.floor(Math.random() * (numMaximo * 1.5)) + 5; 
+          n2 = Math.floor(Math.random() * n1) + 1; 
+          res = n1 - (n2 as number); 
+          texto = `${n1} - ${n2}`; 
+          break;
+        case '×': 
+          n1 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; 
+          n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; 
+          res = n1 * (n2 as number); 
+          texto = `${n1} × ${n2}`; 
+          break;
+        case '÷': 
+          n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; 
+          res = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 1; 
+          n1 = (n2 as number) * res; 
+          texto = `${n1} ÷ ${n2}`; 
+          break;
+        case '^': {
+          let maxExp = 2;
+          n1 = Math.floor(Math.random() * Math.min(multMaximo, 6)) + 2; // Bases seguras (2 a 7)
+          
+          // Define os expoentes máximos baseado na base (para não gerar 999999)
+          if (n1 === 2) maxExp = 5; // até 2^5 = 32
+          else if (n1 === 3) maxExp = 4; // até 3^4 = 81
+          else if (n1 <= 5) maxExp = 3; // até 5^3 = 125
+          else maxExp = 2; // Acima de 5, apenas quadrados perfeitos
+
+          n2 = Math.floor(Math.random() * (maxExp - 1)) + 2; // de 2 até o máximo permitido
+          res = Math.pow(n1, n2); 
+          
+          // 50% de chance de mostrar o formato aberto (ex: 2×2×2) se couber bem na tela (até 4 fatores)
+          if (n2 <= 4 && Math.random() > 0.5) {
+            texto = Array(n2).fill(n1).join('×');
+          } else {
+            const superscripts: {[key: number]: string} = { 2: '²', 3: '³', 4: '⁴', 5: '⁵' };
+            texto = `${n1}${superscripts[n2] || '^' + n2}`;
+          }
+          break;
+        }
+        case '√': 
+          // Raízes de quadrados perfeitos maiores
+          res = Math.floor(Math.random() * Math.min(multMaximo + expansaoEmergencia, 20)) + 2; 
+          n1 = res * res; 
+          n2 = ''; 
+          texto = `√${n1}`; 
+          break;
         default: n1 = 1; n2 = 1; res = 2; texto = '1+1';
       }
       
       const chave = `${n1}${op}${n2}`;
-      const jaAcertou = questoesAcertadasRef.current.has(chave);
       const estaNaTela = operacoesAtuaisRef.current.some(o => o.chave === chave);
+      const jaAcertou = questoesAcertadasRef.current.has(chave);
+      const respostaRepetida = ultimasRespostasRef.current.includes(res);
+
+      // 🚨 REGRA DE FERRO: Jamais permite duas contas iguais caindo juntas na tela
+      if (estaNaTela) continue; 
       
-      if (jaAcertou || estaNaTela) continue; 
+      // 🚨 REGRA ANTI-REPETIÇÃO: Tenta sempre mandar conta inédita e com resultado diferente
+      // Se já tentou muito (t > 40), o celular relaxa as regras apenas para não travar o jogo vazio
+      if (t < 40) {
+        if (jaAcertou || respostaRepetida) continue;
+      }
+
+      // Passou por todos os testes de segurança!
+      ultimasRespostasRef.current.push(res);
+      if (ultimasRespostasRef.current.length > 3) ultimasRespostasRef.current.shift(); // Memoriza as 3 últimas apenas
       
       const isEspecial = Math.random() < 0.10; 
       const laneSelecionada = obterPistaLivre();
@@ -633,42 +697,4 @@ const styles = StyleSheet.create({
   gameArea: { position: 'relative', width: '100%', flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
   operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
-  estrelaEspecial: { position: 'absolute', top: -8, right: -4, backgroundColor: '#FFF', borderRadius: 10, padding: 2 },
-  operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  laser: { position: 'absolute', width: 4, height: height, zIndex: 1 },
-
-  bottomPanel: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 20, width: '100%' },
-  powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 10 },
-  btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
-  btnPowerUpInativo: { backgroundColor: '#1a1a2e', padding: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  txtPowerUpInativo: { color: '#444', fontSize: 12, fontWeight: 'bold' },
-
-  displayContainer: { backgroundColor: '#1a1a2e', width: 250, height: 55, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  displayText: { color: '#fff', fontSize: 26, fontWeight: 'bold' },
-  tecladoContainer: { width: 250, gap: 6 },
-  tecladoRow: { flexDirection: 'row', gap: 6, justifyContent: 'space-between' },
-  tecla: { backgroundColor: '#1a1a2e', flex: 1, height: 55, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  teclaText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  teclaApagar: { backgroundColor: '#E74C3C' },
-  teclaEnviar: { backgroundColor: '#32CD32' },
-  
-  resultadoContainer: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center' },
-  resultadoTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginBottom: 15 },
-  resultadoCard: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', marginBottom: 10, width: '100%' },
-  resultadoPontos: { fontSize: 64, fontWeight: '900', color: '#FFD700' },
-  resultadoLabel: { fontSize: 14, color: '#888', marginTop: 4 },
-  jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#32CD32', padding: 16, borderRadius: 12, alignItems: 'center', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 10 },
-  jogarNovamenteText: { color: '#000', fontSize: 18, fontWeight: '900' },
-  voltarMenuButton: { padding: 16 },
-  voltarMenuText: { color: '#888', fontSize: 14 },
-
-  modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
-  modalPausaContainer: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', width: '80%' },
-  modalPausaTitulo: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginTop: 10 },
-  modalPausaSub: { color: '#888', fontSize: 14, marginBottom: 20 },
-  continuarButton: { backgroundColor: '#32CD32', flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 10, width: '100%', justifyContent: 'center', marginBottom: 10 },
-  continuarButtonText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
-  sairButton: { backgroundColor: '#E74C3C', flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 10, width: '100%', justifyContent: 'center' },
-  sairButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-});
+  estrelaEspecial: { position: 'absolute', top: -8, right: -4, backgroundColor: '#FFF', borderRadius: 1
