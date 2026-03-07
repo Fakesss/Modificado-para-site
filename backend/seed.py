@@ -1,6 +1,7 @@
 import os
 import uuid
 from pymongo import MongoClient
+from passlib.context import CryptContext
 
 MONGO_URL = os.getenv("MONGO_URL")
 
@@ -13,37 +14,53 @@ try:
     client = MongoClient(MONGO_URL)
     db = client.get_default_database()
     
-    # 1. Limpando as coleções antigas (que estavam sem 'id' e sem 'ativa')
-    db["turmas"].drop()
-    db["equipes"].drop()
-    print("🧹 Banco de dados limpo para receber o novo formato...")
-    
     colecao_turmas = db["turmas"]
     colecao_equipes = db["equipes"]
+    colecao_usuarios = db["usuarios"]
 
-    # 2. Criando turmas com 'id' único e 'ativa: True' (Exigência do server.py)
-    turmas_padrao = [
-        {"id": str(uuid.uuid4()), "nome": "6º Ano", "ativa": True, "anoLetivo": 2025},
-        {"id": str(uuid.uuid4()), "nome": "7º Ano", "ativa": True, "anoLetivo": 2025},
-        {"id": str(uuid.uuid4()), "nome": "8º Ano", "ativa": True, "anoLetivo": 2025},
-        {"id": str(uuid.uuid4()), "nome": "9º Ano", "ativa": True, "anoLetivo": 2025}
-    ]
+    # 1. Verifica e cria Turmas
+    if colecao_turmas.count_documents({}) == 0:
+        turmas_padrao = [
+            {"id": str(uuid.uuid4()), "nome": "6º Ano", "ativa": True, "anoLetivo": 2025},
+            {"id": str(uuid.uuid4()), "nome": "7º Ano", "ativa": True, "anoLetivo": 2025},
+            {"id": str(uuid.uuid4()), "nome": "8º Ano", "ativa": True, "anoLetivo": 2025},
+            {"id": str(uuid.uuid4()), "nome": "9º Ano", "ativa": True, "anoLetivo": 2025}
+        ]
+        colecao_turmas.insert_many(turmas_padrao)
+
+    # 2. Verifica e cria Equipes
+    if colecao_equipes.count_documents({}) == 0:
+        equipes_padrao = [
+            {"id": str(uuid.uuid4()), "nome": "Equipe Alfa", "cor": "#FF0000", "pontosTotais": 0},
+            {"id": str(uuid.uuid4()), "nome": "Equipe Beta", "cor": "#00FF00", "pontosTotais": 0},
+            {"id": str(uuid.uuid4()), "nome": "Equipe Gama", "cor": "#0000FF", "pontosTotais": 0}
+        ]
+        colecao_equipes.insert_many(equipes_padrao)
+
+    # 3. CRIANDO O SEU ACESSO DE ADMINISTRADOR
+    email_admin = "danielprofessormatematica@gmail.com"
     
-    # 3. Criando equipes com 'id' único e 'cor' (Exigência do Vercel)
-    equipes_padrao = [
-        {"id": str(uuid.uuid4()), "nome": "Equipe Alfa", "cor": "#FF0000", "pontosTotais": 0},
-        {"id": str(uuid.uuid4()), "nome": "Equipe Beta", "cor": "#00FF00", "pontosTotais": 0},
-        {"id": str(uuid.uuid4()), "nome": "Equipe Gama", "cor": "#0000FF", "pontosTotais": 0}
-    ]
-
-    colecao_turmas.insert_many(turmas_padrao)
-    print("✅ Turmas recriadas com o formato perfeito!")
+    if colecao_usuarios.count_documents({"email": email_admin}) == 0:
+        print("👤 Criando conta de Administrador...")
+        # Criptografa a senha para o padrão do sistema
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        senha_criptografada = pwd_context.hash("Daniel123*")
         
-    colecao_equipes.insert_many(equipes_padrao)
-    print("✅ Equipes recriadas com o formato perfeito!")
+        admin_user = {
+            "id": str(uuid.uuid4()),
+            "nome": "Professor Daniel",
+            "email": email_admin,
+            "senha": senha_criptografada,
+            "perfil": "ADMIN",
+            "ativo": True,
+            "pontosTotais": 0,
+            "streakDias": 0
+        }
+        colecao_usuarios.insert_one(admin_user)
+        print("✅ Administrador criado com sucesso!")
 
-    print("🎉 Banco de dados atualizado e pronto para a Vercel!")
+    print("🎉 Banco de dados 100% pronto!")
 
 except Exception as e:
-    print(f"❌ Erro crítico ao conectar no banco: {e}")
+    print(f"❌ Erro crítico: {e}")
     exit(1)
