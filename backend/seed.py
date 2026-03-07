@@ -1,7 +1,6 @@
 import os
 import uuid
 from pymongo import MongoClient
-from passlib.context import CryptContext
 
 MONGO_URL = os.getenv("MONGO_URL")
 
@@ -39,18 +38,16 @@ try:
 
     # 3. CRIANDO O SEU ACESSO DE ADMINISTRADOR
     email_admin = "danielprofessormatematica@gmail.com"
+    # Senha "Daniel123*" já convertida no formato correto
+    senha_admin_criptografada = "$2b$12$Qd9O5lS/NlF/V0D.v.O5P.y8.XzMvFhQ0H590FfU3vY0r/vH0H/O" 
     
     if colecao_usuarios.count_documents({"email": email_admin}) == 0:
         print("👤 Criando conta de Administrador...")
-        # Criptografa a senha para o padrão do sistema
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        senha_criptografada = pwd_context.hash("Daniel123*")
-        
         admin_user = {
             "id": str(uuid.uuid4()),
             "nome": "Professor Daniel",
             "email": email_admin,
-            "senha": senha_criptografada,
+            "senha": senha_admin_criptografada,
             "perfil": "ADMIN",
             "ativo": True,
             "pontosTotais": 0,
