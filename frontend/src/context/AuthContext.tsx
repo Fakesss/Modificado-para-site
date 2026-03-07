@@ -40,14 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(storedToken);
         setUser(JSON.parse(storedUser));
         
-        // Refresh user data silenciosamente no fundo
         try {
           const userData = await api.getMe();
           setUser(userData);
           await AsyncStorage.setItem('user', JSON.stringify(userData));
         } catch (error: any) {
-          console.log("Aviso: Servidor dormindo ou falha de rede. Usando cache do usuário.");
-          // SÓ joga o login fora se o servidor acordar e disser que expirou (Erro 401)
           if (error.response && error.response.status === 401) {
             await AsyncStorage.removeItem('token');
             await AsyncStorage.removeItem('user');
@@ -70,9 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data.usuario);
       await AsyncStorage.setItem('token', data.access_token);
       await AsyncStorage.setItem('user', JSON.stringify(data.usuario));
-    } catch (error: any) {
-      console.error("AuthContext capturou erro no Login:", error);
-      throw error; // 📢 O megafone: Joga o erro para a tela de Login ouvir!
+    } catch (error) {
+      throw error; // 📢 AQUI ESTÁ O TRUQUE: Repassa o erro para a tela principal
     }
   };
 
@@ -83,9 +79,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data.usuario);
       await AsyncStorage.setItem('token', data.access_token);
       await AsyncStorage.setItem('user', JSON.stringify(data.usuario));
-    } catch (error: any) {
-      console.error("AuthContext capturou erro no Registro:", error);
-      throw error; // 📢 O megafone: Joga o erro para a tela de Registro ouvir!
+    } catch (error) {
+      throw error; // 📢 Repassa o erro
     }
   };
 
