@@ -105,26 +105,41 @@ export default function AdminConteudos() {
   };
 
   const handleDelete = async (conteudoId: string) => {
-    Alert.alert(
-      'Mover para Lixeira',
-      'Deseja mover este conteúdo para a lixeira? Você terá 7 dias para restaurá-lo.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Mover',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.deleteConteudo(conteudoId);
-              Alert.alert('Sucesso', 'Conteúdo movido para a lixeira');
-              loadData();
-            } catch (error) {
-              Alert.alert('Erro', 'Erro ao mover conteúdo');
-            }
+    if (Platform.OS === 'web') {
+      // Regra para a Vercel (Navegador)
+      const confirmou = window.confirm('Deseja mover este conteúdo para a lixeira? Você terá 7 dias para restaurá-lo.');
+      if (confirmou) {
+        try {
+          await api.deleteConteudo(conteudoId);
+          window.alert('Conteúdo movido para a lixeira!');
+          loadData();
+        } catch (error) {
+          window.alert('Erro ao mover conteúdo');
+        }
+      }
+    } else {
+      // Regra para o celular nativo
+      Alert.alert(
+        'Mover para Lixeira',
+        'Deseja mover este conteúdo para a lixeira? Você terá 7 dias para restaurá-lo.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Mover',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await api.deleteConteudo(conteudoId);
+                Alert.alert('Sucesso', 'Conteúdo movido para a lixeira');
+                loadData();
+              } catch (error) {
+                Alert.alert('Erro', 'Erro ao mover conteúdo');
+              }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   if (loading) {
