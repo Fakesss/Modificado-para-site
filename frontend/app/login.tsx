@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +20,10 @@ export default function Login() {
   const [senha, setSenha] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // 🚨 NOVO: Estado para guardar o texto do erro na tela
+  const [mensagemErro, setMensagemErro] = useState('');
+  
   const [previewPressCount, setPreviewPressCount] = useState(0);
   
   const { login, enterPreviewMode, user, isPreviewMode } = useAuth();
@@ -37,8 +40,11 @@ export default function Login() {
   }, [user, isPreviewMode]);
 
   const handleLogin = async () => {
+    // Limpa qualquer erro antigo ao tentar de novo
+    setMensagemErro('');
+
     if (!email || !senha) {
-      Alert.alert('Aviso', 'Preencha email e senha');
+      setMensagemErro('Preencha o e-mail e a senha.');
       return;
     }
 
@@ -50,30 +56,8 @@ export default function Login() {
       await login(emailPadronizado, senhaPadronizada);
       
     } catch (error: any) {
-      // 🚨 FORÇA BRUTA: Caçador de erros implacável
-      console.log("O erro que chegou foi:", error); // Isso ajuda a ver o erro nos logs do Expo
-      
-      let mensagemErro = 'Não foi possível fazer o login. Verifique sua conexão.';
-
-      // Tenta ler o erro de todas as formas que existem na programação:
-      if (error?.response?.status === 401 || error?.response?.status === 400 || error?.response?.status === 404) {
-        mensagemErro = 'E-mail ou senha incorretos. Tente novamente.';
-      } else if (error?.response?.data?.detail) {
-        mensagemErro = error.response.data.detail;
-      } else if (error?.message) {
-        mensagemErro = error.message;
-      } else if (typeof error === 'string') {
-        mensagemErro = error;
-      }
-
-      // Se a mensagem for aquele erro feio em inglês, a gente traduz na marra
-      if (mensagemErro.includes('Request failed with status code 401') || mensagemErro.includes('401')) {
-         mensagemErro = 'E-mail ou senha incorretos. Tente novamente.';
-      }
-
-      // Dispara o alerta na tela!
-      Alert.alert('Acesso Negado', mensagemErro);
-      
+      // 🚨 EM VEZ DE ALERT, ESCREVEMOS O ERRO NA TELA!
+      setMensagemErro('E-mail ou senha incorretos. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -122,7 +106,10 @@ export default function Login() {
                 placeholder="Email"
                 placeholderTextColor="#666"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  setMensagemErro(''); // Limpa o erro quando volta a digitar
+                }}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -136,7 +123,10 @@ export default function Login() {
                 placeholder="Senha"
                 placeholderTextColor="#666"
                 value={senha}
-                onChangeText={setSenha}
+                onChangeText={(text) => {
+                  setSenha(text);
+                  setMensagemErro(''); // Limpa o erro quando volta a digitar
+                }}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
               />
@@ -148,6 +138,14 @@ export default function Login() {
                 />
               </TouchableOpacity>
             </View>
+
+            {/* 🚨 CAIXA DE ERRO VISUAL APARECE AQUI SE TIVER ERRO */}
+            {mensagemErro !== '' && (
+              <View style={styles.caixaErro}>
+                <Ionicons name="alert-circle" size={20} color="#ff4444" />
+                <Text style={styles.textoErro}>{mensagemErro}</Text>
+              </View>
+            )}
 
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
@@ -242,6 +240,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 14,
   },
+  
+  // 🚨 ESTILOS DO NOVO AVISO DE ERRO EM VERMELHO
+  caixaErro: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ff444420', // Fundo vermelho transparente
+    padding: 12,
+    borderRadius: 8,
+    marginTop: -4,
+    marginBottom: 4,
+  },
+  textoErro: {
+    color: '#ff4444', // Letra vermelha
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
   button: {
     backgroundColor: '#FFD700',
     borderRadius: 12,
