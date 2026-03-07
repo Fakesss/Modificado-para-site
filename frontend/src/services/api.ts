@@ -20,13 +20,28 @@ api.interceptors.request.use(async (config) => {
 
 // Auth
 export const login = async (email: string, senha: string) => {
-  const response = await api.post('/auth/login', { email, senha });
-  return response.data;
+  try {
+    const response = await api.post('/auth/login', { email, senha });
+    return response.data;
+  } catch (error: any) {
+    // 🚨 BLINDAGEM: Lê o erro do servidor e joga um erro limpo para a tela
+    if (error.response?.status === 401 || error.response?.status === 404 || error.response?.status === 400) {
+      throw new Error('E-mail ou senha incorretos. Tente novamente.');
+    }
+    throw new Error(error.response?.data?.detail || 'Erro de conexão com o servidor.');
+  }
 };
 
 export const register = async (nome: string, email: string, senha: string, turmaId?: string, equipeId?: string) => {
-  const response = await api.post('/auth/register', { nome, email, senha, turmaId, equipeId });
-  return response.data;
+  try {
+    const response = await api.post('/auth/register', { nome, email, senha, turmaId, equipeId });
+    return response.data;
+  } catch (error: any) {
+    if (error.response?.status === 409 || error.response?.data?.detail?.includes('already exists')) {
+      throw new Error('Este e-mail já está cadastrado.');
+    }
+    throw new Error(error.response?.data?.detail || 'Erro ao criar a conta.');
+  }
 };
 
 export const getMe = async () => {
