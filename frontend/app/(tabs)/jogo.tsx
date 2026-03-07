@@ -175,7 +175,7 @@ export default function Jogo() {
           const nova = gerarOperacao();
           if (nova) { 
             setOperacoes(ops => [...ops, nova]);
-            setTimeout(() => animarQueda(nova), 50); // Garante a criação na tela antes de cair
+            setTimeout(() => animarQueda(nova), 50); 
           }
         }
       }
@@ -191,11 +191,11 @@ export default function Jogo() {
     setTela('jogo');
     inicioRespostaRef.current = Date.now();
     
+    // 🚨 CORREÇÃO DAS CONTAS JUNTAS: Agora spawna apenas 1 no começo
     const inicial: any[] = [];
-    for (let i = 0; i < 3; i++) {
-      const op = gerarOperacao();
-      if (op) inicial.push(op);
-    }
+    const opInicial = gerarOperacao();
+    if (opInicial) inicial.push(opInicial);
+    
     setOperacoes(inicial);
     
     setTimeout(() => {
@@ -217,10 +217,13 @@ export default function Jogo() {
         if (alvosValidos.length > 0 && Math.random() > 0.3) { 
           const alvo = alvosValidos[0];
           alvo.y.stopAnimation();
-          setOperacoes(curr => curr.filter(o => o.id !== alvo.id));
-          operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== alvo.chave);
-          setBotPontos(p => p + 10);
           dispararLaser(alvo, true, 'bot');
+          
+          setTimeout(() => {
+            setOperacoes(curr => curr.filter(o => o.id !== alvo.id));
+            operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== alvo.chave);
+            setBotPontos(p => p + 10);
+          }, 350);
         }
       }, Math.max(2000, 5000 - (rodadaRef.current * 150))); 
     }
@@ -244,7 +247,6 @@ export default function Jogo() {
     });
   };
 
-  // 🚨 SISTEMA DE PAUSA (AGORA FUNCIONA E NÃO TRAVA O CONTINUAR)
   const pausarJogo = () => {
     jogoPausadoRef.current = true;
     setPausado(true);
@@ -275,7 +277,7 @@ export default function Jogo() {
   const dispararLaser = (targetOp: any, acertou: boolean, atirador: 'player' | 'bot' = 'player') => {
     if (acertou && targetOp) {
       const tX = targetOp.posX + CARD_WIDTH / 2;
-      const tY = GAME_AREA_HEIGHT * 0.3; 
+      const tY = (targetOp.y as any)._value || 100;
 
       setLaserAtivo({ x: tX, y: tY, cor: atirador === 'bot' ? '#FF00FF' : '#32CD32' });
       laserAnim.setValue(0);
@@ -328,7 +330,12 @@ export default function Jogo() {
       if (opCorreta.especial && !powerUpDisponivel) setPowerUpDisponivel(true);
       
       dispararLaser(opCorreta, true, 'player');
-      setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id));
+      
+      // 🚨 CORREÇÃO DO SUMIÇO: Só remove a conta da tela DEPOIS que o laser atingir ela
+      setTimeout(() => {
+        setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id));
+      }, 350);
+
     } else {
       perderVida(undefined, false); 
       dispararLaser(null, false, 'player');
@@ -347,11 +354,21 @@ export default function Jogo() {
     });
     if (visiveis.length === 0) return;
     
-    visiveis.forEach(op => op.y.stopAnimation());
+    visiveis.forEach(op => {
+      op.y.stopAnimation();
+      Animated.parallel([
+        Animated.timing(op.scale, { toValue: 1.4, duration: 150, useNativeDriver: true }),
+        Animated.timing(op.opacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+      ]).start();
+    });
     
     setPontos(p => p + (visiveis.length * 10)); 
-    setOperacoes([]);
-    operacoesAtuaisRef.current = [];
+    
+    setTimeout(() => {
+      setOperacoes([]);
+      operacoesAtuaisRef.current = [];
+    }, 200);
+
     setPowerUpDisponivel(false);
   };
 
@@ -490,7 +507,6 @@ export default function Jogo() {
         ))}
       </View>
 
-      {/* 🚨 ÁREA DO JOGO COM LARGURA 100% (FIM DO MISTÉRIO DAS CONTAS INVISÍVEIS) 🚨 */}
       <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
         {operacoes.map((op) => (
           <Animated.View key={op.id} style={[
@@ -514,7 +530,7 @@ export default function Jogo() {
         )}
       </View>
 
-      {/* PAINEL INFERIOR */}
+      {/* PAINEL INFERIOR E TECLADO */}
       <View style={styles.bottomPanel}>
         <View style={styles.powerUpContainer}>
           {powerUpDisponivel ? (
@@ -537,27 +553,28 @@ export default function Jogo() {
           {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
             <View key={i} style={styles.tecladoRow}>
               {row.map(num => (
-                <TouchableOpacity key={num} style={styles.tecla} onPress={() => pressionarTecla(num)}>
+                // 🚨 CORREÇÃO DO TECLADO: onPressIn para resposta em tempo real, sem delay!
+                <TouchableOpacity key={num} style={styles.tecla} onPressIn={() => pressionarTecla(num)}>
                   <Text style={styles.teclaText}>{num}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           ))}
           <View style={styles.tecladoRow}>
-            <TouchableOpacity style={[styles.tecla, styles.teclaApagar]} onPress={() => pressionarTecla('apagar')}>
+            <TouchableOpacity style={[styles.tecla, styles.teclaApagar]} onPressIn={() => pressionarTecla('apagar')}>
               <Ionicons name="close" size={26} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.tecla} onPress={() => pressionarTecla('0')}>
+            <TouchableOpacity style={styles.tecla} onPressIn={() => pressionarTecla('0')}>
               <Text style={styles.teclaText}>0</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.tecla, styles.teclaEnviar]} onPress={() => pressionarTecla('enviar')}>
+            <TouchableOpacity style={[styles.tecla, styles.teclaEnviar]} onPressIn={() => pressionarTecla('enviar')}>
               <Ionicons name="checkmark" size={30} color="#fff" />
             </TouchableOpacity>
           </View>
         </View>
       </View>
 
-      {/* 🚨 MODAL DE PAUSA 🚨 */}
+      {/* MODAL DE PAUSA */}
       {pausado && (
         <View style={styles.modalOverlay}>
           <View style={styles.modalPausaContainer}>
@@ -585,7 +602,6 @@ export default function Jogo() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0c' },
   
-  // Menu
   menuContainer: { flex: 1 },
   menuScrollContent: { padding: 20, alignItems: 'center' },
   menuHeader: { alignItems: 'center', marginBottom: 20, marginTop: 20 },
@@ -600,7 +616,6 @@ const styles = StyleSheet.create({
   botButton: { flexDirection: 'row', backgroundColor: '#FF00FF', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, width: '100%' },
   botButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
   
-  // Header Jogo
   gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
   headerStatsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
@@ -613,38 +628,21 @@ const styles = StyleSheet.create({
   vidaAtiva: { backgroundColor: '#FF4444' },
   vidaInativa: { backgroundColor: '#333' },
   
-  // 🚨 AQUI ESTÁ A CORREÇÃO: width: '100%' PARA IMPEDIR A LARGURA ZERO
   gameArea: { position: 'relative', width: '100%', flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
-  // 🚨 AQUI ESTÁ A CORREÇÃO: top: 0 PARA A CONTA NÃO NASCER NO LIMBO
   operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
   estrelaEspecial: { position: 'absolute', top: -8, right: -4, backgroundColor: '#FFF', borderRadius: 10, padding: 2 },
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   laser: { position: 'absolute', width: 4, height: height, zIndex: 1 },
 
-  // Painel Inferior (Segura o Teclado perfeitamente no lugar)
-  bottomPanel: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end', 
-    paddingBottom: 20,
-    width: '100%',
-  },
+  bottomPanel: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 20, width: '100%' },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 10 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
   btnPowerUpInativo: { backgroundColor: '#1a1a2e', padding: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   txtPowerUpInativo: { color: '#444', fontSize: 12, fontWeight: 'bold' },
 
-  displayContainer: { 
-    backgroundColor: '#1a1a2e', 
-    width: 250, 
-    height: 55, 
-    borderRadius: 8, 
-    alignItems: 'center', 
-    justifyContent: 'center',
-    marginBottom: 10 
-  },
+  displayContainer: { backgroundColor: '#1a1a2e', width: 250, height: 55, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   displayText: { color: '#fff', fontSize: 26, fontWeight: 'bold' },
   tecladoContainer: { width: 250, gap: 6 },
   tecladoRow: { flexDirection: 'row', gap: 6, justifyContent: 'space-between' },
@@ -653,7 +651,6 @@ const styles = StyleSheet.create({
   teclaApagar: { backgroundColor: '#E74C3C' },
   teclaEnviar: { backgroundColor: '#32CD32' },
   
-  // Resultado
   resultadoContainer: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center' },
   resultadoTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginBottom: 15 },
   resultadoCard: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', marginBottom: 10, width: '100%' },
@@ -664,7 +661,6 @@ const styles = StyleSheet.create({
   voltarMenuButton: { padding: 16 },
   voltarMenuText: { color: '#888', fontSize: 14 },
 
-  // Pausa Overlay
   modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
   modalPausaContainer: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', width: '80%' },
   modalPausaTitulo: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginTop: 10 },
