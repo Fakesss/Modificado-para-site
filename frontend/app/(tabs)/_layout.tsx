@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, SafeAreaView } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 import { Equipe } from '../../src/types';
@@ -41,27 +42,32 @@ function NeonLineSimple({ color }: { color: string }) {
 }
 
 export default function TabsLayout() {
-  const { user } = useAuth();
+  const { user, isAdminViewingAsStudent } = useAuth();
   const isLeader = user?.perfil === 'ALUNO_LIDER';
   const [teamColor, setTeamColor] = useState<string>('#FFD700');
 
   useEffect(() => {
-    if (user?.equipeId) {
-      const color = TEAM_COLORS[user.equipeId];
-      if (color) {
-        setTeamColor(color);
-      } else {
-        loadTeamColor();
-      }
-    }
-  }, [user?.equipeId]);
+    loadTeamColor();
+  }, [user?.equipeId, isAdminViewingAsStudent]);
 
   const loadTeamColor = async () => {
     try {
-      const equipes = await api.getEquipes();
-      const userEquipe = equipes.find((e: Equipe) => e.id === user?.equipeId);
-      if (userEquipe) {
-        setTeamColor(userEquipe.cor);
+      // 1. SE FOR ADMIN NO MODO VISUALIZAÇÃO: Puxa a cor salva no celular
+      if (isAdminViewingAsStudent || user?.perfil === 'ADMIN') {
+        const savedAdminColor = await AsyncStorage.getItem('adminPreviewColor');
+        if (savedAdminColor) {
+          setTeamColor(savedAdminColor);
+          return; // Para a função aqui. Não puxa cor de equipe nenhuma.
+        }
+      }
+
+      // 2. SE FOR ALUNO NORMAL: Puxa a cor da equipe no banco de dados
+      if (user?.equipeId) {
+        const equipes = await api.getEquipes();
+        const userEquipe = equipes.find((e: Equipe) => e.id === user?.equipeId);
+        if (userEquipe) {
+          setTeamColor(userEquipe.cor);
+        }
       }
     } catch (error) {
       console.error('Error loading team color:', error);
@@ -154,7 +160,7 @@ export default function TabsLayout() {
           }}
         />
         
-        {/* FIX: Retiramos a verificação solta. Usamos o href para esconder a aba */}
+        {/* Usando o href para esconder a aba caso não seja líder, sem causar erro na Vercel */}
         <Tabs.Screen
           name="equipe"
           options={{
