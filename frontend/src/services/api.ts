@@ -340,4 +340,42 @@ export const listarSalasDisponiveis = async () => {
   return response.data;
 };
 
+// ... (mantenha o código anterior igual)
+
+// ============== JOGOS PERSONALIZADOS (MISSÕES) ==============
+
+// Busca jogos criados pelo admin (para a tela de gerenciamento)
+export const getJogosPersonalizados = async () => {
+  try {
+    const response = await api.get('/jogos-personalizados');
+    return response.data;
+  } catch (error) {
+    console.log('Erro ao buscar jogos (pode não existir ainda):', error);
+    return []; // Retorna lista vazia se der erro, para não travar o app
+  }
+};
+
+// Cria um novo jogo (Admin)
+export const criarJogo = async (dados: any) => {
+  const response = await api.post('/jogos-personalizados', dados);
+  return response.data;
+};
+
+// Deleta um jogo (Admin)
+export const deletarJogo = async (id: string) => {
+  const response = await api.delete(`/jogos-personalizados/${id}`);
+  return response.data;
+};
+
+// Busca as missões disponíveis para o ALUNO logado
+export const getMissoesDisponiveis = async () => {
+  try {
+    const response = await api.get('/jogos-personalizados/disponiveis');
+    return response.data;
+  } catch (error) {
+    return []; // Retorna vazio se não tiver missões ou API off
+  }
+};
+
+export default api;
 export default api;
