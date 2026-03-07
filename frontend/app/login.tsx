@@ -38,25 +38,28 @@ export default function Login() {
 
   const handleLogin = async () => {
     if (!email || !senha) {
-      Alert.alert('Aviso', 'Por favor, preencha seu e-mail e senha.');
+      Alert.alert('Aviso', 'Preencha email e senha');
       return;
     }
 
     setLoading(true);
     try {
-      // Aqui está a mágica: transforma o e-mail todo em minúsculo e corta espaços invisíveis nas pontas
+      // Transforma o e-mail todo em minúsculo e corta espaços invisíveis nas pontas
       const emailPadronizado = email.toLowerCase().trim();
       const senhaPadronizada = senha.trim();
 
       await login(emailPadronizado, senhaPadronizada);
-      // A navegação acontece no useEffect quando o 'user' é atualizado
+      
     } catch (error: any) {
-      // Filtro para dar uma mensagem amigável de erro de senha
-      const statusErro = error.response?.status;
-      if (statusErro === 401 || statusErro === 400 || statusErro === 404) {
+      // Volta a ler o erro exatamente onde o Python manda (detail)
+      const detalheErro = error.response?.data?.detail;
+      
+      if (detalheErro) {
+        // Se o Python mandou um detalhe, é porque o usuário ou senha estão errados
         Alert.alert('Acesso Negado', 'E-mail ou senha incorretos. Tente novamente.');
       } else {
-        Alert.alert('Erro de Conexão', 'Não foi possível conectar ao servidor. Verifique sua internet.');
+        // Se não tem detalhe, provavelmente a internet caiu ou o servidor falhou
+        Alert.alert('Erro', 'Não foi possível conectar. Verifique sua internet.');
       }
     } finally {
       setLoading(false);
@@ -103,7 +106,7 @@ export default function Login() {
               <Ionicons name="mail-outline" size={24} color="#888" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="E-mail"
+                placeholder="Email"
                 placeholderTextColor="#666"
                 value={email}
                 onChangeText={setEmail}
