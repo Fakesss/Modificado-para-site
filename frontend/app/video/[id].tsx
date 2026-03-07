@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,6 @@ export default function VideoPlayer() {
   
   const router = useRouter();
   const [video, setVideo] = useState<Conteudo | null>(null);
-  const [progress, setProgress] = useState<ProgressoVideo | null>(null);
   const [loading, setLoading] = useState(true);
   
   const [currentTime, setCurrentTime] = useState(0);
@@ -24,15 +23,8 @@ export default function VideoPlayer() {
   const [canComplete, setCanComplete] = useState(false);
   const [watchedPercentage, setWatchedPercentage] = useState(0);
   
-  // 🛡️ Refs para blindar as variáveis contra o botão de Maximizar/Minimizar
   const lastUpdateRef = useRef(0);
   const iframeRef = useRef<any>(null);
-  const completedRef = useRef(false);
-  const canCompleteRef = useRef(false);
-
-  // Mantém as refs sincronizadas silenciosamente
-  useEffect(() => { completedRef.current = completed; }, [completed]);
-  useEffect(() => { canCompleteRef.current = canComplete; }, [canComplete]);
 
   const getYouTubeId = (url: string) => {
     if (!url) return null;
@@ -47,66 +39,27 @@ export default function VideoPlayer() {
     if (id) loadVideo();
   }, [id]);
 
-  // 📻 RÁDIO + CÉREBRO JUNTOS (Imune a Maximizar/Minimizar)
+  // 📻 RÁDIO OFICIAL DO YOUTUBE (Sem injeção de script, sobrevive ao Maximizar)
   useEffect(() => {
-    if (Platform.OS !== 'web' || !youtubeId) return;
+    if (!youtubeId) return;
 
     const handleMessage = (event: any) => {
       if (event.origin !== 'https://www.youtube.com') return;
       try {
         const data = JSON.parse(event.data);
         if (data.event === 'infoDelivery' && data.info) {
-          const curr = data.info.currentTime || 0;
-          const dur = data.info.duration || 0;
-
-          if (curr > 0 && dur > 0) {
-            setCurrentTime(curr);
-            setDuration(dur);
-
-            const safeCurrent = Math.floor(Number(curr));
-            const safeDuration = Math.floor(Number(dur));
-
-            // Trava de segurança extra contra Erro 500
-            if (isNaN(safeCurrent) || isNaN(safeDuration) || safeDuration <= 0) return;
-
-            const percentage = (safeCurrent / safeDuration) * 100;
-            setWatchedPercentage(percentage > 100 ? 100 : percentage);
-
-            if (percentage >= 90 && !canCompleteRef.current) {
-              setCanComplete(true);
-              canCompleteRef.current = true;
-            }
-
-            // Sincroniza a cada 5 segundos
-            if (safeCurrent >= 5 && (safeCurrent - lastUpdateRef.current >= 5 || percentage >= 90)) {
-              if (safeCurrent > lastUpdateRef.current) {
-                lastUpdateRef.current = safeCurrent;
-                
-                // Envia direto daqui, sem depender do re-desenho da tela
-                if (!id) return;
-                api.updateProgressoVideo(id, safeCurrent, safeDuration)
-                  .then(result => {
-                    if (result.concluido && !completedRef.current) {
-                      setCompleted(true);
-                      completedRef.current = true;
-                      setPointsEarned(result.pontosGerados);
-                      if (window.alert) window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
-                    }
-                  })
-                  .catch(() => { console.log('Sincronização pendente...'); });
-              }
-            }
-          }
+          if (data.info.currentTime !== undefined) setCurrentTime(data.info.currentTime);
+          if (data.info.duration !== undefined) setDuration(data.info.duration);
         }
       } catch (e) {}
     };
 
     window.addEventListener('message', handleMessage);
 
+    // Bate na porta do YouTube a cada 1 segundo pedindo as informações
     const timer = setInterval(() => {
       if (iframeRef.current && iframeRef.current.contentWindow) {
-        iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'getCurrentTime', args: [] }), 'https://www.youtube.com');
-        iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'getDuration', args: [] }), 'https://www.youtube.com');
+        iframeRef.current.contentWindow.postMessage('{"event":"listening","id":1}', 'https://www.youtube.com');
       }
     }, 1000);
 
@@ -114,7 +67,41 @@ export default function VideoPlayer() {
       window.removeEventListener('message', handleMessage);
       clearInterval(timer);
     };
-  }, [youtubeId, id]); // Só re-executa se mudar o ID do vídeo (nunca ao maximizar!)
+  }, [youtubeId]);
+
+  // 🧠 ÚNICO CÉREBRO MATEMÁTICO (Impossível dar Erro 500)
+  useEffect(() => {
+    const safeCurrent = Math.floor(currentTime);
+    const safeDuration = Math.floor(duration);
+
+    // BLINDAGEM ABSOLUTA: Se a duração for zero ou o vídeo tiver menos de 5s rolando, ele MORRE aqui.
+    if (safeDuration <= 0 || safeCurrent < 5) return;
+
+    const percentage = (safeCurrent / safeDuration) * 100;
+    setWatchedPercentage(percentage > 100 ? 100 : percentage);
+
+    if (percentage >= 90 && !canComplete) {
+      setCanComplete(true);
+    }
+
+    // Só sincroniza com o banco se andou 5 segundos
+    if (safeCurrent - lastUpdateRef.current >= 5 || (percentage >= 90 && lastUpdateRef.current < safeDuration * 0.9)) {
+      if (safeCurrent > lastUpdateRef.current) {
+        lastUpdateRef.current = safeCurrent;
+        
+        // Chamada única e protegida para o Render
+        api.updateProgressoVideo(id as string, safeCurrent, safeDuration)
+          .then(result => {
+            if (result.concluido && !completed) {
+              setCompleted(true);
+              setPointsEarned(result.pontosGerados);
+              if (window.alert) window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
+            }
+          })
+          .catch(() => { /* Erros de rede passam em silêncio */ });
+      }
+    }
+  }, [currentTime, duration]); // Só depende do tempo real do vídeo
 
   const loadVideo = async () => {
     try {
@@ -125,8 +112,6 @@ export default function VideoPlayer() {
       if (videoData) {
         try {
           const progressData = await api.getProgressoVideo(videoData.id);
-          setProgress(progressData);
-          
           if (progressData) {
             const tempoSalvo = Math.floor(progressData.tempoAssistidoSeg || 0);
             setStartTime(tempoSalvo);
@@ -143,8 +128,6 @@ export default function VideoPlayer() {
             
             if (progressData.concluido) {
               setCanComplete(true);
-              canCompleteRef.current = true;
-              completedRef.current = true;
               setWatchedPercentage(100);
             }
           }
@@ -170,12 +153,11 @@ export default function VideoPlayer() {
 
     try {
       const result = await api.updateProgressoVideo(
-        id,
+        id as string,
         Math.floor(Math.max(currentTime, duration * 0.9)),
         Math.floor(duration || 300)
       );
       setCompleted(true);
-      completedRef.current = true;
       setPointsEarned(result.pontosGerados);
       
       if (window.alert) window.alert(`Parabéns! Você ganhou ${result.pontosGerados} pontos!`);
