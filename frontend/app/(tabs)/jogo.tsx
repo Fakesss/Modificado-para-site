@@ -18,6 +18,31 @@ const CARD_WIDTH = 105;
 const NUM_LANES = 3; 
 const LANE_WIDTH = width / NUM_LANES;
 
+// 🚨 A SOLUÇÃO GENIAL: O Botão Inteligente que solta a trava do dedo
+const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
+  const [bloqueado, setBloqueado] = useState(false);
+
+  const handlePress = () => {
+    if (bloqueado) return;
+    onPress(valor);
+    
+    // Desliga o botão por 50ms para forçar o Android a ler o próximo dedo
+    setBloqueado(true);
+    setTimeout(() => setBloqueado(false), 50);
+  };
+
+  return (
+    <TouchableOpacity
+      style={[styles.tecla, styleExtra]}
+      onPressIn={handlePress}
+      disabled={bloqueado} // Ao desabilitar, a tela solta a trava de toque na hora
+      activeOpacity={0.6}
+    >
+      {children}
+    </TouchableOpacity>
+  );
+};
+
 export default function Jogo() {
   const { user } = useAuth();
   const isAdmin = user?.perfil === 'ADMIN';
@@ -191,7 +216,6 @@ export default function Jogo() {
     setTela('jogo');
     inicioRespostaRef.current = Date.now();
     
-    // 🚨 CORREÇÃO DAS CONTAS JUNTAS: Agora spawna apenas 1 no começo
     const inicial: any[] = [];
     const opInicial = gerarOperacao();
     if (opInicial) inicial.push(opInicial);
@@ -277,7 +301,7 @@ export default function Jogo() {
   const dispararLaser = (targetOp: any, acertou: boolean, atirador: 'player' | 'bot' = 'player') => {
     if (acertou && targetOp) {
       const tX = targetOp.posX + CARD_WIDTH / 2;
-      const tY = (targetOp.y as any)._value || 100;
+      const tY = GAME_AREA_HEIGHT * 0.3; 
 
       setLaserAtivo({ x: tX, y: tY, cor: atirador === 'bot' ? '#FF00FF' : '#32CD32' });
       laserAnim.setValue(0);
@@ -331,7 +355,6 @@ export default function Jogo() {
       
       dispararLaser(opCorreta, true, 'player');
       
-      // 🚨 CORREÇÃO DO SUMIÇO: Só remove a conta da tela DEPOIS que o laser atingir ela
       setTimeout(() => {
         setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id));
       }, 350);
@@ -354,21 +377,11 @@ export default function Jogo() {
     });
     if (visiveis.length === 0) return;
     
-    visiveis.forEach(op => {
-      op.y.stopAnimation();
-      Animated.parallel([
-        Animated.timing(op.scale, { toValue: 1.4, duration: 150, useNativeDriver: true }),
-        Animated.timing(op.opacity, { toValue: 0, duration: 150, useNativeDriver: true }),
-      ]).start();
-    });
+    visiveis.forEach(op => op.y.stopAnimation());
     
     setPontos(p => p + (visiveis.length * 10)); 
-    
-    setTimeout(() => {
-      setOperacoes([]);
-      operacoesAtuaisRef.current = [];
-    }, 200);
-
+    setOperacoes([]);
+    operacoesAtuaisRef.current = [];
     setPowerUpDisponivel(false);
   };
 
@@ -530,7 +543,6 @@ export default function Jogo() {
         )}
       </View>
 
-      {/* PAINEL INFERIOR E TECLADO */}
       <View style={styles.bottomPanel}>
         <View style={styles.powerUpContainer}>
           {powerUpDisponivel ? (
@@ -553,28 +565,26 @@ export default function Jogo() {
           {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
             <View key={i} style={styles.tecladoRow}>
               {row.map(num => (
-                // 🚨 CORREÇÃO DO TECLADO: onPressIn para resposta em tempo real, sem delay!
-                <TouchableOpacity key={num} style={styles.tecla} onPressIn={() => pressionarTecla(num)}>
+                <BotaoTeclado key={num} valor={num} onPress={pressionarTecla}>
                   <Text style={styles.teclaText}>{num}</Text>
-                </TouchableOpacity>
+                </BotaoTeclado>
               ))}
             </View>
           ))}
           <View style={styles.tecladoRow}>
-            <TouchableOpacity style={[styles.tecla, styles.teclaApagar]} onPressIn={() => pressionarTecla('apagar')}>
+            <BotaoTeclado valor="apagar" onPress={pressionarTecla} styleExtra={styles.teclaApagar}>
               <Ionicons name="close" size={26} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.tecla} onPressIn={() => pressionarTecla('0')}>
+            </BotaoTeclado>
+            <BotaoTeclado valor="0" onPress={pressionarTecla}>
               <Text style={styles.teclaText}>0</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.tecla, styles.teclaEnviar]} onPressIn={() => pressionarTecla('enviar')}>
+            </BotaoTeclado>
+            <BotaoTeclado valor="enviar" onPress={pressionarTecla} styleExtra={styles.teclaEnviar}>
               <Ionicons name="checkmark" size={30} color="#fff" />
-            </TouchableOpacity>
+            </BotaoTeclado>
           </View>
         </View>
       </View>
 
-      {/* MODAL DE PAUSA */}
       {pausado && (
         <View style={styles.modalOverlay}>
           <View style={styles.modalPausaContainer}>
