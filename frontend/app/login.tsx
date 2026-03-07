@@ -44,22 +44,18 @@ export default function Login() {
 
     setLoading(true);
     try {
-      // Transforma o e-mail todo em minúsculo e corta espaços invisíveis nas pontas
       const emailPadronizado = email.toLowerCase().trim();
       const senhaPadronizada = senha.trim();
 
       await login(emailPadronizado, senhaPadronizada);
       
     } catch (error: any) {
-      // Volta a ler o erro exatamente onde o Python manda (detail)
-      const detalheErro = error.response?.data?.detail;
-      
-      if (detalheErro) {
-        // Se o Python mandou um detalhe, é porque o usuário ou senha estão errados
+      // 🚨 AGORA ELE ESCUTA O ERRO E EXIBE O ALERTA
+      const statusErro = error?.response?.status;
+      if (statusErro === 401 || statusErro === 400 || statusErro === 404) {
         Alert.alert('Acesso Negado', 'E-mail ou senha incorretos. Tente novamente.');
       } else {
-        // Se não tem detalhe, provavelmente a internet caiu ou o servidor falhou
-        Alert.alert('Erro', 'Não foi possível conectar. Verifique sua internet.');
+        Alert.alert('Erro', 'Não foi possível fazer o login. Verifique sua conexão.');
       }
     } finally {
       setLoading(false);
