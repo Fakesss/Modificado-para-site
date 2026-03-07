@@ -34,6 +34,17 @@ export const getMe = async () => {
   return response.data;
 };
 
+// Atualizar Equipe (Nome e Cor)
+export const updateEquipe = async (id: string, dados: { nome?: string; cor?: string }) => {
+  try {
+    const response = await api.put(`/equipes/${id}`, dados);
+    return response.data;
+  } catch (error) {
+    console.error('Erro ao atualizar equipe:', error);
+    throw error;
+  }
+};
+
 // Turmas
 export const getTurmas = async () => {
   const response = await api.get('/turmas');
