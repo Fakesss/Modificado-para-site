@@ -8,19 +8,13 @@ interface Props {
   loading?: boolean;
 }
 
-// Placeholder for empty positions
 const EMPTY_ITEM = { id: 'empty', nome: '-', cor: '#333', pontosTotais: 0, posicao: 0 };
 
 export default function RankingHeader({ ranking, loading }: Props) {
-  // Sort by position
   const sortedRanking = [...ranking].sort((a, b) => a.posicao - b.posicao);
-  
-  // Get first 3 or use placeholders
   const first = sortedRanking[0] || { ...EMPTY_ITEM, posicao: 1 };
   const second = sortedRanking[1] || { ...EMPTY_ITEM, posicao: 2 };
   const third = sortedRanking[2] || { ...EMPTY_ITEM, posicao: 3 };
-  
-  // Display order: 2nd, 1st, 3rd
   const displayOrder = [second, first, third];
 
   if (loading) {
@@ -38,18 +32,19 @@ export default function RankingHeader({ ranking, loading }: Props) {
         {displayOrder.map((item, index) => {
           const isFirst = item.posicao === 1;
           const isEmpty = item.id === 'empty';
+          const podiumHeight = isFirst ? 110 : item.posicao === 2 ? 90 : 75;
           
-          // 🚨 AQUI ESTÁ A MÁGICA DA ALTURA: Aumentamos as alturas para nada vazar!
-          const podiumHeight = isFirst ? 110 : item.posicao === 2 ? 95 : 80;
-          
+          // Quebra o nome em duas linhas se tiver espaço (Ex: "Equipe\nDelta")
+          const nomeFormatado = item.nome.replace(' ', '\n');
+
           return (
             <View key={`${item.id}-${index}`} style={styles.podiumItem}>
               <View style={[styles.badge, { backgroundColor: item.cor }]}>
                 <Text style={styles.badgeText} numberOfLines={2} adjustsFontSizeToFit>
-                  {item.nome}
+                  {nomeFormatado}
                 </Text>
               </View>
-              <View style={[styles.podium, { height: podiumHeight, backgroundColor: item.cor + '40' }]}>
+              <View style={[styles.podium, { height: podiumHeight, backgroundColor: item.cor + '30' }]}>
                 <View style={[styles.positionCircle, { backgroundColor: item.cor }]}>
                   <Text style={styles.positionText}>{item.posicao}º</Text>
                 </View>
@@ -92,43 +87,41 @@ const styles = StyleSheet.create({
   },
   podiumItem: {
     alignItems: 'center',
-    flex: 1, // Faz com que todas as colunas tenham a mesma largura
+    flex: 1, 
   },
   badge: {
-    width: '100%', // Força a ocupar toda a largura da coluna
-    minHeight: 40, // Garante que caibam duas linhas de texto se o nome for grande
+    width: '96%', // Mais cheinho
+    minHeight: 48, // Mais alto para caber 2 linhas bem
     justifyContent: 'center',
-    alignItems: 'center', // Centraliza o texto
+    alignItems: 'center', 
     paddingHorizontal: 4,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginBottom: 12, // Dá um espaço para a bolinha da posição não encostar
+    paddingVertical: 8,
+    borderRadius: 10, // Curva menos acentuada (não fica formato de pílula)
+    marginBottom: 14, 
   },
   badgeText: {
     color: '#000',
     fontWeight: '900',
     fontSize: 12,
-    textAlign: 'center', // Centraliza o texto
+    textAlign: 'center',
+    lineHeight: 14,
   },
   podium: {
     width: '100%',
-    borderRadius: 12,
+    borderRadius: 16, // Pódio com cantos suaves
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#333',
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   positionCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'absolute', // Coloca a bolinha no topo absoluto do podium
-    top: -14, // Puxa ela para cima para ficar metade pra dentro, metade pra fora
-    borderWidth: 2,
-    borderColor: '#1a1a2e',
+    position: 'absolute', 
+    top: -15, 
     zIndex: 2,
   },
   positionText: {
@@ -139,6 +132,6 @@ const styles = StyleSheet.create({
   points: {
     fontWeight: 'bold',
     fontSize: 13,
-    marginTop: 8, // Dá espaço depois do troféu/medalha
+    marginTop: 6,
   },
 });
