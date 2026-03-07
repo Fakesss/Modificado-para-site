@@ -14,6 +14,9 @@ export default function VideoPlayer() {
   const [video, setVideo] = useState<Conteudo | null>(null);
   const [loading, setLoading] = useState(true);
   
+  // 🛡️ ESCUDO ANTI-VERCEL (Impede o servidor de tentar desenhar o vídeo)
+  const [isClient, setIsClient] = useState(false);
+  
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [startTime, setStartTime] = useState(0);
@@ -24,8 +27,12 @@ export default function VideoPlayer() {
   const [watchedPercentage, setWatchedPercentage] = useState(0);
   
   const lastUpdateRef = useRef(0);
-  const completedRef = useRef(false);
-  useEffect(() => { completedRef.current = completed; }, [completed]);
+  const iframeRef = useRef<any>(null);
+
+  // Ativa o aplicativo apenas no celular, não no servidor
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const getYouTubeId = (url: string) => {
     if (!url) return null;
@@ -37,53 +44,46 @@ export default function VideoPlayer() {
   const youtubeId = video?.urlVideo ? getYouTubeId(video.urlVideo) : null;
 
   useEffect(() => {
-    if (id) loadVideo();
-  }, [id]);
+    if (id && isClient) loadVideo();
+  }, [id, isClient]);
 
-  // 🎬 CONEXÃO PASSIVA (Sobrevive ao Maximizar e não afoga o WebView)
+  // 📻 Rádio do YouTube
   useEffect(() => {
-    if (Platform.OS !== 'web' || !youtubeId || loading) return;
+    if (!isClient || !youtubeId || Platform.OS !== 'web') return;
 
-    let player: any;
-    let timer: any;
-
-    const initPlayer = () => {
-      const win = window as any;
-      if (win.YT && win.YT.Player) {
-        player = new win.YT.Player('youtube-iframe', {
-          events: {
-            onReady: () => {
-              timer = setInterval(() => {
-                if (player && player.getCurrentTime) {
-                  setCurrentTime(player.getCurrentTime() || 0);
-                  setDuration(player.getDuration() || 0);
-                }
-              }, 1000); // Exatidão para vídeos curtos
-            }
-          }
-        });
-      }
+    const handleMessage = (event: any) => {
+      if (event.origin !== 'https://www.youtube.com') return;
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === 'infoDelivery' && data.info) {
+          if (data.info.currentTime !== undefined) setCurrentTime(data.info.currentTime);
+          if (data.info.duration !== undefined) setDuration(data.info.duration);
+        }
+      } catch (e) {}
     };
 
-    if (!(window as any).YT) {
-      const script = document.createElement('script');
-      script.src = 'https://www.youtube.com/iframe_api';
-      document.head.appendChild(script);
-      (window as any).onYouTubeIframeAPIReady = initPlayer;
-    } else {
-      setTimeout(initPlayer, 500);
-    }
+    window.addEventListener('message', handleMessage);
 
-    return () => clearInterval(timer);
-  }, [youtubeId, loading]);
+    const timer = setInterval(() => {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+        iframeRef.current.contentWindow.postMessage('{"event":"listening","id":1}', 'https://www.youtube.com');
+      }
+    }, 1000);
 
-  // 🛡️ A BARREIRA DE FERRO (Impossível dar Erro 500)
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      clearInterval(timer);
+    };
+  }, [youtubeId, isClient]);
+
+  // 🧠 Cérebro Matemático Blindado
   useEffect(() => {
+    if (!isClient) return;
+
     const safeCurrent = Math.floor(currentTime);
     const safeDuration = Math.floor(duration);
 
-    // Se a duração for zero ou o tempo for zero, MORRE AQUI. O servidor nunca é chamado.
-    if (safeDuration <= 0 || safeCurrent <= 0 || !id) return;
+    if (safeDuration <= 0 || safeCurrent < 5) return;
 
     const percentage = (safeCurrent / safeDuration) * 100;
     setWatchedPercentage(percentage > 100 ? 100 : percentage);
@@ -92,26 +92,22 @@ export default function VideoPlayer() {
       setCanComplete(true);
     }
 
-    // Só avança para salvar se o aluno assistiu de verdade
-    if (safeCurrent > lastUpdateRef.current) {
-      const diff = safeCurrent - lastUpdateRef.current;
-      
-      // Salva de 5 em 5 segundos OU se bater 90%
-      if (diff >= 5 || (percentage >= 90 && lastUpdateRef.current < safeDuration * 0.9)) {
+    if (safeCurrent - lastUpdateRef.current >= 5 || (percentage >= 90 && lastUpdateRef.current < safeDuration * 0.9)) {
+      if (safeCurrent > lastUpdateRef.current) {
         lastUpdateRef.current = safeCurrent;
         
         api.updateProgressoVideo(id as string, safeCurrent, safeDuration)
           .then(result => {
-            if (result.concluido && !completedRef.current) {
+            if (result.concluido && !completed) {
               setCompleted(true);
               setPointsEarned(result.pontosGerados);
               if (window.alert) window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
             }
           })
-          .catch(() => { /* Falhas de internet caem no vazio, sem tela de erro */ });
+          .catch(() => {});
       }
     }
-  }, [currentTime, duration]); 
+  }, [currentTime, duration, isClient]);
 
   const loadVideo = async () => {
     try {
@@ -176,7 +172,8 @@ export default function VideoPlayer() {
     }
   };
 
-  if (loading) {
+  // Se a tela não terminou de desenhar, exibe apenas carregamento
+  if (!isClient || loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -215,7 +212,7 @@ export default function VideoPlayer() {
       <View style={styles.playerContainer}>
         {youtubeId ? (
           <iframe
-            id="youtube-iframe"
+            ref={iframeRef}
             style={{ width: '100%', height: '100%', borderWidth: 0 }}
             src={`https://www.youtube.com/embed/${youtubeId}?enablejsapi=1&autoplay=1&rel=0&modestbranding=1&start=${startTime}`}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
