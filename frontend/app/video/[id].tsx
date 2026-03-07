@@ -25,9 +25,9 @@ export default function VideoPlayer() {
   const [watchedPercentage, setWatchedPercentage] = useState(0);
   
   const lastUpdateRef = useRef(0);
-  // 🛡️ A CAIXA FORTE: O React não pode tocar no que está aqui dentro
-  const containerRef = useRef<any>(null);
+  const iframeRef = useRef<any>(null);
 
+  // 🔎 Regex que aceita vídeos normais e SHORTS
   const getYouTubeId = (url: string) => {
     if (!url) return null;
     const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ \s]{11})/;
@@ -41,69 +41,45 @@ export default function VideoPlayer() {
     if (id) loadVideo();
   }, [id]);
 
-  // 🎬 O PLAYER ISOLADO (A versão que funcionava, mas blindada contra maximização)
+  // 📻 CANAL DE RÁDIO COM O YOUTUBE (A lógica de sucesso do seu código)
   useEffect(() => {
-    if (Platform.OS !== 'web' || !youtubeId || loading) return;
+    if (Platform.OS !== 'web' || !youtubeId) return;
 
-    let player: any;
-    let timer: any;
-    const win = window as any;
-
-    const setupPlayer = () => {
-      if (!win.YT || !win.YT.Player || !containerRef.current) return;
-
-      // Limpa a caixa forte
-      containerRef.current.innerHTML = '';
-
-      // Cria a div de vídeo MANUALMENTE para esconder do React
-      const targetDiv = document.createElement('div');
-      targetDiv.id = `yt-safe-${youtubeId}`;
-      targetDiv.style.width = '100%';
-      targetDiv.style.height = '100%';
-      containerRef.current.appendChild(targetDiv);
-
-      player = new win.YT.Player(targetDiv.id, {
-        videoId: youtubeId,
-        playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1, start: startTime },
-        events: {
-          onReady: () => {
-            timer = setInterval(() => {
-              if (player && player.getCurrentTime) {
-                setCurrentTime(player.getCurrentTime() || 0);
-                setDuration(player.getDuration() || 0);
-              }
-            }, 1000);
-          }
+    // Escuta as respostas do YouTube
+    const handleMessage = (event: any) => {
+      if (event.origin !== 'https://www.youtube.com') return;
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === 'infoDelivery' && data.info) {
+          if (data.info.currentTime) setCurrentTime(data.info.currentTime);
+          if (data.info.duration) setDuration(data.info.duration);
         }
-      });
+      } catch (e) {}
     };
 
-    if (!win.YT) {
-      const tag = document.createElement('script');
-      tag.src = "https://www.youtube.com/iframe_api";
-      document.head.appendChild(tag);
-      win.onYouTubeIframeAPIReady = setupPlayer;
-    } else {
-      setTimeout(setupPlayer, 200);
-    }
+    window.addEventListener('message', handleMessage);
+
+    // Pergunta o tempo exato para o YouTube a cada 1 segundo
+    const timer = setInterval(() => {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'getCurrentTime', args: [] }), 'https://www.youtube.com');
+        iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'getDuration', args: [] }), 'https://www.youtube.com');
+      }
+    }, 1000);
 
     return () => {
+      window.removeEventListener('message', handleMessage);
       clearInterval(timer);
-      if (player && player.destroy) {
-        try { player.destroy(); } catch (e) {}
-      }
-      if (containerRef.current) {
-        containerRef.current.innerHTML = ''; // Limpa tudo ao sair
-      }
     };
-  }, [youtubeId, startTime, loading]);
+  }, [youtubeId]);
 
-  // 🧠 CÉREBRO MATEMÁTICO (O original que funcionava 100%)
+  // 🧠 Cérebro Matemático Blindado contra o "Maximizar"
   useEffect(() => {
     const safeCurrent = Math.floor(Number(currentTime) || 0);
     const safeDuration = Math.floor(Number(duration) || 0);
 
-    if (safeDuration > 0 && safeCurrent >= 0) {
+    // Se a duração zerar ao maximizar a tela, ele simplesmente congela e não envia erros
+    if (safeDuration > 0 && safeCurrent >= 0 && !isNaN(safeCurrent) && !isNaN(safeDuration)) {
       const percentage = (safeCurrent / safeDuration) * 100;
       setWatchedPercentage(percentage > 100 ? 100 : percentage);
 
@@ -111,25 +87,15 @@ export default function VideoPlayer() {
         setCanComplete(true);
       }
 
+      // Só envia dados pro servidor APÓS 5 segundos de vídeo pra não bugar
       if (safeCurrent >= 5 && (safeCurrent - lastUpdateRef.current >= 5 || percentage >= 90)) {
         if (safeCurrent > lastUpdateRef.current) {
            lastUpdateRef.current = safeCurrent;
-           
-           if (id) {
-             api.updateProgressoVideo(id as string, safeCurrent, safeDuration)
-               .then(result => {
-                 if (result.concluido && !completed) {
-                   setCompleted(true);
-                   setPointsEarned(result.pontosGerados);
-                   if (window.alert) window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
-                 }
-               })
-               .catch(() => {});
-           }
+           updateProgress(safeCurrent, safeDuration);
         }
       }
     }
-  }, [currentTime, duration, canComplete, completed, id]);
+  }, [currentTime, duration, canComplete]);
 
   const loadVideo = async () => {
     try {
@@ -161,12 +127,30 @@ export default function VideoPlayer() {
               setWatchedPercentage(100);
             }
           }
-        } catch (error) {}
+        } catch (error) {
+          // Vídeo novo, sem progresso ainda
+        }
       }
     } catch (error) {
       console.error('Error loading video:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateProgress = async (watchedSeconds: number, totalDuration: number) => {
+    // 🔒 O CADEADO DO PYTHON: Se os números forem NaN ou zero (bug do maximizar), a porta fecha!
+    if (!id || !totalDuration || totalDuration <= 0 || isNaN(watchedSeconds) || isNaN(totalDuration)) return;
+
+    try {
+      const result = await api.updateProgressoVideo(id, watchedSeconds, totalDuration);
+      if (result.concluido && !completed) {
+        setCompleted(true);
+        setPointsEarned(result.pontosGerados);
+        if (window.alert) window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
+      }
+    } catch (error) {
+      console.log('Sincronização pendente...');
     }
   };
 
@@ -182,10 +166,11 @@ export default function VideoPlayer() {
     }
 
     try {
+      const safeDuration = Math.floor(Number(duration) || 300);
       const result = await api.updateProgressoVideo(
-        id as string,
-        Math.floor(Math.max(currentTime, duration * 0.9)),
-        Math.floor(duration || 300)
+        id,
+        Math.floor(Math.max(Number(currentTime) || 0, safeDuration * 0.9)),
+        safeDuration
       );
       setCompleted(true);
       setPointsEarned(result.pontosGerados);
@@ -193,7 +178,7 @@ export default function VideoPlayer() {
       if (window.alert) window.alert(`Parabéns! Você ganhou ${result.pontosGerados} pontos!`);
       router.back();
     } catch (error) {
-      if (window.alert) window.alert('Erro ao marcar como concluído.');
+      if (window.alert) window.alert('Erro ao marcar como concluído. Tente novamente.');
     }
   };
 
@@ -235,8 +220,13 @@ export default function VideoPlayer() {
 
       <View style={styles.playerContainer}>
         {youtubeId ? (
-          // Usando uma div pura do HTML como Caixa Forte para proteger o Android
-          <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+          <iframe
+            ref={iframeRef}
+            style={{ width: '100%', height: '100%', borderWidth: 0 }}
+            src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0&modestbranding=1&enablejsapi=1&start=${startTime}`}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            allowFullScreen
+          />
         ) : (
           <View style={styles.noVideo}>
             <Ionicons name="videocam-off" size={48} color="#666" />
@@ -306,7 +296,6 @@ export default function VideoPlayer() {
   );
 }
 
-const { width } = Dimensions.get('window');
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0c' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -316,7 +305,8 @@ const styles = StyleSheet.create({
   backButtonText: { color: '#000', fontWeight: 'bold' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   headerTitle: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center', marginHorizontal: 16 },
-  playerContainer: { width: '100%', height: width > 600 ? 400 : width * 0.5625, backgroundColor: '#000' },
+  // Usando AspectRatio para suportar Maximizar/Girar a tela perfeitamente sem bugar o React
+  playerContainer: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' },
   noVideo: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   noVideoText: { color: '#666', marginTop: 12, fontSize: 16 },
   infoContainer: { padding: 16 },
