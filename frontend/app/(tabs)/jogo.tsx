@@ -166,7 +166,6 @@ export default function Jogo() {
   const multiplayerPollRef = useRef<any>(null);
   const rodadaRef = useRef(1);
 
-  // Update rodadaRef when rodada changes
   useEffect(() => {
     rodadaRef.current = rodada;
   }, [rodada]);
@@ -564,7 +563,6 @@ export default function Jogo() {
     mostrarMensagem(`🎉 Rodada ${nr}!`, 2000);
   };
 
-  // Logica de Pistas
   const obterPistaLivre = (): number => {
     const pistasDisponiveis = [0, 1, 2].filter(pista => {
       const opNaPista = operacoesAtuaisRef.current.find(op => op.lane === pista);
@@ -953,77 +951,79 @@ export default function Jogo() {
   if (tela === 'menu') {
     return (
       <SafeAreaView style={styles.container}>
-        <ScrollView style={styles.menuContainer} showsVerticalScrollIndicator={false}>
-          <View style={styles.menuHeader}>
-            <Ionicons name="game-controller" size={56} color="#FFD700" />
-            <Text style={styles.menuTitle}>Matemática Turbo</Text>
-          </View>
-
-          <View style={styles.volumeContainer}>
-            <TouchableOpacity onPress={toggleMute} style={styles.volumeButton}>
-              <Ionicons name={musicaMuted ? "volume-mute" : "volume-high"} size={22} color="#FFD700" />
-            </TouchableOpacity>
-            <Slider style={styles.volumeSlider} minimumValue={0} maximumValue={1} value={musicaVolume}
-              onValueChange={handleVolumeChange} minimumTrackTintColor="#FFD700" maximumTrackTintColor="#333" thumbTintColor="#FFD700" />
-          </View>
-
-          {/* SELETOR DE MODOS */}
-          <Text style={styles.sectionLabel}>1. Escolha o Modo de Jogo</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modosScrollRow}>
-            {[
-              { id: 'misto', icon: 'shuffle', name: 'Misto', color: '#FFD700' },
-              { id: 'soma', icon: 'add', name: 'Soma', color: '#32CD32' },
-              { id: 'subtracao', icon: 'remove', name: 'Subtração', color: '#FF4444' },
-              { id: 'multiplicacao', icon: 'close', name: 'Multiplicação', color: '#4169E1' },
-              { id: 'divisao', icon: 'reorder-two', name: 'Divisão', color: '#9B59B6' },
-              { id: 'potenciacao', icon: 'chevron-up', name: 'Potências', color: '#FF8C00' },
-              { id: 'radiciacao', icon: 'flash', name: 'Raízes', color: '#00CED1' },
-            ].map(m => (
-              <TouchableOpacity 
-                key={m.id} 
-                style={[styles.modoCardItem, modoMatematica === m.id && { borderColor: m.color, borderWidth: 2 }]}
-                onPress={() => setModoMatematica(m.id as ModoMatematica)}
-              >
-                <Ionicons name={m.icon as any} size={28} color={m.color} />
-                <Text style={styles.modoTextItem}>{m.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <Text style={styles.sectionLabel}>2. Como deseja jogar?</Text>
-          <TouchableOpacity style={styles.iniciarButton} onPress={() => { setModo('single'); setTela('jogo'); }}>
-            <Ionicons name="play" size={24} color="#000" />
-            <Text style={styles.iniciarButtonText}>JOGAR SOLO AGORA!</Text>
-          </TouchableOpacity>
-
-          <View style={styles.multiSection}>
-            <Text style={styles.multiTitle}>🎮 Multiplayer</Text>
-            <TouchableOpacity style={styles.multiButton} onPress={criarSala}>
-              <Ionicons name="add-circle" size={20} color="#fff" />
-              <Text style={styles.multiButtonText}>Criar Sala</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.joinRow}>
-              <TextInput style={styles.roomInput} placeholder="Código da sala" placeholderTextColor="#666"
-                value={roomIdInput} onChangeText={setRoomIdInput} autoCapitalize="none" />
-              <TouchableOpacity style={styles.joinButton} onPress={() => entrarSala()}>
-                <Ionicons name="enter" size={20} color="#fff" />
-              </TouchableOpacity>
+        {/* AQUI FOI CORRIGIDO O ERRO FATAL DA SCROLLVIEW */}
+        <View style={styles.menuContainer}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.menuScrollContent}>
+            <View style={styles.menuHeader}>
+              <Ionicons name="game-controller" size={56} color="#FFD700" />
+              <Text style={styles.menuTitle}>Matemática Turbo</Text>
             </View>
-            
-            <TouchableOpacity style={styles.salasButton} onPress={() => { carregarSalas(); setTela('salas'); }}>
-              <Text style={styles.salasButtonText}>Ver Salas Disponíveis</Text>
+
+            <View style={styles.volumeContainer}>
+              <TouchableOpacity onPress={toggleMute} style={styles.volumeButton}>
+                <Ionicons name={musicaMuted ? "volume-mute" : "volume-high"} size={22} color="#FFD700" />
+              </TouchableOpacity>
+              <Slider style={styles.volumeSlider} minimumValue={0} maximumValue={1} value={musicaVolume}
+                onValueChange={handleVolumeChange} minimumTrackTintColor="#FFD700" maximumTrackTintColor="#333" thumbTintColor="#FFD700" />
+            </View>
+
+            {/* SELETOR DE MODOS */}
+            <Text style={styles.sectionLabel}>1. Escolha o Modo de Jogo</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modosScrollRow}>
+              {[
+                { id: 'misto', icon: 'shuffle', name: 'Misto', color: '#FFD700' },
+                { id: 'soma', icon: 'add', name: 'Soma', color: '#32CD32' },
+                { id: 'subtracao', icon: 'remove', name: 'Subtração', color: '#FF4444' },
+                { id: 'multiplicacao', icon: 'close', name: 'Multiplicação', color: '#4169E1' },
+                { id: 'divisao', icon: 'albums', name: 'Divisão', color: '#9B59B6' },
+                { id: 'potenciacao', icon: 'chevron-up', name: 'Potências', color: '#FF8C00' },
+                { id: 'radiciacao', icon: 'flash', name: 'Raízes', color: '#00CED1' },
+              ].map(m => (
+                <TouchableOpacity 
+                  key={m.id} 
+                  style={[styles.modoCardItem, modoMatematica === m.id && { borderColor: m.color, borderWidth: 2 }]}
+                  onPress={() => setModoMatematica(m.id as ModoMatematica)}
+                >
+                  <Ionicons name={m.icon as any} size={28} color={m.color} />
+                  <Text style={styles.modoTextItem}>{m.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <Text style={styles.sectionLabel}>2. Como deseja jogar?</Text>
+            <TouchableOpacity style={styles.iniciarButton} onPress={() => { setModo('single'); setTela('jogo'); }}>
+              <Ionicons name="play" size={24} color="#000" />
+              <Text style={styles.iniciarButtonText}>JOGAR SOLO AGORA!</Text>
             </TouchableOpacity>
 
-            {isAdmin && (
-              <TouchableOpacity style={styles.botButton} onPress={iniciarJogoComBot}>
-                <Ionicons name="hardware-chip" size={20} color="#000" />
-                <Text style={styles.botButtonText}>🤖 Jogar vs Bot (Admin)</Text>
+            <View style={styles.multiSection}>
+              <Text style={styles.multiTitle}>🎮 Multiplayer</Text>
+              <TouchableOpacity style={styles.multiButton} onPress={criarSala}>
+                <Ionicons name="add-circle" size={20} color="#fff" />
+                <Text style={styles.multiButtonText}>Criar Sala</Text>
               </TouchableOpacity>
-            )}
-          </View>
+              
+              <View style={styles.joinRow}>
+                <TextInput style={styles.roomInput} placeholder="Código da sala" placeholderTextColor="#666"
+                  value={roomIdInput} onChangeText={setRoomIdInput} autoCapitalize="none" />
+                <TouchableOpacity style={styles.joinButton} onPress={() => entrarSala()}>
+                  <Ionicons name="enter" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              
+              <TouchableOpacity style={styles.salasButton} onPress={() => { carregarSalas(); setTela('salas'); }}>
+                <Text style={styles.salasButtonText}>Ver Salas Disponíveis</Text>
+              </TouchableOpacity>
 
-        </ScrollView>
+              {isAdmin && (
+                <TouchableOpacity style={styles.botButton} onPress={iniciarJogoComBot}>
+                  <Ionicons name="hardware-chip" size={20} color="#000" />
+                  <Text style={styles.botButtonText}>🤖 Jogar vs Bot (Admin)</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </ScrollView>
+        </View>
       </SafeAreaView>
     );
   }
@@ -1450,28 +1450,26 @@ export default function Jogo() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0c' },
-  menuContainer: { flex: 1, padding: 16 },
+  
+  // Menu
+  menuContainer: { flex: 1 },
+  menuScrollContent: { padding: 16, alignItems: 'center' },
   menuHeader: { alignItems: 'center', marginTop: 8, marginBottom: 12 },
-  menuTitle: { fontSize: 24, fontWeight: '900', color: '#fff', marginTop: 8 },
-  volumeContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 10, borderRadius: 10, marginBottom: 12 },
+  menuTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginTop: 8 },
+  volumeContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 10, borderRadius: 10, marginBottom: 12, width: '100%' },
   volumeButton: { padding: 4 },
   volumeSlider: { flex: 1, height: 36, marginHorizontal: 8 },
   
   // Modos
-  sectionLabel: { color: '#888', fontSize: 14, fontWeight: 'bold', marginTop: 10, marginBottom: 8 },
+  sectionLabel: { color: '#888', fontSize: 14, fontWeight: 'bold', marginTop: 10, marginBottom: 8, alignSelf: 'flex-start' },
   modosScrollRow: { gap: 10, paddingBottom: 10 },
   modoCardItem: { backgroundColor: '#1a1a2e', width: 90, height: 90, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent' },
   modoTextItem: { color: '#fff', fontSize: 12, fontWeight: 'bold', marginTop: 6, textAlign: 'center' },
   
-  recordesContainer: { flexDirection: 'row', gap: 8, marginBottom: 14, marginTop: 10 },
-  recordeCard: { flex: 1, backgroundColor: '#1a1a2e', padding: 12, borderRadius: 10, alignItems: 'center' },
-  recordeLabel: { color: '#888', fontSize: 10, marginTop: 4 },
-  recordeValor: { color: '#FFD700', fontSize: 20, fontWeight: 'bold', marginTop: 2 },
-  
-  iniciarButton: { flexDirection: 'row', backgroundColor: '#32CD32', padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 },
+  iniciarButton: { flexDirection: 'row', backgroundColor: '#32CD32', padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10, width: '100%' },
   iniciarButtonText: { color: '#000', fontSize: 18, fontWeight: '900' },
   
-  multiSection: { backgroundColor: '#1a1a2e', padding: 14, borderRadius: 10, marginTop: 10, marginBottom: 40 },
+  multiSection: { backgroundColor: '#1a1a2e', padding: 14, borderRadius: 10, marginTop: 10, marginBottom: 40, width: '100%' },
   multiTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
   multiButton: { flexDirection: 'row', backgroundColor: '#4169E1', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 10 },
   multiButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
