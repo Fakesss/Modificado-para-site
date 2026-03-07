@@ -105,23 +105,26 @@ export default function AdminConteudos() {
   };
 
   const handleDelete = async (conteudoId: string) => {
+    // Esse console.log é o nosso "Grito de Alerta"
+    console.log("🚨 CLICOU NA LIXEIRA! ID do conteúdo:", conteudoId);
+
     if (Platform.OS === 'web') {
-      // Regra para a Vercel (Navegador)
-      const confirmou = window.confirm('Deseja mover este conteúdo para a lixeira? Você terá 7 dias para restaurá-lo.');
+      const confirmou = window.confirm('Deseja mover este conteúdo para a lixeira?');
       if (confirmou) {
         try {
+          console.log("Enviando comando de deletar para a API...");
           await api.deleteConteudo(conteudoId);
-          window.alert('Conteúdo movido para a lixeira!');
+          window.alert('Conteúdo movido para a lixeira com sucesso!');
           loadData();
         } catch (error) {
-          window.alert('Erro ao mover conteúdo');
+          console.error("❌ ERRO AO DELETAR:", error);
+          window.alert('Erro ao mover conteúdo. Olhe o Console (F12).');
         }
       }
     } else {
-      // Regra para o celular nativo
       Alert.alert(
         'Mover para Lixeira',
-        'Deseja mover este conteúdo para a lixeira? Você terá 7 dias para restaurá-lo.',
+        'Deseja mover este conteúdo para a lixeira?',
         [
           { text: 'Cancelar', style: 'cancel' },
           {
