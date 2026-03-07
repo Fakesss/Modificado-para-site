@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -43,26 +44,39 @@ export default function AdminExercicios() {
   };
 
   const handleDelete = async (exercicioId: string) => {
-    Alert.alert(
-      'Mover para Lixeira',
-      'Deseja mover este exercício para a lixeira? Você terá 7 dias para restaurá-lo.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Mover',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.deleteExercicio(exercicioId);
-              Alert.alert('Sucesso', 'Exercício movido para a lixeira');
-              loadData();
-            } catch (error) {
-              Alert.alert('Erro', 'Erro ao mover exercício');
-            }
+    if (Platform.OS === 'web') {
+      const confirmou = window.confirm('Deseja mover este exercício para a lixeira? Você terá 7 dias para restaurá-lo.');
+      if (confirmou) {
+        try {
+          await api.deleteExercicio(exercicioId);
+          window.alert('Exercício movido para a lixeira!');
+          loadData();
+        } catch (error) {
+          window.alert('Erro ao mover exercício');
+        }
+      }
+    } else {
+      Alert.alert(
+        'Mover para Lixeira',
+        'Deseja mover este exercício para a lixeira? Você terá 7 dias para restaurá-lo.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Mover',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await api.deleteExercicio(exercicioId);
+                Alert.alert('Sucesso', 'Exercício movido para a lixeira');
+                loadData();
+              } catch (error) {
+                Alert.alert('Erro', 'Erro ao mover exercício');
+              }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   if (loading) {
