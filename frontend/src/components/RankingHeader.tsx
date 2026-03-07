@@ -34,7 +34,7 @@ export default function RankingHeader({ ranking, loading }: Props) {
           const isEmpty = item.id === 'empty';
           const podiumHeight = isFirst ? 110 : item.posicao === 2 ? 90 : 75;
           
-          // Quebra o nome em duas linhas se tiver espaço (Ex: "Equipe\nDelta")
+          // Quebra o nome em duas linhas certinhas (Ex: Equipe \n Delta)
           const nomeFormatado = item.nome.replace(' ', '\n');
 
           return (
@@ -90,14 +90,14 @@ const styles = StyleSheet.create({
     flex: 1, 
   },
   badge: {
-    width: '96%', // Mais cheinho
-    minHeight: 48, // Mais alto para caber 2 linhas bem
+    width: '100%', // Ocupa a largura total da coluna
+    minHeight: 48, // Altura exata para caber as 2 linhas sem espremer
     justifyContent: 'center',
     alignItems: 'center', 
-    paddingHorizontal: 4,
     paddingVertical: 8,
-    borderRadius: 10, // Curva menos acentuada (não fica formato de pílula)
-    marginBottom: 14, 
+    paddingHorizontal: 4,
+    borderRadius: 12, // Curva igual da sua imagem original
+    marginBottom: 18, // Espaço exato para a bolinha não grudar no nome
   },
   badgeText: {
     color: '#000',
@@ -108,26 +108,26 @@ const styles = StyleSheet.create({
   },
   podium: {
     width: '100%',
-    borderRadius: 16, // Pódio com cantos suaves
+    borderRadius: 14, // Cantos suaves no pódio também
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 16,
     paddingBottom: 8,
   },
   positionCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'absolute', 
-    top: -15, 
+    top: -16, 
     zIndex: 2,
   },
   positionText: {
     color: '#000',
     fontWeight: 'bold',
-    fontSize: 13,
+    fontSize: 14,
   },
   points: {
     fontWeight: 'bold',
