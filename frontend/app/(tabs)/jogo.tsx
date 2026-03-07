@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,24 +6,22 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 
 const { width, height } = Dimensions.get('window');
-// Aumentamos a área de jogo para 60% da tela dinamicamente
-const INITIAL_GAME_AREA_HEIGHT = height * 0.60; 
+// Usamos uma altura fixa baseada na tela para nunca causar loop de renderização (Fim da tela branca)
+const GAME_AREA_HEIGHT = height * 0.55; 
 const CARD_WIDTH = 105;
 const NUM_LANES = 3; 
 const LANE_WIDTH = width / NUM_LANES;
 
 export default function Jogo() {
   const { user } = useAuth();
-  const isAdmin = user?.perfil === 'ADMIN';
-
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
-  const [modo, setModo] = useState<'single' | 'bot'>('single');
   const [modoMatematica, setModoMatematica] = useState('misto');
   
   // Game state
@@ -35,21 +33,16 @@ export default function Jogo() {
   const [metaRodada, setMetaRodada] = useState(10);
   const [resposta, setResposta] = useState('');
   const [powerUpDisponivel, setPowerUpDisponivel] = useState(false);
-  const [gameAreaHeight, setGameAreaHeight] = useState(INITIAL_GAME_AREA_HEIGHT);
   
-  // Bot State (Multiplayer Prototype)
-  const [botPontos, setBotPontos] = useState(0);
+  // Visual feedback
   const [laserAtivo, setLaserAtivo] = useState<{ x: number; y: number; cor: string } | null>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   
   // Refs de Lógica e IA (Inteligência Invisível)
   const spawnTimer = useRef<any>(null);
-  const botTimer = useRef<any>(null);
   const operacoesAtuaisRef = useRef<{lane: number, y: number, chave: string}[]>([]);
-  const operacoesListRef = useRef<any[]>([]); 
   const rodadaRef = useRef(1);
-  const congeladoRef = useRef(false);
   const jogoPausadoRef = useRef(false);
   
   // 🧠 VARIÁVEIS DA IA DE DIFICULDADE DINÂMICA
@@ -58,16 +51,13 @@ export default function Jogo() {
   const inicioRespostaRef = useRef<number>(Date.now()); // Cronômetro de agilidade
 
   useEffect(() => { rodadaRef.current = rodada; }, [rodada]);
-  useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
 
   // Limpa tudo ao sair ou reiniciar
   const resetGame = () => {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
-    if (botTimer.current) clearInterval(botTimer.current);
     setOperacoes([]);
     setVidas(10);
     setPontos(0);
-    setBotPontos(0);
     setRodada(1);
     setAcertosRodada(0);
     setMetaRodada(10);
@@ -75,7 +65,7 @@ export default function Jogo() {
     operacoesAtuaisRef.current = [];
     questoesAcertadasRef.current.clear();
     desempenhoOcultoRef.current = 0;
-    congeladoRef.current = false;
+    setResposta('');
   };
 
   const calcularMetaRodada = (r: number) => {
@@ -87,13 +77,13 @@ export default function Jogo() {
     setRodada(nr);
     setAcertosRodada(0);
     setMetaRodada(calcularMetaRodada(nr));
-    questoesAcertadasRef.current.clear(); // Limpa a memória para o novo round
+    questoesAcertadasRef.current.clear(); // 🧠 Limpa a memória para o novo round (pode repetir contas antigas)
   };
 
   const obterPistaLivre = (): number => {
     const pistasDisponiveis = [0, 1, 2].filter(pista => {
       const opNaPista = operacoesAtuaisRef.current.find(op => op.lane === pista);
-      return !opNaPista || opNaPista.y > gameAreaHeight * 0.2;
+      return !opNaPista || opNaPista.y > GAME_AREA_HEIGHT * 0.2;
     });
     if (pistasDisponiveis.length === 0) return Math.floor(Math.random() * 3);
     return pistasDisponiveis[Math.floor(Math.random() * pistasDisponiveis.length)];
@@ -102,11 +92,11 @@ export default function Jogo() {
   // 🧠 CÉREBRO DA MATEMÁTICA E IA
   const gerarOperacao = () => {
     const currentRodada = rodadaRef.current;
-    const desempenho = desempenhoOcultoRef.current; // Pega o nível de calor atual do jogador
+    const desempenho = desempenhoOcultoRef.current; 
     
     let opsPermitidas = ['+'];
     
-    // A dificuldade evolui com a rodada E um pouco com o desempenho (se o cara for gênio, puxa números maiores)
+    // A dificuldade evolui com a rodada E um pouco com o desempenho do aluno
     const bonusDesempenho = Math.floor(desempenho / 3); 
     let numMaximo = 10 + (currentRodada * 3) + bonusDesempenho; 
     let multMaximo = 3 + Math.floor(currentRodada / 2) + Math.floor(bonusDesempenho / 2); 
@@ -127,7 +117,7 @@ export default function Jogo() {
       multMaximo = 3 + Math.floor(currentRodada / 2);
     }
 
-    // Tenta gerar uma conta inédita (Até 50 tentativas para não travar o celular)
+    // Tenta gerar uma conta inédita (Até 50 tentativas)
     for (let t = 0; t < 50; t++) {
       const op = opsPermitidas[Math.floor(Math.random() * opsPermitidas.length)];
       let n1=0, n2: number | string = 0, res=0, texto='';
@@ -181,7 +171,7 @@ export default function Jogo() {
       
       if (jaAcertou || estaNaTela) continue; // Descarta e tenta gerar outra
       
-      const isEspecial = Math.random() < 0.15;
+      const isEspecial = Math.random() < 0.10; // 10% de chance de power-up
       const laneSelecionada = obterPistaLivre();
       const posX = (laneSelecionada * LANE_WIDTH) + (LANE_WIDTH - CARD_WIDTH) / 2;
       
@@ -210,7 +200,7 @@ export default function Jogo() {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
 
     const loopSpawner = () => {
-      if (!jogoPausadoRef.current && !congeladoRef.current) {
+      if (!jogoPausadoRef.current) {
         setOperacoes(ops => {
           // Máximo de contas na tela cresce junto com a rodada e com o desempenho (se ele for rápido, enche a tela)
           const maxOps = Math.min(8, 3 + Math.floor(rodadaRef.current / 3) + Math.floor(desempenhoOcultoRef.current / 3));
@@ -226,7 +216,7 @@ export default function Jogo() {
         });
       }
       
-      // O intervalo de nascimento (spawn) diminui se ele estiver jogando muito bem
+      // O intervalo de nascimento diminui se ele estiver jogando muito bem
       const spawnInterval = Math.max(1200, 3500 - (rodadaRef.current * 150) - (desempenhoOcultoRef.current * 150));
       spawnTimer.current = setTimeout(loopSpawner, spawnInterval);
     };
@@ -234,9 +224,8 @@ export default function Jogo() {
     loopSpawner();
   };
 
-  const iniciarJogo = (modoEscolhido: 'single' | 'bot') => {
+  const iniciarJogo = () => {
     resetGame();
-    setModo(modoEscolhido);
     setTela('jogo');
     inicioRespostaRef.current = Date.now();
     
@@ -249,53 +238,30 @@ export default function Jogo() {
     inicial.forEach(op => animarQueda(op));
     
     iniciarSpawner();
-
-    if (modoEscolhido === 'bot') {
-      botTimer.current = setInterval(() => {
-        const ops = operacoesListRef.current;
-        const alvosValidos = ops.filter(o => {
-          const yVal = (o.y as any)._value || 0;
-          return yVal > (gameAreaHeight * 0.35); // Bot espera a conta descer 35% para atirar
-        });
-
-        if (alvosValidos.length > 0 && Math.random() > 0.3) { 
-          const alvo = alvosValidos[0];
-          alvo.y.stopAnimation();
-          
-          setOperacoes(curr => curr.filter(o => o.id !== alvo.id));
-          operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== alvo.chave);
-          
-          setBotPontos(p => p + 10);
-          dispararLaser(alvo, true, 'bot');
-        }
-      }, Math.max(2000, 5000 - (rodadaRef.current * 150))); 
-    }
   };
 
   const animarQueda = (op: any) => {
-    if (congeladoRef.current) return;
-    
     op.y.addListener(({ value }: { value: number }) => {
       const ref = operacoesAtuaisRef.current.find(o => o.chave === op.chave);
       if (ref) ref.y = value;
     });
     
     Animated.timing(op.y, {
-      toValue: gameAreaHeight + 50,
+      toValue: GAME_AREA_HEIGHT + 100,
       duration: op.speed,
       useNativeDriver: true,
     }).start(({ finished }) => {
-      if (finished) perderVida(op.id, true); // True indica que caiu (erro passivo)
+      if (finished) perderVida(op.id, true); // True indica que caiu no chão (erro passivo)
     });
   };
 
-  const dispararLaser = (targetOp: any, acertou: boolean, atirador: 'player' | 'bot' = 'player') => {
+  const dispararLaser = (targetOp: any, acertou: boolean) => {
     if (acertou && targetOp) {
       const tX = targetOp.posX + CARD_WIDTH / 2;
-      const tY = (targetOp.y as any)._value || 100;
-      const corLaser = atirador === 'bot' ? '#FF00FF' : '#32CD32'; 
+      // Usamos um alvo seguro para não dar crash na animação
+      const tY = GAME_AREA_HEIGHT * 0.3; 
 
-      setLaserAtivo({ x: tX, y: tY, cor: corLaser });
+      setLaserAtivo({ x: tX, y: tY, cor: '#32CD32' });
       laserAnim.setValue(0);
       Animated.timing(laserAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start(() => {
         Animated.parallel([
@@ -304,7 +270,7 @@ export default function Jogo() {
         ]).start(() => setLaserAtivo(null));
       });
     } else {
-      setLaserAtivo({ x: width / 2, y: gameAreaHeight * 0.2, cor: '#FF4444' });
+      setLaserAtivo({ x: width / 2, y: GAME_AREA_HEIGHT * 0.2, cor: '#FF4444' });
       laserAnim.setValue(0);
       Animated.timing(laserAnim, { toValue: 1, duration: 280, useNativeDriver: true }).start(() => setLaserAtivo(null));
       Animated.sequence([
@@ -316,8 +282,6 @@ export default function Jogo() {
   };
 
   const verificarResposta = () => {
-    if (congeladoRef.current) return;
-    
     const resN = parseInt(resposta);
     if (isNaN(resN) || resposta === '') return;
     
@@ -328,16 +292,16 @@ export default function Jogo() {
       opCorreta.y.stopAnimation();
       operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== opCorreta.chave);
       
-      // 🧠 IA AVALIA O TEMPO (Aumenta o heat se for rápido)
+      // 🧠 IA AVALIA O TEMPO (Aumenta a velocidade se o aluno estiver voando)
       if (tempoLevado <= 3000) {
         desempenhoOcultoRef.current = Math.min(desempenhoOcultoRef.current + 1, 10);
       } else if (tempoLevado > 6000) {
         desempenhoOcultoRef.current = Math.max(desempenhoOcultoRef.current - 1, 0);
       }
 
-      questoesAcertadasRef.current.add(opCorreta.chave); // Guarda no cofre para não repetir
+      questoesAcertadasRef.current.add(opCorreta.chave); // Guarda no cofre
       
-      setPontos(p => p + 10 + (tempoLevado < 3000 ? 5 : 0)); // Bônus de agilidade real
+      setPontos(p => p + 10 + (tempoLevado < 3000 ? 5 : 0));
       setAcertosRodada(a => {
         const na = a + 1;
         if (na >= metaRodada) avancarRodada();
@@ -346,11 +310,11 @@ export default function Jogo() {
       
       if (opCorreta.especial && !powerUpDisponivel) setPowerUpDisponivel(true);
       
-      dispararLaser(opCorreta, true, 'player');
+      dispararLaser(opCorreta, true);
       setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id));
     } else {
-      perderVida(undefined, false); // Falso indica erro ativo (teclado)
-      dispararLaser(null, false, 'player');
+      perderVida(undefined, false); // Erro ativo (digitou errado)
+      dispararLaser(null, false);
     }
     
     setResposta('');
@@ -358,11 +322,11 @@ export default function Jogo() {
   };
 
   const ativarPowerUp = () => {
-    if (!powerUpDisponivel || operacoes.length === 0 || congeladoRef.current) return;
+    if (!powerUpDisponivel || operacoes.length === 0) return;
     
     const visiveis = operacoes.filter(op => {
       const y = (op.y as any)._value || 0;
-      return y >= 0 && y < gameAreaHeight;
+      return y >= 0 && y < GAME_AREA_HEIGHT;
     });
     if (visiveis.length === 0) return;
     
@@ -375,14 +339,13 @@ export default function Jogo() {
   };
 
   const perderVida = (opId?: string, caiuNoChao: boolean = false) => {
-    // 🧠 IA AVALIA O ERRO (Reduz brutalmente a dificuldade temporariamente para ajudar)
+    // 🧠 IA AVALIA O ERRO (Reduz a dificuldade temporariamente para ajudar)
     desempenhoOcultoRef.current = Math.max(desempenhoOcultoRef.current - (caiuNoChao ? 2 : 1), 0);
 
     setVidas(v => {
       const nv = v - 1;
       if (nv <= 0) {
         if (spawnTimer.current) clearTimeout(spawnTimer.current);
-        if (botTimer.current) clearInterval(botTimer.current);
         setOperacoes([]);
         setTela('resultado');
       }
@@ -399,7 +362,6 @@ export default function Jogo() {
   };
 
   const pressionarTecla = (tecla: string) => {
-    if (congeladoRef.current) return;
     if (tecla === 'enviar') verificarResposta();
     else if (tecla === 'apagar') setResposta(r => r.slice(0, -1));
     else setResposta(r => r + tecla);
@@ -417,7 +379,7 @@ export default function Jogo() {
               <Text style={styles.menuSubtitle}>Treinamento Adaptativo</Text>
             </View>
 
-            <Text style={styles.sectionLabel}>1. Escolha a Matéria:</Text>
+            <Text style={styles.sectionLabel}>Escolha a Matéria:</Text>
             <View style={styles.modosGrid}>
               {[
                 { id: 'misto', name: 'Jornada (Misto)', color: '#FFD700' },
@@ -438,17 +400,10 @@ export default function Jogo() {
               ))}
             </View>
 
-            <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}>
+            <TouchableOpacity style={styles.iniciarButton} onPress={iniciarJogo}>
               <Ionicons name="play" size={24} color="#000" />
-              <Text style={styles.iniciarButtonText}>JOGAR SOLO</Text>
+              <Text style={styles.iniciarButtonText}>INICIAR TREINO</Text>
             </TouchableOpacity>
-
-            {isAdmin && (
-              <TouchableOpacity style={styles.botButton} onPress={() => iniciarJogo('bot')}>
-                <Ionicons name="hardware-chip" size={22} color="#000" />
-                <Text style={styles.botButtonText}>🤖 Testar Multiplayer vs BOT</Text>
-              </TouchableOpacity>
-            )}
           </ScrollView>
         </View>
       </SafeAreaView>
@@ -460,21 +415,14 @@ export default function Jogo() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.resultadoContainer}>
-          <Text style={styles.resultadoTitle}>{modo === 'bot' && botPontos > pontos ? '🤖 O Bot Venceu!' : 'Fim de Treino!'}</Text>
+          <Text style={styles.resultadoTitle}>Fim de Treino!</Text>
           
           <View style={styles.resultadoCard}>
             <Text style={styles.resultadoPontos}>{pontos}</Text>
             <Text style={styles.resultadoLabel}>Seus Pontos (Rodada {rodada})</Text>
           </View>
 
-          {modo === 'bot' && (
-             <View style={[styles.resultadoCard, { backgroundColor: '#FF00FF20', padding: 20, marginBottom: 30 }]}>
-               <Text style={[styles.resultadoPontos, { color: '#FF00FF', fontSize: 40 }]}>{botPontos}</Text>
-               <Text style={styles.resultadoLabel}>Pontos do Bot</Text>
-             </View>
-          )}
-
-          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => iniciarJogo(modo)}>
+          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={iniciarJogo}>
             <Ionicons name="refresh" size={22} color="#000" />
             <Text style={styles.jogarNovamenteText}>Tentar Novamente</Text>
           </TouchableOpacity>
@@ -489,22 +437,24 @@ export default function Jogo() {
   // ==================== TELA DO JOGO ====================
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      
+      {/* HEADER DA IMAGEM (ESTRELA E TROFÉU) */}
       <View style={styles.gameHeader}>
-        <View style={styles.placarContainer}>
-          <View style={styles.gameStats}>
-            <Ionicons name="person" size={16} color="#32CD32" />
-            <Text style={[styles.statText, { color: '#32CD32' }]}>{pontos}</Text>
-          </View>
-          {modo === 'bot' && (
-            <View style={styles.gameStats}>
-              <Ionicons name="hardware-chip" size={16} color="#FF00FF" />
-              <Text style={[styles.statText, { color: '#FF00FF' }]}>{botPontos}</Text>
-            </View>
-          )}
+        <View style={styles.headerStatsGroup}>
+          <Ionicons name="star" size={18} color="#FFD700" />
+          <Text style={styles.statTextScore}>{pontos}</Text>
+          
+          <Ionicons name="trophy" size={16} color="#4169E1" style={{ marginLeft: 15 }} />
+          <Text style={styles.statTextMeta}>{acertosRodada}/{metaRodada}</Text>
         </View>
-        <View style={{alignItems: 'flex-end'}}>
-          <Text style={styles.rodadaText}>Rodada {rodada}</Text>
-          <Text style={styles.metaText}>{acertosRodada}/{metaRodada}</Text>
+        <View style={styles.headerRightGroup}>
+          {powerUpDisponivel ? (
+            <TouchableOpacity onPress={ativarPowerUp} style={styles.miniPowerUpBtn}>
+              <Ionicons name="flash" size={18} color="#000" />
+            </TouchableOpacity>
+          ) : (
+            <Ionicons name="flash" size={18} color="#333" style={{ marginRight: 10 }} />
+          )}
         </View>
       </View>
 
@@ -514,18 +464,14 @@ export default function Jogo() {
         ))}
       </View>
 
-      {/* ÁREA DE JOGO DINÂMICA COM FLEX: 1 */}
-      <View 
-        style={styles.gameArea} 
-        onLayout={(e) => setGameAreaHeight(e.nativeEvent.layout.height)}
-      >
+      {/* ÁREA DE JOGO (Mais limpa e sem onLayout para não bugar) */}
+      <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
         {operacoes.map((op) => (
           <Animated.View key={op.id} style={[
             styles.operacaoCard,
             op.especial && styles.operacaoEspecial,
             { transform: [{ translateY: op.y }, { scale: op.scale }], left: op.posX, opacity: op.opacity }
           ]}>
-            {op.especial && <Ionicons name="flash" size={12} color="#000" style={styles.estrelaEspecial} />}
             <Text style={[styles.operacaoText, op.especial && { color: '#000' }]}>
               {op.textoTela}
             </Text>
@@ -541,46 +487,36 @@ export default function Jogo() {
         )}
       </View>
 
-      <View style={styles.powerUpRow}>
-        {powerUpDisponivel ? (
-          <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}>
-            <Ionicons name="flash" size={18} color="#000" />
-            <Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.btnPowerUpInativo}>
-            <Text style={styles.txtPowerUpInativo}>Acerte a conta amarela para carregar o poder</Text>
-          </View>
-        )}
-      </View>
+      {/* TECLADO IDÊNTICO À IMAGEM */}
+      <View style={styles.keyboardWrapper}>
+        <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}>
+          <Text style={styles.displayText}>{resposta || '0'}</Text>
+        </Animated.View>
 
-      {/* TECLADO REDUZIDO */}
-      <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}>
-        <Text style={styles.displayText}>{resposta || '?'}</Text>
-      </Animated.View>
-
-      <View style={styles.tecladoContainer}>
-        {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
-          <View key={i} style={styles.tecladoRow}>
-            {row.map(num => (
-              <TouchableOpacity key={num} style={styles.tecla} onPress={() => pressionarTecla(num)}>
-                <Text style={styles.teclaText}>{num}</Text>
-              </TouchableOpacity>
-            ))}
+        <View style={styles.tecladoContainer}>
+          {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
+            <View key={i} style={styles.tecladoRow}>
+              {row.map(num => (
+                <TouchableOpacity key={num} style={styles.tecla} onPress={() => pressionarTecla(num)}>
+                  <Text style={styles.teclaText}>{num}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ))}
+          <View style={styles.tecladoRow}>
+            <TouchableOpacity style={[styles.tecla, styles.teclaApagar]} onPress={() => pressionarTecla('apagar')}>
+              <Ionicons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.tecla} onPress={() => pressionarTecla('0')}>
+              <Text style={styles.teclaText}>0</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.tecla, styles.teclaEnviar]} onPress={() => pressionarTecla('enviar')}>
+              <Ionicons name="checkmark" size={32} color="#fff" />
+            </TouchableOpacity>
           </View>
-        ))}
-        <View style={styles.tecladoRow}>
-          <TouchableOpacity style={[styles.tecla, styles.teclaApagar]} onPress={() => pressionarTecla('apagar')}>
-            <Ionicons name="backspace" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tecla} onPress={() => pressionarTecla('0')}>
-            <Text style={styles.teclaText}>0</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.tecla, styles.teclaEnviar]} onPress={() => pressionarTecla('enviar')}>
-            <Ionicons name="checkmark-circle" size={24} color="#000" />
-          </TouchableOpacity>
         </View>
       </View>
+      
     </SafeAreaView>
   );
 }
@@ -600,43 +536,48 @@ const styles = StyleSheet.create({
   modoTextItem: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
   iniciarButton: { flexDirection: 'row', backgroundColor: '#32CD32', padding: 18, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', marginBottom: 10 },
   iniciarButtonText: { color: '#000', fontSize: 18, fontWeight: '900' },
-  botButton: { flexDirection: 'row', backgroundColor: '#FF00FF', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, width: '100%' },
-  botButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
   
-  // Game
-  gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 },
-  placarContainer: { flexDirection: 'row', gap: 10 },
-  gameStats: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1a1a2e', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  statText: { fontSize: 16, fontWeight: 'bold' },
-  rodadaText: { color: '#4169E1', fontSize: 16, fontWeight: '900' },
-  metaText: { color: '#888', fontSize: 12, fontWeight: 'bold' },
+  // Game Header Idêntico a Foto
+  gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
+  headerStatsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  statTextMeta: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  headerRightGroup: { flexDirection: 'row', alignItems: 'center' },
+  miniPowerUpBtn: { backgroundColor: '#FFD700', padding: 6, borderRadius: 6, marginRight: 10 },
   
-  vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 3, paddingBottom: 5 },
+  vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingBottom: 10 },
   vidaMarca: { width: 8, height: 8, borderRadius: 4 },
   vidaAtiva: { backgroundColor: '#FF4444' },
   vidaInativa: { backgroundColor: '#333' },
   
-  // A Área de Jogo agora tem flex: 1 para empurrar o teclado para baixo
-  gameArea: { flex: 1, position: 'relative', backgroundColor: '#0a0a0a', borderBottomWidth: 1, borderColor: '#333' },
-  operacaoCard: { position: 'absolute', backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center' },
-  operacaoEspecial: { backgroundColor: '#FFD700', borderWidth: 2, borderColor: '#FFF' },
-  estrelaEspecial: { position: 'absolute', top: -8, right: -4, backgroundColor: '#FFF', borderRadius: 10, padding: 2 },
+  gameArea: { position: 'relative', backgroundColor: '#0a0a0a' },
+  operacaoCard: { position: 'absolute', backgroundColor: '#4169E1', paddingVertical: 8, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center' },
+  operacaoEspecial: { backgroundColor: '#FFD700' },
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   laser: { position: 'absolute', width: 4, height: height, zIndex: -1 },
-  
-  powerUpRow: { paddingHorizontal: 16, paddingVertical: 5 },
-  btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
-  btnPowerUpInativo: { backgroundColor: '#1a1a2e', padding: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  txtPowerUpInativo: { color: '#555', fontSize: 11, fontWeight: 'bold' },
 
-  // Teclado Encolhido
-  displayContainer: { backgroundColor: '#1a1a2e', marginHorizontal: 16, padding: 6, marginVertical: 4, borderRadius: 8, alignItems: 'center' },
-  displayText: { color: '#fff', fontSize: 26, fontWeight: 'bold' },
-  tecladoContainer: { paddingHorizontal: 16, paddingBottom: 15, gap: 6 },
-  tecladoRow: { flexDirection: 'row', gap: 6, justifyContent: 'center' },
-  tecla: { backgroundColor: '#1a1a2e', flex: 1, height: 46, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  teclaText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  // Teclado Idêntico a Foto (Compacto e Centralizado)
+  keyboardWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center', // Empurra tudo pro meio da tela de baixo
+    width: '100%',
+    paddingBottom: 20,
+  },
+  displayContainer: { 
+    backgroundColor: '#1a1a2e', 
+    width: 240, 
+    height: 50, 
+    borderRadius: 8, 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    marginBottom: 15 
+  },
+  displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+  tecladoContainer: { width: 240, gap: 8 },
+  tecladoRow: { flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
+  tecla: { backgroundColor: '#1a1a2e', width: 74, height: 55, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  teclaText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
   teclaApagar: { backgroundColor: '#E74C3C' },
   teclaEnviar: { backgroundColor: '#32CD32' },
   
