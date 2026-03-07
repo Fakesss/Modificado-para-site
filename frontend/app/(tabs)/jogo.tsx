@@ -18,25 +18,17 @@ const CARD_WIDTH = 105;
 const NUM_LANES = 3; 
 const LANE_WIDTH = width / NUM_LANES;
 
-// 🚨 A SOLUÇÃO GENIAL: O Botão Inteligente que solta a trava do dedo
+// 🚨 O BOTÃO ANTI-TRAVA: Lê o toque no vidro e ignora a trava de gestos do Android
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
-  const [bloqueado, setBloqueado] = useState(false);
-
-  const handlePress = () => {
-    if (bloqueado) return;
-    onPress(valor);
-    
-    // Desliga o botão por 50ms para forçar o Android a ler o próximo dedo
-    setBloqueado(true);
-    setTimeout(() => setBloqueado(false), 50);
-  };
-
   return (
     <TouchableOpacity
+      activeOpacity={0.5}
       style={[styles.tecla, styleExtra]}
-      onPressIn={handlePress}
-      disabled={bloqueado} // Ao desabilitar, a tela solta a trava de toque na hora
-      activeOpacity={0.6}
+      // onTouchStart atira no milissegundo exato do toque, independente de outros dedos na tela!
+      onTouchStart={(e) => {
+        e.stopPropagation(); // Impede o Android de interferir
+        onPress(valor);
+      }}
     >
       {children}
     </TouchableOpacity>
