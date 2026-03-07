@@ -12,7 +12,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-// 🚨 ARRANCAMOS A IMPORTAÇÃO DO WEBVIEW DAQUI!
 import * as api from '../../src/services/api';
 import { Conteudo, ProgressoVideo } from '../../src/types';
 
@@ -22,42 +21,61 @@ export default function VideoPlayer() {
   const [video, setVideo] = useState<Conteudo | null>(null);
   const [progress, setProgress] = useState<ProgressoVideo | null>(null);
   const [loading, setLoading] = useState(true);
+  
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(300); // 5 minutos por padrão
+  const [duration, setDuration] = useState(0);
+  const [startTime, setStartTime] = useState(0); // Tempo salvo para iniciar o vídeo
+  
   const [completed, setCompleted] = useState(false);
   const [pointsEarned, setPointsEarned] = useState(0);
   const [canComplete, setCanComplete] = useState(false);
   const [watchedPercentage, setWatchedPercentage] = useState(0);
+  
   const lastUpdateRef = useRef(0);
 
   useEffect(() => {
     loadVideo();
   }, [id]);
 
-  // 🚀 CRONÔMETRO INTELIGENTE: Salva no banco a cada 10 seg e anda a % sozinha
+  // 🎧 Ouvido absoluto: Escuta as mensagens do Iframe de 1 em 1 segundo
   useEffect(() => {
-    if (video && !completed) {
-      const timer = setInterval(() => {
-         setCurrentTime((prevTime) => {
-            const newTime = prevTime + 10;
-            
-            const percentage = (newTime / duration) * 100;
-            setWatchedPercentage(percentage > 100 ? 100 : percentage);
-            
-            if (percentage >= 90 && !canComplete) {
-              setCanComplete(true);
-            }
+    if (Platform.OS !== 'web') return;
+    
+    const handleMessage = (event: any) => {
+      try {
+        if (typeof event.data === 'string') {
+          const data = JSON.parse(event.data);
+          if (data.type === 'yt-timeupdate') {
+            setCurrentTime(data.currentTime);
+            setDuration(data.duration);
+          }
+        }
+      } catch (e) {
+        // Ignora mensagens estranhas de outras extensões do navegador
+      }
+    };
 
-            // Avisa o servidor (Render) a cada 10s para NÃO PERDER o progresso!
-            updateProgress(newTime, duration);
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
-            return newTime;
-         });
-      }, 10000);
+  // 🧠 Cérebro Matemático: Calcula a porcentagem real e envia pro Render sem travar
+  useEffect(() => {
+    if (duration > 0 && currentTime > 0) {
+      const percentage = (currentTime / duration) * 100;
+      setWatchedPercentage(percentage > 100 ? 100 : percentage);
 
-      return () => clearInterval(timer);
+      if (percentage >= 90 && !canComplete) {
+        setCanComplete(true);
+      }
+
+      // Evita o ERRO 500 limitando as chamadas para a cada 5 segundos ou ao bater 90%
+      if (currentTime - lastUpdateRef.current >= 5 || (percentage >= 90 && lastUpdateRef.current < duration * 0.9)) {
+        lastUpdateRef.current = currentTime;
+        updateProgress(currentTime, duration);
+      }
     }
-  }, [video, completed, canComplete, duration]);
+  }, [currentTime, duration, canComplete]);
 
   const loadVideo = async () => {
     try {
@@ -70,15 +88,17 @@ export default function VideoPlayer() {
           const progressData = await api.getProgressoVideo(videoData.id);
           setProgress(progressData);
           
-          // 🧠 PUXA DA MEMÓRIA DE ONDE O ALUNO PAROU!
           if (progressData) {
             const tempoSalvo = progressData.tempoAssistidoSeg || 0;
-            const duracaoSalva = progressData.duracaoSeg || 300;
-            
+            // Configura de onde o vídeo deve continuar
+            setStartTime(Math.floor(tempoSalvo));
             setCurrentTime(tempoSalvo);
-            setDuration(duracaoSalva);
-            setWatchedPercentage((tempoSalvo / duracaoSalva) * 100);
             lastUpdateRef.current = tempoSalvo;
+            
+            if (progressData.duracaoSeg > 0) {
+              setDuration(progressData.duracaoSeg);
+              setWatchedPercentage((tempoSalvo / progressData.duracaoSeg) * 100);
+            }
             
             setCompleted(progressData.concluido || false);
             setPointsEarned(progressData.pontosGerados || 0);
@@ -86,12 +106,10 @@ export default function VideoPlayer() {
             if (progressData.concluido) {
               setCanComplete(true);
               setWatchedPercentage(100);
-            } else if ((tempoSalvo / duracaoSalva) * 100 >= 90) {
-              setCanComplete(true);
             }
           }
         } catch (error) {
-          // Sem progresso anterior
+          // Vídeo novo, sem progresso ainda
         }
       }
     } catch (error) {
@@ -102,23 +120,23 @@ export default function VideoPlayer() {
   };
 
   const updateProgress = async (watchedSeconds: number, totalDuration: number) => {
-    // Evita travar a internet se não andou o vídeo
-    if (watchedSeconds <= lastUpdateRef.current && watchedSeconds !== 0) return;
-    lastUpdateRef.current = watchedSeconds;
+    if (totalDuration <= 0) return; // Barreira contra Erro 500
 
     try {
-      const result = await api.updateProgressoVideo(id as string, watchedSeconds, totalDuration);
+      // Usamos Math.floor para enviar números exatos e perfeitos para o Python/Render
+      const result = await api.updateProgressoVideo(
+        id as string, 
+        Math.floor(watchedSeconds), 
+        Math.floor(totalDuration)
+      );
+      
       if (result.concluido && !completed) {
         setCompleted(true);
         setPointsEarned(result.pontosGerados);
-        if (Platform.OS === 'web') {
-           window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
-        } else {
-           Alert.alert('Parabéns!', `Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
-        }
+        window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
       }
     } catch (error) {
-      console.error('Error updating progress:', error);
+      console.error('Error updating progress:', error); // Falhas silenciosas de internet
     }
   };
 
@@ -129,36 +147,30 @@ export default function VideoPlayer() {
     }
 
     if (!canComplete) {
-      const msg = `Assista pelo menos 90% do vídeo. Progresso atual: ${Math.round(watchedPercentage)}%`;
-      if (Platform.OS === 'web') { window.alert(msg); } else { Alert.alert('Atenção', msg); }
+      window.alert(`Você precisa assistir pelo menos 90% do vídeo. Progresso atual: ${Math.round(watchedPercentage)}%`);
       return;
     }
 
     try {
       const result = await api.updateProgressoVideo(
         id as string,
-        Math.max(currentTime, duration * 0.9),
-        duration
+        Math.floor(Math.max(currentTime, duration * 0.9)),
+        Math.floor(duration || 300)
       );
       setCompleted(true);
       setPointsEarned(result.pontosGerados);
       
-      const msg = `Parabéns! Você ganhou ${result.pontosGerados} pontos!`;
-      if (Platform.OS === 'web') {
-        window.alert(msg);
-        router.back();
-      } else {
-        Alert.alert('Parabéns!', msg, [{ text: 'OK', onPress: () => router.back() }]);
-      }
+      window.alert(`Parabéns! Você ganhou ${result.pontosGerados} pontos!`);
+      router.back();
     } catch (error) {
-      console.error('Error completing video:', error);
-      if (Platform.OS === 'web') { window.alert('Erro ao marcar como concluído.'); } else { Alert.alert('Erro', 'Tente novamente.'); }
+      window.alert('Erro ao marcar como concluído. Tente novamente.');
     }
   };
 
+  // 🔎 Agora caça YouTube normal, embutido e SHORTS!
   const getYouTubeId = (url: string) => {
     if (!url) return null;
-    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ \s]{11})/;
+    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ \s]{11})/;
     const match = url.match(regex);
     return match ? match[1] : null;
   };
@@ -189,6 +201,57 @@ export default function VideoPlayer() {
 
   const youtubeId = video.urlVideo ? getYouTubeId(video.urlVideo) : null;
 
+  // 🎬 O "Iframe Mágico" que se comunica com o nosso React de 1 em 1 segundo
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          * { margin: 0; padding: 0; }
+          body { background: #000; overflow: hidden; }
+          #player { width: 100vw; height: 100vh; }
+        </style>
+      </head>
+      <body>
+        <div id="player"></div>
+        <script>
+          var tag = document.createElement('script');
+          tag.src = "https://www.youtube.com/iframe_api";
+          var firstScriptTag = document.getElementsByTagName('script')[0];
+          firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+          
+          var player;
+          function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+              videoId: '${youtubeId}',
+              playerVars: { 
+                'autoplay': 1, 
+                'rel': 0, 
+                'modestbranding': 1, 
+                'playsinline': 1,
+                'start': ${startTime}
+              },
+              events: { 'onReady': onPlayerReady }
+            });
+          }
+          
+          function onPlayerReady(event) {
+            setInterval(function() {
+              if (player && player.getCurrentTime) {
+                window.parent.postMessage(JSON.stringify({
+                  type: 'yt-timeupdate',
+                  currentTime: player.getCurrentTime(),
+                  duration: player.getDuration()
+                }), '*');
+              }
+            }, 1000); // Exatidão de 1 segundo para vídeos curtos!
+          }
+        </script>
+      </body>
+    </html>
+  `;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -203,12 +266,9 @@ export default function VideoPlayer() {
 
       <View style={styles.playerContainer}>
         {youtubeId ? (
-          // Usamos o Iframe de internet puro 100% das vezes (Adeus erro vermelho!)
           <iframe
-            width="100%"
-            height="100%"
-            src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0&modestbranding=1`}
-            frameBorder="0"
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            srcDoc={htmlContent}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           />
@@ -224,7 +284,7 @@ export default function VideoPlayer() {
         <Text style={styles.title}>{video.titulo}</Text>
         {video.descricao && <Text style={styles.description}>{video.descricao}</Text>}
 
-        {!completed && (
+        {!completed && duration > 0 && (
           <View style={styles.progressSection}>
             <View style={styles.progressBar}>
               <View style={[styles.progressFill, { width: `${Math.min(watchedPercentage, 100)}%` }]} />
@@ -274,7 +334,7 @@ export default function VideoPlayer() {
             ? 'Vídeo Concluído - Voltar'
             : canComplete
             ? 'Marcar como Concluído'
-            : `Assista ${Math.round(90 - watchedPercentage)}% para desbloquear`}
+            : `Assista ${Math.round(Math.max(0, 90 - watchedPercentage))}% para desbloquear`}
         </Text>
       </TouchableOpacity>
     </SafeAreaView>
@@ -292,7 +352,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   headerTitle: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center', marginHorizontal: 16 },
   playerContainer: { width: '100%', height: width > 600 ? 400 : width * 0.5625, backgroundColor: '#000' },
-  player: { flex: 1 },
   noVideo: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   noVideoText: { color: '#666', marginTop: 12, fontSize: 16 },
   infoContainer: { padding: 16 },
