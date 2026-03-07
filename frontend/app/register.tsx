@@ -65,23 +65,35 @@ export default function Register() {
       return;
     }
 
-    if (senha !== confirmarSenha) {
+    // Limpeza de espaços invisíveis e padronização para evitar erros
+    const emailPadronizado = email.toLowerCase().trim();
+    const senhaPadronizada = senha.trim();
+    const confirmarSenhaPadronizada = confirmarSenha.trim();
+
+    if (senhaPadronizada !== confirmarSenhaPadronizada) {
       Alert.alert('Erro', 'As senhas não coincidem');
       return;
     }
 
-    if (senha.length < 6) {
+    if (senhaPadronizada.length < 6) {
       Alert.alert('Erro', 'A senha deve ter pelo menos 6 caracteres');
       return;
     }
 
     setLoading(true);
     try {
-      await register(nome.trim(), email.trim(), senha, turmaId, equipeId);
+      // Envia os dados limpos para a API
+      await register(nome.trim(), emailPadronizado, senhaPadronizada, turmaId, equipeId);
       // Navigation will happen in useEffect
     } catch (error: any) {
-      const message = error.response?.data?.detail || 'Erro ao cadastrar';
-      Alert.alert('Erro', message);
+      // Filtro para erros comuns de cadastro
+      const statusErro = error.response?.status;
+      if (statusErro === 409 || error.response?.data?.detail?.includes('already exists')) {
+        Alert.alert('Aviso', 'Este e-mail já está cadastrado. Tente fazer o login.');
+      } else {
+        const message = error.response?.data?.detail || 'Erro ao criar a conta. Tente novamente.';
+        Alert.alert('Erro no Cadastro', message);
+      }
     } finally {
       setLoading(false);
     }
@@ -122,7 +134,7 @@ export default function Register() {
               <Ionicons name="mail-outline" size={24} color="#888" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Email *"
+                placeholder="E-mail *"
                 placeholderTextColor="#666"
                 value={email}
                 onChangeText={setEmail}
@@ -141,6 +153,7 @@ export default function Register() {
                 value={senha}
                 onChangeText={setSenha}
                 secureTextEntry={!showPassword}
+                autoCapitalize="none"
               />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                 <Ionicons
@@ -160,6 +173,7 @@ export default function Register() {
                 value={confirmarSenha}
                 onChangeText={setConfirmarSenha}
                 secureTextEntry={!showPassword}
+                autoCapitalize="none"
               />
             </View>
 
