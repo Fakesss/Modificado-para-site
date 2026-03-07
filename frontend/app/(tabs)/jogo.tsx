@@ -35,7 +35,7 @@ export default function Jogo() {
   const [metaRodada, setMetaRodada] = useState(10);
   const [resposta, setResposta] = useState('');
   const [powerUpDisponivel, setPowerUpDisponivel] = useState(false);
-  const [pausado, setPausado] = useState(false); // NOVO: Controle de pausa
+  const [pausado, setPausado] = useState(false); 
   
   // Bot State
   const [botPontos, setBotPontos] = useState(0);
@@ -49,7 +49,7 @@ export default function Jogo() {
   const operacoesAtuaisRef = useRef<{lane: number, y: number, chave: string}[]>([]);
   const operacoesListRef = useRef<any[]>([]); 
   const rodadaRef = useRef(1);
-  const jogoPausadoRef = useRef(false); // Ref para pausar a IA e o Spawner
+  const jogoPausadoRef = useRef(false); 
   
   // IA de Dificuldade
   const desempenhoOcultoRef = useRef(0); 
@@ -146,14 +146,13 @@ export default function Jogo() {
       const laneSelecionada = obterPistaLivre();
       const posX = (laneSelecionada * LANE_WIDTH) + (LANE_WIDTH - CARD_WIDTH) / 2;
       
-      // 🚨 MUDANÇA SALVA-VIDAS: Y começa em 0 para não ser bloqueado pelo Android
       operacoesAtuaisRef.current.push({ lane: laneSelecionada, y: 0, chave });
       const tempoQueda = Math.max(4500, 15000 - (currentRodada * 500) - (desempenho * 400));
 
       return {
         id: Math.random().toString(),
         num1: n1, num2: n2, operador: op, resposta: res, textoTela: texto, chave: chave,
-        y: new Animated.Value(0), // NASCE NA TELA EM VEZ DE FORA DELA
+        y: new Animated.Value(0), 
         speed: tempoQueda,
         posX,
         lane: laneSelecionada,
@@ -170,17 +169,17 @@ export default function Jogo() {
 
     const loopSpawner = () => {
       if (!jogoPausadoRef.current) {
-        setOperacoes(ops => {
-          const maxOps = Math.min(8, 3 + Math.floor(rodadaRef.current / 3) + Math.floor(desempenhoOcultoRef.current / 3));
-          if (ops.length < maxOps) {
-            const nova = gerarOperacao();
-            if (nova) { 
-              animarQueda(nova); 
-              return [...ops, nova]; 
-            }
+        const maxOps = Math.min(8, 3 + Math.floor(rodadaRef.current / 3) + Math.floor(desempenhoOcultoRef.current / 3));
+        
+        // Compara com a referência segura para não bugar
+        if (operacoesListRef.current.length < maxOps) {
+          const nova = gerarOperacao();
+          if (nova) { 
+            setOperacoes(ops => [...ops, nova]);
+            // 🚨 SOLUÇÃO DO LIMBO: O setTimeout de 50ms garante que o celular desenhou a caixa ANTES dela começar a cair
+            setTimeout(() => animarQueda(nova), 50);
           }
-          return ops;
-        });
+        }
       }
       const spawnInterval = Math.max(1200, 3500 - (rodadaRef.current * 150) - (desempenhoOcultoRef.current * 150));
       spawnTimer.current = setTimeout(loopSpawner, spawnInterval);
@@ -200,13 +199,17 @@ export default function Jogo() {
       if (op) inicial.push(op);
     }
     setOperacoes(inicial);
-    inicial.forEach(op => animarQueda(op));
+    
+    // Anima as 3 iniciais também com o atraso de segurança
+    setTimeout(() => {
+      inicial.forEach(op => animarQueda(op));
+    }, 50);
     
     iniciarSpawner();
 
     if (modoEscolhido === 'bot') {
       botTimer.current = setInterval(() => {
-        if (jogoPausadoRef.current) return; // Bot não atira se tiver pausado
+        if (jogoPausadoRef.current) return;
         
         const ops = operacoesListRef.current;
         const alvosValidos = ops.filter(o => {
@@ -226,7 +229,10 @@ export default function Jogo() {
     }
   };
 
-  const animarQueda = (op: any, duracaoPersonalizada?: number) => {
+  const animarQueda = (op: any) => {
+    if (jogoPausadoRef.current) return;
+    
+    op.y.removeAllListeners(); // Evita duplicação de rastreio de colisão
     op.y.addListener(({ value }: { value: number }) => {
       const ref = operacoesAtuaisRef.current.find(o => o.chave === op.chave);
       if (ref) ref.y = value;
@@ -234,19 +240,19 @@ export default function Jogo() {
     
     Animated.timing(op.y, {
       toValue: GAME_AREA_HEIGHT + 50,
-      duration: duracaoPersonalizada || op.speed,
-      useNativeDriver: true,
+      duration: op.speed,
+      useNativeDriver: true, // Faz a queda ser fluída a 60fps sem travar o app
     }).start(({ finished }) => {
       if (finished) perderVida(op.id, true); 
     });
   };
 
-  // 🚨 SISTEMA DE PAUSA
+  // 🚨 SISTEMA DE PAUSA SEGURO (MATA A TELA BRANCA)
   const pausarJogo = () => {
     jogoPausadoRef.current = true;
     setPausado(true);
-    // Congela todas as animações onde elas estão
-    operacoes.forEach(op => op.y.stopAnimation());
+    // Para todas as animações imediatamente
+    operacoesListRef.current.forEach(op => op.y.stopAnimation());
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
   };
 
@@ -254,17 +260,13 @@ export default function Jogo() {
     jogoPausadoRef.current = false;
     setPausado(false);
     
-    // Retoma a queda de onde parou
-    operacoes.forEach(op => {
-      const posAtual = (op.y as any)._value || 0;
-      const distanciaRestante = (GAME_AREA_HEIGHT + 50) - posAtual;
-      // Calcula o tempo proporcional restante para a queda
-      const tempoRestante = (distanciaRestante / (GAME_AREA_HEIGHT + 50)) * op.speed;
-      
-      animarQueda(op, Math.max(tempoRestante, 500));
+    // Religa a animação de onde ela estava. 
+    // O React Native retoma sozinho, sem precisarmos fazer cálculos que travam o app!
+    operacoesListRef.current.forEach(op => {
+      animarQueda(op);
     });
     
-    iniciarSpawner(); // Religa a máquina de fazer contas
+    iniciarSpawner(); // Religa a esteira
   };
 
   const sairDoJogo = () => {
@@ -470,7 +472,6 @@ export default function Jogo() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       
-      {/* HEADER DE PONTOS COM BOTÃO DE PAUSA */}
       <View style={styles.gameHeader}>
         <View style={styles.headerStatsGroup}>
           <Ionicons name="star" size={18} color="#FFD700" />
@@ -491,7 +492,7 @@ export default function Jogo() {
         ))}
       </View>
 
-      {/* ÁREA DO JOGO SEGURO */}
+      {/* ÁREA DO JOGO COM ALTURA FIXA E OVERFLOW HIDDEN */}
       <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
         {operacoes.map((op) => (
           <Animated.View key={op.id} style={[
@@ -515,7 +516,7 @@ export default function Jogo() {
         )}
       </View>
 
-      {/* PAINEL INFERIOR (TECLADO IDÊNTICO À IMAGEM) */}
+      {/* PAINEL INFERIOR */}
       <View style={styles.bottomPanel}>
         <View style={styles.powerUpContainer}>
           {powerUpDisponivel ? (
