@@ -12,9 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 
-// Cálculo Fixo e Seguro para evitar a Tela Branca do Android
 const { width, height } = Dimensions.get('window');
-const GAME_AREA_HEIGHT = height * 0.50; // O Jogo ocupa exatos 50% do topo da tela
+const GAME_AREA_HEIGHT = height * 0.50; 
 const CARD_WIDTH = 105;
 const NUM_LANES = 3; 
 const LANE_WIDTH = width / NUM_LANES;
@@ -36,24 +35,26 @@ export default function Jogo() {
   const [metaRodada, setMetaRodada] = useState(10);
   const [resposta, setResposta] = useState('');
   const [powerUpDisponivel, setPowerUpDisponivel] = useState(false);
+  const [pausado, setPausado] = useState(false); // NOVO: Controle de pausa
   
-  // Bot State (Multiplayer Prototype)
+  // Bot State
   const [botPontos, setBotPontos] = useState(0);
   const [laserAtivo, setLaserAtivo] = useState<{ x: number; y: number; cor: string } | null>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   
-  // Refs de Lógica e IA (Inteligência Invisível)
+  // Refs
   const spawnTimer = useRef<any>(null);
   const botTimer = useRef<any>(null);
   const operacoesAtuaisRef = useRef<{lane: number, y: number, chave: string}[]>([]);
   const operacoesListRef = useRef<any[]>([]); 
   const rodadaRef = useRef(1);
+  const jogoPausadoRef = useRef(false); // Ref para pausar a IA e o Spawner
   
-  // 🧠 VARIÁVEIS DA IA DE DIFICULDADE DINÂMICA
-  const desempenhoOcultoRef = useRef(0); // Varia de 0 (sofrendo) a 10 (voando)
-  const questoesAcertadasRef = useRef<Set<string>>(new Set()); // Memória do Round
-  const inicioRespostaRef = useRef<number>(Date.now()); // Cronômetro de agilidade
+  // IA de Dificuldade
+  const desempenhoOcultoRef = useRef(0); 
+  const questoesAcertadasRef = useRef<Set<string>>(new Set()); 
+  const inicioRespostaRef = useRef<number>(Date.now()); 
 
   useEffect(() => { rodadaRef.current = rodada; }, [rodada]);
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
@@ -69,22 +70,22 @@ export default function Jogo() {
     setAcertosRodada(0);
     setMetaRodada(10);
     setPowerUpDisponivel(false);
+    setPausado(false);
+    jogoPausadoRef.current = false;
     operacoesAtuaisRef.current = [];
     questoesAcertadasRef.current.clear();
     desempenhoOcultoRef.current = 0;
     setResposta('');
   };
 
-  const calcularMetaRodada = (r: number) => {
-    return r <= 10 ? 10 + (r * 2) : 30 + (r * 5);
-  };
+  const calcularMetaRodada = (r: number) => r <= 10 ? 10 + (r * 2) : 30 + (r * 5);
 
   const avancarRodada = () => {
     const nr = rodada + 1;
     setRodada(nr);
     setAcertosRodada(0);
     setMetaRodada(calcularMetaRodada(nr));
-    questoesAcertadasRef.current.clear(); // Limpa a memória para o novo round
+    questoesAcertadasRef.current.clear(); 
   };
 
   const obterPistaLivre = (): number => {
@@ -126,44 +127,13 @@ export default function Jogo() {
       let n1=0, n2: number | string = 0, res=0, texto='';
       
       switch (op) {
-        case '+':
-          n1 = Math.floor(Math.random() * numMaximo) + 1;
-          n2 = Math.floor(Math.random() * numMaximo) + 1;
-          res = n1 + (n2 as number);
-          texto = `${n1} + ${n2}`;
-          break;
-        case '-':
-          n1 = Math.floor(Math.random() * (numMaximo * 1.5)) + 5;
-          n2 = Math.floor(Math.random() * n1) + 1;
-          res = n1 - (n2 as number);
-          texto = `${n1} - ${n2}`;
-          break;
-        case '×':
-          n1 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2;
-          n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2;
-          res = n1 * (n2 as number);
-          texto = `${n1} × ${n2}`;
-          break;
-        case '÷':
-          n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2;
-          res = Math.floor(Math.random() * Math.min(multMaximo, 10)) + 1;
-          n1 = (n2 as number) * res;
-          texto = `${n1} ÷ ${n2}`;
-          break;
-        case '^': 
-          n1 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2;
-          n2 = 2;
-          res = n1 * n1;
-          texto = `${n1}²`;
-          break;
-        case '√':
-          res = Math.floor(Math.random() * Math.min(multMaximo, 15)) + 2;
-          n1 = res * res;
-          n2 = '';
-          texto = `√${n1}`;
-          break;
-        default:
-          n1 = 1; n2 = 1; res = 2; texto = '1+1';
+        case '+': n1 = Math.floor(Math.random() * numMaximo) + 1; n2 = Math.floor(Math.random() * numMaximo) + 1; res = n1 + (n2 as number); texto = `${n1} + ${n2}`; break;
+        case '-': n1 = Math.floor(Math.random() * (numMaximo * 1.5)) + 5; n2 = Math.floor(Math.random() * n1) + 1; res = n1 - (n2 as number); texto = `${n1} - ${n2}`; break;
+        case '×': n1 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; res = n1 * (n2 as number); texto = `${n1} × ${n2}`; break;
+        case '÷': n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; res = Math.floor(Math.random() * Math.min(multMaximo, 10)) + 1; n1 = (n2 as number) * res; texto = `${n1} ÷ ${n2}`; break;
+        case '^': n1 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; n2 = 2; res = n1 * n1; texto = `${n1}²`; break;
+        case '√': res = Math.floor(Math.random() * Math.min(multMaximo, 15)) + 2; n1 = res * res; n2 = ''; texto = `√${n1}`; break;
+        default: n1 = 1; n2 = 1; res = 2; texto = '1+1';
       }
       
       const chave = gerarChaveQuestao(n1, op, n2);
@@ -176,13 +146,14 @@ export default function Jogo() {
       const laneSelecionada = obterPistaLivre();
       const posX = (laneSelecionada * LANE_WIDTH) + (LANE_WIDTH - CARD_WIDTH) / 2;
       
-      operacoesAtuaisRef.current.push({ lane: laneSelecionada, y: -100, chave });
+      // 🚨 MUDANÇA SALVA-VIDAS: Y começa em 0 para não ser bloqueado pelo Android
+      operacoesAtuaisRef.current.push({ lane: laneSelecionada, y: 0, chave });
       const tempoQueda = Math.max(4500, 15000 - (currentRodada * 500) - (desempenho * 400));
 
       return {
         id: Math.random().toString(),
         num1: n1, num2: n2, operador: op, resposta: res, textoTela: texto, chave: chave,
-        y: new Animated.Value(-100),
+        y: new Animated.Value(0), // NASCE NA TELA EM VEZ DE FORA DELA
         speed: tempoQueda,
         posX,
         lane: laneSelecionada,
@@ -198,17 +169,19 @@ export default function Jogo() {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
 
     const loopSpawner = () => {
-      setOperacoes(ops => {
-        const maxOps = Math.min(8, 3 + Math.floor(rodadaRef.current / 3) + Math.floor(desempenhoOcultoRef.current / 3));
-        if (ops.length < maxOps) {
-          const nova = gerarOperacao();
-          if (nova) { 
-            animarQueda(nova); 
-            return [...ops, nova]; 
+      if (!jogoPausadoRef.current) {
+        setOperacoes(ops => {
+          const maxOps = Math.min(8, 3 + Math.floor(rodadaRef.current / 3) + Math.floor(desempenhoOcultoRef.current / 3));
+          if (ops.length < maxOps) {
+            const nova = gerarOperacao();
+            if (nova) { 
+              animarQueda(nova); 
+              return [...ops, nova]; 
+            }
           }
-        }
-        return ops;
-      });
+          return ops;
+        });
+      }
       const spawnInterval = Math.max(1200, 3500 - (rodadaRef.current * 150) - (desempenhoOcultoRef.current * 150));
       spawnTimer.current = setTimeout(loopSpawner, spawnInterval);
     };
@@ -233,6 +206,8 @@ export default function Jogo() {
 
     if (modoEscolhido === 'bot') {
       botTimer.current = setInterval(() => {
+        if (jogoPausadoRef.current) return; // Bot não atira se tiver pausado
+        
         const ops = operacoesListRef.current;
         const alvosValidos = ops.filter(o => {
           const yVal = (o.y as any)._value || 0;
@@ -251,7 +226,7 @@ export default function Jogo() {
     }
   };
 
-  const animarQueda = (op: any) => {
+  const animarQueda = (op: any, duracaoPersonalizada?: number) => {
     op.y.addListener(({ value }: { value: number }) => {
       const ref = operacoesAtuaisRef.current.find(o => o.chave === op.chave);
       if (ref) ref.y = value;
@@ -259,20 +234,50 @@ export default function Jogo() {
     
     Animated.timing(op.y, {
       toValue: GAME_AREA_HEIGHT + 50,
-      duration: op.speed,
+      duration: duracaoPersonalizada || op.speed,
       useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) perderVida(op.id, true); 
     });
   };
 
+  // 🚨 SISTEMA DE PAUSA
+  const pausarJogo = () => {
+    jogoPausadoRef.current = true;
+    setPausado(true);
+    // Congela todas as animações onde elas estão
+    operacoes.forEach(op => op.y.stopAnimation());
+    if (spawnTimer.current) clearTimeout(spawnTimer.current);
+  };
+
+  const continuarJogo = () => {
+    jogoPausadoRef.current = false;
+    setPausado(false);
+    
+    // Retoma a queda de onde parou
+    operacoes.forEach(op => {
+      const posAtual = (op.y as any)._value || 0;
+      const distanciaRestante = (GAME_AREA_HEIGHT + 50) - posAtual;
+      // Calcula o tempo proporcional restante para a queda
+      const tempoRestante = (distanciaRestante / (GAME_AREA_HEIGHT + 50)) * op.speed;
+      
+      animarQueda(op, Math.max(tempoRestante, 500));
+    });
+    
+    iniciarSpawner(); // Religa a máquina de fazer contas
+  };
+
+  const sairDoJogo = () => {
+    resetGame();
+    setTela('menu');
+  };
+
   const dispararLaser = (targetOp: any, acertou: boolean, atirador: 'player' | 'bot' = 'player') => {
     if (acertou && targetOp) {
       const tX = targetOp.posX + CARD_WIDTH / 2;
-      const tY = (targetOp.y as any)._value || 100;
-      const corLaser = atirador === 'bot' ? '#FF00FF' : '#32CD32'; 
+      const tY = GAME_AREA_HEIGHT * 0.3; 
 
-      setLaserAtivo({ x: tX, y: tY, cor: corLaser });
+      setLaserAtivo({ x: tX, y: tY, cor: atirador === 'bot' ? '#FF00FF' : '#32CD32' });
       laserAnim.setValue(0);
       Animated.timing(laserAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start(() => {
         Animated.parallel([
@@ -293,6 +298,8 @@ export default function Jogo() {
   };
 
   const verificarResposta = () => {
+    if (jogoPausadoRef.current) return;
+    
     const resN = parseInt(resposta);
     if (isNaN(resN) || resposta === '') return;
     
@@ -332,7 +339,7 @@ export default function Jogo() {
   };
 
   const ativarPowerUp = () => {
-    if (!powerUpDisponivel || operacoes.length === 0) return;
+    if (!powerUpDisponivel || operacoes.length === 0 || jogoPausadoRef.current) return;
     
     const visiveis = operacoes.filter(op => {
       const y = (op.y as any)._value || 0;
@@ -372,6 +379,7 @@ export default function Jogo() {
   };
 
   const pressionarTecla = (tecla: string) => {
+    if (jogoPausadoRef.current) return;
     if (tecla === 'enviar') verificarResposta();
     else if (tecla === 'apagar') setResposta(r => r.slice(0, -1));
     else setResposta(r => r + tecla);
@@ -462,7 +470,7 @@ export default function Jogo() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       
-      {/* HEADER DE PONTOS */}
+      {/* HEADER DE PONTOS COM BOTÃO DE PAUSA */}
       <View style={styles.gameHeader}>
         <View style={styles.headerStatsGroup}>
           <Ionicons name="star" size={18} color="#FFD700" />
@@ -471,13 +479,9 @@ export default function Jogo() {
           <Text style={styles.statTextMeta}>{acertosRodada}/{metaRodada}</Text>
         </View>
         <View style={styles.headerRightGroup}>
-          {powerUpDisponivel ? (
-            <TouchableOpacity onPress={ativarPowerUp} style={styles.miniPowerUpBtn}>
-              <Ionicons name="flash" size={18} color="#000" />
-            </TouchableOpacity>
-          ) : (
-            <Ionicons name="flash" size={18} color="#333" style={{ marginRight: 10 }} />
-          )}
+          <TouchableOpacity onPress={pausarJogo} style={styles.btnPausaIcone}>
+            <Ionicons name="pause" size={26} color="#fff" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -487,7 +491,7 @@ export default function Jogo() {
         ))}
       </View>
 
-      {/* ÁREA DO JOGO DINÂMICA SEGURA */}
+      {/* ÁREA DO JOGO SEGURO */}
       <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
         {operacoes.map((op) => (
           <Animated.View key={op.id} style={[
@@ -513,6 +517,19 @@ export default function Jogo() {
 
       {/* PAINEL INFERIOR (TECLADO IDÊNTICO À IMAGEM) */}
       <View style={styles.bottomPanel}>
+        <View style={styles.powerUpContainer}>
+          {powerUpDisponivel ? (
+            <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}>
+              <Ionicons name="flash" size={18} color="#000" />
+              <Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.btnPowerUpInativo}>
+              <Text style={styles.txtPowerUpInativo}>Acerte a conta amarela para carregar</Text>
+            </View>
+          )}
+        </View>
+
         <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}>
           <Text style={styles.displayText}>{resposta || '0'}</Text>
         </Animated.View>
@@ -540,6 +557,27 @@ export default function Jogo() {
           </View>
         </View>
       </View>
+
+      {/* 🚨 MODAL DE PAUSA 🚨 */}
+      {pausado && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalPausaContainer}>
+            <Ionicons name="pause-circle" size={64} color="#FFD700" />
+            <Text style={styles.modalPausaTitulo}>Jogo Pausado</Text>
+            <Text style={styles.modalPausaSub}>Respire fundo!</Text>
+
+            <TouchableOpacity style={styles.continuarButton} onPress={continuarJogo}>
+              <Ionicons name="play" size={22} color="#000" />
+              <Text style={styles.continuarButtonText}>Continuar</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.sairButton} onPress={sairDoJogo}>
+              <Ionicons name="exit" size={22} color="#fff" />
+              <Text style={styles.sairButtonText}>Sair para o Menu</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
     </SafeAreaView>
   );
@@ -569,7 +607,7 @@ const styles = StyleSheet.create({
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   statTextMeta: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   headerRightGroup: { flexDirection: 'row', alignItems: 'center' },
-  miniPowerUpBtn: { backgroundColor: '#FFD700', padding: 6, borderRadius: 6, marginRight: 10 },
+  btnPausaIcone: { padding: 4, marginLeft: 10 },
   
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingBottom: 10 },
   vidaMarca: { width: 8, height: 8, borderRadius: 4 },
@@ -577,20 +615,26 @@ const styles = StyleSheet.create({
   vidaInativa: { backgroundColor: '#333' },
   
   gameArea: { position: 'relative', backgroundColor: '#0a0a0a', overflow: 'hidden' },
-  operacaoCard: { position: 'absolute', backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center' },
+  operacaoCard: { position: 'absolute', backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
   estrelaEspecial: { position: 'absolute', top: -8, right: -4, backgroundColor: '#FFF', borderRadius: 10, padding: 2 },
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  laser: { position: 'absolute', width: 4, height: height, zIndex: -1 },
+  laser: { position: 'absolute', width: 4, height: height, zIndex: 1 },
 
   // Painel Inferior (Segura o Teclado perfeitamente no lugar)
   bottomPanel: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'flex-end', // Garante que fique colado em baixo independente do celular
+    justifyContent: 'flex-end', 
     paddingBottom: 20,
     width: '100%',
   },
+  powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 10 },
+  btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
+  btnPowerUpInativo: { backgroundColor: '#1a1a2e', padding: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  txtPowerUpInativo: { color: '#444', fontSize: 12, fontWeight: 'bold' },
+
   displayContainer: { 
     backgroundColor: '#1a1a2e', 
     width: 250, 
@@ -618,4 +662,14 @@ const styles = StyleSheet.create({
   jogarNovamenteText: { color: '#000', fontSize: 18, fontWeight: '900' },
   voltarMenuButton: { padding: 16 },
   voltarMenuText: { color: '#888', fontSize: 14 },
+
+  // Pausa Overlay
+  modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
+  modalPausaContainer: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', width: '80%' },
+  modalPausaTitulo: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginTop: 10 },
+  modalPausaSub: { color: '#888', fontSize: 14, marginBottom: 20 },
+  continuarButton: { backgroundColor: '#32CD32', flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 10, width: '100%', justifyContent: 'center', marginBottom: 10 },
+  continuarButtonText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
+  sairButton: { backgroundColor: '#E74C3C', flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 10, width: '100%', justifyContent: 'center' },
+  sairButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 });
