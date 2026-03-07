@@ -50,13 +50,8 @@ export default function Login() {
       await login(emailPadronizado, senhaPadronizada);
       
     } catch (error: any) {
-      // 🚨 AGORA ELE ESCUTA O ERRO E EXIBE O ALERTA
-      const statusErro = error?.response?.status;
-      if (statusErro === 401 || statusErro === 400 || statusErro === 404) {
-        Alert.alert('Acesso Negado', 'E-mail ou senha incorretos. Tente novamente.');
-      } else {
-        Alert.alert('Erro', 'Não foi possível fazer o login. Verifique sua conexão.');
-      }
+      // 🚨 AGORA SIM! Como o api.ts (que arrumamos antes) já traduziu o erro, nós só mostramos na tela!
+      Alert.alert('Acesso Negado', error.message || 'Não foi possível fazer o login.');
     } finally {
       setLoading(false);
     }
