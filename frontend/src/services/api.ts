@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Alteramos a linha abaixo para o seu novo endereço do Render
+// SEU ENDEREÇO DO RENDER
 const API_URL = 'https://modificado-para-site-1.onrender.com';
 
 const api = axios.create({
@@ -9,7 +9,7 @@ const api = axios.create({
   timeout: 30000,
 });
 
-// Add token to requests
+// Adiciona o token em todas as requisições
 api.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem('token');
   if (token) {
@@ -18,16 +18,19 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Auth
+// ==============================================================================
+// 1. AUTENTICAÇÃO E USUÁRIOS (Isso continua indo para o Servidor)
+// ==============================================================================
+
 export const login = async (email: string, senha: string) => {
   try {
     const response = await api.post('/auth/login', { email, senha });
     return response.data;
   } catch (error: any) {
     if (error.response?.status === 401 || error.response?.status === 404 || error.response?.status === 400) {
-      throw new Error('E-mail ou senha incorretos. Tente novamente.');
+      throw new Error('E-mail ou senha incorretos.');
     }
-    throw new Error(error.response?.data?.detail || 'Erro de conexão com o servidor.');
+    throw new Error(error.response?.data?.detail || 'Erro de conexão.');
   }
 };
 
@@ -36,10 +39,7 @@ export const register = async (nome: string, email: string, senha: string, turma
     const response = await api.post('/auth/register', { nome, email, senha, turmaId, equipeId });
     return response.data;
   } catch (error: any) {
-    if (error.response?.status === 409 || error.response?.data?.detail?.includes('already exists')) {
-      throw new Error('Este e-mail já está cadastrado.');
-    }
-    throw new Error(error.response?.data?.detail || 'Erro ao criar a conta.');
+    throw new Error(error.response?.data?.detail || 'Erro ao criar conta.');
   }
 };
 
@@ -48,326 +48,115 @@ export const getMe = async () => {
   return response.data;
 };
 
-// Atualizar Equipe (Nome e Cor)
-export const updateEquipe = async (id: string, dados: { nome?: string; cor?: string }) => {
-  try {
-    const response = await api.put(`/equipes/${id}`, dados);
-    return response.data;
-  } catch (error) {
-    console.error('Erro ao atualizar equipe:', error);
-    throw error;
-  }
-};
+// ==============================================================================
+// 2. DADOS GERAIS (Turmas, Equipes, Ranking - Vai para o Servidor)
+// ==============================================================================
 
-// Turmas
 export const getTurmas = async () => {
-  const response = await api.get('/turmas');
-  return response.data;
+  try {
+    const response = await api.get('/turmas');
+    return response.data;
+  } catch (error) { return []; }
 };
 
-// Equipes
 export const getEquipes = async () => {
-  const response = await api.get('/equipes');
+  try {
+    const response = await api.get('/equipes');
+    return response.data;
+  } catch (error) { return []; }
+};
+
+export const getUsuarios = async () => {
+  try {
+    const response = await api.get('/usuarios');
+    return response.data;
+  } catch (error) { return []; }
+};
+
+export const updateEquipe = async (id: string, dados: any) => {
+  const response = await api.put(`/equipes/${id}`, dados);
   return response.data;
 };
 
 // Ranking
-export const getRankingGeral = async () => {
-  const response = await api.get('/ranking/geral');
-  return response.data;
-};
+export const getRankingGeral = async () => { try { const r = await api.get('/ranking/geral'); return r.data; } catch (e) { return []; } };
+export const getRankingPorTurma = async (id: string) => { try { const r = await api.get(`/ranking/turma/${id}`); return r.data; } catch (e) { return []; } };
+export const getRankingAlunosEquipe = async (id: string) => { try { const r = await api.get(`/ranking/alunos/${id}`); return r.data; } catch (e) { return []; } };
 
-export const getRankingPorTurma = async (turmaId: string) => {
-  const response = await api.get(`/ranking/turma/${turmaId}`);
-  return response.data;
-};
+// Conteúdos e Exercícios
+export const getConteudos = async (cat?: string) => { const r = await api.get('/conteudos', { params: { categoria: cat } }); return r.data; };
+export const createConteudo = async (d: any) => (await api.post('/conteudos', d)).data;
+export const deleteConteudo = async (id: string) => (await api.delete(`/conteudos/${id}`)).data;
 
-export const getRankingAlunosEquipe = async (equipeId: string) => {
-  const response = await api.get(`/ranking/alunos/${equipeId}`);
-  return response.data;
-};
+export const getExercicios = async () => { const r = await api.get('/exercicios'); return r.data; };
+export const createExercicio = async (d: any) => (await api.post('/exercicios', d)).data;
+export const deleteExercicio = async (id: string) => (await api.delete(`/exercicios/${id}`)).data;
 
-// Conteudos
-export const getConteudos = async (categoria?: string) => {
-  const params = categoria ? { categoria } : {};
-  const response = await api.get('/conteudos', { params });
-  return response.data;
-};
+export const submitExercicio = async (id: string, resp: any) => (await api.post('/submissoes', { exercicioId: id, respostas: resp })).data;
+export const getSubmissao = async (id: string) => (await api.get(`/submissoes/${id}`)).data;
 
-export const createConteudo = async (data: any) => {
-  const response = await api.post('/conteudos', data);
-  return response.data;
-};
+// Relatórios
+export const getRelatorioGeral = async () => { try { const r = await api.get('/relatorios/geral'); return r.data; } catch (e) { return {}; } };
+export const getBNCCErros = async () => { try { const r = await api.get('/relatorios/bncc-erros'); return r.data; } catch (e) { return []; } };
 
-export const updateConteudo = async (id: string, data: any) => {
-  const response = await api.put(`/conteudos/${id}`, data);
-  return response.data;
-};
+// Lixeira
+export const getLixeira = async () => (await api.get('/admin/lixeira')).data;
+export const restaurarItem = async (id: string, tipo: string) => (await api.post(`/admin/lixeira/${id}/restaurar?tipo=${tipo}`)).data;
+export const deletePermanente = async (id: string, tipo: string) => (await api.delete(`/admin/lixeira/${id}?tipo=${tipo}`)).data;
 
-export const deleteConteudo = async (id: string) => {
-  const response = await api.delete(`/conteudos/${id}`);
-  return response.data;
-};
+// ==============================================================================
+// 3. JOGOS PERSONALIZADOS (LOCAL - SALVA NA MEMÓRIA DO CELULAR)
+// ==============================================================================
+// Como não temos o backend pronto para isso, vamos usar o AsyncStorage
+// para simular um banco de dados local. Assim o botão SALVAR vai funcionar!
 
-// Video Progress
-export const updateProgressoVideo = async (conteudoId: string, tempoAssistidoSeg: number, duracaoSeg: number) => {
-  const response = await api.post('/progresso-video', { conteudoId, tempoAssistidoSeg, duracaoSeg });
-  return response.data;
-};
+const JOGOS_STORAGE_KEY = '@jogos_personalizados_v1';
 
-export const getProgressoVideo = async (conteudoId: string) => {
-  const response = await api.get(`/progresso-video/${conteudoId}`);
-  return response.data;
-};
-
-// My Progress
-export const getMeuProgresso = async () => {
-  const response = await api.get('/meu-progresso');
-  return response.data;
-};
-
-// Exercicios
-export const getExercicios = async () => {
-  const response = await api.get('/exercicios');
-  return response.data;
-};
-
-export const getExercicio = async (id: string) => {
-  const response = await api.get(`/exercicios/${id}`);
-  return response.data;
-};
-
-export const createExercicio = async (data: any) => {
-  const response = await api.post('/exercicios', data);
-  return response.data;
-};
-
-export const updateExercicio = async (id: string, data: any) => {
-  const response = await api.put(`/exercicios/${id}`, data);
-  return response.data;
-};
-
-export const deleteExercicio = async (id: string) => {
-  const response = await api.delete(`/exercicios/${id}`);
-  return response.data;
-};
-
-// Submissoes
-export const submitExercicio = async (exercicioId: string, respostas: { questaoId: string; resposta: string }[]) => {
-  const response = await api.post('/submissoes', { exercicioId, respostas });
-  return response.data;
-};
-
-export const getSubmissao = async (exercicioId: string) => {
-  const response = await api.get(`/submissoes/${exercicioId}`);
-  return response.data;
-};
-
-// BNCC Reports
-export const getBNCCErros = async (turmaId?: string, equipeId?: string) => {
-  const params: any = {};
-  if (turmaId) params.turmaId = turmaId;
-  if (equipeId) params.equipeId = equipeId;
-  const response = await api.get('/relatorios/bncc-erros', { params });
-  return response.data;
-};
-
-export const getAlunoBNCC = async (alunoId: string) => {
-  const response = await api.get(`/relatorios/aluno/${alunoId}/bncc`);
-  return response.data;
-};
-
-// Admin - Users
-export const getUsuarios = async () => {
-  const response = await api.get('/usuarios');
-  return response.data;
-};
-
-export const getUsuario = async (id: string) => {
-  const response = await api.get(`/usuarios/${id}`);
-  return response.data;
-};
-
-export const updateUsuario = async (id: string, data: any) => {
-  const response = await api.put(`/usuarios/${id}`, data);
-  return response.data;
-};
-
-export const deleteUsuario = async (id: string) => {
-  const response = await api.delete(`/usuarios/${id}`);
-  return response.data;
-};
-
-// Self update (for updating own turma/equipe)
-export const updateUsuarioSelf = async (data: any) => {
-  const response = await api.put('/auth/me', data);
-  return response.data;
-};
-
-// Admin - Reports
-export const getRelatorioGeral = async () => {
-  const response = await api.get('/relatorios/geral');
-  return response.data;
-};
-
-export const getRelatorioUsuarios = async () => {
-  const response = await api.get('/relatorios/usuarios');
-  return response.data;
-};
-
-// Abas
-export const getAbas = async () => {
-  const response = await api.get('/abas');
-  return response.data;
-};
-
-export const createAba = async (data: any) => {
-  const response = await api.post('/abas', data);
-  return response.data;
-};
-
-export const updateAba = async (id: string, data: any) => {
-  const response = await api.put(`/abas/${id}`, data);
-  return response.data;
-};
-
-export const deleteAba = async (id: string) => {
-  const response = await api.delete(`/abas/${id}`);
-  return response.data;
-};
-
-// Questoes
-export const createQuestao = async (data: any) => {
-  const response = await api.post('/questoes', data);
-  return response.data;
-};
-
-export const updateQuestao = async (id: string, data: any) => {
-  const response = await api.put(`/questoes/${id}`, data);
-  return response.data;
-};
-
-export const deleteQuestao = async (id: string) => {
-  const response = await api.delete(`/questoes/${id}`);
-  return response.data;
-};
-
-// Lixeira (Trash)
-export const getLixeira = async () => {
-  const response = await api.get('/admin/lixeira');
-  return response.data;
-};
-
-export const restaurarItem = async (id: string, tipo: string) => {
-  const response = await api.post(`/admin/lixeira/${id}/restaurar?tipo=${tipo}`);
-  return response.data;
-};
-
-export const deletePermanente = async (id: string, tipo: string) => {
-  const response = await api.delete(`/admin/lixeira/${id}?tipo=${tipo}`);
-  return response.data;
-};
-
-export const limparItensExpirados = async () => {
-  const response = await api.post('/admin/lixeira/limpar-expirados');
-  return response.data;
-};
-
-// Jogo
-export const getRecordesJogo = async () => {
-  const response = await api.get('/jogo/recordes');
-  return response.data;
-};
-
-export const salvarRecordeJogo = async (modo: string, pontos: number) => {
-  const response = await api.post('/jogo/recorde', { modo, pontos });
-  return response.data;
-};
-
-// ============== MULTIPLAYER ==============
-
-export const criarSalaMultiplayer = async (maxPlayers: number = 2) => {
-  const response = await api.post('/jogo/multiplayer/criar-sala', { maxPlayers });
-  return response.data;
-};
-
-export const entrarSalaMultiplayer = async (roomId: string) => {
-  const response = await api.post('/jogo/multiplayer/entrar-sala', { roomId });
-  return response.data;
-};
-
-export const getSalaMultiplayer = async (roomId: string) => {
-  const response = await api.get(`/jogo/multiplayer/sala/${roomId}`);
-  return response.data;
-};
-
-export const setPlayerReady = async (roomId: string, ready: boolean) => {
-  const response = await api.post(`/jogo/multiplayer/sala/${roomId}/ready`, { ready });
-  return response.data;
-};
-
-export const iniciarJogoMultiplayer = async (roomId: string) => {
-  const response = await api.post(`/jogo/multiplayer/sala/${roomId}/iniciar`);
-  return response.data;
-};
-
-export const atualizarPontosMultiplayer = async (roomId: string, pontos: number, vidas: number) => {
-  const response = await api.post(`/jogo/multiplayer/sala/${roomId}/atualizar-pontos`, { pontos, vidas });
-  return response.data;
-};
-
-export const enviarVoiceMessage = async (roomId: string, audioBase64: string) => {
-  const response = await api.post(`/jogo/multiplayer/sala/${roomId}/voice`, { audioBase64 });
-  return response.data;
-};
-
-export const getVoiceMessages = async (roomId: string, since?: string) => {
-  const url = since 
-    ? `/jogo/multiplayer/sala/${roomId}/voice?since=${since}`
-    : `/jogo/multiplayer/sala/${roomId}/voice`;
-  const response = await api.get(url);
-  return response.data;
-};
-
-export const sairSalaMultiplayer = async (roomId: string) => {
-  const response = await api.post(`/jogo/multiplayer/sala/${roomId}/sair`);
-  return response.data;
-};
-
-export const listarSalasDisponiveis = async () => {
-  const response = await api.get('/jogo/multiplayer/salas-disponiveis');
-  return response.data;
-};
-
-// ============== JOGOS PERSONALIZADOS (MISSÕES) ==============
-
+// Busca jogos salvos na memória
 export const getJogosPersonalizados = async () => {
   try {
-    const response = await api.get('/jogos-personalizados');
-    return response.data;
-  } catch (error) {
-    console.log('Erro ao buscar jogos (pode não existir ainda):', error);
-    return []; 
+    const jsonValue = await AsyncStorage.getItem(JOGOS_STORAGE_KEY);
+    return jsonValue != null ? JSON.parse(jsonValue) : [];
+  } catch(e) {
+    return [];
   }
 };
 
+// Salva um novo jogo na memória
 export const criarJogo = async (dados: any) => {
-  const response = await api.post('/jogos-personalizados', dados);
-  return response.data;
-};
-
-export const deletarJogo = async (id: string) => {
-  const response = await api.delete(`/jogos-personalizados/${id}`);
-  return response.data;
-};
-
-export const getMissoesDisponiveis = async () => {
   try {
-    const response = await api.get('/jogos-personalizados/disponiveis');
-    return response.data;
-  } catch (error) {
-    return []; 
+    // 1. Pega os jogos antigos
+    const existing = await getJogosPersonalizados();
+    
+    // 2. Adiciona o novo (com ID único)
+    const novoJogo = { ...dados, id: Math.random().toString(36).substr(2, 9) };
+    const novaLista = [novoJogo, ...existing]; // Adiciona no topo
+    
+    // 3. Salva de volta
+    await AsyncStorage.setItem(JOGOS_STORAGE_KEY, JSON.stringify(novaLista));
+    return novoJogo;
+  } catch (e) {
+    throw new Error('Erro ao salvar localmente');
   }
+};
+
+// Deleta da memória
+export const deletarJogo = async (id: string) => {
+  try {
+    const existing = await getJogosPersonalizados();
+    const novaLista = existing.filter((jogo: any) => jogo.id !== id);
+    await AsyncStorage.setItem(JOGOS_STORAGE_KEY, JSON.stringify(novaLista));
+    return true;
+  } catch (e) {
+    throw new Error('Erro ao deletar');
+  }
+};
+
+// Para o aluno ver (Pega da memória também)
+export const getMissoesDisponiveis = async () => {
+  // Num cenário real, filtrariamos por turma aqui.
+  // Como é local, retorna tudo que foi criado no admin.
+  return await getJogosPersonalizados();
 };
 
 export default api;
