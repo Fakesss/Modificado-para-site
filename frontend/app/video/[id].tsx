@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
-import { Conteudo, ProgressoVideo } from '../../src/types';
+import { Conteudo } from '../../src/types';
 
 export default function VideoPlayer() {
   const params = useLocalSearchParams();
@@ -13,6 +13,8 @@ export default function VideoPlayer() {
   const { width } = useWindowDimensions();
   const router = useRouter();
   
+  // 🛡️ ESCUDO ANTI-VERCEL
+  const [isClient, setIsClient] = useState(false);
   const [video, setVideo] = useState<Conteudo | null>(null);
   const [loading, setLoading] = useState(true);
   
@@ -26,6 +28,10 @@ export default function VideoPlayer() {
   
   const iframeRef = useRef<any>(null);
 
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   const getYouTubeId = (url: string) => {
     if (!url) return null;
     const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ \s]{11})/;
@@ -36,12 +42,12 @@ export default function VideoPlayer() {
   const youtubeId = video?.urlVideo ? getYouTubeId(video.urlVideo) : null;
 
   useEffect(() => {
-    if (id) loadVideo();
-  }, [id]);
+    if (id && isClient) loadVideo();
+  }, [id, isClient]);
 
-  // 📻 CRONÔMETRO VISUAL (Serve APENAS para mexer a barrinha verde na tela)
+  // 📻 CRONÔMETRO VISUAL (Só para a barrinha verde)
   useEffect(() => {
-    if (Platform.OS !== 'web' || !youtubeId) return;
+    if (!isClient || Platform.OS !== 'web' || !youtubeId) return;
 
     const handleMessage = (event: any) => {
       if (event.origin !== 'https://www.youtube.com') return;
@@ -66,9 +72,9 @@ export default function VideoPlayer() {
       window.removeEventListener('message', handleMessage);
       clearInterval(timer);
     };
-  }, [youtubeId]);
+  }, [youtubeId, isClient]);
 
-  // 🧠 CÁLCULO VISUAL (Não envia nada pro servidor!)
+  // 🧠 CÁLCULO VISUAL (Não avisa o servidor para evitar travamentos)
   useEffect(() => {
     if (duration > 0 && currentTime > 0) {
       const percentage = (currentTime / duration) * 100;
@@ -88,7 +94,6 @@ export default function VideoPlayer() {
 
       if (videoData) {
         try {
-          // Busca apenas para saber se o aluno JÁ tinha concluído antes
           const progressData = await api.getProgressoVideo(videoData.id);
           if (progressData && progressData.concluido) {
             setCompleted(true);
@@ -117,9 +122,8 @@ export default function VideoPlayer() {
     }
 
     try {
-      // Criamos números fixos e à prova de falhas para o Render nunca rejeitar
       const safeDuration = Math.floor(duration > 0 ? duration : 300);
-      const safeCurrent = Math.floor(safeDuration * 0.95); // Força 95% para garantir a aprovação
+      const safeCurrent = Math.floor(safeDuration * 0.95);
 
       const result = await api.updateProgressoVideo(id as string, safeCurrent, safeDuration);
       
@@ -133,7 +137,8 @@ export default function VideoPlayer() {
     }
   };
 
-  if (loading) {
+  // Previne renderização antes do celular estar pronto
+  if (!isClient || loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -158,6 +163,8 @@ export default function VideoPlayer() {
   }
 
   const playerHeight = width > 600 ? 400 : width * 0.5625;
+  // Define o origin correto para evitar bloqueios de CORS do Android
+  const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://youtube.com';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -176,7 +183,8 @@ export default function VideoPlayer() {
           <iframe
             ref={iframeRef}
             style={{ width: '100%', height: '100%', borderWidth: 0 }}
-            src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0&modestbranding=1&enablejsapi=1`}
+            // 🚨 SOLUÇÃO PARA O ANDROID: playsinline=1 e origin adicionados aqui!
+            src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0&modestbranding=1&enablejsapi=1&playsinline=1&origin=${appOrigin}`}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
             allowFullScreen
           />
