@@ -24,7 +24,7 @@ export default function VideoPlayer() {
   
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [startTime, setStartTime] = useState(0); // Tempo salvo para iniciar o vídeo
+  const [startTime, setStartTime] = useState(0);
   
   const [completed, setCompleted] = useState(false);
   const [pointsEarned, setPointsEarned] = useState(0);
@@ -33,33 +33,62 @@ export default function VideoPlayer() {
   
   const lastUpdateRef = useRef(0);
 
+  const getYouTubeId = (url: string) => {
+    if (!url) return null;
+    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ \s]{11})/;
+    const match = url.match(regex);
+    return match ? match[1] : null;
+  };
+
+  const youtubeId = video?.urlVideo ? getYouTubeId(video.urlVideo) : null;
+
   useEffect(() => {
     loadVideo();
   }, [id]);
 
-  // 🎧 Ouvido absoluto: Escuta as mensagens do Iframe de 1 em 1 segundo
+  // 🎬 NOVO PLAYER: Nascido e criado direto na Web, sem srcDoc para não bugar o Android!
   useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    
-    const handleMessage = (event: any) => {
-      try {
-        if (typeof event.data === 'string') {
-          const data = JSON.parse(event.data);
-          if (data.type === 'yt-timeupdate') {
-            setCurrentTime(data.currentTime);
-            setDuration(data.duration);
+    if (Platform.OS !== 'web' || !youtubeId || loading) return;
+
+    let player: any;
+    let timer: any;
+    const win = window as any;
+
+    const setupPlayer = () => {
+      if (!win.YT || !win.YT.Player) return;
+      
+      player = new win.YT.Player('yt-player-container', {
+        videoId: youtubeId,
+        playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1, start: startTime },
+        events: {
+          onReady: () => {
+            timer = setInterval(() => {
+              if (player && player.getCurrentTime) {
+                setCurrentTime(player.getCurrentTime());
+                setDuration(player.getDuration());
+              }
+            }, 1000);
           }
         }
-      } catch (e) {
-        // Ignora mensagens estranhas de outras extensões do navegador
-      }
+      });
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
+    if (!win.YT) {
+      const tag = document.createElement('script');
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(tag);
+      win.onYouTubeIframeAPIReady = setupPlayer;
+    } else {
+      setTimeout(setupPlayer, 200);
+    }
 
-  // 🧠 Cérebro Matemático: Calcula a porcentagem real e envia pro Render sem travar
+    return () => {
+      clearInterval(timer);
+      if (player && player.destroy) player.destroy();
+    };
+  }, [youtubeId, startTime, loading]);
+
+  // 🧠 Cérebro Matemático
   useEffect(() => {
     if (duration > 0 && currentTime > 0) {
       const percentage = (currentTime / duration) * 100;
@@ -69,7 +98,6 @@ export default function VideoPlayer() {
         setCanComplete(true);
       }
 
-      // Evita o ERRO 500 limitando as chamadas para a cada 5 segundos ou ao bater 90%
       if (currentTime - lastUpdateRef.current >= 5 || (percentage >= 90 && lastUpdateRef.current < duration * 0.9)) {
         lastUpdateRef.current = currentTime;
         updateProgress(currentTime, duration);
@@ -90,7 +118,6 @@ export default function VideoPlayer() {
           
           if (progressData) {
             const tempoSalvo = progressData.tempoAssistidoSeg || 0;
-            // Configura de onde o vídeo deve continuar
             setStartTime(Math.floor(tempoSalvo));
             setCurrentTime(tempoSalvo);
             lastUpdateRef.current = tempoSalvo;
@@ -109,7 +136,7 @@ export default function VideoPlayer() {
             }
           }
         } catch (error) {
-          // Vídeo novo, sem progresso ainda
+          // Vídeo novo
         }
       }
     } catch (error) {
@@ -120,23 +147,17 @@ export default function VideoPlayer() {
   };
 
   const updateProgress = async (watchedSeconds: number, totalDuration: number) => {
-    if (totalDuration <= 0) return; // Barreira contra Erro 500
+    if (totalDuration <= 0) return;
 
     try {
-      // Usamos Math.floor para enviar números exatos e perfeitos para o Python/Render
-      const result = await api.updateProgressoVideo(
-        id as string, 
-        Math.floor(watchedSeconds), 
-        Math.floor(totalDuration)
-      );
-      
+      const result = await api.updateProgressoVideo(id as string, Math.floor(watchedSeconds), Math.floor(totalDuration));
       if (result.concluido && !completed) {
         setCompleted(true);
         setPointsEarned(result.pontosGerados);
         window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
       }
     } catch (error) {
-      console.error('Error updating progress:', error); // Falhas silenciosas de internet
+      console.error('Error updating progress:', error);
     }
   };
 
@@ -167,14 +188,6 @@ export default function VideoPlayer() {
     }
   };
 
-  // 🔎 Agora caça YouTube normal, embutido e SHORTS!
-  const getYouTubeId = (url: string) => {
-    if (!url) return null;
-    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ \s]{11})/;
-    const match = url.match(regex);
-    return match ? match[1] : null;
-  };
-
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -199,59 +212,6 @@ export default function VideoPlayer() {
     );
   }
 
-  const youtubeId = video.urlVideo ? getYouTubeId(video.urlVideo) : null;
-
-  // 🎬 O "Iframe Mágico" que se comunica com o nosso React de 1 em 1 segundo
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          * { margin: 0; padding: 0; }
-          body { background: #000; overflow: hidden; }
-          #player { width: 100vw; height: 100vh; }
-        </style>
-      </head>
-      <body>
-        <div id="player"></div>
-        <script>
-          var tag = document.createElement('script');
-          tag.src = "https://www.youtube.com/iframe_api";
-          var firstScriptTag = document.getElementsByTagName('script')[0];
-          firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-          
-          var player;
-          function onYouTubeIframeAPIReady() {
-            player = new YT.Player('player', {
-              videoId: '${youtubeId}',
-              playerVars: { 
-                'autoplay': 1, 
-                'rel': 0, 
-                'modestbranding': 1, 
-                'playsinline': 1,
-                'start': ${startTime}
-              },
-              events: { 'onReady': onPlayerReady }
-            });
-          }
-          
-          function onPlayerReady(event) {
-            setInterval(function() {
-              if (player && player.getCurrentTime) {
-                window.parent.postMessage(JSON.stringify({
-                  type: 'yt-timeupdate',
-                  currentTime: player.getCurrentTime(),
-                  duration: player.getDuration()
-                }), '*');
-              }
-            }, 1000); // Exatidão de 1 segundo para vídeos curtos!
-          }
-        </script>
-      </body>
-    </html>
-  `;
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -266,12 +226,8 @@ export default function VideoPlayer() {
 
       <View style={styles.playerContainer}>
         {youtubeId ? (
-          <iframe
-            style={{ width: '100%', height: '100%', border: 'none' }}
-            srcDoc={htmlContent}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
+          // Usamos uma div pura, a API do YouTube injeta o iframe aqui de forma segura
+          <div id="yt-player-container" style={{ width: '100%', height: '100%' }} />
         ) : (
           <View style={styles.noVideo}>
             <Ionicons name="videocam-off" size={48} color="#666" />
