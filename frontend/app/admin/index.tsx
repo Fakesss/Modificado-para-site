@@ -180,6 +180,19 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
+        {/* ---------------- NOVO BOTÃO DE JOGOS AQUI ---------------- */}
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/gerenciar-jogos')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#FF69B4' + '30' }]}>
+            <Ionicons name="game-controller" size={24} color="#FF69B4" />
+          </View>
+          <View style={styles.menuInfo}>
+            <Text style={styles.menuTitle}>Jogos Personalizados</Text>
+            <Text style={styles.menuDescription}>Criar missões e desafios específicos</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+        {/* ---------------------------------------------------------- */}
+
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/relatorios')}>
           <View style={[styles.menuIcon, { backgroundColor: '#9B59B6' + '30' }]}>
             <Ionicons name="bar-chart" size={24} color="#9B59B6" />
@@ -202,7 +215,6 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
-        {/* ---------------- AQUI ESTÁ O BOTÃO DO PASSO 3 ---------------- */}
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/cor-admin')}>
           <View style={[styles.menuIcon, { backgroundColor: '#00CED1' + '30' }]}>
             <Ionicons name="color-wand" size={24} color="#00CED1" />
@@ -213,7 +225,6 @@ export default function AdminHome() {
           </View>
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
-        {/* ---------------------------------------------------------------- */}
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/lixeira')}>
           <View style={[styles.menuIcon, { backgroundColor: '#E74C3C' + '30' }]}>
