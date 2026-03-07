@@ -7,12 +7,12 @@ import {
   Animated,
   Dimensions,
   ScrollView,
-  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
-import * as api from '../../src/services/api';
+import api, { getMissoesDisponiveis } from '../../src/services/api'; // Importação reforçada
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.50; 
@@ -38,16 +38,13 @@ const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
 export default function Jogo() {
   const { user } = useAuth();
   
-  // Estados
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [modo, setModo] = useState<'single' | 'bot' | 'missao'>('single');
   const [modoMatematica, setModoMatematica] = useState('misto');
   
-  // Estados de Missão
   const [missoesDisponiveis, setMissoesDisponiveis] = useState<any[]>([]);
   const [missaoAtual, setMissaoAtual] = useState<any>(null);
   
-  // Game state
   const [operacoes, setOperacoes] = useState<any[]>([]);
   const [vidas, setVidas] = useState(10);
   const [pontos, setPontos] = useState(0);
@@ -58,13 +55,11 @@ export default function Jogo() {
   const [powerUpDisponivel, setPowerUpDisponivel] = useState(false);
   const [pausado, setPausado] = useState(false); 
   
-  // Bot State
   const [botPontos, setBotPontos] = useState(0);
   const [laserAtivo, setLaserAtivo] = useState<{ x: number; y: number; cor: string } | null>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   
-  // Refs
   const spawnTimer = useRef<any>(null);
   const botTimer = useRef<any>(null);
   const operacoesAtuaisRef = useRef<{lane: number, y: number, chave: string}[]>([]);
@@ -73,7 +68,6 @@ export default function Jogo() {
   const jogoPausadoRef = useRef(false); 
   const filaQuestoesRef = useRef<any[]>([]); 
   
-  // IA
   const desempenhoOcultoRef = useRef(0); 
   const questoesAcertadasRef = useRef<Set<string>>(new Set()); 
   const ultimasRespostasRef = useRef<number[]>([]); 
@@ -82,23 +76,25 @@ export default function Jogo() {
   useEffect(() => { rodadaRef.current = rodada; }, [rodada]);
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
 
-  // Carrega missões com segurança
+  // 🚨 SEGURANÇA MÁXIMA AQUI: Try/Catch para não dar tela branca
   useEffect(() => {
     if (tela === 'menu') {
-      carregarMissoes();
+      const fetchMissoes = async () => {
+        try {
+          // Verifica se a função existe antes de chamar
+          if (typeof getMissoesDisponiveis === 'function') {
+            const data = await getMissoesDisponiveis();
+            if (Array.isArray(data)) {
+              setMissoesDisponiveis(data);
+            }
+          }
+        } catch (error) {
+          console.log('API Indisponível (Ignorando erro para não travar):', error);
+        }
+      };
+      fetchMissoes();
     }
   }, [tela]);
-
-  const carregarMissoes = async () => {
-    // Verificação de segurança: se a função não existir na API, não quebra o app
-    if (!api.getMissoesDisponiveis) return;
-    try {
-      const data = await api.getMissoesDisponiveis();
-      setMissoesDisponiveis(data || []);
-    } catch (error) {
-      console.log('Sem missões ou erro de conexão');
-    }
-  };
 
   const resetGame = () => {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
@@ -124,14 +120,6 @@ export default function Jogo() {
 
   const calcularMetaRodada = (r: number) => r <= 10 ? 10 + (r * 2) : 30 + (r * 5);
 
-  const avancarRodada = () => {
-    const nr = rodada + 1;
-    setRodada(nr);
-    setAcertosRodada(0);
-    setMetaRodada(calcularMetaRodada(nr));
-    questoesAcertadasRef.current.clear(); 
-  };
-
   const obterPistaLivre = (): number => {
     const pistasDisponiveis = [0, 1, 2].filter(pista => {
       const opNaPista = operacoesAtuaisRef.current.find(op => op.lane === pista);
@@ -142,9 +130,9 @@ export default function Jogo() {
   };
 
   const gerarOperacao = () => {
-    // --- MODO MISSÃO (FIXO) ---
+    // --- MODO MISSÃO ---
     if (modo === 'missao') {
-      if (filaQuestoesRef.current.length === 0) return null; 
+      if (!filaQuestoesRef.current || filaQuestoesRef.current.length === 0) return null;
       
       const questaoDaMissao = filaQuestoesRef.current.shift();
       if (!questaoDaMissao) return null;
@@ -159,13 +147,9 @@ export default function Jogo() {
         resposta: questaoDaMissao.resposta,
         textoTela: questaoDaMissao.texto,
         y: new Animated.Value(0),
-        speed: 12000, // Um pouco mais lento para leitura
-        posX,
-        lane: laneSelecionada,
-        especial: false,
-        opacity: new Animated.Value(1),
-        scale: new Animated.Value(1),
-        chave: questaoDaMissao.id
+        speed: 12000, 
+        posX, lane: laneSelecionada, especial: false,
+        opacity: new Animated.Value(1), scale: new Animated.Value(1), chave: questaoDaMissao.id
       };
     }
 
@@ -250,7 +234,6 @@ export default function Jogo() {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     const loopSpawner = () => {
       if (!jogoPausadoRef.current) {
-        // Verifica fim da missão
         if (modo === 'missao' && filaQuestoesRef.current.length === 0 && operacoesListRef.current.length === 0) {
           setTimeout(() => setTela('resultado'), 1000);
           return;
@@ -276,13 +259,10 @@ export default function Jogo() {
     setTela('jogo');
     inicioRespostaRef.current = Date.now();
     
-    // Configura Missão (com segurança)
     if (modoEscolhido === 'missao' && missaoDados?.questoes) {
       setMissaoAtual(missaoDados);
-      const copiaQuestoes = [...missaoDados.questoes];
-      // Adiciona IDs únicos para animação se não tiver
-      const questoesProntas = copiaQuestoes.map(q => ({...q, id: q.id || Math.random().toString()}));
-      filaQuestoesRef.current = questoesProntas;
+      const copiaQuestoes = missaoDados.questoes.map((q: any) => ({...q, id: q.id || Math.random().toString()}));
+      filaQuestoesRef.current = copiaQuestoes;
     }
 
     const inicial: any[] = [];
@@ -291,7 +271,6 @@ export default function Jogo() {
     
     setOperacoes(inicial);
     setTimeout(() => { inicial.forEach(op => animarQueda(op)); }, 50);
-    
     iniciarSpawner();
 
     if (modoEscolhido === 'bot') {
@@ -384,7 +363,6 @@ export default function Jogo() {
     if (jogoPausadoRef.current) return;
     const resN = parseInt(resposta);
     if (isNaN(resN) || resposta === '') return;
-    
     const opCorreta = operacoes.find(op => op.resposta === resN);
     const tempoLevado = Date.now() - inicioRespostaRef.current;
     
@@ -395,11 +373,7 @@ export default function Jogo() {
       else if (tempoLevado > 6000) desempenhoOcultoRef.current = Math.max(desempenhoOcultoRef.current - 1, 0);
       questoesAcertadasRef.current.add(opCorreta.chave); 
       setPontos(p => p + 10 + (tempoLevado < 3000 ? 5 : 0)); 
-      setAcertosRodada(a => {
-        const na = a + 1;
-        if (na >= metaRodada) avancarRodada();
-        return na;
-      });
+      setAcertosRodada(a => { const na = a + 1; if (na >= metaRodada) avancarRodada(); return na; });
       if (opCorreta.especial && !powerUpDisponivel) setPowerUpDisponivel(true);
       dispararLaser(opCorreta, true, 'player');
       setTimeout(() => { setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id)); }, 350);
@@ -413,10 +387,7 @@ export default function Jogo() {
 
   const ativarPowerUp = () => {
     if (!powerUpDisponivel || operacoes.length === 0 || jogoPausadoRef.current) return;
-    const visiveis = operacoes.filter(op => {
-      const y = (op.y as any)._value || 0;
-      return y >= 0 && y < GAME_AREA_HEIGHT;
-    });
+    const visiveis = operacoes.filter(op => { const y = (op.y as any)._value || 0; return y >= 0 && y < GAME_AREA_HEIGHT; });
     if (visiveis.length === 0) return;
     visiveis.forEach(op => op.y.stopAnimation());
     setPontos(p => p + (visiveis.length * 10)); 
@@ -464,19 +435,12 @@ export default function Jogo() {
               <Text style={styles.menuSubtitle}>Treinamento Adaptativo</Text>
             </View>
 
-            {/* SEÇÃO MISSÕES */}
             {missoesDisponiveis.length > 0 && (
               <View style={{width: '100%', marginBottom: 20}}>
                 <Text style={styles.sectionLabel}>🎯 Missões do Professor:</Text>
                 {missoesDisponiveis.map((missao, index) => (
-                  <TouchableOpacity 
-                    key={missao.id || index}
-                    style={styles.missaoCard}
-                    onPress={() => iniciarJogo('missao', missao)}
-                  >
-                    <View style={styles.missaoIcon}>
-                      <Ionicons name="trophy" size={24} color="#FFF" />
-                    </View>
+                  <TouchableOpacity key={missao.id || index} style={styles.missaoCard} onPress={() => iniciarJogo('missao', missao)}>
+                    <View style={styles.missaoIcon}><Ionicons name="trophy" size={24} color="#FFF" /></View>
                     <View style={{flex: 1}}>
                       <Text style={styles.missaoTitle}>{missao.titulo}</Text>
                       <Text style={styles.missaoSub}>{missao.questoes?.length || 0} Questões</Text>
@@ -508,13 +472,6 @@ export default function Jogo() {
               <Ionicons name="play" size={24} color="#000" />
               <Text style={styles.iniciarButtonText}>JOGAR SOLO</Text>
             </TouchableOpacity>
-
-            {isAdmin && (
-              <TouchableOpacity style={styles.botButton} onPress={() => iniciarJogo('bot')}>
-                <Ionicons name="hardware-chip" size={22} color="#000" />
-                <Text style={styles.botButtonText}>🤖 Testar Multiplayer vs BOT</Text>
-              </TouchableOpacity>
-            )}
           </ScrollView>
         </View>
       </SafeAreaView>
@@ -525,19 +482,11 @@ export default function Jogo() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.resultadoContainer}>
-          <Text style={styles.resultadoTitle}>
-            {modo === 'missao' ? '🎯 Missão Cumprida!' : (modo === 'bot' && botPontos > pontos ? '🤖 O Bot Venceu!' : 'Fim de Treino!')}
-          </Text>
+          <Text style={styles.resultadoTitle}>{modo === 'missao' ? '🎯 Missão Cumprida!' : 'Fim de Treino!'}</Text>
           <View style={styles.resultadoCard}>
             <Text style={styles.resultadoPontos}>{pontos}</Text>
             <Text style={styles.resultadoLabel}>Pontos Totais</Text>
           </View>
-          {modo === 'bot' && (
-             <View style={[styles.resultadoCard, { backgroundColor: '#FF00FF20', padding: 20, marginBottom: 30 }]}>
-               <Text style={[styles.resultadoPontos, { color: '#FF00FF', fontSize: 40 }]}>{botPontos}</Text>
-               <Text style={styles.resultadoLabel}>Pontos do Bot</Text>
-             </View>
-          )}
           <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => setTela('menu')}>
             <Ionicons name="home" size={22} color="#000" />
             <Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text>
@@ -662,16 +611,12 @@ const styles = StyleSheet.create({
   modosGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginBottom: 20 },
   modoCardItem: { backgroundColor: '#1a1a2e', paddingVertical: 12, paddingHorizontal: 5, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent', minWidth: '30%' },
   modoTextItem: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  
   missaoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF69B4', padding: 15, borderRadius: 16, marginBottom: 10, width: '100%', elevation: 3 },
   missaoIcon: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 15 },
   missaoTitle: { color: '#fff', fontSize: 18, fontWeight: '900' },
   missaoSub: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '600' },
-
   iniciarButton: { flexDirection: 'row', backgroundColor: '#32CD32', padding: 18, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', marginBottom: 10 },
   iniciarButtonText: { color: '#000', fontSize: 18, fontWeight: '900' },
-  botButton: { flexDirection: 'row', backgroundColor: '#FF00FF', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, width: '100%' },
-  botButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
   gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
   headerStatsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
