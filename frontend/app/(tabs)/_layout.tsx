@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, SafeAreaView } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, SafeAreaView, Platform } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -85,15 +85,16 @@ export default function TabsLayout() {
             backgroundColor: '#1a1a2e',
             borderTopColor: teamColor + '40',
             borderTopWidth: 2,
-            paddingBottom: 8,
+            paddingBottom: Platform.OS === 'ios' ? 20 : 12, // Dá mais espaço embaixo no Android (12) e no iOS (20)
             paddingTop: 8,
-            height: 65,
+            height: Platform.OS === 'ios' ? 85 : 70, // Aumenta a altura total da barra
           },
           tabBarActiveTintColor: teamColor,
           tabBarInactiveTintColor: '#666',
           tabBarLabelStyle: {
             fontSize: 12,
             fontWeight: '600',
+            marginBottom: Platform.OS === 'android' ? 4 : 0, // Ajuste fino pro texto não encostar
           },
         }}
       >
