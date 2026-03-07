@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,9 +14,6 @@ export default function VideoPlayer() {
   const [video, setVideo] = useState<Conteudo | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // 🛡️ ESCUDO ANTI-VERCEL (Impede o servidor de tentar desenhar o vídeo)
-  const [isClient, setIsClient] = useState(false);
-  
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [startTime, setStartTime] = useState(0);
@@ -29,11 +26,6 @@ export default function VideoPlayer() {
   const lastUpdateRef = useRef(0);
   const iframeRef = useRef<any>(null);
 
-  // Ativa o aplicativo apenas no celular, não no servidor
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
   const getYouTubeId = (url: string) => {
     if (!url) return null;
     const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ \s]{11})/;
@@ -44,12 +36,12 @@ export default function VideoPlayer() {
   const youtubeId = video?.urlVideo ? getYouTubeId(video.urlVideo) : null;
 
   useEffect(() => {
-    if (id && isClient) loadVideo();
-  }, [id, isClient]);
+    if (id) loadVideo();
+  }, [id]);
 
-  // 📻 Rádio do YouTube
+  // 📻 RÁDIO DO YOUTUBE (Sobrevive ao maximizar a tela)
   useEffect(() => {
-    if (!isClient || !youtubeId || Platform.OS !== 'web') return;
+    if (typeof window === 'undefined' || !youtubeId) return;
 
     const handleMessage = (event: any) => {
       if (event.origin !== 'https://www.youtube.com') return;
@@ -74,16 +66,14 @@ export default function VideoPlayer() {
       window.removeEventListener('message', handleMessage);
       clearInterval(timer);
     };
-  }, [youtubeId, isClient]);
+  }, [youtubeId]);
 
-  // 🧠 Cérebro Matemático Blindado
+  // 🧠 CÉREBRO MATEMÁTICO (Impede Erro 500 antes do play)
   useEffect(() => {
-    if (!isClient) return;
-
     const safeCurrent = Math.floor(currentTime);
     const safeDuration = Math.floor(duration);
 
-    if (safeDuration <= 0 || safeCurrent < 5) return;
+    if (safeDuration <= 0 || safeCurrent <= 0) return;
 
     const percentage = (safeCurrent / safeDuration) * 100;
     setWatchedPercentage(percentage > 100 ? 100 : percentage);
@@ -92,8 +82,12 @@ export default function VideoPlayer() {
       setCanComplete(true);
     }
 
-    if (safeCurrent - lastUpdateRef.current >= 5 || (percentage >= 90 && lastUpdateRef.current < safeDuration * 0.9)) {
-      if (safeCurrent > lastUpdateRef.current) {
+    // 🛡️ A BARREIRA: Só envia se o tempo atual for MAIOR que o tempo inicial salvo
+    // Isso garante que o aluno clicou no Play e o vídeo andou.
+    if (safeCurrent > lastUpdateRef.current && safeCurrent > startTime) {
+      const diff = safeCurrent - lastUpdateRef.current;
+      
+      if (diff >= 5 || (percentage >= 90 && lastUpdateRef.current < safeDuration * 0.9)) {
         lastUpdateRef.current = safeCurrent;
         
         api.updateProgressoVideo(id as string, safeCurrent, safeDuration)
@@ -101,13 +95,13 @@ export default function VideoPlayer() {
             if (result.concluido && !completed) {
               setCompleted(true);
               setPointsEarned(result.pontosGerados);
-              if (window.alert) window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
+              if (typeof window !== 'undefined' && window.alert) window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
             }
           })
           .catch(() => {});
       }
     }
-  }, [currentTime, duration, isClient]);
+  }, [currentTime, duration]);
 
   const loadVideo = async () => {
     try {
@@ -152,7 +146,7 @@ export default function VideoPlayer() {
     }
 
     if (!canComplete) {
-      if (window.alert) window.alert(`Você precisa assistir pelo menos 90% do vídeo. Progresso atual: ${Math.round(watchedPercentage)}%`);
+      if (typeof window !== 'undefined' && window.alert) window.alert(`Você precisa assistir pelo menos 90% do vídeo. Progresso atual: ${Math.round(watchedPercentage)}%`);
       return;
     }
 
@@ -165,15 +159,14 @@ export default function VideoPlayer() {
       setCompleted(true);
       setPointsEarned(result.pontosGerados);
       
-      if (window.alert) window.alert(`Parabéns! Você ganhou ${result.pontosGerados} pontos!`);
+      if (typeof window !== 'undefined' && window.alert) window.alert(`Parabéns! Você ganhou ${result.pontosGerados} pontos!`);
       router.back();
     } catch (error) {
-      if (window.alert) window.alert('Erro ao marcar como concluído.');
+      if (typeof window !== 'undefined' && window.alert) window.alert('Erro ao marcar como concluído.');
     }
   };
 
-  // Se a tela não terminou de desenhar, exibe apenas carregamento
-  if (!isClient || loading) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
