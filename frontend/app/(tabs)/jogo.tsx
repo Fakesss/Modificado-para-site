@@ -20,7 +20,6 @@ const CARD_WIDTH = 105;
 const NUM_LANES = 3; 
 const LANE_WIDTH = width / NUM_LANES;
 
-// Botão especial "Piano" (sem delay)
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
   return (
     <TouchableOpacity
@@ -39,17 +38,15 @@ const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
 export default function Jogo() {
   const { user } = useAuth();
   
-  // Estados de Navegação e Modo
+  // Estados
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [modo, setModo] = useState<'single' | 'bot' | 'missao'>('single');
   const [modoMatematica, setModoMatematica] = useState('misto');
   
-  // Estados das Missões
+  // Estados de Missão
   const [missoesDisponiveis, setMissoesDisponiveis] = useState<any[]>([]);
   const [missaoAtual, setMissaoAtual] = useState<any>(null);
-  const [filaQuestõesMissao, setFilaQuestoesMissao] = useState<any[]>([]);
-  const [loadingMissoes, setLoadingMissoes] = useState(false);
-
+  
   // Game state
   const [operacoes, setOperacoes] = useState<any[]>([]);
   const [vidas, setVidas] = useState(10);
@@ -74,9 +71,9 @@ export default function Jogo() {
   const operacoesListRef = useRef<any[]>([]); 
   const rodadaRef = useRef(1);
   const jogoPausadoRef = useRef(false); 
-  const filaQuestoesRef = useRef<any[]>([]); // Para controlar a fila da missão sem renderizar
+  const filaQuestoesRef = useRef<any[]>([]); 
   
-  // IA de Dificuldade
+  // IA
   const desempenhoOcultoRef = useRef(0); 
   const questoesAcertadasRef = useRef<Set<string>>(new Set()); 
   const ultimasRespostasRef = useRef<number[]>([]); 
@@ -85,7 +82,7 @@ export default function Jogo() {
   useEffect(() => { rodadaRef.current = rodada; }, [rodada]);
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
 
-  // Carrega as missões quando abre o menu
+  // Carrega missões com segurança
   useEffect(() => {
     if (tela === 'menu') {
       carregarMissoes();
@@ -93,14 +90,13 @@ export default function Jogo() {
   }, [tela]);
 
   const carregarMissoes = async () => {
-    setLoadingMissoes(true);
+    // Verificação de segurança: se a função não existir na API, não quebra o app
+    if (!api.getMissoesDisponiveis) return;
     try {
       const data = await api.getMissoesDisponiveis();
       setMissoesDisponiveis(data || []);
     } catch (error) {
-      console.log('Erro ao carregar missões');
-    } finally {
-      setLoadingMissoes(false);
+      console.log('Sem missões ou erro de conexão');
     }
   };
 
@@ -123,14 +119,12 @@ export default function Jogo() {
     desempenhoOcultoRef.current = 0;
     setResposta('');
     setMissaoAtual(null);
-    setFilaQuestoesMissao([]);
     filaQuestoesRef.current = [];
   };
 
   const calcularMetaRodada = (r: number) => r <= 10 ? 10 + (r * 2) : 30 + (r * 5);
 
   const avancarRodada = () => {
-    // No modo missão não tem rodadas infinitas, mas mantemos o contador visual
     const nr = rodada + 1;
     setRodada(nr);
     setAcertosRodada(0);
@@ -147,26 +141,25 @@ export default function Jogo() {
     return pistasDisponiveis[Math.floor(Math.random() * pistasDisponiveis.length)];
   };
 
-  // ==================== GERADOR DE QUESTÕES ====================
   const gerarOperacao = () => {
-    // 🚨 LÓGICA HÍBRIDA: Se for missão, pega da fila. Se não, usa IA.
+    // --- MODO MISSÃO (FIXO) ---
     if (modo === 'missao') {
-      if (filaQuestoesRef.current.length === 0) return null; // Acabaram as questões da missão!
+      if (filaQuestoesRef.current.length === 0) return null; 
       
-      const questaoDaMissao = filaQuestoesRef.current.shift(); // Pega a primeira e remove da fila
-      
+      const questaoDaMissao = filaQuestoesRef.current.shift();
+      if (!questaoDaMissao) return null;
+
       const laneSelecionada = obterPistaLivre();
       const posX = (laneSelecionada * LANE_WIDTH) + (LANE_WIDTH - CARD_WIDTH) / 2;
       operacoesAtuaisRef.current.push({ lane: laneSelecionada, y: 0, chave: questaoDaMissao.id });
 
-      // Configuração para questão personalizada
       return {
-        id: Math.random().toString(), // ID único para a animação
-        num1: 0, num2: 0, operador: '', // Campos legado (ignorar)
-        resposta: questaoDaMissao.resposta, // Resposta definida pelo professor
-        textoTela: questaoDaMissao.texto,   // Texto definido pelo professor (ex: "2+2")
+        id: Math.random().toString(),
+        num1: 0, num2: 0, operador: '',
+        resposta: questaoDaMissao.resposta,
+        textoTela: questaoDaMissao.texto,
         y: new Animated.Value(0),
-        speed: 10000, // Velocidade fixa confortável para missões
+        speed: 12000, // Um pouco mais lento para leitura
         posX,
         lane: laneSelecionada,
         especial: false,
@@ -176,7 +169,7 @@ export default function Jogo() {
       };
     }
 
-    // --- MODO INFINITO (IA ORIGINAL) ---
+    // --- MODO ARCADE (IA) ---
     const currentRodada = rodadaRef.current;
     const desempenho = desempenhoOcultoRef.current; 
     let opsPermitidas = ['+'];
@@ -214,11 +207,9 @@ export default function Jogo() {
         case '×': n1 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; res = n1 * (n2 as number); texto = `${n1} × ${n2}`; break;
         case '÷': n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; res = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 1; n1 = (n2 as number) * res; texto = `${n1} ÷ ${n2}`; break;
         case '^': {
-          let maxExp = 2;
-          n1 = Math.floor(Math.random() * Math.min(multMaximo, 6)) + 2; 
+          let maxExp = 2; n1 = Math.floor(Math.random() * Math.min(multMaximo, 6)) + 2; 
           if (n1 === 2) maxExp = 5; else if (n1 === 3) maxExp = 4; else if (n1 <= 5) maxExp = 3; else maxExp = 2; 
-          n2 = Math.floor(Math.random() * (maxExp - 1)) + 2; 
-          res = Math.pow(n1, n2); 
+          n2 = Math.floor(Math.random() * (maxExp - 1)) + 2; res = Math.pow(n1, n2); 
           if (n2 <= 4 && Math.random() > 0.5) texto = Array(n2).fill(n1).join('×');
           else { const ss: any = { 2: '²', 3: '³', 4: '⁴', 5: '⁵' }; texto = `${n1}${ss[n2] || '^' + n2}`; }
           break;
@@ -229,10 +220,10 @@ export default function Jogo() {
       
       const chave = `${n1}${op}${n2}`;
       const estaNaTela = operacoesAtuaisRef.current.some(o => o.chave === chave);
+      if (estaNaTela) continue; 
+      
       const jaAcertou = questoesAcertadasRef.current.has(chave);
       const respostaRepetida = ultimasRespostasRef.current.includes(res);
-
-      if (estaNaTela) continue; 
       if (t < 40) { if (jaAcertou || respostaRepetida) continue; }
 
       ultimasRespostasRef.current.push(res);
@@ -241,40 +232,30 @@ export default function Jogo() {
       const isEspecial = Math.random() < 0.10; 
       const laneSelecionada = obterPistaLivre();
       const posX = (laneSelecionada * LANE_WIDTH) + (LANE_WIDTH - CARD_WIDTH) / 2;
-      
       operacoesAtuaisRef.current.push({ lane: laneSelecionada, y: 0, chave });
       const tempoQueda = Math.max(4500, 15000 - (currentRodada * 500) - (desempenho * 400));
 
       return {
         id: Math.random().toString(),
-        num1: n1, num2: n2, operador: op, resposta: res, textoTela: texto, chave: chave,
-        y: new Animated.Value(0), 
-        speed: tempoQueda,
-        posX,
-        lane: laneSelecionada,
-        especial: isEspecial,
-        opacity: new Animated.Value(1),
-        scale: new Animated.Value(1),
+        num1: n1, num2: n2, operador: op, resposta: res, textoTela: texto,
+        y: new Animated.Value(0),
+        speed: tempoQueda, posX, lane: laneSelecionada, especial: isEspecial,
+        opacity: new Animated.Value(1), scale: new Animated.Value(1), chave
       };
     }
     return null;
   };
 
-  // Spawner Unificado
   const iniciarSpawner = () => {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
-
     const loopSpawner = () => {
       if (!jogoPausadoRef.current) {
-        // Se for missão, verifica se ainda tem questões na tela ou na fila
+        // Verifica fim da missão
         if (modo === 'missao' && filaQuestoesRef.current.length === 0 && operacoesListRef.current.length === 0) {
-          // MISSÃO CUMPRIDA! (Acabaram as questões)
           setTimeout(() => setTela('resultado'), 1000);
           return;
         }
-
         const maxOps = Math.min(8, 3 + Math.floor(rodadaRef.current / 3) + Math.floor(desempenhoOcultoRef.current / 3));
-        
         if (operacoesListRef.current.length < maxOps) {
           const nova = gerarOperacao();
           if (nova) { 
@@ -283,7 +264,6 @@ export default function Jogo() {
           }
         }
       }
-      
       const spawnInterval = Math.max(1200, 3500 - (rodadaRef.current * 150) - (desempenhoOcultoRef.current * 150));
       spawnTimer.current = setTimeout(loopSpawner, spawnInterval);
     };
@@ -296,16 +276,15 @@ export default function Jogo() {
     setTela('jogo');
     inicioRespostaRef.current = Date.now();
     
-    // Configuração Específica de Missão
-    if (modoEscolhido === 'missao' && missaoDados) {
+    // Configura Missão (com segurança)
+    if (modoEscolhido === 'missao' && missaoDados?.questoes) {
       setMissaoAtual(missaoDados);
-      // Cria uma cópia das questões para consumir
-      const questoesParaJogar = [...missaoDados.questoes]; 
-      setFilaQuestoesMissao(questoesParaJogar);
-      filaQuestoesRef.current = questoesParaJogar;
+      const copiaQuestoes = [...missaoDados.questoes];
+      // Adiciona IDs únicos para animação se não tiver
+      const questoesProntas = copiaQuestoes.map(q => ({...q, id: q.id || Math.random().toString()}));
+      filaQuestoesRef.current = questoesProntas;
     }
 
-    // Spawn Inicial
     const inicial: any[] = [];
     const opInicial = gerarOperacao();
     if (opInicial) inicial.push(opInicial);
@@ -315,7 +294,6 @@ export default function Jogo() {
     
     iniciarSpawner();
 
-    // Bot apenas no modo Bot
     if (modoEscolhido === 'bot') {
       botTimer.current = setInterval(() => {
         if (jogoPausadoRef.current) return;
@@ -324,7 +302,6 @@ export default function Jogo() {
           const yVal = (o.y as any)._value || 0;
           return yVal > (GAME_AREA_HEIGHT * 0.35); 
         });
-
         if (alvosValidos.length > 0 && Math.random() > 0.3) { 
           const alvo = alvosValidos[0];
           alvo.y.stopAnimation();
@@ -341,13 +318,11 @@ export default function Jogo() {
 
   const animarQueda = (op: any, duracaoPersonalizada?: number) => {
     if (jogoPausadoRef.current) return;
-    
     op.y.removeAllListeners(); 
     op.y.addListener(({ value }: { value: number }) => {
       const ref = operacoesAtuaisRef.current.find(o => o.chave === op.chave);
       if (ref) ref.y = value;
     });
-    
     Animated.timing(op.y, {
       toValue: GAME_AREA_HEIGHT + 50,
       duration: duracaoPersonalizada || op.speed,
@@ -416,10 +391,8 @@ export default function Jogo() {
     if (opCorreta) {
       opCorreta.y.stopAnimation();
       operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== opCorreta.chave);
-      
       if (tempoLevado <= 3000) desempenhoOcultoRef.current = Math.min(desempenhoOcultoRef.current + 1, 10);
       else if (tempoLevado > 6000) desempenhoOcultoRef.current = Math.max(desempenhoOcultoRef.current - 1, 0);
-
       questoesAcertadasRef.current.add(opCorreta.chave); 
       setPontos(p => p + 10 + (tempoLevado < 3000 ? 5 : 0)); 
       setAcertosRodada(a => {
@@ -427,7 +400,6 @@ export default function Jogo() {
         if (na >= metaRodada) avancarRodada();
         return na;
       });
-      
       if (opCorreta.especial && !powerUpDisponivel) setPowerUpDisponivel(true);
       dispararLaser(opCorreta, true, 'player');
       setTimeout(() => { setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id)); }, 350);
@@ -446,7 +418,6 @@ export default function Jogo() {
       return y >= 0 && y < GAME_AREA_HEIGHT;
     });
     if (visiveis.length === 0) return;
-    
     visiveis.forEach(op => op.y.stopAnimation());
     setPontos(p => p + (visiveis.length * 10)); 
     setOperacoes([]);
@@ -482,8 +453,6 @@ export default function Jogo() {
     else setResposta(r => r + tecla);
   };
 
-  // ==================== RENDERIZADORES ====================
-
   if (tela === 'menu') {
     return (
       <SafeAreaView style={styles.container}>
@@ -495,7 +464,7 @@ export default function Jogo() {
               <Text style={styles.menuSubtitle}>Treinamento Adaptativo</Text>
             </View>
 
-            {/* 🚨 NOVA SEÇÃO: MISSÕES DO PROFESSOR */}
+            {/* SEÇÃO MISSÕES */}
             {missoesDisponiveis.length > 0 && (
               <View style={{width: '100%', marginBottom: 20}}>
                 <Text style={styles.sectionLabel}>🎯 Missões do Professor:</Text>
@@ -510,7 +479,7 @@ export default function Jogo() {
                     </View>
                     <View style={{flex: 1}}>
                       <Text style={styles.missaoTitle}>{missao.titulo}</Text>
-                      <Text style={styles.missaoSub}>{missao.questoes?.length} Questões</Text>
+                      <Text style={styles.missaoSub}>{missao.questoes?.length || 0} Questões</Text>
                     </View>
                     <Ionicons name="play-circle" size={32} color="#FFF" />
                   </TouchableOpacity>
@@ -694,7 +663,6 @@ const styles = StyleSheet.create({
   modoCardItem: { backgroundColor: '#1a1a2e', paddingVertical: 12, paddingHorizontal: 5, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent', minWidth: '30%' },
   modoTextItem: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
   
-  // 🚨 ESTILOS DAS MISSÕES
   missaoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF69B4', padding: 15, borderRadius: 16, marginBottom: 10, width: '100%', elevation: 3 },
   missaoIcon: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 15 },
   missaoTitle: { color: '#fff', fontSize: 18, fontWeight: '900' },
