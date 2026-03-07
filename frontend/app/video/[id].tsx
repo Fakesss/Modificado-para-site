@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,7 +7,10 @@ import * as api from '../../src/services/api';
 import { Conteudo, ProgressoVideo } from '../../src/types';
 
 export default function VideoPlayer() {
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  // Blindagem 1: Garante que o ID é uma string e não um array quebrado
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  
   const router = useRouter();
   const [video, setVideo] = useState<Conteudo | null>(null);
   const [progress, setProgress] = useState<ProgressoVideo | null>(null);
@@ -43,10 +37,9 @@ export default function VideoPlayer() {
   const youtubeId = video?.urlVideo ? getYouTubeId(video.urlVideo) : null;
 
   useEffect(() => {
-    loadVideo();
+    if (id) loadVideo();
   }, [id]);
 
-  // 🎬 NOVO PLAYER: Nascido e criado direto na Web, sem srcDoc para não bugar o Android!
   useEffect(() => {
     if (Platform.OS !== 'web' || !youtubeId || loading) return;
 
@@ -64,8 +57,10 @@ export default function VideoPlayer() {
           onReady: () => {
             timer = setInterval(() => {
               if (player && player.getCurrentTime) {
-                setCurrentTime(player.getCurrentTime());
-                setDuration(player.getDuration());
+                const curr = player.getCurrentTime() || 0;
+                const dur = player.getDuration() || 0;
+                setCurrentTime(curr);
+                setDuration(dur);
               }
             }, 1000);
           }
@@ -88,19 +83,25 @@ export default function VideoPlayer() {
     };
   }, [youtubeId, startTime, loading]);
 
-  // 🧠 Cérebro Matemático
+  // Blindagem 2: Cérebro Matemático anti-Erro 500
   useEffect(() => {
-    if (duration > 0 && currentTime > 0) {
-      const percentage = (currentTime / duration) * 100;
+    const safeCurrent = Math.floor(Number(currentTime) || 0);
+    const safeDuration = Math.floor(Number(duration) || 0);
+
+    if (safeDuration > 0 && safeCurrent >= 0) {
+      const percentage = (safeCurrent / safeDuration) * 100;
       setWatchedPercentage(percentage > 100 ? 100 : percentage);
 
       if (percentage >= 90 && !canComplete) {
         setCanComplete(true);
       }
 
-      if (currentTime - lastUpdateRef.current >= 5 || (percentage >= 90 && lastUpdateRef.current < duration * 0.9)) {
-        lastUpdateRef.current = currentTime;
-        updateProgress(currentTime, duration);
+      // Regra de Ouro: Só comunica com o servidor após 5 segundos de vídeo E se o tempo andou
+      if (safeCurrent >= 5 && (safeCurrent - lastUpdateRef.current >= 5 || percentage >= 90)) {
+        if (safeCurrent > lastUpdateRef.current) {
+           lastUpdateRef.current = safeCurrent;
+           updateProgress(safeCurrent, safeDuration);
+        }
       }
     }
   }, [currentTime, duration, canComplete]);
@@ -117,8 +118,8 @@ export default function VideoPlayer() {
           setProgress(progressData);
           
           if (progressData) {
-            const tempoSalvo = progressData.tempoAssistidoSeg || 0;
-            setStartTime(Math.floor(tempoSalvo));
+            const tempoSalvo = Math.floor(progressData.tempoAssistidoSeg || 0);
+            setStartTime(tempoSalvo);
             setCurrentTime(tempoSalvo);
             lastUpdateRef.current = tempoSalvo;
             
@@ -147,17 +148,18 @@ export default function VideoPlayer() {
   };
 
   const updateProgress = async (watchedSeconds: number, totalDuration: number) => {
-    if (totalDuration <= 0) return;
+    if (!id || totalDuration <= 0) return;
 
     try {
-      const result = await api.updateProgressoVideo(id as string, Math.floor(watchedSeconds), Math.floor(totalDuration));
+      const result = await api.updateProgressoVideo(id, watchedSeconds, totalDuration);
       if (result.concluido && !completed) {
         setCompleted(true);
         setPointsEarned(result.pontosGerados);
-        window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
+        if (window.alert) window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
       }
     } catch (error) {
-      console.error('Error updating progress:', error);
+      // Falha silenciosa: ignora para não engatilhar a tela 404 da Vercel
+      console.log('Sincronização pendente...');
     }
   };
 
@@ -168,23 +170,23 @@ export default function VideoPlayer() {
     }
 
     if (!canComplete) {
-      window.alert(`Você precisa assistir pelo menos 90% do vídeo. Progresso atual: ${Math.round(watchedPercentage)}%`);
+      if (window.alert) window.alert(`Você precisa assistir pelo menos 90% do vídeo. Progresso atual: ${Math.round(watchedPercentage)}%`);
       return;
     }
 
     try {
       const result = await api.updateProgressoVideo(
-        id as string,
+        id,
         Math.floor(Math.max(currentTime, duration * 0.9)),
         Math.floor(duration || 300)
       );
       setCompleted(true);
       setPointsEarned(result.pontosGerados);
       
-      window.alert(`Parabéns! Você ganhou ${result.pontosGerados} pontos!`);
+      if (window.alert) window.alert(`Parabéns! Você ganhou ${result.pontosGerados} pontos!`);
       router.back();
     } catch (error) {
-      window.alert('Erro ao marcar como concluído. Tente novamente.');
+      if (window.alert) window.alert('Erro ao marcar como concluído. Tente novamente.');
     }
   };
 
@@ -226,7 +228,6 @@ export default function VideoPlayer() {
 
       <View style={styles.playerContainer}>
         {youtubeId ? (
-          // Usamos uma div pura, a API do YouTube injeta o iframe aqui de forma segura
           <div id="yt-player-container" style={{ width: '100%', height: '100%' }} />
         ) : (
           <View style={styles.noVideo}>
