@@ -1,5 +1,6 @@
 import os
 import uuid
+import bcrypt  # Agora chamamos a ferramenta certa aqui também!
 from pymongo import MongoClient
 
 MONGO_URL = os.getenv("MONGO_URL")
@@ -35,11 +36,14 @@ try:
         colecao_equipes.insert_many(equipes_padrao)
 
     email_admin = "danielprofessormatematica@gmail.com"
-    colecao_usuarios.delete_one({"email": email_admin}) # Limpa se tiver algum erro antigo
+    # Limpa as minhas "gambiarras" antigas
+    colecao_usuarios.delete_one({"email": email_admin}) 
     
     print("👤 Criando conta de Administrador oficial...")
-    # Senha "Daniel123*" pré-criptografada de forma 100% segura sem usar o passlib
-    senha_real_criptografada = "$2b$12$6/1y/z4f.p27Z/U/6gqA3.E7R1lX5QZ/sR.59q/L8Fk/zXq/V39"
+    
+    # AGORA SIM! O Python vai calcular a criptografia real da sua senha:
+    senha_plana = "Daniel123*"
+    senha_real_criptografada = bcrypt.hashpw(senha_plana.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     
     admin_user = {
         "id": str(uuid.uuid4()),
@@ -52,7 +56,7 @@ try:
         "streakDias": 0
     }
     colecao_usuarios.insert_one(admin_user)
-    print("✅ Administrador criado com sucesso e senha ativada!")
+    print("✅ Administrador criado com sucesso e senha 100% matemática!")
 
     print("🎉 Banco de dados atualizado e pronto para a Vercel!")
 
