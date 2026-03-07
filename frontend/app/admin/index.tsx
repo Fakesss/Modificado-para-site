@@ -191,6 +191,18 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
+        {/* NOVO BOTÃO: GERENCIAR EQUIPES */}
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/equipes')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#FF8C00' + '30' }]}>
+            <Ionicons name="color-palette" size={24} color="#FF8C00" />
+          </View>
+          <View style={styles.menuInfo}>
+            <Text style={styles.menuTitle}>Equipes</Text>
+            <Text style={styles.menuDescription}>Alterar nomes e cores padrão</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/lixeira')}>
           <View style={[styles.menuIcon, { backgroundColor: '#E74C3C' + '30' }]}>
             <Ionicons name="trash" size={24} color="#E74C3C" />
