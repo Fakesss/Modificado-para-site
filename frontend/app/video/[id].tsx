@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,9 @@ import { Conteudo, ProgressoVideo } from '../../src/types';
 export default function VideoPlayer() {
   const params = useLocalSearchParams();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  
+  // FIX: Monitora o tamanho da tela em tempo real para não quebrar ao Maximizar
+  const { width } = useWindowDimensions();
   
   const router = useRouter();
   const [video, setVideo] = useState<Conteudo | null>(null);
@@ -41,7 +44,7 @@ export default function VideoPlayer() {
     if (id) loadVideo();
   }, [id]);
 
-  // 📻 CANAL DE RÁDIO COM O YOUTUBE (A lógica de sucesso do seu código)
+  // 📻 CANAL DE RÁDIO COM O YOUTUBE (Sem injeção de script = Sem erro 500 na Vercel)
   useEffect(() => {
     if (Platform.OS !== 'web' || !youtubeId) return;
 
@@ -59,7 +62,7 @@ export default function VideoPlayer() {
 
     window.addEventListener('message', handleMessage);
 
-    // Pergunta o tempo exato para o YouTube a cada 1 segundo
+    // Pergunta o tempo exato para o YouTube a cada 1 segundo (Salva vídeos curtos de 30s)
     const timer = setInterval(() => {
       if (iframeRef.current && iframeRef.current.contentWindow) {
         iframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'getCurrentTime', args: [] }), 'https://www.youtube.com');
@@ -73,13 +76,12 @@ export default function VideoPlayer() {
     };
   }, [youtubeId]);
 
-  // 🧠 Cérebro Matemático Blindado contra o "Maximizar"
+  // 🧠 Cérebro Matemático Blindado (Sua lógica original intacta)
   useEffect(() => {
     const safeCurrent = Math.floor(Number(currentTime) || 0);
     const safeDuration = Math.floor(Number(duration) || 0);
 
-    // Se a duração zerar ao maximizar a tela, ele simplesmente congela e não envia erros
-    if (safeDuration > 0 && safeCurrent >= 0 && !isNaN(safeCurrent) && !isNaN(safeDuration)) {
+    if (safeDuration > 0 && safeCurrent >= 0) {
       const percentage = (safeCurrent / safeDuration) * 100;
       setWatchedPercentage(percentage > 100 ? 100 : percentage);
 
@@ -139,8 +141,7 @@ export default function VideoPlayer() {
   };
 
   const updateProgress = async (watchedSeconds: number, totalDuration: number) => {
-    // 🔒 O CADEADO DO PYTHON: Se os números forem NaN ou zero (bug do maximizar), a porta fecha!
-    if (!id || !totalDuration || totalDuration <= 0 || isNaN(watchedSeconds) || isNaN(totalDuration)) return;
+    if (!id || totalDuration <= 0) return;
 
     try {
       const result = await api.updateProgressoVideo(id, watchedSeconds, totalDuration);
@@ -166,11 +167,10 @@ export default function VideoPlayer() {
     }
 
     try {
-      const safeDuration = Math.floor(Number(duration) || 300);
       const result = await api.updateProgressoVideo(
         id,
-        Math.floor(Math.max(Number(currentTime) || 0, safeDuration * 0.9)),
-        safeDuration
+        Math.floor(Math.max(currentTime, duration * 0.9)),
+        Math.floor(duration || 300)
       );
       setCompleted(true);
       setPointsEarned(result.pontosGerados);
@@ -206,6 +206,9 @@ export default function VideoPlayer() {
     );
   }
 
+  // Define a altura baseada na tela atual
+  const playerHeight = width > 600 ? 400 : width * 0.5625;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -218,7 +221,7 @@ export default function VideoPlayer() {
         <View style={{ width: 24 }} />
       </View>
 
-      <View style={styles.playerContainer}>
+      <View style={[styles.playerContainer, { height: playerHeight }]}>
         {youtubeId ? (
           <iframe
             ref={iframeRef}
@@ -305,8 +308,7 @@ const styles = StyleSheet.create({
   backButtonText: { color: '#000', fontWeight: 'bold' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   headerTitle: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center', marginHorizontal: 16 },
-  // Usando AspectRatio para suportar Maximizar/Girar a tela perfeitamente sem bugar o React
-  playerContainer: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' },
+  playerContainer: { width: '100%', backgroundColor: '#000' }, // Altura agora é dinâmica
   noVideo: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   noVideoText: { color: '#666', marginTop: 12, fontSize: 16 },
   infoContainer: { padding: 16 },
