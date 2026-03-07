@@ -1,7 +1,6 @@
 import os
 from pymongo import MongoClient
 
-# 1. Tenta pegar a URL do MongoDB configurada no Render
 MONGO_URL = os.getenv("MONGO_URL")
 
 if not MONGO_URL:
@@ -10,12 +9,11 @@ if not MONGO_URL:
 
 try:
     print("🔄 Conectando ao MongoDB...")
-    # 2. Conecta ao banco de dados
     client = MongoClient(MONGO_URL)
-    
-    # Pega o banco de dados padrão da sua URL
     db = client.get_default_database()
+    
     colecao_turmas = db["turmas"]
+    colecao_equipes = db["equipes"]
 
     turmas_padrao = [
         {"nome": "6º Ano"},
@@ -23,13 +21,29 @@ try:
         {"nome": "8º Ano"},
         {"nome": "9º Ano"}
     ]
+    
+    # Criando as equipes que faltavam para a tela funcionar!
+    equipes_padrao = [
+        {"nome": "Equipe Alfa"},
+        {"nome": "Equipe Beta"},
+        {"nome": "Equipe Gama"}
+    ]
 
-    # 3. Verifica se as turmas já existem
+    # Verifica se as turmas existem (como já existem, ele pula)
     if colecao_turmas.count_documents({}) == 0:
         colecao_turmas.insert_many(turmas_padrao)
-        print("✅ Turmas criadas com sucesso no MongoDB!")
+        print("✅ Turmas criadas!")
     else:
-        print("⚠️ As turmas já existem no banco de dados. Nenhuma ação necessária.")
+        print("⚠️ Turmas já existem no banco.")
+        
+    # Verifica e cria as equipes que faltam
+    if colecao_equipes.count_documents({}) == 0:
+        colecao_equipes.insert_many(equipes_padrao)
+        print("✅ Equipes criadas!")
+    else:
+        print("⚠️ Equipes já existem no banco.")
+
+    print("✅ Banco de dados populado com sucesso!")
 
 except Exception as e:
     print(f"❌ Erro crítico ao conectar no banco: {e}")
