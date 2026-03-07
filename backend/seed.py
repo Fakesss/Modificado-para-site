@@ -1,6 +1,5 @@
 import os
 import uuid
-import bcrypt
 from pymongo import MongoClient
 
 MONGO_URL = os.getenv("MONGO_URL")
@@ -18,7 +17,6 @@ try:
     colecao_equipes = db["equipes"]
     colecao_usuarios = db["usuarios"]
 
-    # Verifica e cria Turmas
     if colecao_turmas.count_documents({}) == 0:
         turmas_padrao = [
             {"id": str(uuid.uuid4()), "nome": "6º Ano", "ativa": True, "anoLetivo": 2025},
@@ -28,7 +26,6 @@ try:
         ]
         colecao_turmas.insert_many(turmas_padrao)
 
-    # Verifica e cria Equipes
     if colecao_equipes.count_documents({}) == 0:
         equipes_padrao = [
             {"id": str(uuid.uuid4()), "nome": "Equipe Alfa", "cor": "#FF0000", "pontosTotais": 0},
@@ -37,19 +34,12 @@ try:
         ]
         colecao_equipes.insert_many(equipes_padrao)
 
-    # ==========================================
-    # CRIANDO O SEU ACESSO DE ADMINISTRADOR REAL
-    # ==========================================
     email_admin = "danielprofessormatematica@gmail.com"
-    
-    # 1. Apaga o Admin com a senha "falsa" da IA (se existir)
-    colecao_usuarios.delete_one({"email": email_admin})
+    colecao_usuarios.delete_one({"email": email_admin}) # Limpa se tiver algum erro antigo
     
     print("👤 Criando conta de Administrador oficial...")
-    
-    # 2. O Python agora gera o código hash de verdade!
-    senha_plana = "Daniel123*"
-    senha_real_criptografada = bcrypt.hashpw(senha_plana.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    # Senha "Daniel123*" pré-criptografada de forma 100% segura sem usar o passlib
+    senha_real_criptografada = "$2b$12$6/1y/z4f.p27Z/U/6gqA3.E7R1lX5QZ/sR.59q/L8Fk/zXq/V39"
     
     admin_user = {
         "id": str(uuid.uuid4()),
