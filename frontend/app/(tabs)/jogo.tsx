@@ -41,7 +41,6 @@ export default function Jogo() {
   const [modo, setModo] = useState<'single' | 'bot'>('single');
   const [modoMatematica, setModoMatematica] = useState('misto');
   
-  // Game state
   const [operacoes, setOperacoes] = useState<any[]>([]);
   const [vidas, setVidas] = useState(10);
   const [pontos, setPontos] = useState(0);
@@ -52,13 +51,11 @@ export default function Jogo() {
   const [powerUpDisponivel, setPowerUpDisponivel] = useState(false);
   const [pausado, setPausado] = useState(false); 
   
-  // Bot State
   const [botPontos, setBotPontos] = useState(0);
   const [laserAtivo, setLaserAtivo] = useState<{ x: number; y: number; cor: string } | null>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   
-  // Refs
   const spawnTimer = useRef<any>(null);
   const botTimer = useRef<any>(null);
   const operacoesAtuaisRef = useRef<{lane: number, y: number, chave: string}[]>([]);
@@ -66,10 +63,9 @@ export default function Jogo() {
   const rodadaRef = useRef(1);
   const jogoPausadoRef = useRef(false); 
   
-  // IA de Dificuldade e Anti-Repetição
   const desempenhoOcultoRef = useRef(0); 
-  const questoesAcertadasRef = useRef<Set<string>>(new Set()); // Memoriza as contas já feitas
-  const ultimasRespostasRef = useRef<number[]>([]); // Memoriza os últimos resultados
+  const questoesAcertadasRef = useRef<Set<string>>(new Set()); 
+  const ultimasRespostasRef = useRef<number[]>([]); 
   const inicioRespostaRef = useRef<number>(Date.now()); 
 
   useEffect(() => { rodadaRef.current = rodada; }, [rodada]);
@@ -138,9 +134,7 @@ export default function Jogo() {
       numMaximoBase = 10 + (currentRodada * 4);
     }
 
-    // 🚨 IA ANTI-REPETIÇÃO: 60 tentativas para achar uma conta inédita
     for (let t = 0; t < 60; t++) {
-      // Se já tentou mais de 20 vezes, começa a injetar dificuldade extra para "desbloquear" novos números inéditos
       const expansaoEmergencia = t > 20 ? Math.floor((t - 20) / 4) : 0;
       const numMaximo = numMaximoBase + (expansaoEmergencia * 5);
       const multMaximo = multMaximoBase + (expansaoEmergencia * 2);
@@ -150,43 +144,27 @@ export default function Jogo() {
       
       switch (op) {
         case '+': 
-          n1 = Math.floor(Math.random() * numMaximo) + 1; 
-          n2 = Math.floor(Math.random() * numMaximo) + 1; 
-          res = n1 + (n2 as number); 
-          texto = `${n1} + ${n2}`; 
+          n1 = Math.floor(Math.random() * numMaximo) + 1; n2 = Math.floor(Math.random() * numMaximo) + 1; res = n1 + (n2 as number); texto = `${n1} + ${n2}`; 
           break;
         case '-': 
-          n1 = Math.floor(Math.random() * (numMaximo * 1.5)) + 5; 
-          n2 = Math.floor(Math.random() * n1) + 1; 
-          res = n1 - (n2 as number); 
-          texto = `${n1} - ${n2}`; 
+          n1 = Math.floor(Math.random() * (numMaximo * 1.5)) + 5; n2 = Math.floor(Math.random() * n1) + 1; res = n1 - (n2 as number); texto = `${n1} - ${n2}`; 
           break;
         case '×': 
-          n1 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; 
-          n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; 
-          res = n1 * (n2 as number); 
-          texto = `${n1} × ${n2}`; 
+          n1 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; res = n1 * (n2 as number); texto = `${n1} × ${n2}`; 
           break;
         case '÷': 
-          n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; 
-          res = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 1; 
-          n1 = (n2 as number) * res; 
-          texto = `${n1} ÷ ${n2}`; 
+          n2 = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 2; res = Math.floor(Math.random() * Math.min(multMaximo, 12)) + 1; n1 = (n2 as number) * res; texto = `${n1} ÷ ${n2}`; 
           break;
         case '^': {
           let maxExp = 2;
-          n1 = Math.floor(Math.random() * Math.min(multMaximo, 6)) + 2; // Bases seguras (2 a 7)
-          
-          // Define os expoentes máximos baseado na base (para não gerar 999999)
-          if (n1 === 2) maxExp = 5; // até 2^5 = 32
-          else if (n1 === 3) maxExp = 4; // até 3^4 = 81
-          else if (n1 <= 5) maxExp = 3; // até 5^3 = 125
-          else maxExp = 2; // Acima de 5, apenas quadrados perfeitos
+          n1 = Math.floor(Math.random() * Math.min(multMaximo, 6)) + 2; 
+          if (n1 === 2) maxExp = 5; 
+          else if (n1 === 3) maxExp = 4; 
+          else if (n1 <= 5) maxExp = 3; 
+          else maxExp = 2; 
 
-          n2 = Math.floor(Math.random() * (maxExp - 1)) + 2; // de 2 até o máximo permitido
+          n2 = Math.floor(Math.random() * (maxExp - 1)) + 2; 
           res = Math.pow(n1, n2); 
-          
-          // 50% de chance de mostrar o formato aberto (ex: 2×2×2) se couber bem na tela (até 4 fatores)
           if (n2 <= 4 && Math.random() > 0.5) {
             texto = Array(n2).fill(n1).join('×');
           } else {
@@ -196,11 +174,8 @@ export default function Jogo() {
           break;
         }
         case '√': 
-          // Raízes de quadrados perfeitos maiores
           res = Math.floor(Math.random() * Math.min(multMaximo + expansaoEmergencia, 20)) + 2; 
-          n1 = res * res; 
-          n2 = ''; 
-          texto = `√${n1}`; 
+          n1 = res * res; n2 = ''; texto = `√${n1}`; 
           break;
         default: n1 = 1; n2 = 1; res = 2; texto = '1+1';
       }
@@ -210,18 +185,11 @@ export default function Jogo() {
       const jaAcertou = questoesAcertadasRef.current.has(chave);
       const respostaRepetida = ultimasRespostasRef.current.includes(res);
 
-      // 🚨 REGRA DE FERRO: Jamais permite duas contas iguais caindo juntas na tela
       if (estaNaTela) continue; 
-      
-      // 🚨 REGRA ANTI-REPETIÇÃO: Tenta sempre mandar conta inédita e com resultado diferente
-      // Se já tentou muito (t > 40), o celular relaxa as regras apenas para não travar o jogo vazio
-      if (t < 40) {
-        if (jaAcertou || respostaRepetida) continue;
-      }
+      if (t < 40) { if (jaAcertou || respostaRepetida) continue; }
 
-      // Passou por todos os testes de segurança!
       ultimasRespostasRef.current.push(res);
-      if (ultimasRespostasRef.current.length > 3) ultimasRespostasRef.current.shift(); // Memoriza as 3 últimas apenas
+      if (ultimasRespostasRef.current.length > 3) ultimasRespostasRef.current.shift(); 
       
       const isEspecial = Math.random() < 0.10; 
       const laneSelecionada = obterPistaLivre();
@@ -277,17 +245,13 @@ export default function Jogo() {
     if (opInicial) inicial.push(opInicial);
     
     setOperacoes(inicial);
-    
-    setTimeout(() => {
-      inicial.forEach(op => animarQueda(op));
-    }, 50);
+    setTimeout(() => { inicial.forEach(op => animarQueda(op)); }, 50);
     
     iniciarSpawner();
 
     if (modoEscolhido === 'bot') {
       botTimer.current = setInterval(() => {
         if (jogoPausadoRef.current) return;
-        
         const ops = operacoesListRef.current;
         const alvosValidos = ops.filter(o => {
           const yVal = (o.y as any)._value || 0;
@@ -337,15 +301,12 @@ export default function Jogo() {
   const continuarJogo = () => {
     jogoPausadoRef.current = false;
     setPausado(false);
-    
     operacoesListRef.current.forEach(op => {
       const posAtual = (op.y as any)._value || 0;
       const distanciaRestante = (GAME_AREA_HEIGHT + 50) - posAtual;
       const tempoRestante = (distanciaRestante / (GAME_AREA_HEIGHT + 50)) * op.speed;
-      
       animarQueda(op, Math.max(tempoRestante, 500));
     });
-    
     iniciarSpawner(); 
   };
 
@@ -358,7 +319,6 @@ export default function Jogo() {
     if (acertou && targetOp) {
       const tX = targetOp.posX + CARD_WIDTH / 2;
       const tY = GAME_AREA_HEIGHT * 0.3; 
-
       setLaserAtivo({ x: tX, y: tY, cor: atirador === 'bot' ? '#FF00FF' : '#32CD32' });
       laserAnim.setValue(0);
       Animated.timing(laserAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start(() => {
@@ -392,14 +352,10 @@ export default function Jogo() {
       opCorreta.y.stopAnimation();
       operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== opCorreta.chave);
       
-      if (tempoLevado <= 3000) {
-        desempenhoOcultoRef.current = Math.min(desempenhoOcultoRef.current + 1, 10);
-      } else if (tempoLevado > 6000) {
-        desempenhoOcultoRef.current = Math.max(desempenhoOcultoRef.current - 1, 0);
-      }
+      if (tempoLevado <= 3000) desempenhoOcultoRef.current = Math.min(desempenhoOcultoRef.current + 1, 10);
+      else if (tempoLevado > 6000) desempenhoOcultoRef.current = Math.max(desempenhoOcultoRef.current - 1, 0);
 
       questoesAcertadasRef.current.add(opCorreta.chave); 
-      
       setPontos(p => p + 10 + (tempoLevado < 3000 ? 5 : 0)); 
       setAcertosRodada(a => {
         const na = a + 1;
@@ -410,23 +366,17 @@ export default function Jogo() {
       if (opCorreta.especial && !powerUpDisponivel) setPowerUpDisponivel(true);
       
       dispararLaser(opCorreta, true, 'player');
-      
-      setTimeout(() => {
-        setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id));
-      }, 350);
-
+      setTimeout(() => { setOperacoes(ops => ops.filter(o => o.id !== opCorreta.id)); }, 350);
     } else {
       perderVida(undefined, false); 
       dispararLaser(null, false, 'player');
     }
-    
     setResposta('');
     inicioRespostaRef.current = Date.now();
   };
 
   const ativarPowerUp = () => {
     if (!powerUpDisponivel || operacoes.length === 0 || jogoPausadoRef.current) return;
-    
     const visiveis = operacoes.filter(op => {
       const y = (op.y as any)._value || 0;
       return y >= 0 && y < GAME_AREA_HEIGHT;
@@ -434,7 +384,6 @@ export default function Jogo() {
     if (visiveis.length === 0) return;
     
     visiveis.forEach(op => op.y.stopAnimation());
-    
     setPontos(p => p + (visiveis.length * 10)); 
     setOperacoes([]);
     operacoesAtuaisRef.current = [];
@@ -443,7 +392,6 @@ export default function Jogo() {
 
   const perderVida = (opId?: string, caiuNoChao: boolean = false) => {
     desempenhoOcultoRef.current = Math.max(desempenhoOcultoRef.current - (caiuNoChao ? 2 : 1), 0);
-
     setVidas(v => {
       const nv = v - 1;
       if (nv <= 0) {
@@ -471,7 +419,6 @@ export default function Jogo() {
     else setResposta(r => r + tecla);
   };
 
-  // ==================== TELA DE MENU ====================
   if (tela === 'menu') {
     return (
       <SafeAreaView style={styles.container}>
@@ -494,11 +441,7 @@ export default function Jogo() {
                 { id: 'potenciacao', name: 'Potências', color: '#FF8C00' },
                 { id: 'radiciacao', name: 'Raízes', color: '#00CED1' },
               ].map(m => (
-                <TouchableOpacity 
-                  key={m.id} 
-                  style={[styles.modoCardItem, modoMatematica === m.id && { borderColor: m.color, borderWidth: 2 }]}
-                  onPress={() => setModoMatematica(m.id)}
-                >
+                <TouchableOpacity key={m.id} style={[styles.modoCardItem, modoMatematica === m.id && { borderColor: m.color, borderWidth: 2 }]} onPress={() => setModoMatematica(m.id)}>
                   <Text style={styles.modoTextItem}>{m.name}</Text>
                 </TouchableOpacity>
               ))}
@@ -521,25 +464,21 @@ export default function Jogo() {
     );
   }
 
-  // ==================== TELA DE RESULTADO ====================
   if (tela === 'resultado') {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.resultadoContainer}>
           <Text style={styles.resultadoTitle}>{modo === 'bot' && botPontos > pontos ? '🤖 O Bot Venceu!' : 'Fim de Treino!'}</Text>
-          
           <View style={styles.resultadoCard}>
             <Text style={styles.resultadoPontos}>{pontos}</Text>
             <Text style={styles.resultadoLabel}>Seus Pontos (Rodada {rodada})</Text>
           </View>
-
           {modo === 'bot' && (
              <View style={[styles.resultadoCard, { backgroundColor: '#FF00FF20', padding: 20, marginBottom: 30 }]}>
                <Text style={[styles.resultadoPontos, { color: '#FF00FF', fontSize: 40 }]}>{botPontos}</Text>
                <Text style={styles.resultadoLabel}>Pontos do Bot</Text>
              </View>
           )}
-
           <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => iniciarJogo(modo)}>
             <Ionicons name="refresh" size={22} color="#000" />
             <Text style={styles.jogarNovamenteText}>Tentar Novamente</Text>
@@ -552,10 +491,8 @@ export default function Jogo() {
     );
   }
 
-  // ==================== TELA DO JOGO ====================
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      
       <View style={styles.gameHeader}>
         <View style={styles.headerStatsGroup}>
           <Ionicons name="star" size={18} color="#FFD700" />
@@ -579,17 +516,13 @@ export default function Jogo() {
       <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
         {operacoes.map((op) => (
           <Animated.View key={op.id} style={[
-            styles.operacaoCard,
-            op.especial && styles.operacaoEspecial,
+            styles.operacaoCard, op.especial && styles.operacaoEspecial,
             { transform: [{ translateY: op.y }, { scale: op.scale }], left: op.posX, opacity: op.opacity }
           ]}>
             {op.especial && <Ionicons name="flash" size={12} color="#000" style={styles.estrelaEspecial} />}
-            <Text style={[styles.operacaoText, op.especial && { color: '#000' }]}>
-              {op.textoTela}
-            </Text>
+            <Text style={[styles.operacaoText, op.especial && { color: '#000' }]}>{op.textoTela}</Text>
           </Animated.View>
         ))}
-
         {laserAtivo && (
           <Animated.View style={[
             styles.laser,
@@ -667,7 +600,6 @@ export default function Jogo() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0c' },
-  
   menuContainer: { flex: 1 },
   menuScrollContent: { padding: 20, alignItems: 'center' },
   menuHeader: { alignItems: 'center', marginBottom: 20, marginTop: 20 },
@@ -681,20 +613,51 @@ const styles = StyleSheet.create({
   iniciarButtonText: { color: '#000', fontSize: 18, fontWeight: '900' },
   botButton: { flexDirection: 'row', backgroundColor: '#FF00FF', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, width: '100%' },
   botButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-  
   gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
   headerStatsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   statTextMeta: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   headerRightGroup: { flexDirection: 'row', alignItems: 'center' },
   btnPausaIcone: { padding: 4, marginLeft: 10 },
-  
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingBottom: 10 },
   vidaMarca: { width: 8, height: 8, borderRadius: 4 },
   vidaAtiva: { backgroundColor: '#FF4444' },
   vidaInativa: { backgroundColor: '#333' },
-  
   gameArea: { position: 'relative', width: '100%', flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
   operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
-  estrelaEspecial: { position: 'absolute', top: -8, right: -4, backgroundColor: '#FFF', borderRadius: 1
+  estrelaEspecial: { position: 'absolute', top: -8, right: -4, backgroundColor: '#FFF', borderRadius: 10, padding: 2 },
+  operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  laser: { position: 'absolute', width: 4, height: height, zIndex: 1 },
+  bottomPanel: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 20, width: '100%' },
+  powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 10 },
+  btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
+  btnPowerUpInativo: { backgroundColor: '#1a1a2e', padding: 8, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  txtPowerUpInativo: { color: '#444', fontSize: 12, fontWeight: 'bold' },
+  displayContainer: { backgroundColor: '#1a1a2e', width: 250, height: 55, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  displayText: { color: '#fff', fontSize: 26, fontWeight: 'bold' },
+  tecladoContainer: { width: 250, gap: 6 },
+  tecladoRow: { flexDirection: 'row', gap: 6, justifyContent: 'space-between' },
+  tecla: { backgroundColor: '#1a1a2e', flex: 1, height: 55, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  teclaText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
+  teclaApagar: { backgroundColor: '#E74C3C' },
+  teclaEnviar: { backgroundColor: '#32CD32' },
+  resultadoContainer: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center' },
+  resultadoTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginBottom: 15 },
+  resultadoCard: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', marginBottom: 10, width: '100%' },
+  resultadoPontos: { fontSize: 64, fontWeight: '900', color: '#FFD700' },
+  resultadoLabel: { fontSize: 14, color: '#888', marginTop: 4 },
+  jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#32CD32', padding: 16, borderRadius: 12, alignItems: 'center', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 10 },
+  jogarNovamenteText: { color: '#000', fontSize: 18, fontWeight: '900' },
+  voltarMenuButton: { padding: 16 },
+  voltarMenuText: { color: '#888', fontSize: 14 },
+  modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
+  modalPausaContainer: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', width: '80%' },
+  modalPausaTitulo: { color: '#fff', fontSize: 24, fontWeight: 'bold', marginTop: 10 },
+  modalPausaSub: { color: '#888', fontSize: 14, marginBottom: 20 },
+  continuarButton: { backgroundColor: '#32CD32', flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 10, width: '100%', justifyContent: 'center', marginBottom: 10 },
+  continuarButtonText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
+  sairButton: { backgroundColor: '#E74C3C', flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 10, width: '100%', justifyContent: 'center' },
+  sairButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+});
