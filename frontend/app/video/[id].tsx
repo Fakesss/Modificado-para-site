@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
-import { Conteudo } from '../../src/types';
+import { Conteudo, ProgressoVideo } from '../../src/types';
 
 export default function VideoPlayer() {
   const params = useLocalSearchParams();
@@ -13,24 +13,21 @@ export default function VideoPlayer() {
   const { width } = useWindowDimensions();
   const router = useRouter();
   
-  // 🛡️ ESCUDO ANTI-VERCEL
-  const [isClient, setIsClient] = useState(false);
   const [video, setVideo] = useState<Conteudo | null>(null);
+  const [progress, setProgress] = useState<ProgressoVideo | null>(null);
   const [loading, setLoading] = useState(true);
   
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [startTime, setStartTime] = useState(0);
   
   const [completed, setCompleted] = useState(false);
   const [pointsEarned, setPointsEarned] = useState(0);
   const [canComplete, setCanComplete] = useState(false);
   const [watchedPercentage, setWatchedPercentage] = useState(0);
   
+  const lastUpdateRef = useRef(0);
   const iframeRef = useRef<any>(null);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
 
   const getYouTubeId = (url: string) => {
     if (!url) return null;
@@ -42,12 +39,12 @@ export default function VideoPlayer() {
   const youtubeId = video?.urlVideo ? getYouTubeId(video.urlVideo) : null;
 
   useEffect(() => {
-    if (id && isClient) loadVideo();
-  }, [id, isClient]);
+    if (id) loadVideo();
+  }, [id]);
 
-  // 📻 CRONÔMETRO VISUAL (Só para a barrinha verde)
+  // 📻 CANAL DE RÁDIO COM O YOUTUBE
   useEffect(() => {
-    if (!isClient || Platform.OS !== 'web' || !youtubeId) return;
+    if (Platform.OS !== 'web' || !youtubeId) return;
 
     const handleMessage = (event: any) => {
       if (event.origin !== 'https://www.youtube.com') return;
@@ -72,19 +69,29 @@ export default function VideoPlayer() {
       window.removeEventListener('message', handleMessage);
       clearInterval(timer);
     };
-  }, [youtubeId, isClient]);
+  }, [youtubeId]);
 
-  // 🧠 CÁLCULO VISUAL (Não avisa o servidor para evitar travamentos)
+  // 🧠 CÉREBRO MATEMÁTICO
   useEffect(() => {
-    if (duration > 0 && currentTime > 0) {
-      const percentage = (currentTime / duration) * 100;
+    const safeCurrent = Math.floor(Number(currentTime) || 0);
+    const safeDuration = Math.floor(Number(duration) || 0);
+
+    if (safeDuration > 0 && safeCurrent >= 0 && !isNaN(safeCurrent) && !isNaN(safeDuration)) {
+      const percentage = (safeCurrent / safeDuration) * 100;
       setWatchedPercentage(percentage > 100 ? 100 : percentage);
 
       if (percentage >= 90 && !canComplete) {
         setCanComplete(true);
       }
+
+      if (safeCurrent >= 5 && (safeCurrent - lastUpdateRef.current >= 5 || percentage >= 90)) {
+        if (safeCurrent > lastUpdateRef.current) {
+           lastUpdateRef.current = safeCurrent;
+           updateProgress(safeCurrent, safeDuration);
+        }
+      }
     }
-  }, [currentTime, duration]);
+  }, [currentTime, duration, canComplete]);
 
   const loadVideo = async () => {
     try {
@@ -95,21 +102,51 @@ export default function VideoPlayer() {
       if (videoData) {
         try {
           const progressData = await api.getProgressoVideo(videoData.id);
-          if (progressData && progressData.concluido) {
-            setCompleted(true);
-            setCanComplete(true);
-            setWatchedPercentage(100);
+          setProgress(progressData);
+          
+          if (progressData) {
+            const tempoSalvo = Math.floor(progressData.tempoAssistidoSeg || 0);
+            setStartTime(tempoSalvo);
+            setCurrentTime(tempoSalvo);
+            lastUpdateRef.current = tempoSalvo;
+            
+            if (progressData.duracaoSeg > 0) {
+              setDuration(progressData.duracaoSeg);
+              setWatchedPercentage((tempoSalvo / progressData.duracaoSeg) * 100);
+            }
+            
+            setCompleted(progressData.concluido || false);
             setPointsEarned(progressData.pontosGerados || 0);
+            
+            if (progressData.concluido) {
+              setCanComplete(true);
+              setWatchedPercentage(100);
+            }
           }
         } catch (error) {}
       }
     } catch (error) {
+      console.error('Error loading video:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // 🚀 A ÚNICA VEZ QUE O SERVIDOR É ACIONADO
+  const updateProgress = async (watchedSeconds: number, totalDuration: number) => {
+    if (!id || !totalDuration || totalDuration <= 0 || isNaN(watchedSeconds) || isNaN(totalDuration)) return;
+
+    try {
+      const result = await api.updateProgressoVideo(id, watchedSeconds, totalDuration);
+      if (result.concluido && !completed) {
+        setCompleted(true);
+        setPointsEarned(result.pontosGerados);
+        if (window.alert) window.alert(`Parabéns! Você concluiu este vídeo e ganhou ${result.pontosGerados} pontos!`);
+      }
+    } catch (error) {
+      console.log('Sincronização pendente...');
+    }
+  };
+
   const handleComplete = async () => {
     if (completed) {
       router.back();
@@ -122,11 +159,12 @@ export default function VideoPlayer() {
     }
 
     try {
-      const safeDuration = Math.floor(duration > 0 ? duration : 300);
-      const safeCurrent = Math.floor(safeDuration * 0.95);
-
-      const result = await api.updateProgressoVideo(id as string, safeCurrent, safeDuration);
-      
+      const safeDuration = Math.floor(Number(duration) || 300);
+      const result = await api.updateProgressoVideo(
+        id,
+        Math.floor(Math.max(Number(currentTime) || 0, safeDuration * 0.9)),
+        safeDuration
+      );
       setCompleted(true);
       setPointsEarned(result.pontosGerados);
       
@@ -137,8 +175,7 @@ export default function VideoPlayer() {
     }
   };
 
-  // Previne renderização antes do celular estar pronto
-  if (!isClient || loading) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -163,7 +200,6 @@ export default function VideoPlayer() {
   }
 
   const playerHeight = width > 600 ? 400 : width * 0.5625;
-  // Define o origin correto para evitar bloqueios de CORS do Android
   const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://youtube.com';
 
   return (
@@ -183,8 +219,7 @@ export default function VideoPlayer() {
           <iframe
             ref={iframeRef}
             style={{ width: '100%', height: '100%', borderWidth: 0 }}
-            // 🚨 SOLUÇÃO PARA O ANDROID: playsinline=1 e origin adicionados aqui!
-            src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0&modestbranding=1&enablejsapi=1&playsinline=1&origin=${appOrigin}`}
+            src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0&modestbranding=1&enablejsapi=1&start=${startTime}&playsinline=1&origin=${appOrigin}`}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
             allowFullScreen
           />
