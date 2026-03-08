@@ -22,11 +22,11 @@ export default function CriarExercicio() {
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
 
-  // Formulário
+  // Formulário Geral
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [pontuacaoTotal, setPontuacaoTotal] = useState('10');
-  const [habilidadesBNCC, setHabilidadesBNCC] = useState('');
+  const [habilidadesBNCC, setHabilidadesBNCC] = useState(''); // Geral
   
   // Destinatários
   const [turmas, setTurmas] = useState<any[]>([]);
@@ -46,6 +46,7 @@ export default function CriarExercicio() {
   const loadInitialData = async () => {
     setLoadingData(true);
     try {
+      // Carrega listas
       const [t, e, u] = await Promise.all([
         api.getTurmas(),
         api.getEquipes().catch(() => []),
@@ -55,6 +56,7 @@ export default function CriarExercicio() {
       setEquipes(e || []);
       setAlunos(u || []);
 
+      // Se for edição, carrega dados
       if (isEditing) {
         const ex = await api.getExercicio(id as string);
         if (ex) {
@@ -70,6 +72,7 @@ export default function CriarExercicio() {
             const questoesFormatadas = ex.questoes.map((q: any) => ({
               ...q,
               id: q.id || Math.random().toString(),
+              habilidadeBNCC: Array.isArray(q.habilidadesBNCC) ? q.habilidadesBNCC.join(', ') : (q.habilidadeBNCC || ''),
               alternativas: q.tipoResposta === 'MULTIPLA_ESCOLHA' 
                 ? (q.alternativas || []).map((alt: any) => ({
                     ...alt,
@@ -80,6 +83,7 @@ export default function CriarExercicio() {
             
             setQuestoes(questoesFormatadas);
             
+            // Recalcula pontuação visual
             const totalPts = ex.questoes.reduce((acc: number, q: any) => acc + (Number(q.pontuacaoMax) || 0), 0);
             if (totalPts > 0) setPontuacaoTotal(totalPts.toString());
           }
@@ -99,6 +103,7 @@ export default function CriarExercicio() {
       numero: questoes.length + 1,
       tipoResposta: 'MULTIPLA_ESCOLHA',
       enunciado: '',
+      habilidadeBNCC: '', // Novo campo por questão
       alternativas: ALTERNATIVA_CORES.slice(0, 4).map(c => ({ letra: c.letra, texto: '', cor: c.cor })),
       correta: ''
     }]);
@@ -111,9 +116,11 @@ export default function CriarExercicio() {
   };
 
   const handleSave = async () => {
+    // 1. Validações Básicas
     if (!titulo.trim()) return Alert.alert("Erro", "O título é obrigatório");
     if (questoes.length === 0) return Alert.alert("Erro", "Adicione pelo menos uma questão");
 
+    // 2. Validação das Questões
     for (const q of questoes) {
         if (!q.enunciado) return Alert.alert("Erro", `Questão ${q.numero} sem enunciado.`);
         if (q.tipoResposta === 'MULTIPLA_ESCOLHA' && !q.correta) return Alert.alert("Erro", `Questão ${q.numero} sem resposta correta marcada.`);
@@ -121,14 +128,21 @@ export default function CriarExercicio() {
     }
 
     setLoading(true);
+    
     try {
+      // Converte pontos para Float (para aceitar 3.33, etc)
       const pts = parseFloat(pontuacaoTotal.replace(',', '.')) || 10;
-      const ptsPorQ = pts / questions.length;
       
+      // === CORREÇÃO CRÍTICA AQUI (era questions.length) ===
+      const ptsPorQ = pts / questoes.length; 
+      
+      // Prepara Array de Habilidades Gerais
+      const habilidadesGerais = habilidadesBNCC.split(',').map(s => s.trim()).filter(Boolean);
+
       const payload = {
         titulo,
         descricao,
-        habilidadesBNCC: habilidadesBNCC.split(',').map(s => s.trim()).filter(Boolean),
+        habilidadesBNCC: habilidadesGerais,
         turmaId: tipoDestinatario === 'TURMA' && destinatarioId ? destinatarioId : null,
         equipeId: tipoDestinatario === 'EQUIPE' && destinatarioId ? destinatarioId : null,
         alunoId: tipoDestinatario === 'ALUNO' && destinatarioId ? destinatarioId : null,
@@ -139,12 +153,17 @@ export default function CriarExercicio() {
           enunciado: q.enunciado,
           correta: q.correta,
           pontuacaoMax: ptsPorQ,
+          // Agora enviamos a habilidade específica da questão
+          habilidadesBNCC: q.habilidadeBNCC 
+             ? q.habilidadeBNCC.split(',').map((s: string) => s.trim()).filter(Boolean)
+             : habilidadesGerais, // Se não tiver específica, usa a geral como fallback
           alternativas: q.tipoResposta === 'MULTIPLA_ESCOLHA' 
             ? q.alternativas.map((a: any) => ({ letra: a.letra, texto: a.texto })) 
-            : [],
-          habilidadesBNCC: habilidadesBNCC.split(',').map(s => s.trim()).filter(Boolean)
+            : []
         }))
       };
+
+      console.log("Enviando Payload:", JSON.stringify(payload));
 
       if (isEditing && id) {
         if (api.updateExercicio) {
@@ -191,6 +210,7 @@ export default function CriarExercicio() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Modal de Loading Bloqueante */}
       <Modal visible={loading} transparent animationType="fade">
         <View style={styles.loadingOverlay}>
             <View style={styles.loadingBox}>
@@ -223,12 +243,18 @@ export default function CriarExercicio() {
                 <Text style={styles.label}>Título</Text>
                 <TextInput style={styles.input} value={titulo} onChangeText={setTitulo} placeholderTextColor="#666" placeholder="Ex: Equações de 1º Grau" />
                 
-                <Text style={styles.label}>Pontos Totais</Text>
-                <TextInput style={[styles.input, {textAlign:'center', color:'#FFD700', fontWeight:'bold', width: '30%'}]} 
-                    value={pontuacaoTotal} onChangeText={setPontuacaoTotal} keyboardType="numeric" />
-
-                <Text style={styles.label}>Códigos BNCC</Text>
-                <TextInput style={styles.input} value={habilidadesBNCC} onChangeText={setHabilidadesBNCC} placeholder="Ex: EF06MA01, EF06MA02" placeholderTextColor="#666" />
+                {/* Linha de Pontos e BNCC Geral */}
+                <View style={{flexDirection:'row', justifyContent:'space-between'}}>
+                    <View style={{flex:1, marginRight:10}}>
+                        <Text style={styles.label}>Pontos Totais</Text>
+                        <TextInput style={[styles.input, {textAlign:'center', color:'#FFD700', fontWeight:'bold'}]} 
+                            value={pontuacaoTotal} onChangeText={setPontuacaoTotal} keyboardType="numeric" />
+                    </View>
+                    <View style={{flex:2}}>
+                        <Text style={styles.label}>BNCC (Padrão/Geral)</Text>
+                        <TextInput style={styles.input} value={habilidadesBNCC} onChangeText={setHabilidadesBNCC} placeholder="Ex: EF06MA01" placeholderTextColor="#666" />
+                    </View>
+                </View>
 
                 <Text style={styles.label}>Descrição (Opcional)</Text>
                 <TextInput style={[styles.input, {height:60}]} multiline value={descricao} onChangeText={setDescricao} placeholder="Instruções..." placeholderTextColor="#666" />
@@ -259,9 +285,20 @@ export default function CriarExercicio() {
                     <View style={styles.badgeNumero}><Text style={{fontWeight:'bold'}}>{q.numero}</Text></View>
                     <TouchableOpacity onPress={() => removeQuestao(i)}><Ionicons name="trash" size={20} color="#E74C3C"/></TouchableOpacity>
                 </View>
+
+                {/* CAMPO BNCC ESPECÍFICO DA QUESTÃO */}
+                <Text style={styles.label}>Habilidade BNCC desta questão (Opcional)</Text>
+                <TextInput 
+                    style={[styles.input, {marginBottom:10}]} 
+                    value={q.habilidadeBNCC} 
+                    onChangeText={t => {const n=[...questoes]; n[i].habilidadeBNCC=t; setQuestoes(n)}} 
+                    placeholder="Ex: EF06MA12 (Deixe vazio para usar a Geral)" 
+                    placeholderTextColor="#555" 
+                />
                 
-                <TextInput style={[styles.input, {height:60, fontFamily: Platform.OS==='ios'?'Courier':'monospace'}]} multiline value={q.enunciado} 
-                    onChangeText={t => {const n=[...questoes]; n[i].enunciado=t; setQuestoes(n)}} placeholder="Enunciado da questão..." placeholderTextColor="#555"/>
+                <Text style={styles.label}>Enunciado</Text>
+                <TextInput style={[styles.input, {height:80, fontFamily: Platform.OS==='ios'?'Courier':'monospace'}]} multiline value={q.enunciado} 
+                    onChangeText={t => {const n=[...questoes]; n[i].enunciado=t; setQuestoes(n)}} placeholder="Digite a pergunta..." placeholderTextColor="#555"/>
 
                 <View style={{flexDirection:'row', marginVertical:10, backgroundColor:'#000', padding:2, borderRadius:8}}>
                     <TouchableOpacity onPress={() => {const n=[...questoes]; n[i].tipoResposta='MULTIPLA_ESCOLHA'; setQuestoes(n)}} 
