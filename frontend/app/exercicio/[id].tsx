@@ -49,6 +49,32 @@ export default function ExercicioScreen() {
     setRespostas((prev) => ({ ...prev, [questaoId]: text }));
   };
 
+  const handleRetry = async () => {
+    Alert.alert(
+      "Tentar Novamente",
+      "Sua nota anterior será apagada. Deseja continuar?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { 
+          text: "Sim, refazer", 
+          onPress: async () => {
+            setLoading(true);
+            try {
+              await api.retryExercicio(id as string);
+              setExistingSubmission(null);
+              setRespostas({});
+              Alert.alert("Pronto!", "Pode tentar de novo.");
+            } catch (error) {
+              Alert.alert("Erro", "Não foi possível resetar.");
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleSubmit = async () => {
     if (!exercicio?.questoes) return;
     const unanswered = exercicio.questoes.filter((q) => !respostas[q.id]);
@@ -72,14 +98,15 @@ export default function ExercicioScreen() {
 
       const result = await api.submitExercicio(id as string, respostasArray);
       
-      // CORREÇÃO: Convertendo tudo para String explicitamente para garantir o transporte
+      // >>> CORREÇÃO DO RESULTADO ZERADO <<<
+      // Convertendo explicitamente para String para garantir o transporte
       router.replace({
         pathname: '/resultado',
         params: {
           exercicioId: id as string,
           acertos: String(result.acertos),
           erros: String(result.erros),
-          total: String(result.totalQuestoes),
+          total: String(result.totalQuestoes), // Usando a chave correta do backend
           nota: String(result.nota),
           percentual: String(result.percentual),
           pontos: String(result.pontosGerados),
@@ -106,8 +133,10 @@ export default function ExercicioScreen() {
 
       {existingSubmission && (
         <View style={styles.submittedBanner}>
-          <Ionicons name="checkmark-circle" size={20} color="#32CD32" />
-          <Text style={styles.submittedText}>Nota: {existingSubmission.nota}</Text>
+          <Ionicons name="checkmark-circle" size={20} color={existingSubmission.nota >= 5 ? "#32CD32" : "#E74C3C"} />
+          <Text style={[styles.submittedText, { color: existingSubmission.nota >= 5 ? "#32CD32" : "#E74C3C" }]}>
+            Nota Final: {existingSubmission.nota}
+          </Text>
         </View>
       )}
 
@@ -127,12 +156,8 @@ export default function ExercicioScreen() {
               <View style={styles.alternativasContainer}>
                 {questao.alternativas.map((alt, altIndex) => {
                   const isSelected = respostas[questao.id] === alt.letra;
-                  
-                  // CORREÇÃO VISUAL: Força cor colorida se vier a padrão azul
                   let cor = alt.cor;
-                  if (!cor || cor === '#4169E1') {
-                     cor = ALTERNATIVA_CORES[altIndex % ALTERNATIVA_CORES.length];
-                  }
+                  if (!cor || cor === '#4169E1') cor = ALTERNATIVA_CORES[altIndex % ALTERNATIVA_CORES.length];
                   
                   let statusStyle = {};
                   let statusIcon = null;
@@ -184,10 +209,18 @@ export default function ExercicioScreen() {
         ))}
       </ScrollView>
 
-      {!existingSubmission && (
+      {/* BOTÕES DE AÇÃO */}
+      {!existingSubmission ? (
         <TouchableOpacity style={[styles.submitButton, submitting && {opacity:0.5}]} onPress={handleSubmit} disabled={submitting}>
           {submitting ? <ActivityIndicator color="#000" /> : <Text style={styles.submitButtonText}>Enviar Respostas</Text>}
         </TouchableOpacity>
+      ) : existingSubmission.nota < 5.0 ? (
+        // >>> BOTÃO DE TENTAR NOVAMENTE (Se nota < 5) <<<
+        <TouchableOpacity style={[styles.submitButton, { backgroundColor: '#E74C3C' }]} onPress={handleRetry}>
+          <Text style={[styles.submitButtonText, { color: '#fff' }]}>Tentar Novamente</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={{height: 20}} />
       )}
     </SafeAreaView>
   );
@@ -200,8 +233,8 @@ const styles = StyleSheet.create({
   errorText: { color: '#666', fontSize: 18 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   headerTitle: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },
-  submittedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#32CD3230', padding: 8, gap: 8 },
-  submittedText: { color: '#32CD32', fontWeight: '600' },
+  submittedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#222', padding: 10, gap: 8, borderBottomWidth:1, borderBottomColor:'#333' },
+  submittedText: { fontWeight: 'bold', fontSize: 16 },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
   description: { color: '#888', fontSize: 14, marginBottom: 20 },
