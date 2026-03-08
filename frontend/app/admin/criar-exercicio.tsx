@@ -77,7 +77,6 @@ export default function CriarExercicio() {
               alternativas: q.tipoResposta === 'MULTIPLA_ESCOLHA' 
                 ? (q.alternativas || []).map((alt: any) => ({
                     ...alt,
-                    // Garante que a cor venha do banco ou use o padrão
                     cor: alt.cor || ALTERNATIVA_CORES.find(c => c.letra === alt.letra)?.cor || '#999'
                   }))
                 : ALTERNATIVA_CORES.slice(0, 4).map(c => ({ letra: c.letra, texto: '', cor: c.cor }))
@@ -108,7 +107,7 @@ export default function CriarExercicio() {
       alternativas: ALTERNATIVA_CORES.slice(0, 4).map(c => ({ 
         letra: c.letra, 
         texto: '', 
-        cor: c.cor // Garante que a cor seja inicializada corretamente
+        cor: c.cor
       })),
       correta: ''
     }]);
@@ -134,8 +133,8 @@ export default function CriarExercicio() {
     
     try {
       const pts = parseFloat(pontuacaoTotal.replace(',', '.')) || 10;
-      const ptsPorQ = pts / questions.length > 0 ? questions.length : 1; 
-      // Correção: uso da variável correta 'questoes' e proteção contra divisão por zero
+      
+      // === CORREÇÃO AQUI: Usando 'questoes' (português) ao invés de 'questions' ===
       const valorPorQuestao = questoes.length > 0 ? (pts / questoes.length) : 0;
       
       const habilidadesGerais = habilidadesBNCC.split(',').map(s => s.trim()).filter(Boolean);
@@ -144,7 +143,6 @@ export default function CriarExercicio() {
         titulo,
         descricao,
         habilidadesBNCC: habilidadesGerais,
-        // Envia null se for Geral, para limpar no banco
         turmaId: tipoDestinatario === 'TURMA' && destinatarioId ? destinatarioId : null,
         equipeId: tipoDestinatario === 'EQUIPE' && destinatarioId ? destinatarioId : null,
         alunoId: tipoDestinatario === 'ALUNO' && destinatarioId ? destinatarioId : null,
@@ -162,15 +160,15 @@ export default function CriarExercicio() {
             ? q.alternativas.map((a: any) => ({ 
                 letra: a.letra, 
                 texto: a.texto,
-                cor: a.cor // CORREÇÃO: Agora enviamos a cor para o backend!
+                cor: a.cor 
               })) 
             : []
         }))
       };
 
       if (isEditing && id) {
-        if (api.updateExercicio) {
-            await api.updateExercicio(id as string, payload);
+        if ((api as any).updateExercicio) {
+            await (api as any).updateExercicio(id as string, payload);
         } else {
             throw new Error("Função updateExercicio não encontrada");
         }
@@ -178,8 +176,6 @@ export default function CriarExercicio() {
         await api.createExercicio(payload);
       }
 
-      // CORREÇÃO DO TRAVAMENTO: 
-      // Fecha o loading PRIMEIRO, espera um pouquinho, e só depois mostra o alerta.
       setLoading(false);
       setTimeout(() => {
         Alert.alert("Sucesso", "Salvo com sucesso!", [
@@ -198,7 +194,7 @@ export default function CriarExercicio() {
   };
 
   const renderListaSelecao = () => {
-    let dados = [];
+    let dados: any[] = [];
     if (tipoDestinatario === 'TURMA') dados = turmas;
     else if (tipoDestinatario === 'EQUIPE') dados = equipes;
     else dados = alunos;
