@@ -491,3 +491,26 @@ const styles = StyleSheet.create({
   emptyListText: { color: '#555', fontStyle: 'italic', fontSize: 12, marginVertical: 8 },
 
   questaoCard: { backgroundColor: '#151520', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#222' },
+  questaoHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  questaoNumero: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFD700', alignItems: 'center', justifyContent: 'center' },
+  questaoNumeroText: { color: '#000', fontWeight: 'bold', fontSize: 14 },
+  
+  tipoSwitch: { flexDirection: 'row', backgroundColor: '#000', borderRadius: 8, padding: 2, marginBottom: 12 },
+  switchOption: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
+  switchActive: { backgroundColor: '#333' },
+  switchText: { color: '#666', fontSize: 12, fontWeight: 'bold' },
+
+  alternativaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  alternativaLetra: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  alternativaCorreta: { borderWidth: 2, borderColor: '#fff' },
+  alternativaLetraText: { color: '#000', fontWeight: 'bold', fontSize: 14 },
+  checkBadge: { position: 'absolute', top: -2, right: -2, backgroundColor: '#27AE60', width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#151520' },
+  alternativaInput: { flex: 1, backgroundColor: '#222', borderRadius: 8, padding: 10, color: '#fff', fontSize: 14 },
+
+  emptyQuestions: { alignItems: 'center', padding: 30, opacity: 0.5 },
+  emptyText: { color: '#888', fontSize: 14, marginTop: 12 },
+
+  loadingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
+  loadingBox: { backgroundColor: '#222', padding: 24, borderRadius: 16, alignItems: 'center' },
+  loadingText: { color: '#fff', marginTop: 12, fontSize: 16, fontWeight: '600' },
+});
