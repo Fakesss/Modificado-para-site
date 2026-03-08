@@ -8,12 +8,11 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Modal
+  Modal,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
@@ -29,13 +28,12 @@ export default function AdminConteudos() {
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [tipo, setTipo] = useState<TipoConteudo>('VIDEO');
-  const [url, setUrl] = useState(''); // Para Vídeo e Link
+  const [url, setUrl] = useState(''); 
   
   // Estado para Arquivo
   const [nomeArquivo, setNomeArquivo] = useState('');
   const [arquivoBase64, setArquivoBase64] = useState<string | null>(null);
 
-  // Destinatários (Turmas)
   const [turmas, setTurmas] = useState<any[]>([]);
   const [turmaId, setTurmaId] = useState('');
 
@@ -55,7 +53,7 @@ export default function AdminConteudos() {
   const handlePickDocument = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*', // Aceita qualquer arquivo (PDF, Doc, Imagem)
+        type: '*/*', 
         copyToCacheDirectory: true
       });
 
@@ -64,13 +62,25 @@ export default function AdminConteudos() {
       const file = result.assets[0];
       setNomeArquivo(file.name);
 
-      // Converte para Base64 para enviar ao servidor
-      const base64 = await FileSystem.readAsStringAsync(file.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      
-      setArquivoBase64(base64);
-      Alert.alert("Sucesso", "Arquivo selecionado!");
+      if (Platform.OS === 'web') {
+        // LÓGICA PARA WEB (VERCEL)
+        const response = await fetch(file.uri);
+        const blob = await response.blob();
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64String = (reader.result as string).split(',')[1];
+          setArquivoBase64(base64String);
+          Alert.alert("Sucesso", "Arquivo carregado no navegador!");
+        };
+        reader.readAsDataURL(blob);
+      } else {
+        // LÓGICA PARA CELULAR (ANDROID/IOS)
+        const base64 = await FileSystem.readAsStringAsync(file.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        setArquivoBase64(base64);
+        Alert.alert("Sucesso", "Arquivo processado!");
+      }
 
     } catch (err) {
       Alert.alert("Erro", "Falha ao selecionar arquivo.");
@@ -92,7 +102,7 @@ export default function AdminConteudos() {
         tipo,
         turmaId: turmaId || null,
         urlVideo: (tipo === 'VIDEO' || tipo === 'LINK') ? url : null,
-        arquivo: tipo === 'MATERIAL' ? arquivoBase64 : null, // Envia o arquivo aqui!
+        arquivo: tipo === 'MATERIAL' ? arquivoBase64 : null,
         abaCategoria: tipo === 'VIDEO' ? 'videos' : 'materiais',
       };
 
@@ -145,7 +155,6 @@ export default function AdminConteudos() {
         <Text style={styles.label}>Descrição</Text>
         <TextInput style={[styles.input, {height:60}]} multiline value={descricao} onChangeText={setDescricao} placeholder="Detalhes..." placeholderTextColor="#666" />
 
-        {/* LÓGICA DINÂMICA DOS CAMPOS */}
         {tipo === 'VIDEO' && (
           <>
             <Text style={styles.label}>Link do YouTube</Text>
@@ -197,16 +206,12 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   label: { color: '#888', fontSize: 11, marginTop: 15, marginBottom: 5, textTransform: 'uppercase', letterSpacing:1 },
   input: { backgroundColor: '#1a1a2e', color: '#fff', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#333', fontSize:16 },
-  
   tabContainer: { flexDirection: 'row', backgroundColor:'#1a1a2e', borderRadius:8, padding:4, marginBottom:10 },
   tab: { flex:1, paddingVertical:10, alignItems:'center', borderRadius:6 },
   tabActive: { backgroundColor:'#FFD700' },
-
   uploadButton: { flexDirection:'row', alignItems:'center', justifyContent:'center', backgroundColor:'#FFD700', padding:15, borderRadius:10, gap:10 },
   uploadText: { color:'#000', fontWeight:'bold', fontSize:16 },
-
   chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#333', marginRight: 8 },
   chipActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
-
   loadingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
 });
