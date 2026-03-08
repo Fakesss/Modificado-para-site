@@ -10,12 +10,15 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
-import { Turma } from '../../src/types';
+// Se você tiver tipos definidos para Equipe e Aluno, importe-os aqui. 
+// Caso contrário, o código usará 'any' para evitar erros.
+import { Turma } from '../../src/types'; 
 
 const ALTERNATIVA_CORES = [
   { letra: 'A', cor: '#E74C3C' },
@@ -34,29 +37,58 @@ interface QuestaoForm {
   correta: string;
 }
 
+type TipoDestinatario = 'TURMA' | 'EQUIPE' | 'ALUNO';
+
 export default function CriarExercicio() {
   const router = useRouter();
-  const [turmas, setTurmas] = useState<Turma[]>([]);
-  const [loading, setLoading] = useState(false);
   
+  // Dados das listas
+  const [turmas, setTurmas] = useState<Turma[]>([]);
+  const [equipes, setEquipes] = useState<any[]>([]); // Use o tipo correto se tiver
+  const [alunos, setAlunos] = useState<any[]>([]);   // Use o tipo correto se tiver
+
+  const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
+  
+  // Formulário
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
-  const [turmaId, setTurmaId] = useState('');
+  const [pontuacaoTotal, setPontuacaoTotal] = useState('10');
   const [habilidadesBNCC, setHabilidadesBNCC] = useState('');
-  const [pontuacaoTotal, setPontuacaoTotal] = useState('10'); // Novo campo de pontuação total
+  
+  // Controle de Destinatário
+  const [tipoDestinatario, setTipoDestinatario] = useState<TipoDestinatario>('TURMA');
+  const [destinatarioId, setDestinatarioId] = useState('');
   
   const [questoes, setQuestoes] = useState<QuestaoForm[]>([]);
 
   useEffect(() => {
-    loadTurmas();
+    loadData();
   }, []);
 
-  const loadTurmas = async () => {
+  const loadData = async () => {
+    setLoadingData(true);
     try {
-      const data = await api.getTurmas();
-      setTurmas(data);
+      // Carrega Turmas
+      const turmasData = await api.getTurmas();
+      setTurmas(turmasData);
+
+      // Tenta carregar Equipes (se a função existir na API)
+      if ((api as any).getEquipes) {
+        const equipesData = await (api as any).getEquipes();
+        setEquipes(equipesData);
+      }
+
+      // Tenta carregar Alunos (se a função existir na API)
+      if ((api as any).getAlunos) {
+        const alunosData = await (api as any).getAlunos();
+        setAlunos(alunosData);
+      }
+
     } catch (error) {
-      console.error('Error loading turmas:', error);
+      console.error('Erro ao carregar dados:', error);
+    } finally {
+      setLoadingData(false);
     }
   };
 
@@ -97,55 +129,61 @@ export default function CriarExercicio() {
   };
 
   const handleSave = async () => {
+    // Validações Básicas
     if (!titulo.trim()) {
-      Alert.alert('Erro', 'Título é obrigatório');
+      Alert.alert('Erro', 'O título é obrigatório.');
       return;
     }
-
     if (questoes.length === 0) {
-      Alert.alert('Erro', 'Adicione pelo menos uma questão');
+      Alert.alert('Erro', 'Adicione pelo menos uma questão.');
       return;
     }
-
-    const pontos = Number(pontuacaoTotal.replace(/[^0-9]/g, ''));
+    const pontos = Number(pontuacaoTotal.replace(/[^0-9.]/g, ''));
     if (!pontos || pontos <= 0) {
-      Alert.alert('Erro', 'A pontuação total do exercício precisa ser maior que zero');
+      Alert.alert('Erro', 'A pontuação total deve ser maior que zero.');
       return;
     }
 
-    // Valida as questões
+    // Validações das Questões
     for (const q of questoes) {
       if (!q.enunciado.trim()) {
-        Alert.alert('Erro', `Questão ${q.numero} precisa de um enunciado`);
+        Alert.alert('Erro', `A Questão ${q.numero} está sem enunciado.`);
         return;
       }
       if (q.tipoResposta === 'MULTIPLA_ESCOLHA' && !q.correta) {
-        Alert.alert('Erro', `Questão ${q.numero} precisa ter uma resposta marcada como correta`);
+        Alert.alert('Erro', `Selecione a alternativa correta na Questão ${q.numero}.`);
         return;
       }
       if (q.tipoResposta === 'TEXTO' && !q.correta.trim()) {
-        Alert.alert('Erro', `Questão ${q.numero} precisa de uma resposta esperada`);
+        Alert.alert('Erro', `Informe a resposta esperada na Questão ${q.numero}.`);
         return;
       }
     }
 
-    setLoading(true);
+    setLoading(true); // Ativa o modal de carregamento
+
     try {
       const habilidades = habilidadesBNCC
         .split(',')
         .map((h) => h.trim())
         .filter((h) => h);
 
-      // O aplicativo divide os pontos totais pela quantidade de questões automaticamente
       const valorPorQuestao = pontos / questoes.length;
 
+      // Monta o objeto para o Backend
+      // Nota: O backend precisa aceitar equipeId ou alunoId se selecionado
       const exercicioData = {
         titulo,
         descricao,
         modoCriacao: 'MANUAL',
         habilidadesBNCC: habilidades,
-        turmaId: turmaId || undefined,
         pontosPorQuestao: valorPorQuestao,
+        
+        // Lógica de Destinatário
+        turmaId: tipoDestinatario === 'TURMA' && destinatarioId ? destinatarioId : undefined,
+        equipeId: tipoDestinatario === 'EQUIPE' && destinatarioId ? destinatarioId : undefined,
+        alunoId: tipoDestinatario === 'ALUNO' && destinatarioId ? destinatarioId : undefined,
+
         questoes: questoes.map((q) => ({
           numero: q.numero,
           tipoResposta: q.tipoResposta,
@@ -159,7 +197,8 @@ export default function CriarExercicio() {
 
       await api.createExercicio(exercicioData);
       
-      Alert.alert('Sucesso', 'Exercício criado com sucesso!', [
+      // Feedback visual claro
+      Alert.alert('Sucesso!', 'Exercício salvo e enviado.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
       
@@ -167,266 +206,32 @@ export default function CriarExercicio() {
       console.log("=== ERRO AO SALVAR ===");
       console.log(error);
       
-      let mensagemErro = 'Erro desconhecido ao tentar salvar. Verifique sua internet.';
+      let mensagemErro = 'Não foi possível salvar. Verifique sua conexão.';
       
-      if (error.response && error.response.data) {
+      if (error.response?.data?.detail) {
         const detalhe = error.response.data.detail;
-        if (typeof detalhe === 'string') {
-          mensagemErro = detalhe;
-        } else if (Array.isArray(detalhe)) {
-          mensagemErro = "O servidor recusou os dados (Erro 422). Verifique se preencheu tudo corretamente.";
-        }
+        mensagemErro = typeof detalhe === 'string' ? detalhe : "Verifique os dados preenchidos.";
       }
-      Alert.alert('Falha ao Salvar', mensagemErro);
+      Alert.alert('Erro ao Salvar', mensagemErro);
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="close" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Criar Exercício</Text>
-          <TouchableOpacity onPress={handleSave} disabled={loading}>
-            {loading ? (
-              <ActivityIndicator color="#FFD700" />
-            ) : (
-              <Ionicons name="checkmark" size={28} color="#FFD700" />
-            )}
-          </TouchableOpacity>
-        </View>
+  // Renderização das opções de destinatário
+  const renderDestinatarios = () => {
+    let dados = [];
+    let placeholder = "";
 
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          {/* Informações Básicas */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Informações Básicas</Text>
+    if (tipoDestinatario === 'TURMA') {
+      dados = turmas;
+      placeholder = "Selecione uma Turma";
+    } else if (tipoDestinatario === 'EQUIPE') {
+      dados = equipes;
+      placeholder = "Selecione uma Equipe";
+    } else {
+      dados = alunos;
+      placeholder = "Selecione um Aluno";
+    }
 
-            <Text style={styles.inputLabel}>Título *</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Título do exercício"
-              placeholderTextColor="#666"
-              value={titulo}
-              onChangeText={setTitulo}
-            />
-
-            <Text style={styles.inputLabel}>Descrição</Text>
-            <TextInput
-              style={[styles.textInput, { height: 80 }]}
-              placeholder="Descrição (opcional)"
-              placeholderTextColor="#666"
-              value={descricao}
-              onChangeText={setDescricao}
-              multiline
-            />
-
-            <Text style={styles.inputLabel}>Pontuação Total do Exercício *</Text>
-            <TextInput
-              style={[styles.textInput, { width: 120, textAlign: 'center', fontSize: 20, fontWeight: 'bold', color: '#FFD700' }]}
-              keyboardType="numeric"
-              placeholder="Ex: 10"
-              placeholderTextColor="#666"
-              value={pontuacaoTotal}
-              onChangeText={setPontuacaoTotal}
-            />
-            <Text style={styles.hintText}>Os pontos serão divididos igualmente entre as questões adicionadas.</Text>
-
-            <Text style={styles.inputLabel}>Turma (opcional)</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <TouchableOpacity
-                style={[styles.selectOption, !turmaId && styles.selectOptionActive]}
-                onPress={() => setTurmaId('')}
-              >
-                <Text style={[styles.selectText, !turmaId && { color: '#000' }]}>Todas</Text>
-              </TouchableOpacity>
-              {turmas.map((turma) => (
-                <TouchableOpacity
-                  key={turma.id}
-                  style={[styles.selectOption, turmaId === turma.id && styles.selectOptionActive]}
-                  onPress={() => setTurmaId(turma.id)}
-                >
-                  <Text style={[styles.selectText, turmaId === turma.id && { color: '#000' }]}>{turma.nome}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.inputLabel}>Habilidades BNCC (separadas por vírgula)</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Ex: EF06MA01, EF06MA02"
-              placeholderTextColor="#666"
-              value={habilidadesBNCC}
-              onChangeText={setHabilidadesBNCC}
-            />
-          </View>
-
-          {/* Questões */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Questões ({questoes.length})</Text>
-              <TouchableOpacity style={styles.addButton} onPress={addQuestao}>
-                <Ionicons name="add" size={20} color="#000" />
-                <Text style={styles.addButtonText}>Adicionar</Text>
-              </TouchableOpacity>
-            </View>
-
-            {questoes.map((questao, qIndex) => (
-              <View key={questao.id} style={styles.questaoCard}>
-                <View style={styles.questaoHeader}>
-                  <View style={styles.questaoNumero}>
-                    <Text style={styles.questaoNumeroText}>{questao.numero}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => removeQuestao(qIndex)}>
-                    <Ionicons name="trash" size={20} color="#E74C3C" />
-                  </TouchableOpacity>
-                </View>
-
-                <Text style={styles.inputLabel}>Tipo de Resposta</Text>
-                <View style={styles.tipoContainer}>
-                  <TouchableOpacity
-                    style={[
-                      styles.tipoOption,
-                      questao.tipoResposta === 'MULTIPLA_ESCOLHA' && styles.tipoOptionActive,
-                    ]}
-                    onPress={() => updateQuestao(qIndex, 'tipoResposta', 'MULTIPLA_ESCOLHA')}
-                  >
-                    <Text
-                      style={[
-                        styles.tipoText,
-                        questao.tipoResposta === 'MULTIPLA_ESCOLHA' && { color: '#000' },
-                      ]}
-                    >
-                      Múltipla Escolha
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.tipoOption,
-                      questao.tipoResposta === 'TEXTO' && styles.tipoOptionActive,
-                    ]}
-                    onPress={() => updateQuestao(qIndex, 'tipoResposta', 'TEXTO')}
-                  >
-                    <Text
-                      style={[
-                        styles.tipoText,
-                        questao.tipoResposta === 'TEXTO' && { color: '#000' },
-                      ]}
-                    >
-                      Texto
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <Text style={styles.inputLabel}>Enunciado *</Text>
-                <TextInput
-                  style={[styles.textInput, { height: 100 }]}
-                  placeholder="Ex: Qual o valor de $x$ na equação $2x = 4$?"
-                  placeholderTextColor="#666"
-                  value={questao.enunciado}
-                  onChangeText={(text) => updateQuestao(qIndex, 'enunciado', text)}
-                  multiline
-                />
-
-                {questao.tipoResposta === 'MULTIPLA_ESCOLHA' && (
-                  <>
-                    <Text style={styles.inputLabel}>Alternativas (suporta LaTeX com cifrão $)</Text>
-                    {questao.alternativas.map((alt, altIndex) => (
-                      <View key={alt.letra} style={styles.alternativaRow}>
-                        <TouchableOpacity
-                          style={[
-                            styles.alternativaLetra,
-                            { backgroundColor: alt.cor },
-                            questao.correta === alt.letra && styles.alternativaCorreta,
-                          ]}
-                          onPress={() => updateQuestao(qIndex, 'correta', alt.letra)}
-                        >
-                          <Text style={styles.alternativaLetraText}>{alt.letra}</Text>
-                          {questao.correta === alt.letra && (
-                            <Ionicons name="checkmark" size={14} color="#fff" />
-                          )}
-                        </TouchableOpacity>
-                        <TextInput
-                          style={styles.alternativaInput}
-                          placeholder={`Alternativa ${alt.letra}`}
-                          placeholderTextColor="#666"
-                          value={alt.texto}
-                          onChangeText={(text) => updateAlternativa(qIndex, altIndex, text)}
-                        />
-                      </View>
-                    ))}
-                    <Text style={styles.hintText}>
-                      Toque na bolinha colorida com a letra para marcar como a resposta correta.
-                    </Text>
-                  </>
-                )}
-
-                {questao.tipoResposta === 'TEXTO' && (
-                  <>
-                    <Text style={styles.inputLabel}>Resposta Esperada Exata</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="Resposta correta (suporta LaTeX)"
-                      placeholderTextColor="#666"
-                      value={questao.correta}
-                      onChangeText={(text) => updateQuestao(qIndex, 'correta', text)}
-                    />
-                  </>
-                )}
-              </View>
-            ))}
-
-            {questoes.length === 0 && (
-              <View style={styles.emptyQuestions}>
-                <Ionicons name="document-text-outline" size={40} color="#666" />
-                <Text style={styles.emptyText}>Nenhuma questão adicionada</Text>
-                <Text style={styles.emptyHint}>Clique em "Adicionar" para criar questões</Text>
-              </View>
-            )}
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#222' },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  scrollView: { flex: 1 },
-  scrollContent: { padding: 16 },
-  section: { marginBottom: 24 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  sectionTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  addButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD700', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 4 },
-  addButtonText: { color: '#000', fontWeight: '600' },
-  inputLabel: { color: '#888', fontSize: 12, marginBottom: 8, marginTop: 12 },
-  textInput: { backgroundColor: '#1a1a2e', borderRadius: 12, padding: 14, color: '#fff', fontSize: 16 },
-  selectOption: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#333', marginRight: 8 },
-  selectOptionActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
-  selectText: { color: '#888', fontWeight: '600' },
-  questaoCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, marginBottom: 16 },
-  questaoHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  questaoNumero: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFD700', alignItems: 'center', justifyContent: 'center' },
-  questaoNumeroText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
-  tipoContainer: { flexDirection: 'row', gap: 8 },
-  tipoOption: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#333', alignItems: 'center' },
-  tipoOptionActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
-  tipoText: { color: '#888', fontWeight: '600' },
-  alternativaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
-  alternativaLetra: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 2 },
-  alternativaCorreta: { borderWidth: 3, borderColor: '#fff' },
-  alternativaLetraText: { color: '#000', fontWeight: 'bold', fontSize: 14 },
-  alternativaInput: { flex: 1, backgroundColor: '#252540', borderRadius: 10, padding: 12, color: '#fff', fontSize: 14 },
-  hintText: { color: '#666', fontSize: 12, fontStyle: 'italic', marginTop: 8 },
-  emptyQuestions: { alignItems: 'center', padding: 30, backgroundColor: '#1a1a2e', borderRadius: 16 },
-  emptyText: { color: '#888', fontSize: 16, marginTop: 12 },
-  emptyHint: { color: '#666', fontSize: 12, marginTop: 4 },
-});
+    if (loadingData)
