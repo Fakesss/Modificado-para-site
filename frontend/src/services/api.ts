@@ -42,10 +42,8 @@ export const getEquipes = async () => { try { return (await api.get('/equipes'))
 export const createEquipe = async (nome: string, cor: string) => (await api.post('/equipes', { nome, cor })).data;
 export const deleteEquipe = async (id: string) => (await api.delete(`/equipes/${id}`)).data;
 
-// EXERCÍCIOS (AQUI ESTAVAM FALTANDO COISAS!)
+// EXERCÍCIOS
 export const getExercicios = async () => { const r = await api.get('/exercicios'); return r.data; };
-
-// >>> FUNÇÃO QUE FALTAVA PARA EDITAR <<<
 export const getExercicio = async (id: string) => {
   try {
     const r = await api.get(`/exercicios/${id}`);
@@ -55,16 +53,13 @@ export const getExercicio = async (id: string) => {
     return null;
   }
 };
-
 export const createExercicio = async (d: any) => (await api.post('/exercicios', d)).data;
-
-// >>> FUNÇÃO QUE FALTAVA PARA SALVAR EDIÇÃO <<<
 export const updateExercicio = async (id: string, d: any) => {
   const r = await api.put(`/exercicios/${id}`, d);
   return r.data;
 };
-
 export const deleteExercicio = async (id: string) => (await api.delete(`/exercicios/${id}`)).data;
+
 export const submitExercicio = async (id: string, resp: any) => (await api.post('/submissoes', { exercicioId: id, respostas: resp })).data;
 export const getSubmissao = async (id: string) => (await api.get(`/submissoes/${id}`)).data;
 
