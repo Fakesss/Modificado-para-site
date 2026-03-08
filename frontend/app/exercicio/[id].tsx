@@ -49,32 +49,6 @@ export default function ExercicioScreen() {
     setRespostas((prev) => ({ ...prev, [questaoId]: text }));
   };
 
-  const handleRetry = async () => {
-    Alert.alert(
-      "Tentar Novamente",
-      "Sua nota anterior será apagada. Deseja continuar?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        { 
-          text: "Sim, refazer", 
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await api.retryExercicio(id as string);
-              setExistingSubmission(null);
-              setRespostas({});
-              Alert.alert("Pronto!", "Pode tentar de novo.");
-            } catch (error) {
-              Alert.alert("Erro", "Não foi possível resetar.");
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
-  };
-
   const handleSubmit = async () => {
     if (!exercicio?.questoes) return;
     const unanswered = exercicio.questoes.filter((q) => !respostas[q.id]);
@@ -98,15 +72,13 @@ export default function ExercicioScreen() {
 
       const result = await api.submitExercicio(id as string, respostasArray);
       
-      // >>> CORREÇÃO DO RESULTADO ZERADO <<<
-      // Convertendo explicitamente para String para garantir o transporte
       router.replace({
         pathname: '/resultado',
         params: {
           exercicioId: id as string,
           acertos: String(result.acertos),
           erros: String(result.erros),
-          total: String(result.totalQuestoes), // Usando a chave correta do backend
+          total: String(result.totalQuestoes),
           nota: String(result.nota),
           percentual: String(result.percentual),
           pontos: String(result.pontosGerados),
@@ -209,18 +181,15 @@ export default function ExercicioScreen() {
         ))}
       </ScrollView>
 
-      {/* BOTÕES DE AÇÃO */}
+      {/* AÇÕES RODAPÉ: Apenas Enviar ou Voltar, sem opção de tentar novamente */}
       {!existingSubmission ? (
         <TouchableOpacity style={[styles.submitButton, submitting && {opacity:0.5}]} onPress={handleSubmit} disabled={submitting}>
           {submitting ? <ActivityIndicator color="#000" /> : <Text style={styles.submitButtonText}>Enviar Respostas</Text>}
         </TouchableOpacity>
-      ) : existingSubmission.nota < 5.0 ? (
-        // >>> BOTÃO DE TENTAR NOVAMENTE (Se nota < 5) <<<
-        <TouchableOpacity style={[styles.submitButton, { backgroundColor: '#E74C3C' }]} onPress={handleRetry}>
-          <Text style={[styles.submitButtonText, { color: '#fff' }]}>Tentar Novamente</Text>
-        </TouchableOpacity>
       ) : (
-        <View style={{height: 20}} />
+        <TouchableOpacity style={styles.backToExercises} onPress={() => router.back()}>
+          <Text style={styles.backToExercisesText}>Voltar para Atividades</Text>
+        </TouchableOpacity>
       )}
     </SafeAreaView>
   );
@@ -253,4 +222,6 @@ const styles = StyleSheet.create({
   textInput: { backgroundColor: '#252540', borderRadius: 12, padding: 12, color: '#fff', minHeight: 50 },
   submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFD700', margin: 16, padding: 16, borderRadius: 12 },
   submitButtonText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
+  backToExercises: { alignItems: 'center', paddingVertical: 16, margin: 16, backgroundColor: '#1a1a2e', borderRadius: 12, borderWidth: 1, borderColor: '#333' },
+  backToExercisesText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
