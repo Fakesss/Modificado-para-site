@@ -9,9 +9,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
 
 const ALTERNATIVA_CORES = [
-  { letra: 'A', cor: '#E74C3C' }, { letra: 'B', cor: '#F39C12' },
-  { letra: 'C', cor: '#27AE60' }, { letra: 'D', cor: '#3498DB' },
-  { letra: 'E', cor: '#9B59B6' }
+  { letra: 'A', cor: '#E74C3C' }, // Vermelho
+  { letra: 'B', cor: '#F39C12' }, // Laranja
+  { letra: 'C', cor: '#27AE60' }, // Verde
+  { letra: 'D', cor: '#3498DB' }, // Azul
+  { letra: 'E', cor: '#9B59B6' }  // Roxo
 ];
 
 export default function CriarExercicio() {
@@ -46,7 +48,6 @@ export default function CriarExercicio() {
   const loadInitialData = async () => {
     setLoadingData(true);
     try {
-      // Carrega listas
       const [t, e, u] = await Promise.all([
         api.getTurmas(),
         api.getEquipes().catch(() => []),
@@ -56,7 +57,6 @@ export default function CriarExercicio() {
       setEquipes(e || []);
       setAlunos(u || []);
 
-      // Se for edição, carrega dados
       if (isEditing) {
         const ex = await api.getExercicio(id as string);
         if (ex) {
@@ -67,6 +67,7 @@ export default function CriarExercicio() {
           if (ex.turmaId) { setTipoDestinatario('TURMA'); setDestinatarioId(ex.turmaId); }
           else if (ex.equipeId) { setTipoDestinatario('EQUIPE'); setDestinatarioId(ex.equipeId); }
           else if (ex.alunoId) { setTipoDestinatario('ALUNO'); setDestinatarioId(ex.alunoId); }
+          else { setTipoDestinatario('TURMA'); setDestinatarioId(''); } // Geral
           
           if (ex.questoes && ex.questoes.length > 0) {
             const questoesFormatadas = ex.questoes.map((q: any) => ({
@@ -76,14 +77,14 @@ export default function CriarExercicio() {
               alternativas: q.tipoResposta === 'MULTIPLA_ESCOLHA' 
                 ? (q.alternativas || []).map((alt: any) => ({
                     ...alt,
-                    cor: ALTERNATIVA_CORES.find(c => c.letra === alt.letra)?.cor || '#999'
+                    // Garante que a cor venha do banco ou use o padrão
+                    cor: alt.cor || ALTERNATIVA_CORES.find(c => c.letra === alt.letra)?.cor || '#999'
                   }))
                 : ALTERNATIVA_CORES.slice(0, 4).map(c => ({ letra: c.letra, texto: '', cor: c.cor }))
             }));
             
             setQuestoes(questoesFormatadas);
             
-            // Recalcula pontuação visual
             const totalPts = ex.questoes.reduce((acc: number, q: any) => acc + (Number(q.pontuacaoMax) || 0), 0);
             if (totalPts > 0) setPontuacaoTotal(totalPts.toString());
           }
@@ -91,7 +92,7 @@ export default function CriarExercicio() {
       }
     } catch (error) {
       console.log(error);
-      Alert.alert("Erro", "Falha ao carregar dados. Verifique a conexão.");
+      Alert.alert("Erro", "Falha ao carregar dados.");
     } finally {
       setLoadingData(false);
     }
@@ -103,8 +104,12 @@ export default function CriarExercicio() {
       numero: questoes.length + 1,
       tipoResposta: 'MULTIPLA_ESCOLHA',
       enunciado: '',
-      habilidadeBNCC: '', // Novo campo por questão
-      alternativas: ALTERNATIVA_CORES.slice(0, 4).map(c => ({ letra: c.letra, texto: '', cor: c.cor })),
+      habilidadeBNCC: '',
+      alternativas: ALTERNATIVA_CORES.slice(0, 4).map(c => ({ 
+        letra: c.letra, 
+        texto: '', 
+        cor: c.cor // Garante que a cor seja inicializada corretamente
+      })),
       correta: ''
     }]);
   };
@@ -116,72 +121,79 @@ export default function CriarExercicio() {
   };
 
   const handleSave = async () => {
-    // 1. Validações Básicas
     if (!titulo.trim()) return Alert.alert("Erro", "O título é obrigatório");
-    if (questoes.length === 0) return Alert.alert("Erro", "Adicione pelo menos uma questão");
+    if (questoes.length === 0) return Alert.alert("Erro", "Adicione questões");
 
-    // 2. Validação das Questões
     for (const q of questoes) {
         if (!q.enunciado) return Alert.alert("Erro", `Questão ${q.numero} sem enunciado.`);
-        if (q.tipoResposta === 'MULTIPLA_ESCOLHA' && !q.correta) return Alert.alert("Erro", `Questão ${q.numero} sem resposta correta marcada.`);
+        if (q.tipoResposta === 'MULTIPLA_ESCOLHA' && !q.correta) return Alert.alert("Erro", `Questão ${q.numero} sem resposta correta.`);
         if (q.tipoResposta === 'TEXTO' && !q.correta) return Alert.alert("Erro", `Questão ${q.numero} sem gabarito.`);
     }
 
     setLoading(true);
     
     try {
-      // Converte pontos para Float (para aceitar 3.33, etc)
       const pts = parseFloat(pontuacaoTotal.replace(',', '.')) || 10;
+      const ptsPorQ = pts / questions.length > 0 ? questions.length : 1; 
+      // Correção: uso da variável correta 'questoes' e proteção contra divisão por zero
+      const valorPorQuestao = questoes.length > 0 ? (pts / questoes.length) : 0;
       
-      // === CORREÇÃO CRÍTICA AQUI (era questions.length) ===
-      const ptsPorQ = pts / questoes.length; 
-      
-      // Prepara Array de Habilidades Gerais
       const habilidadesGerais = habilidadesBNCC.split(',').map(s => s.trim()).filter(Boolean);
 
       const payload = {
         titulo,
         descricao,
         habilidadesBNCC: habilidadesGerais,
+        // Envia null se for Geral, para limpar no banco
         turmaId: tipoDestinatario === 'TURMA' && destinatarioId ? destinatarioId : null,
         equipeId: tipoDestinatario === 'EQUIPE' && destinatarioId ? destinatarioId : null,
         alunoId: tipoDestinatario === 'ALUNO' && destinatarioId ? destinatarioId : null,
-        pontosPorQuestao: ptsPorQ,
+        pontosPorQuestao: valorPorQuestao,
         questoes: questoes.map((q, i) => ({
           numero: i + 1,
           tipoResposta: q.tipoResposta,
           enunciado: q.enunciado,
           correta: q.correta,
-          pontuacaoMax: ptsPorQ,
-          // Agora enviamos a habilidade específica da questão
+          pontuacaoMax: valorPorQuestao,
           habilidadesBNCC: q.habilidadeBNCC 
              ? q.habilidadeBNCC.split(',').map((s: string) => s.trim()).filter(Boolean)
-             : habilidadesGerais, // Se não tiver específica, usa a geral como fallback
+             : habilidadesGerais,
           alternativas: q.tipoResposta === 'MULTIPLA_ESCOLHA' 
-            ? q.alternativas.map((a: any) => ({ letra: a.letra, texto: a.texto })) 
+            ? q.alternativas.map((a: any) => ({ 
+                letra: a.letra, 
+                texto: a.texto,
+                cor: a.cor // CORREÇÃO: Agora enviamos a cor para o backend!
+              })) 
             : []
         }))
       };
 
-      console.log("Enviando Payload:", JSON.stringify(payload));
-
       if (isEditing && id) {
         if (api.updateExercicio) {
             await api.updateExercicio(id as string, payload);
-            Alert.alert("Sucesso", "Exercício atualizado!", [{ text: "OK", onPress: () => router.back() }]);
         } else {
-            throw new Error("Função updateExercicio não encontrada na API");
+            throw new Error("Função updateExercicio não encontrada");
         }
       } else {
         await api.createExercicio(payload);
-        Alert.alert("Sucesso", "Exercício criado!", [{ text: "OK", onPress: () => router.back() }]);
       }
+
+      // CORREÇÃO DO TRAVAMENTO: 
+      // Fecha o loading PRIMEIRO, espera um pouquinho, e só depois mostra o alerta.
+      setLoading(false);
+      setTimeout(() => {
+        Alert.alert("Sucesso", "Salvo com sucesso!", [
+            { text: "OK", onPress: () => router.back() }
+        ]);
+      }, 500);
+
     } catch (error: any) {
+      setLoading(false);
       console.error(error);
       const msg = error.response?.data?.detail || error.message || "Erro desconhecido";
-      Alert.alert("Erro ao Salvar", typeof msg === 'string' ? msg : JSON.stringify(msg));
-    } finally {
-      setLoading(false);
+      setTimeout(() => {
+        Alert.alert("Erro ao Salvar", typeof msg === 'string' ? msg : JSON.stringify(msg));
+      }, 500);
     }
   };
 
@@ -210,7 +222,6 @@ export default function CriarExercicio() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Modal de Loading Bloqueante */}
       <Modal visible={loading} transparent animationType="fade">
         <View style={styles.loadingOverlay}>
             <View style={styles.loadingBox}>
@@ -243,7 +254,6 @@ export default function CriarExercicio() {
                 <Text style={styles.label}>Título</Text>
                 <TextInput style={styles.input} value={titulo} onChangeText={setTitulo} placeholderTextColor="#666" placeholder="Ex: Equações de 1º Grau" />
                 
-                {/* Linha de Pontos e BNCC Geral */}
                 <View style={{flexDirection:'row', justifyContent:'space-between'}}>
                     <View style={{flex:1, marginRight:10}}>
                         <Text style={styles.label}>Pontos Totais</Text>
@@ -251,7 +261,7 @@ export default function CriarExercicio() {
                             value={pontuacaoTotal} onChangeText={setPontuacaoTotal} keyboardType="numeric" />
                     </View>
                     <View style={{flex:2}}>
-                        <Text style={styles.label}>BNCC (Padrão/Geral)</Text>
+                        <Text style={styles.label}>BNCC (Padrão)</Text>
                         <TextInput style={styles.input} value={habilidadesBNCC} onChangeText={setHabilidadesBNCC} placeholder="Ex: EF06MA01" placeholderTextColor="#666" />
                     </View>
                 </View>
@@ -286,13 +296,12 @@ export default function CriarExercicio() {
                     <TouchableOpacity onPress={() => removeQuestao(i)}><Ionicons name="trash" size={20} color="#E74C3C"/></TouchableOpacity>
                 </View>
 
-                {/* CAMPO BNCC ESPECÍFICO DA QUESTÃO */}
-                <Text style={styles.label}>Habilidade BNCC desta questão (Opcional)</Text>
+                <Text style={styles.label}>Habilidade BNCC desta questão</Text>
                 <TextInput 
                     style={[styles.input, {marginBottom:10}]} 
                     value={q.habilidadeBNCC} 
                     onChangeText={t => {const n=[...questoes]; n[i].habilidadeBNCC=t; setQuestoes(n)}} 
-                    placeholder="Ex: EF06MA12 (Deixe vazio para usar a Geral)" 
+                    placeholder="Ex: EF06MA12 (Vazio = usa Padrão)" 
                     placeholderTextColor="#555" 
                 />
                 
