@@ -48,23 +48,31 @@ export default function Conteudos() {
     }
   };
 
-  // >>> FUNÇÃO DE DOWNLOAD E VISUALIZAÇÃO <<<
   const abrirMaterial = async (conteudo: Conteudo) => {
     if (!conteudo.arquivo) {
       return Alert.alert('Erro', 'Arquivo não disponível.');
     }
 
     try {
-      // 1. Define onde salvar o arquivo temporariamente
+      // LÓGICA PARA WEB (VERCEL)
+      if (Platform.OS === 'web') {
+        const linkSource = `data:application/pdf;base64,${conteudo.arquivo}`;
+        const downloadLink = document.createElement("a");
+        const fileName = `${conteudo.titulo}.pdf`;
+        downloadLink.href = linkSource;
+        downloadLink.download = fileName;
+        downloadLink.click();
+        return;
+      }
+
+      // LÓGICA PARA CELULAR (ANDROID/IOS)
       const filename = conteudo.titulo.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.pdf';
       const fileUri = FileSystem.documentDirectory + filename;
 
-      // 2. Escreve o base64 no arquivo
       await FileSystem.writeAsStringAsync(fileUri, conteudo.arquivo, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      // 3. Abre o menu de compartilhamento/visualização
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri);
       } else {
