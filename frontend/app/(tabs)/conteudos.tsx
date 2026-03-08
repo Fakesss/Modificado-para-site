@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+// REMOVIDOS IMPORTS NATIVOS QUE QUEBRAM O VERCEL
 import * as api from '../../src/services/api';
 import { Conteudo } from '../../src/types';
 
@@ -53,7 +54,6 @@ export default function Conteudos() {
 
     if (Platform.OS === 'web') {
       try {
-        // SOLUÇÃO WEB: Cria link de download e clica nele
         const linkSource = `data:application/pdf;base64,${conteudo.arquivo}`;
         const downloadLink = document.createElement("a");
         const fileName = `${conteudo.titulo}.pdf`;
@@ -64,7 +64,7 @@ export default function Conteudos() {
         Alert.alert("Erro", "Falha ao baixar no navegador.");
       }
     } else {
-      Alert.alert("Aviso", "Download disponível apenas na versão Web.");
+      Alert.alert("Aviso", "Visualização de arquivos disponível apenas na versão Web no momento.");
     }
   };
 
