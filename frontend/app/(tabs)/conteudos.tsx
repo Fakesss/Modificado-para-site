@@ -1,15 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-  Linking,
-  Alert,
-  Platform,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
+  ActivityIndicator, Linking, Alert, Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -60,8 +52,8 @@ export default function Conteudos() {
     }
 
     if (Platform.OS === 'web') {
-      // LÓGICA EXCLUSIVA PARA WEB (Funciona no Vercel)
       try {
+        // SOLUÇÃO WEB: Cria link de download e clica nele
         const linkSource = `data:application/pdf;base64,${conteudo.arquivo}`;
         const downloadLink = document.createElement("a");
         const fileName = `${conteudo.titulo}.pdf`;
@@ -72,8 +64,7 @@ export default function Conteudos() {
         Alert.alert("Erro", "Falha ao baixar no navegador.");
       }
     } else {
-      // LÓGICA PARA CELULAR (Temporariamente simplificada para não dar erro de build)
-      Alert.alert("Aviso", "O download de arquivos no App requer configuração nativa.");
+      Alert.alert("Aviso", "Download disponível apenas na versão Web.");
     }
   };
 
