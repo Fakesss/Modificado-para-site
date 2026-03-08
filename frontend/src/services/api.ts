@@ -42,6 +42,13 @@ export const getEquipes = async () => { try { return (await api.get('/equipes'))
 export const createEquipe = async (nome: string, cor: string) => (await api.post('/equipes', { nome, cor })).data;
 export const deleteEquipe = async (id: string) => (await api.delete(`/equipes/${id}`)).data;
 
+// CONTEÚDOS
+export const getConteudos = async (cat?: string) => { const r = await api.get('/conteudos', { params: { categoria: cat } }); return r.data; };
+export const createConteudo = async (d: any) => (await api.post('/conteudos', d)).data;
+// >>> ADICIONADO: FUNÇÃO DE ATUALIZAR CONTEÚDO <<<
+export const updateConteudo = async (id: string, d: any) => (await api.put(`/conteudos/${id}`, d)).data;
+export const deleteConteudo = async (id: string) => (await api.delete(`/conteudos/${id}`)).data;
+
 // EXERCÍCIOS
 export const getExercicios = async () => { const r = await api.get('/exercicios'); return r.data; };
 export const getExercicio = async (id: string) => {
@@ -62,8 +69,6 @@ export const deleteExercicio = async (id: string) => (await api.delete(`/exercic
 
 export const submitExercicio = async (id: string, resp: any) => (await api.post('/submissoes', { exercicioId: id, respostas: resp })).data;
 export const getSubmissao = async (id: string) => (await api.get(`/submissoes/${id}`)).data;
-
-// >>> NOVA FUNÇÃO PARA RETRY <<<
 export const retryExercicio = async (id: string) => (await api.delete(`/submissoes/${id}/retry`)).data;
 
 // OUTROS
