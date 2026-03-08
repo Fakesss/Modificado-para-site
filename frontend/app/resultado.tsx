@@ -14,10 +14,11 @@ export default function Resultado() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // Função segura para ler números (texto ou number)
+  // Função segura para garantir que lemos números corretamente
   const parseNumber = (val: any) => {
     if (!val) return 0;
     if (typeof val === 'number') return val;
+    // Tenta converter string para float/int
     return Number(val) || 0;
   };
 
@@ -47,7 +48,6 @@ export default function Resultado() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Result Header */}
         <View style={styles.resultHeader}>
           <Ionicons
             name={nota >= 7 ? 'trophy' : nota >= 5 ? 'thumbs-up' : 'refresh'}
@@ -58,7 +58,6 @@ export default function Resultado() {
           <Text style={styles.notaMessage}>{getNotaMessage()}</Text>
         </View>
 
-        {/* Stats */}
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
             <Ionicons name="checkmark-circle" size={24} color="#32CD32" />
@@ -79,7 +78,6 @@ export default function Resultado() {
           </View>
         </View>
 
-        {/* Points Earned */}
         <View style={styles.pointsCard}>
           <Ionicons name="star" size={32} color="#FFD700" />
           <View style={styles.pointsInfo}>
@@ -88,7 +86,6 @@ export default function Resultado() {
           </View>
         </View>
 
-        {/* Progress Bar */}
         <View style={styles.progressContainer}>
           <Text style={styles.progressLabel}>Aproveitamento: {percentual.toFixed(0)}%</Text>
           <View style={styles.progressBar}>
@@ -101,7 +98,6 @@ export default function Resultado() {
           </View>
         </View>
 
-        {/* Details */}
         {detalhes.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Revisão das Questões</Text>
@@ -144,7 +140,6 @@ export default function Resultado() {
         )}
       </ScrollView>
 
-      {/* Action Buttons */}
       <View style={styles.actionsContainer}>
         <TouchableOpacity
           style={styles.primaryButton}
