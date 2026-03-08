@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
-import { Turma, Equipe, Usuario } from '../../src/types';
+import { Turma } from '../../src/types';
 
 const ALTERNATIVA_CORES = [
   { letra: 'A', cor: '#E74C3C' },
@@ -32,46 +32,31 @@ interface QuestaoForm {
   enunciado: string;
   alternativas: { letra: string; texto: string; cor: string }[];
   correta: string;
-  pontuacaoMax: number;
-  habilidadesBNCC: string[];
 }
 
 export default function CriarExercicio() {
   const router = useRouter();
-  
-  // Listas puxadas do banco de dados
   const [turmas, setTurmas] = useState<Turma[]>([]);
-  const [equipes, setEquipes] = useState<Equipe[]>([]);
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  
   const [loading, setLoading] = useState(false);
+  
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
-  
-  // Destinatários selecionados
   const [turmaId, setTurmaId] = useState('');
-  const [equipeId, setEquipeId] = useState('');
-  const [usuarioId, setUsuarioId] = useState('');
-  
   const [habilidadesBNCC, setHabilidadesBNCC] = useState('');
+  const [pontuacaoTotal, setPontuacaoTotal] = useState('10'); // Novo campo de pontuação total
+  
   const [questoes, setQuestoes] = useState<QuestaoForm[]>([]);
 
   useEffect(() => {
-    loadDestinatarios();
+    loadTurmas();
   }, []);
 
-  const loadDestinatarios = async () => {
+  const loadTurmas = async () => {
     try {
-      const [turmasData, equipesData, usuariosData] = await Promise.all([
-        api.getTurmas().catch(() => []),
-        api.getEquipes().catch(() => []),
-        api.getUsuarios().catch(() => [])
-      ]);
-      setTurmas(turmasData);
-      setEquipes(equipesData);
-      setUsuarios(usuariosData);
+      const data = await api.getTurmas();
+      setTurmas(data);
     } catch (error) {
-      console.error('Erro ao carregar listas:', error);
+      console.error('Error loading turmas:', error);
     }
   };
 
@@ -87,8 +72,6 @@ export default function CriarExercicio() {
         cor: a.cor,
       })),
       correta: '',
-      pontuacaoMax: 1, 
-      habilidadesBNCC: [],
     };
     setQuestoes([...questoes, novaQuestao]);
   };
@@ -124,6 +107,13 @@ export default function CriarExercicio() {
       return;
     }
 
+    const pontos = Number(pontuacaoTotal.replace(/[^0-9]/g, ''));
+    if (!pontos || pontos <= 0) {
+      Alert.alert('Erro', 'A pontuação total do exercício precisa ser maior que zero');
+      return;
+    }
+
+    // Valida as questões
     for (const q of questoes) {
       if (!q.enunciado.trim()) {
         Alert.alert('Erro', `Questão ${q.numero} precisa de um enunciado`);
@@ -146,30 +136,33 @@ export default function CriarExercicio() {
         .map((h) => h.trim())
         .filter((h) => h);
 
+      // O aplicativo divide os pontos totais pela quantidade de questões automaticamente
+      const valorPorQuestao = pontos / questoes.length;
+
       const exercicioData = {
         titulo,
         descricao,
         modoCriacao: 'MANUAL',
         habilidadesBNCC: habilidades,
         turmaId: turmaId || undefined,
-        equipeId: equipeId || undefined,
-        usuarioId: usuarioId || undefined,
-        pontosPorQuestao: questoes[0]?.pontuacaoMax || 1, 
+        pontosPorQuestao: valorPorQuestao,
         questoes: questoes.map((q) => ({
           numero: q.numero,
           tipoResposta: q.tipoResposta,
           enunciado: q.enunciado,
           alternativas: q.alternativas.filter((a) => a.texto.trim()),
           correta: q.correta,
-          pontuacaoMax: q.pontuacaoMax,
+          pontuacaoMax: valorPorQuestao,
           habilidadesBNCC: habilidades,
         })),
       };
 
       await api.createExercicio(exercicioData);
+      
       Alert.alert('Sucesso', 'Exercício criado com sucesso!', [
         { text: 'OK', onPress: () => router.back() },
       ]);
+      
     } catch (error: any) {
       console.log("=== ERRO AO SALVAR ===");
       console.log(error);
@@ -181,7 +174,7 @@ export default function CriarExercicio() {
         if (typeof detalhe === 'string') {
           mensagemErro = detalhe;
         } else if (Array.isArray(detalhe)) {
-          mensagemErro = "O servidor recusou os dados (Erro 422). Pode ser que ele ainda não suporte envio para Equipe ou Usuário específico.";
+          mensagemErro = "O servidor recusou os dados (Erro 422). Verifique se preencheu tudo corretamente.";
         }
       }
       Alert.alert('Falha ao Salvar', mensagemErro);
@@ -234,22 +227,18 @@ export default function CriarExercicio() {
               multiline
             />
 
-            <Text style={styles.inputLabel}>Habilidades BNCC (separadas por vírgula)</Text>
+            <Text style={styles.inputLabel}>Pontuação Total do Exercício *</Text>
             <TextInput
-              style={styles.textInput}
-              placeholder="Ex: EF06MA01, EF06MA02"
+              style={[styles.textInput, { width: 120, textAlign: 'center', fontSize: 20, fontWeight: 'bold', color: '#FFD700' }]}
+              keyboardType="numeric"
+              placeholder="Ex: 10"
               placeholderTextColor="#666"
-              value={habilidadesBNCC}
-              onChangeText={setHabilidadesBNCC}
+              value={pontuacaoTotal}
+              onChangeText={setPontuacaoTotal}
             />
-          </View>
+            <Text style={styles.hintText}>Os pontos serão divididos igualmente entre as questões adicionadas.</Text>
 
-          {/* Área de Destinatários */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Público-Alvo (Opcional)</Text>
-            <Text style={styles.hintText}>Se deixar tudo marcado como "Todas/Todos", o exercício será público.</Text>
-
-            <Text style={styles.inputLabel}>Enviar para Turma Específica:</Text>
+            <Text style={styles.inputLabel}>Turma (opcional)</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <TouchableOpacity
                 style={[styles.selectOption, !turmaId && styles.selectOptionActive]}
@@ -268,43 +257,14 @@ export default function CriarExercicio() {
               ))}
             </ScrollView>
 
-            <Text style={styles.inputLabel}>Enviar para Equipe Específica:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <TouchableOpacity
-                style={[styles.selectOption, !equipeId && styles.selectOptionActive]}
-                onPress={() => setEquipeId('')}
-              >
-                <Text style={[styles.selectText, !equipeId && { color: '#000' }]}>Todas</Text>
-              </TouchableOpacity>
-              {equipes.map((equipe) => (
-                <TouchableOpacity
-                  key={equipe.id}
-                  style={[styles.selectOption, equipeId === equipe.id && styles.selectOptionActive]}
-                  onPress={() => setEquipeId(equipe.id)}
-                >
-                  <Text style={[styles.selectText, equipeId === equipe.id && { color: '#000' }]}>{equipe.nome}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.inputLabel}>Enviar para Usuário Específico:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <TouchableOpacity
-                style={[styles.selectOption, !usuarioId && styles.selectOptionActive]}
-                onPress={() => setUsuarioId('')}
-              >
-                <Text style={[styles.selectText, !usuarioId && { color: '#000' }]}>Todos</Text>
-              </TouchableOpacity>
-              {usuarios.map((user) => (
-                <TouchableOpacity
-                  key={user.id}
-                  style={[styles.selectOption, usuarioId === user.id && styles.selectOptionActive]}
-                  onPress={() => setUsuarioId(user.id)}
-                >
-                  <Text style={[styles.selectText, usuarioId === user.id && { color: '#000' }]}>{user.nome}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            <Text style={styles.inputLabel}>Habilidades BNCC (separadas por vírgula)</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Ex: EF06MA01, EF06MA02"
+              placeholderTextColor="#666"
+              value={habilidadesBNCC}
+              onChangeText={setHabilidadesBNCC}
+            />
           </View>
 
           {/* Questões */}
@@ -327,18 +287,6 @@ export default function CriarExercicio() {
                     <Ionicons name="trash" size={20} color="#E74C3C" />
                   </TouchableOpacity>
                 </View>
-
-                {/* Pontuação da Questão */}
-                <Text style={styles.inputLabel}>Pontos que essa questão vale:</Text>
-                <TextInput
-                  style={[styles.textInput, { width: 100, textAlign: 'center' }]}
-                  keyboardType="numeric"
-                  value={String(questao.pontuacaoMax)}
-                  onChangeText={(text) => {
-                    const number = Number(text.replace(/[^0-9]/g, ''));
-                    updateQuestao(qIndex, 'pontuacaoMax', number);
-                  }}
-                />
 
                 <Text style={styles.inputLabel}>Tipo de Resposta</Text>
                 <View style={styles.tipoContainer}>
@@ -388,7 +336,7 @@ export default function CriarExercicio() {
 
                 {questao.tipoResposta === 'MULTIPLA_ESCOLHA' && (
                   <>
-                    <Text style={styles.inputLabel}>Alternativas (suporta LaTeX com cifrão)</Text>
+                    <Text style={styles.inputLabel}>Alternativas (suporta LaTeX com cifrão $)</Text>
                     {questao.alternativas.map((alt, altIndex) => (
                       <View key={alt.letra} style={styles.alternativaRow}>
                         <TouchableOpacity
