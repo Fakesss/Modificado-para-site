@@ -23,9 +23,9 @@ export default function Resultado() {
 
   const acertos = parseNumber(params.acertos);
   const erros = parseNumber(params.erros);
-  const total = parseNumber(params.total); // Agora lê corretamente
+  const total = parseNumber(params.total);
   const nota = parseNumber(params.nota);
-  const percentual = parseNumber(params.percentual);
+  // percentual removido visualmente, mas mantido na leitura caso precise futuramente
   const pontos = parseNumber(params.pontos);
   
   const detalhes = params.detalhes ? JSON.parse(params.detalhes as string) : [];
@@ -34,6 +34,12 @@ export default function Resultado() {
     if (nota >= 7) return '#32CD32';
     if (nota >= 5) return '#FFD700';
     return '#E74C3C';
+  };
+
+  const getNotaIcon = () => {
+    if (nota >= 7) return 'trophy';
+    if (nota >= 5) return 'thumbs-up';
+    return 'alert-circle'; // Mudado de 'refresh' para 'alert-circle' para não confundir
   };
 
   const getNotaMessage = () => {
@@ -47,16 +53,19 @@ export default function Resultado() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        
+        {/* Cabeçalho do Resultado */}
         <View style={styles.resultHeader}>
           <Ionicons
-            name={nota >= 7 ? 'trophy' : nota >= 5 ? 'thumbs-up' : 'refresh'}
-            size={64}
+            name={getNotaIcon()}
+            size={80}
             color={getNotaColor()}
           />
           <Text style={[styles.notaText, { color: getNotaColor() }]}>{nota.toFixed(1)}</Text>
           <Text style={styles.notaMessage}>{getNotaMessage()}</Text>
         </View>
 
+        {/* Estatísticas (Cards) */}
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
             <Ionicons name="checkmark-circle" size={24} color="#32CD32" />
@@ -77,6 +86,7 @@ export default function Resultado() {
           </View>
         </View>
 
+        {/* Card de Pontos */}
         <View style={styles.pointsCard}>
           <Ionicons name="star" size={32} color="#FFD700" />
           <View style={styles.pointsInfo}>
@@ -85,18 +95,9 @@ export default function Resultado() {
           </View>
         </View>
 
-        <View style={styles.progressContainer}>
-          <Text style={styles.progressLabel}>Aproveitamento: {percentual.toFixed(0)}%</Text>
-          <View style={styles.progressBar}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${Math.min(percentual, 100)}%`, backgroundColor: getNotaColor() },
-              ]}
-            />
-          </View>
-        </View>
+        {/* BARRA DE PROGRESSO REMOVIDA AQUI COMO SOLICITADO */}
 
+        {/* Detalhes das Questões */}
         {detalhes.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Revisão das Questões</Text>
@@ -139,6 +140,7 @@ export default function Resultado() {
         )}
       </ScrollView>
 
+      {/* Botão Voltar */}
       <View style={styles.actionsContainer}>
         <TouchableOpacity
           style={styles.primaryButton}
@@ -168,10 +170,6 @@ const styles = StyleSheet.create({
   pointsInfo: { flex: 1 },
   pointsLabel: { color: '#888', fontSize: 14 },
   pointsValue: { color: '#FFD700', fontSize: 28, fontWeight: 'bold' },
-  progressContainer: { marginBottom: 24 },
-  progressLabel: { color: '#fff', fontSize: 14, marginBottom: 8 },
-  progressBar: { height: 12, backgroundColor: '#333', borderRadius: 6, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 6 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 16 },
   detalheCard: { backgroundColor: '#1a1a2e', borderRadius: 12, padding: 16, marginBottom: 12 },
   detalheHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
