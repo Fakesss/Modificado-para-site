@@ -63,6 +63,9 @@ export const deleteExercicio = async (id: string) => (await api.delete(`/exercic
 export const submitExercicio = async (id: string, resp: any) => (await api.post('/submissoes', { exercicioId: id, respostas: resp })).data;
 export const getSubmissao = async (id: string) => (await api.get(`/submissoes/${id}`)).data;
 
+// >>> NOVA FUNÇÃO PARA RETRY <<<
+export const retryExercicio = async (id: string) => (await api.delete(`/submissoes/${id}/retry`)).data;
+
 // OUTROS
 export const getRelatorioGeral = async () => { try { return (await api.get('/relatorios/geral')).data; } catch { return {}; } };
 export const getLixeira = async () => (await api.get('/admin/lixeira')).data;
