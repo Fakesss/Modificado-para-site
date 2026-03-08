@@ -107,6 +107,7 @@ class ConteudoCreate(BaseModel):
     titulo: str
     descricao: Optional[str] = None
     urlVideo: Optional[str] = None
+    arquivo: Optional[str] = None  # >>> ADICIONADO AQUI PARA PERMITIR UPLOAD <<<
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
@@ -471,7 +472,7 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     detalhes = []
     
     for resp in submissao_data.respostas:
-        questao = questoes_map.get(resp.questaoId)
+        questao = questões_map.get(resp.questaoId)
         if not questao: continue
         correto = resp.resposta.upper().strip() == questao.get("correta", "").upper().strip()
         if correto: acertos += 1
@@ -502,6 +503,7 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     await db.submissoes.insert_one(submissao.dict())
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
     
+    # SALVA OS ERROS BNCC
     for d in detalhes:
         if not d["acertou"]:
             for bncc in d.get("habilidadesBNCC", []):
@@ -511,36 +513,50 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
                     upsert=True
                 )
     
-    return {
-        "submissao": {k: v for k, v in submissao.dict().items() if k != '_id'}, 
-        "acertos": acertos, 
-        "erros": erros,
-        "totalQuestoes": total, # Retorna explicitamente o total
-        "nota": round(nota, 1), 
-        "pontosGerados": pontos
-    }
+    return {"submissao": {k: v for k, v in submissao.dict().items() if k != '_id'}, "acertos": acertos, "erros": erros, "totalQuestoes": total, "nota": round(nota, 1), "pontosGerados": pontos}
 
 @api_router.get("/submissoes/{exercicio_id}")
 async def get_submissao(exercicio_id: str, current_user: dict = Depends(get_current_user)):
     sub = await db.submissoes.find_one({"exercicioId": exercicio_id, "usuarioId": current_user["id"]})
     return {k: v for k, v in sub.items() if k != '_id'} if sub else None
 
-# >>> NOVA ROTA PARA TENTAR NOVAMENTE <<<
 @api_router.delete("/submissoes/{exercicio_id}/retry")
 async def retry_submissao(exercicio_id: str, current_user: dict = Depends(get_current_user)):
-    # 1. Acha a submissão antiga
     sub = await db.submissoes.find_one({"exercicioId": exercicio_id, "usuarioId": current_user["id"]})
     if sub:
         pontos = sub.get("pontosGerados", 0)
-        # 2. Remove os pontos do usuário (para não acumular injustamente)
         if pontos > 0:
             await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": -pontos}})
-        
-        # 3. Deleta a submissão
         await db.submissoes.delete_one({"_id": sub["_id"]})
-        
     return {"message": "Pronto para tentar novamente"}
 
+@api_router.get("/conteudos")
+async def get_conteudos(categoria: Optional[str] = None, turmaId: Optional[str] = None):
+    query = {"ativo": True, "is_deleted": {"$ne": True}}
+    if categoria: query["abaCategoria"] = categoria
+    if turmaId: query["$or"] = [{"turmaId": turmaId}, {"turmaId": None}]
+    
+    conteudos = await db.conteudos.find(query).sort("ordem", 1).to_list(1000)
+    return [{k: v for k, v in c.items() if k != '_id'} for c in conteudos]
+
+@api_router.post("/conteudos")
+async def create_conteudo(conteudo_data: ConteudoCreate, current_user: dict = Depends(require_admin)):
+    conteudo = Conteudo(**conteudo_data.dict())
+    await db.conteudos.insert_one(conteudo.dict())
+    return conteudo.dict()
+
+@api_router.put("/conteudos/{conteudo_id}")
+async def update_conteudo(conteudo_id: str, conteudo_data: dict, current_user: dict = Depends(require_admin)):
+    await db.conteudos.update_one({"id": conteudo_id}, {"$set": conteudo_data})
+    conteudo = await db.conteudos.find_one({"id": conteudo_id})
+    return {k: v for k, v in conteudo.items() if k != '_id'}
+
+@api_router.delete("/conteudos/{conteudo_id}")
+async def delete_conteudo(conteudo_id: str, current_user: dict = Depends(require_admin)):
+    await db.conteudos.update_one({"id": conteudo_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}})
+    return {"message": "Conteúdo movido para a lixeira"}
+
+# Outras rotas do sistema
 @api_router.get("/relatorios/geral")
 async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_u = await db.usuarios.count_documents({"ativo": True})
@@ -550,11 +566,7 @@ async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
 
 @api_router.get("/relatorios/bncc-erros")
 async def get_bncc_erros(current_user: dict = Depends(require_admin)):
-    pipeline = [
-        {"$group": {"_id": "$habilidade", "totalErros": {"$sum": "$count"}}},
-        {"$sort": {"totalErros": -1}},
-        {"$limit": 20}
-    ]
+    pipeline = [{"$group": {"_id": "$habilidade", "totalErros": {"$sum": "$count"}}}, {"$sort": {"totalErros": -1}}, {"$limit": 20}]
     results = await db.erros_bncc.aggregate(pipeline).to_list(20)
     return [{"habilidade": r["_id"], "totalErros": r["totalErros"]} for r in results]
 
