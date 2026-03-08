@@ -14,55 +14,107 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import * as api from '../../src/services/api';
 
 type TipoConteudo = 'VIDEO' | 'LINK' | 'MATERIAL';
+type ViewMode = 'LIST' | 'FORM';
 
 export default function AdminConteudos() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('LIST');
+  const [conteudos, setConteudos] = useState<any[]>([]);
   
   // Estado do Formulário
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [tipo, setTipo] = useState<TipoConteudo>('VIDEO');
   const [url, setUrl] = useState(''); 
-  
-  // Estado para Arquivo
   const [nomeArquivo, setNomeArquivo] = useState('');
   const [arquivoBase64, setArquivoBase64] = useState<string | null>(null);
-
   const [turmas, setTurmas] = useState<any[]>([]);
   const [turmaId, setTurmaId] = useState('');
 
   useEffect(() => {
-    loadTurmas();
+    loadData();
   }, []);
 
-  const loadTurmas = async () => {
+  const loadData = async () => {
+    setLoading(true);
     try {
-      const data = await api.getTurmas();
-      setTurmas(data || []);
+      const [contData, turmasData] = await Promise.all([
+        api.getConteudos(),
+        api.getTurmas()
+      ]);
+      setConteudos(contData || []);
+      setTurmas(turmasData || []);
     } catch (e) {
-      console.log('Erro ao carregar turmas');
+      console.log('Erro ao carregar dados', e);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const startCreating = () => {
+    setEditingId(null);
+    setTitulo('');
+    setDescricao('');
+    setTipo('VIDEO');
+    setUrl('');
+    setNomeArquivo('');
+    setArquivoBase64(null);
+    setTurmaId('');
+    setViewMode('FORM');
+  };
+
+  const startEditing = (item: any) => {
+    setEditingId(item.id);
+    setTitulo(item.titulo);
+    setDescricao(item.descricao || '');
+    setTipo(item.tipo);
+    setUrl(item.urlVideo || '');
+    setTurmaId(item.turmaId || '');
+    // Arquivo não carregamos de volta o base64 para economizar memória, 
+    // só mostramos se já existe
+    setNomeArquivo(item.arquivo ? 'Arquivo Atual (Mantenha ou troque)' : '');
+    setArquivoBase64(null); // Só muda se o usuário selecionar outro
+    setViewMode('FORM');
+  };
+
+  const handleDelete = (id: string) => {
+    Alert.alert("Excluir", "Tem certeza?", [
+      { text: "Cancelar" },
+      { text: "Sim", style: 'destructive', onPress: async () => {
+          try {
+            await api.deleteConteudo(id);
+            loadData();
+          } catch(e) { Alert.alert("Erro", "Não foi possível excluir"); }
+      }}
+    ]);
   };
 
   const handlePickDocument = async () => {
     if (Platform.OS === 'web') {
-      // SOLUÇÃO NATIVA PARA WEB (Sem biblioteca extra)
+      // WEB: Usa input nativo do navegador (Funciona no Vercel)
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = '*/*';
-      
+      input.accept = '*/*'; // Aceita tudo
       input.onchange = (e: any) => {
         const file = e.target.files[0];
         if (file) {
+          // Validação de tamanho simples (limite 4MB para evitar travar Vercel free tier)
+          if (file.size > 4 * 1024 * 1024) {
+            Alert.alert("Erro", "Arquivo muito grande (Máx 4MB na versão Web).");
+            return;
+          }
+          
           setNomeArquivo(file.name);
           const reader = new FileReader();
           reader.onload = () => {
             if (typeof reader.result === 'string') {
-              // Remove o cabeçalho "data:application/pdf;base64," para pegar só o código
               const base64String = reader.result.split(',')[1];
               setArquivoBase64(base64String);
               Alert.alert("Sucesso", "Arquivo carregado!");
@@ -73,42 +125,112 @@ export default function AdminConteudos() {
       };
       input.click();
     } else {
-      Alert.alert("Aviso", "Upload de arquivos disponível apenas na versão Web no momento.");
+      // MOBILE: Usa Expo Document Picker
+      try {
+        const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+        if (result.canceled) return;
+        
+        const file = result.assets[0];
+        setNomeArquivo(file.name);
+        // No mobile precisa ler o arquivo do cache para converter em Base64
+        const base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 });
+        setArquivoBase64(base64);
+      } catch (err) {
+        Alert.alert("Erro", "Falha ao selecionar arquivo no celular.");
+      }
     }
   };
 
   const handleSave = async () => {
     if (!titulo.trim()) return Alert.alert("Erro", "Título é obrigatório.");
-
-    if (tipo === 'VIDEO' && !url.trim()) return Alert.alert("Erro", "URL do vídeo é obrigatória.");
-    if (tipo === 'LINK' && !url.trim()) return Alert.alert("Erro", "Link é obrigatório.");
-    if (tipo === 'MATERIAL' && !arquivoBase64) return Alert.alert("Erro", "Selecione um arquivo.");
+    if (tipo !== 'MATERIAL' && !url.trim()) return Alert.alert("Erro", "Link/URL é obrigatório.");
+    // Se for material novo, precisa de arquivo. Se for edição, pode manter o antigo (arquivoBase64 null)
+    if (tipo === 'MATERIAL' && !arquivoBase64 && !editingId) return Alert.alert("Erro", "Selecione um arquivo.");
 
     setLoading(true);
     try {
-      const payload = {
+      const payload: any = {
         titulo,
         descricao,
         tipo,
         turmaId: turmaId || null,
         urlVideo: (tipo === 'VIDEO' || tipo === 'LINK') ? url : null,
-        arquivo: tipo === 'MATERIAL' ? arquivoBase64 : null,
         abaCategoria: tipo === 'VIDEO' ? 'videos' : 'materiais',
       };
 
-      await api.createConteudo(payload);
+      // Só envia arquivo se houver um novo selecionado
+      if (arquivoBase64) {
+        payload.arquivo = arquivoBase64;
+      }
+
+      if (editingId) {
+        // Atualizar
+        if (api.updateConteudo) {
+            await api.updateConteudo(editingId, payload);
+        } else {
+            throw new Error("Função de atualização não encontrada no API.");
+        }
+      } else {
+        // Criar
+        await api.createConteudo(payload);
+      }
       
       Alert.alert("Sucesso", "Conteúdo salvo!", [
-        { text: "OK", onPress: () => router.back() }
+        { text: "OK", onPress: () => {
+            setViewMode('LIST');
+            loadData();
+        }}
       ]);
 
     } catch (error: any) {
-      Alert.alert("Erro ao Salvar", "Verifique os dados e tente novamente.");
+      console.log(error);
+      Alert.alert("Erro ao Salvar", "Verifique sua conexão ou o tamanho do arquivo.");
     } finally {
       setLoading(false);
     }
   };
 
+  // --- RENDERIZAÇÃO ---
+
+  if (viewMode === 'LIST') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color="#fff" /></TouchableOpacity>
+          <Text style={styles.headerTitle}>Gerenciar Conteúdos</Text>
+          <TouchableOpacity onPress={startCreating}><Ionicons name="add-circle" size={32} color="#FFD700" /></TouchableOpacity>
+        </View>
+
+        <ScrollView style={{padding: 16}}>
+          {loading ? <ActivityIndicator color="#FFD700" /> : conteudos.length === 0 ? (
+            <Text style={{color:'#666', textAlign:'center', marginTop:20}}>Nenhum conteúdo cadastrado.</Text>
+          ) : (
+            conteudos.map(item => (
+              <View key={item.id} style={styles.card}>
+                <View style={{flex:1}}>
+                  <Text style={styles.cardTitle}>{item.titulo}</Text>
+                  <View style={{flexDirection:'row', gap:10, marginTop:4}}>
+                    <Text style={[styles.badge, {color: item.tipo==='VIDEO'?'#4169E1':item.tipo==='LINK'?'#32CD32':'#FFD700'}]}>{item.tipo}</Text>
+                    {item.turmaId ? <Text style={styles.badgeTurma}>Turma Específica</Text> : <Text style={styles.badgeTurma}>Geral</Text>}
+                  </View>
+                </View>
+                <View style={{flexDirection:'row', gap:15}}>
+                  <TouchableOpacity onPress={() => startEditing(item)}>
+                    <Ionicons name="pencil" size={20} color="#FFD700" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                    <Ionicons name="trash" size={20} color="#E74C3C" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // --- MODO FORMULÁRIO ---
   return (
     <SafeAreaView style={styles.container}>
       <Modal visible={loading} transparent animationType="fade">
@@ -119,60 +241,45 @@ export default function AdminConteudos() {
       </Modal>
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Novo Conteúdo</Text>
+        <TouchableOpacity onPress={() => setViewMode('LIST')}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
+        <Text style={styles.headerTitle}>{editingId ? "Editar Conteúdo" : "Novo Conteúdo"}</Text>
         <TouchableOpacity onPress={handleSave}><Ionicons name="checkmark" size={28} color="#FFD700" /></TouchableOpacity>
       </View>
 
       <ScrollView style={{padding: 16}}>
         
-        <Text style={styles.label}>Tipo de Conteúdo</Text>
+        <Text style={styles.label}>Tipo</Text>
         <View style={styles.tabContainer}>
           {(['VIDEO', 'LINK', 'MATERIAL'] as TipoConteudo[]).map(t => (
-            <TouchableOpacity 
-              key={t} 
-              style={[styles.tab, tipo === t && styles.tabActive]}
-              onPress={() => setTipo(t)}
-            >
+            <TouchableOpacity key={t} style={[styles.tab, tipo === t && styles.tabActive]} onPress={() => setTipo(t)}>
               <Text style={{color: tipo === t ? '#000' : '#fff', fontWeight:'bold'}}>{t}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         <Text style={styles.label}>Título</Text>
-        <TextInput style={styles.input} value={titulo} onChangeText={setTitulo} placeholder="Ex: Aula 01" placeholderTextColor="#666" />
+        <TextInput style={styles.input} value={titulo} onChangeText={setTitulo} placeholder="Título do conteúdo" placeholderTextColor="#666" />
 
         <Text style={styles.label}>Descrição</Text>
-        <TextInput style={[styles.input, {height:60}]} multiline value={descricao} onChangeText={setDescricao} placeholder="Detalhes..." placeholderTextColor="#666" />
+        <TextInput style={[styles.input, {height:60}]} multiline value={descricao} onChangeText={setDescricao} placeholder="Opcional" placeholderTextColor="#666" />
 
-        {tipo === 'VIDEO' && (
+        {tipo !== 'MATERIAL' ? (
           <>
-            <Text style={styles.label}>Link do YouTube</Text>
-            <TextInput style={styles.input} value={url} onChangeText={setUrl} placeholder="https://youtube.com/..." placeholderTextColor="#666" />
-          </>
-        )}
-
-        {tipo === 'LINK' && (
-          <>
-            <Text style={styles.label}>URL do Site</Text>
+            <Text style={styles.label}>{tipo === 'VIDEO' ? 'Link do YouTube' : 'URL do Link'}</Text>
             <TextInput style={styles.input} value={url} onChangeText={setUrl} placeholder="https://..." placeholderTextColor="#666" />
           </>
-        )}
-
-        {tipo === 'MATERIAL' && (
+        ) : (
           <View style={{marginBottom: 20}}>
-            <Text style={styles.label}>Arquivo (PDF, Imagem, Doc)</Text>
+            <Text style={styles.label}>Arquivo (PDF, Doc, Imagem)</Text>
             <TouchableOpacity style={styles.uploadButton} onPress={handlePickDocument}>
               <Ionicons name="cloud-upload-outline" size={24} color="#000" />
-              <Text style={styles.uploadText}>
-                {nomeArquivo ? nomeArquivo : "Selecionar Arquivo"}
-              </Text>
+              <Text style={styles.uploadText}>{nomeArquivo || "Selecionar Arquivo"}</Text>
             </TouchableOpacity>
-            {nomeArquivo !== '' && <Text style={{color:'#32CD32', marginTop:5, fontSize:12}}>Arquivo carregado pronto para envio.</Text>}
+            <Text style={{color:'#666', fontSize:12, marginTop:5}}>* Limite recomendado: 4MB (Web)</Text>
           </View>
         )}
 
-        <Text style={styles.label}>Disponível Para (Opcional)</Text>
+        <Text style={styles.label}>Disponível Para</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>
           <TouchableOpacity onPress={() => setTurmaId('')} style={[styles.chip, !turmaId && styles.chipActive]}>
             <Text style={{color: !turmaId ? '#000' : '#fff'}}>Geral (Todos)</Text>
@@ -204,4 +311,8 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#333', marginRight: 8 },
   chipActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
   loadingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
+  card: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', backgroundColor:'#1a1a2e', padding:16, marginBottom:10, borderRadius:12 },
+  cardTitle: { color:'#fff', fontWeight:'bold', fontSize:16 },
+  badge: { fontSize:10, fontWeight:'bold', marginRight:10 },
+  badgeTurma: { fontSize:10, color:'#888' }
 });
