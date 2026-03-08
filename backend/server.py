@@ -125,7 +125,7 @@ class Questao(BaseModel):
     imagemBase64: Optional[str] = None
     alternativas: List[Alternativa] = []
     correta: str = ""
-    pontuacaoMax: int = 1
+    pontuacaoMax: float = 1.0  # MUDADO PARA FLOAT
     habilidadesBNCC: List[str] = []
 
 class QuestaoCreate(BaseModel):
@@ -135,7 +135,7 @@ class QuestaoCreate(BaseModel):
     imagemBase64: Optional[str] = None
     alternativas: List[Dict[str, str]] = []
     correta: str = ""
-    pontuacaoMax: int = 1
+    pontuacaoMax: float = 1.0  # MUDADO PARA FLOAT
     habilidadesBNCC: List[str] = []
 
 class Exercicio(BaseModel):
@@ -148,8 +148,8 @@ class Exercicio(BaseModel):
     ativo: bool = True
     turmaId: Optional[str] = None
     equipeId: Optional[str] = None
-    alunoId: Optional[str] = None # ADICIONADO PARA SUPORTE INDIVIDUAL
-    pontosPorQuestao: int = 1
+    alunoId: Optional[str] = None
+    pontosPorQuestao: float = 1.0  # MUDADO PARA FLOAT
     criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     is_deleted: bool = False
     deleted_at: Optional[str] = None
@@ -163,7 +163,7 @@ class ExercicioCreate(BaseModel):
     turmaId: Optional[str] = None
     equipeId: Optional[str] = None
     alunoId: Optional[str] = None
-    pontosPorQuestao: int = 1
+    pontosPorQuestao: float = 1.0  # MUDADO PARA FLOAT
     questoes: List[QuestaoCreate] = []
 
 class ExercicioUpdate(BaseModel):
@@ -173,7 +173,7 @@ class ExercicioUpdate(BaseModel):
     turmaId: Optional[str] = None
     equipeId: Optional[str] = None
     alunoId: Optional[str] = None
-    pontosPorQuestao: Optional[int] = None
+    pontosPorQuestao: Optional[float] = None  # MUDADO PARA FLOAT
     questoes: Optional[List[QuestaoCreate]] = None
 
 class RespostaQuestao(BaseModel):
@@ -381,7 +381,6 @@ async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Dep
     if turmaId:
         query["$or"] = [{"turmaId": turmaId}, {"turmaId": None}]
     
-    # Se for ADMIN, ignora o filtro e traz tudo (para não dar 'Não encontrado' no painel)
     if current_user.get("perfil") == "ADMIN":
         query = {"ativo": True, "is_deleted": {"$ne": True}}
 
@@ -506,6 +505,16 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     await db.submissoes.insert_one(submissao.dict())
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
     
+    # SALVA OS ERROS BNCC
+    for d in detalhes:
+        if not d["acertou"]:
+            for bncc in d.get("habilidadesBNCC", []):
+                await db.erros_bncc.update_one(
+                    {"usuarioId": current_user["id"], "habilidade": bncc},
+                    {"$inc": {"count": 1}},
+                    upsert=True
+                )
+    
     return {"submissao": {k: v for k, v in submissao.dict().items() if k != '_id'}, "nota": round(nota, 1), "pontosGerados": pontos}
 
 @api_router.get("/submissoes/{exercicio_id}")
@@ -519,6 +528,16 @@ async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_e = await db.exercicios.count_documents({"ativo": True})
     total_s = await db.submissoes.count_documents({})
     return {"totalUsuarios": total_u, "totalExercicios": total_e, "totalSubmissoes": total_s}
+
+@api_router.get("/relatorios/bncc-erros")
+async def get_bncc_erros(current_user: dict = Depends(require_admin)):
+    pipeline = [
+        {"$group": {"_id": "$habilidade", "totalErros": {"$sum": "$count"}}},
+        {"$sort": {"totalErros": -1}},
+        {"$limit": 20}
+    ]
+    results = await db.erros_bncc.aggregate(pipeline).to_list(20)
+    return [{"habilidade": r["_id"], "totalErros": r["totalErros"]} for r in results]
 
 @api_router.get("/admin/lixeira")
 async def get_lixeira(current_user: dict = Depends(require_admin)):
