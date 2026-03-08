@@ -125,7 +125,7 @@ class Questao(BaseModel):
     imagemBase64: Optional[str] = None
     alternativas: List[Alternativa] = []
     correta: str = ""
-    pontuacaoMax: float = 1.0  # MUDADO PARA FLOAT
+    pontuacaoMax: float = 1.0
     habilidadesBNCC: List[str] = []
 
 class QuestaoCreate(BaseModel):
@@ -135,7 +135,7 @@ class QuestaoCreate(BaseModel):
     imagemBase64: Optional[str] = None
     alternativas: List[Dict[str, str]] = []
     correta: str = ""
-    pontuacaoMax: float = 1.0  # MUDADO PARA FLOAT
+    pontuacaoMax: float = 1.0
     habilidadesBNCC: List[str] = []
 
 class Exercicio(BaseModel):
@@ -149,7 +149,7 @@ class Exercicio(BaseModel):
     turmaId: Optional[str] = None
     equipeId: Optional[str] = None
     alunoId: Optional[str] = None
-    pontosPorQuestao: float = 1.0  # MUDADO PARA FLOAT
+    pontosPorQuestao: float = 1.0
     criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     is_deleted: bool = False
     deleted_at: Optional[str] = None
@@ -163,7 +163,7 @@ class ExercicioCreate(BaseModel):
     turmaId: Optional[str] = None
     equipeId: Optional[str] = None
     alunoId: Optional[str] = None
-    pontosPorQuestao: float = 1.0  # MUDADO PARA FLOAT
+    pontosPorQuestao: float = 1.0
     questoes: List[QuestaoCreate] = []
 
 class ExercicioUpdate(BaseModel):
@@ -173,7 +173,7 @@ class ExercicioUpdate(BaseModel):
     turmaId: Optional[str] = None
     equipeId: Optional[str] = None
     alunoId: Optional[str] = None
-    pontosPorQuestao: Optional[float] = None  # MUDADO PARA FLOAT
+    pontosPorQuestao: Optional[float] = None
     questoes: Optional[List[QuestaoCreate]] = None
 
 class RespostaQuestao(BaseModel):
@@ -432,14 +432,11 @@ async def create_exercicio(exercicio_data: ExercicioCreate, current_user: dict =
 
 @api_router.put("/exercicios/{exercicio_id}")
 async def update_exercicio(exercicio_id: str, exercicio_data: ExercicioUpdate, current_user: dict = Depends(require_admin)):
-    # 1. Atualiza dados do exercício
-    update_data = {k: v for k, v in exercicio_data.dict(exclude={'questoes'}).items() if v is not None}
+    update_data = exercicio_data.dict(exclude={'questoes'})
     await db.exercicios.update_one({"id": exercicio_id}, {"$set": update_data})
     
-    # 2. Se houver questões, SUBSTITUI todas
     if exercicio_data.questoes is not None:
         await db.questoes.delete_many({"exercicioId": exercicio_id})
-        
         for q_data in exercicio_data.questoes:
             alternativas = [Alternativa(**a) for a in q_data.alternativas]
             questao = Questao(
@@ -505,7 +502,6 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     await db.submissoes.insert_one(submissao.dict())
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
     
-    # SALVA OS ERROS BNCC
     for d in detalhes:
         if not d["acertou"]:
             for bncc in d.get("habilidadesBNCC", []):
@@ -515,12 +511,35 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
                     upsert=True
                 )
     
-    return {"submissao": {k: v for k, v in submissao.dict().items() if k != '_id'}, "nota": round(nota, 1), "pontosGerados": pontos}
+    return {
+        "submissao": {k: v for k, v in submissao.dict().items() if k != '_id'}, 
+        "acertos": acertos, 
+        "erros": erros,
+        "totalQuestoes": total, # Retorna explicitamente o total
+        "nota": round(nota, 1), 
+        "pontosGerados": pontos
+    }
 
 @api_router.get("/submissoes/{exercicio_id}")
 async def get_submissao(exercicio_id: str, current_user: dict = Depends(get_current_user)):
     sub = await db.submissoes.find_one({"exercicioId": exercicio_id, "usuarioId": current_user["id"]})
     return {k: v for k, v in sub.items() if k != '_id'} if sub else None
+
+# >>> NOVA ROTA PARA TENTAR NOVAMENTE <<<
+@api_router.delete("/submissoes/{exercicio_id}/retry")
+async def retry_submissao(exercicio_id: str, current_user: dict = Depends(get_current_user)):
+    # 1. Acha a submissão antiga
+    sub = await db.submissoes.find_one({"exercicioId": exercicio_id, "usuarioId": current_user["id"]})
+    if sub:
+        pontos = sub.get("pontosGerados", 0)
+        # 2. Remove os pontos do usuário (para não acumular injustamente)
+        if pontos > 0:
+            await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": -pontos}})
+        
+        # 3. Deleta a submissão
+        await db.submissoes.delete_one({"_id": sub["_id"]})
+        
+    return {"message": "Pronto para tentar novamente"}
 
 @api_router.get("/relatorios/geral")
 async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
