@@ -13,7 +13,7 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'; // Adicionado useLocalSearchParams
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
 import { Turma } from '../../src/types'; 
@@ -39,6 +39,7 @@ type TipoDestinatario = 'TURMA' | 'EQUIPE' | 'ALUNO';
 
 export default function CriarExercicio() {
   const router = useRouter();
+  const { id } = useLocalSearchParams(); // Pega o ID caso seja edição
   
   // Dados das listas
   const [turmas, setTurmas] = useState<Turma[]>([]);
@@ -47,6 +48,7 @@ export default function CriarExercicio() {
 
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
+  const [isEditing, setIsEditing] = useState(false); // Flag para saber se está editando
   
   // Formulário
   const [titulo, setTitulo] = useState('');
@@ -61,30 +63,77 @@ export default function CriarExercicio() {
   const [questoes, setQuestoes] = useState<QuestaoForm[]>([]);
 
   useEffect(() => {
-    loadData();
+    loadInitialData();
   }, []);
 
-  const loadData = async () => {
+  const loadInitialData = async () => {
     setLoadingData(true);
     try {
-      // Carrega Turmas
+      // 1. Carrega listas (Turmas, etc)
       const turmasData = await api.getTurmas();
       setTurmas(turmasData);
 
-      // Tenta carregar Equipes (se a função existir na API)
       if ((api as any).getEquipes) {
         const equipesData = await (api as any).getEquipes();
         setEquipes(equipesData);
       }
-
-      // Tenta carregar Alunos (se a função existir na API)
       if ((api as any).getAlunos) {
         const alunosData = await (api as any).getAlunos();
         setAlunos(alunosData);
       }
 
+      // 2. Se tiver ID, carrega o Exercício para Edição
+      if (id) {
+        setIsEditing(true);
+        const exercicio = await api.getExercicio(id as string);
+        
+        setTitulo(exercicio.titulo);
+        setDescricao(exercicio.descricao || '');
+        if (exercicio.habilidadesBNCC) {
+            setHabilidadesBNCC(exercicio.habilidadesBNCC.join(', '));
+        }
+        
+        // Tenta calcular pontuação total baseado nas questões
+        if(exercicio.questoes && exercicio.questoes.length > 0) {
+            const pontosCalc = exercicio.questoes.reduce((acc: number, q: any) => acc + (q.pontuacaoMax || 0), 0);
+            setPontuacaoTotal(pontosCalc > 0 ? pontosCalc.toString() : '10');
+        }
+
+        // Configura destinatário (lógica aproximada)
+        if (exercicio.turmaId) {
+            setTipoDestinatario('TURMA');
+            setDestinatarioId(exercicio.turmaId);
+        } else if (exercicio.equipeId) {
+            setTipoDestinatario('EQUIPE');
+            setDestinatarioId(exercicio.equipeId);
+        } else if (exercicio.alunoId) {
+            setTipoDestinatario('ALUNO');
+            setDestinatarioId(exercicio.alunoId);
+        }
+
+        // Mapeia questões do banco para o formato do formulário
+        if (exercicio.questoes) {
+            const questoesFormatadas = exercicio.questoes.map((q: any) => ({
+                id: q.id || `q-${Math.random()}`,
+                numero: q.numero,
+                tipoResposta: q.tipoResposta,
+                enunciado: q.enunciado,
+                correta: q.correta || '', // Backends às vezes não retornam a correta por segurança, cuidado aqui
+                alternativas: q.tipoResposta === 'MULTIPLA_ESCOLHA' 
+                    ? (q.alternativas || []).map((alt: any) => ({
+                        letra: alt.letra,
+                        texto: alt.texto,
+                        cor: ALTERNATIVA_CORES.find(c => c.letra === alt.letra)?.cor || '#999'
+                      })) 
+                    : ALTERNATIVA_CORES.slice(0, 4).map((a) => ({ letra: a.letra, texto: '', cor: a.cor })),
+            }));
+            setQuestoes(questoesFormatadas);
+        }
+      }
+
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
+      Alert.alert("Erro", "Não foi possível carregar os dados para edição.");
     } finally {
       setLoadingData(false);
     }
@@ -172,7 +221,7 @@ export default function CriarExercicio() {
         modoCriacao: 'MANUAL',
         habilidadesBNCC: habilidades,
         pontosPorQuestao: valorPorQuestao,
-        
+
         turmaId: tipoDestinatario === 'TURMA' && destinatarioId ? destinatarioId : undefined,
         equipeId: tipoDestinatario === 'EQUIPE' && destinatarioId ? destinatarioId : undefined,
         alunoId: tipoDestinatario === 'ALUNO' && destinatarioId ? destinatarioId : undefined,
@@ -188,9 +237,20 @@ export default function CriarExercicio() {
         })),
       };
 
-      await api.createExercicio(exercicioData);
+      if (isEditing && id) {
+        // MODO EDIÇÃO (Se a função updateExercicio existir na API)
+        if ((api as any).updateExercicio) {
+            await (api as any).updateExercicio(id, exercicioData);
+        } else {
+            // Fallback se não tiver update: Tenta criar e avisa, ou use lógica específica
+            throw new Error("Função de atualização não encontrada na API.");
+        }
+      } else {
+        // MODO CRIAÇÃO
+        await api.createExercicio(exercicioData);
+      }
       
-      Alert.alert('Sucesso!', 'Exercício salvo e enviado.', [
+      Alert.alert('Sucesso!', 'Dados salvos corretamente.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
       
@@ -198,11 +258,10 @@ export default function CriarExercicio() {
       console.log("=== ERRO AO SALVAR ===");
       console.log(error);
       
-      let mensagemErro = 'Não foi possível salvar. Verifique sua conexão.';
-      
+      let mensagemErro = 'Não foi possível salvar.';
       if (error.response && error.response.data && error.response.data.detail) {
         const detalhe = error.response.data.detail;
-        mensagemErro = typeof detalhe === 'string' ? detalhe : "Verifique os dados preenchidos.";
+        mensagemErro = typeof detalhe === 'string' ? detalhe : "Verifique os dados.";
       }
       Alert.alert('Erro ao Salvar', mensagemErro);
     } finally {
@@ -269,7 +328,9 @@ export default function CriarExercicio() {
         <View style={styles.loadingOverlay}>
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color="#FFD700" />
-            <Text style={styles.loadingText}>Salvando...</Text>
+            <Text style={styles.loadingText}>
+                {isEditing ? "Atualizando..." : "Salvando..."}
+            </Text>
           </View>
         </View>
       </Modal>
@@ -282,7 +343,9 @@ export default function CriarExercicio() {
           <TouchableOpacity onPress={() => router.back()}>
             <Ionicons name="close" size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Novo Exercício</Text>
+          <Text style={styles.headerTitle}>
+            {isEditing ? "Editar Exercício" : "Novo Exercício"}
+          </Text>
           <TouchableOpacity onPress={handleSave} disabled={loading}>
             <Ionicons name="checkmark" size={28} color={loading ? "#666" : "#FFD700"} />
           </TouchableOpacity>
@@ -296,7 +359,7 @@ export default function CriarExercicio() {
             <Text style={styles.inputLabel}>Título</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="Ex: Lista de Equações do 2º Grau"
+              placeholder="Ex: Lista de Equações"
               placeholderTextColor="#666"
               value={titulo}
               onChangeText={setTitulo}
@@ -347,7 +410,7 @@ export default function CriarExercicio() {
             <Text style={styles.inputLabel}>Descrição (Opcional)</Text>
             <TextInput
               style={[styles.textInput, { height: 60 }]}
-              placeholder="Instruções para os alunos..."
+              placeholder="Instruções..."
               placeholderTextColor="#666"
               value={descricao}
               onChangeText={setDescricao}
@@ -393,7 +456,7 @@ export default function CriarExercicio() {
                 <Text style={styles.inputLabel}>Enunciado (Aceita LaTeX entre $)</Text>
                 <TextInput
                   style={[styles.textInput, styles.codeFont]}
-                  placeholder="Escreva a pergunta aqui. Ex: Calcule $\sqrt{144}$."
+                  placeholder="Escreva a pergunta..."
                   placeholderTextColor="#666"
                   value={questao.enunciado}
                   onChangeText={(text) => updateQuestao(qIndex, 'enunciado', text)}
@@ -436,7 +499,7 @@ export default function CriarExercicio() {
                     <Text style={styles.inputLabel}>Resposta Esperada (Gabarito)</Text>
                     <TextInput
                       style={styles.textInput}
-                      placeholder="Resposta correta para correção automática"
+                      placeholder="Resposta correta"
                       placeholderTextColor="#666"
                       value={questao.correta}
                       onChangeText={(text) => updateQuestao(qIndex, 'correta', text)}
