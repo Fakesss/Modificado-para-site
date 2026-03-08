@@ -14,7 +14,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
 import * as api from '../../src/services/api';
 
 type TipoConteudo = 'VIDEO' | 'LINK' | 'MATERIAL';
@@ -23,11 +22,13 @@ export default function AdminConteudos() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   
+  // Estado do Formulário
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [tipo, setTipo] = useState<TipoConteudo>('VIDEO');
   const [url, setUrl] = useState(''); 
   
+  // Estado para Arquivo
   const [nomeArquivo, setNomeArquivo] = useState('');
   const [arquivoBase64, setArquivoBase64] = useState<string | null>(null);
 
@@ -48,37 +49,31 @@ export default function AdminConteudos() {
   };
 
   const handlePickDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*', 
-        copyToCacheDirectory: true
-      });
-
-      if (result.canceled) return;
-
-      const file = result.assets[0];
-      setNomeArquivo(file.name);
-
-      if (Platform.OS === 'web') {
-        // LÓGICA PARA WEB (VERCEL)
-        const response = await fetch(file.uri);
-        const blob = await response.blob();
-        const reader = new FileReader();
-        reader.onload = () => {
-          const base64String = (reader.result as string).split(',')[1];
-          setArquivoBase64(base64String);
-          Alert.alert("Sucesso", "Arquivo carregado no navegador!");
-        };
-        reader.readAsDataURL(blob);
-      } else {
-        // LÓGICA PARA CELULAR (Temporária: usa URI direta se possível, ou requer FileSystem futuro)
-        Alert.alert("Aviso", "No celular, o upload requer FileSystem instalado.");
-        // Para evitar erro de build, não usamos FileSystem aqui.
-        // Se precisar no futuro, instale: npx expo install expo-file-system
-      }
-
-    } catch (err) {
-      Alert.alert("Erro", "Falha ao selecionar arquivo.");
+    if (Platform.OS === 'web') {
+      // SOLUÇÃO NATIVA PARA WEB (Sem biblioteca extra)
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '*/*';
+      
+      input.onchange = (e: any) => {
+        const file = e.target.files[0];
+        if (file) {
+          setNomeArquivo(file.name);
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result === 'string') {
+              // Remove o cabeçalho "data:application/pdf;base64," para pegar só o código
+              const base64String = reader.result.split(',')[1];
+              setArquivoBase64(base64String);
+              Alert.alert("Sucesso", "Arquivo carregado!");
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      input.click();
+    } else {
+      Alert.alert("Aviso", "Upload de arquivos disponível apenas na versão Web no momento.");
     }
   };
 
