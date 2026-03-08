@@ -55,7 +55,7 @@ export default function ExercicioScreen() {
     if (unanswered.length > 0) {
       Alert.alert(
         'Questões não respondidas',
-        `Faltam ${unanswered.length} questões. Enviar mesmo assim?`,
+        `Faltam ${unanswered.length} questão(ões). Enviar mesmo assim?`,
         [{ text: 'Não', style: 'cancel' }, { text: 'Sim', onPress: submitAnswers }]
       );
     } else {
@@ -72,7 +72,7 @@ export default function ExercicioScreen() {
 
       const result = await api.submitExercicio(id as string, respostasArray);
       
-      // Envia como STRING para garantir que chegue na outra tela
+      // CORREÇÃO: Convertendo tudo para String explicitamente para garantir o transporte
       router.replace({
         pathname: '/resultado',
         params: {
@@ -128,7 +128,7 @@ export default function ExercicioScreen() {
                 {questao.alternativas.map((alt, altIndex) => {
                   const isSelected = respostas[questao.id] === alt.letra;
                   
-                  // CORREÇÃO VISUAL: Se a cor for o azul padrão do backend (#4169E1), usa o colorido
+                  // CORREÇÃO VISUAL: Força cor colorida se vier a padrão azul
                   let cor = alt.cor;
                   if (!cor || cor === '#4169E1') {
                      cor = ALTERNATIVA_CORES[altIndex % ALTERNATIVA_CORES.length];
