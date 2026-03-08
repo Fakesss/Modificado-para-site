@@ -14,17 +14,16 @@ export default function Resultado() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  // Função segura para garantir que lemos números corretamente
+  // Função BLINDADA para ler números
   const parseNumber = (val: any) => {
-    if (!val) return 0;
-    if (typeof val === 'number') return val;
-    // Tenta converter string para float/int
-    return Number(val) || 0;
+    if (val === undefined || val === null || val === '') return 0;
+    const parsed = Number(val);
+    return isNaN(parsed) ? 0 : parsed;
   };
 
   const acertos = parseNumber(params.acertos);
   const erros = parseNumber(params.erros);
-  const total = parseNumber(params.total);
+  const total = parseNumber(params.total); // Agora lê corretamente
   const nota = parseNumber(params.nota);
   const percentual = parseNumber(params.percentual);
   const pontos = parseNumber(params.pontos);
