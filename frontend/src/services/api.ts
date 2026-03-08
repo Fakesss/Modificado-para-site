@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// SEU ENDEREÇO DO SERVIDOR (Onde estão as Turmas e Equipes)
+// SEU ENDEREÇO DO SERVIDOR
 const API_URL = 'https://modificado-para-site-1.onrender.com';
 
 const api = axios.create({
@@ -9,62 +9,23 @@ const api = axios.create({
   timeout: 30000,
 });
 
-// Envia o crachá (Token) em toda requisição para o servidor deixar a gente entrar
 api.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
 // ==============================================================================
-// 1. DADOS DO SERVIDOR (O que "sumiu" vai voltar aqui)
+// 1. AUTENTICAÇÃO E DADOS BÁSICOS
 // ==============================================================================
 
-// Turmas (6º Ano, 7º Ano...)
-export const getTurmas = async () => {
-  try {
-    const response = await api.get('/turmas');
-    return response.data;
-  } catch (error) {
-    console.error('Erro ao buscar turmas:', error);
-    return []; // Retorna vazio só se der erro de conexão real
-  }
-};
-
-// Equipes (Cores e Nomes)
-export const getEquipes = async () => {
-  try {
-    const response = await api.get('/equipes');
-    return response.data;
-  } catch (error) {
-    console.error('Erro ao buscar equipes:', error);
-    return [];
-  }
-};
-
-// Usuários (Lista de Alunos)
-export const getUsuarios = async () => {
-  try {
-    const response = await api.get('/usuarios');
-    return response.data;
-  } catch (error) {
-    console.error('Erro ao buscar usuários:', error);
-    return [];
-  }
-};
-
-// Autenticação
 export const login = async (email: string, senha: string) => {
   try {
     const response = await api.post('/auth/login', { email, senha });
     return response.data;
   } catch (error: any) {
-    if (error.response?.status === 401 || error.response?.status === 404) {
-      throw new Error('Email ou senha incorretos.');
-    }
-    throw new Error('Erro de conexão com o servidor.');
+    if (error.response?.status === 401 || error.response?.status === 404) throw new Error('Dados incorretos.');
+    throw new Error('Erro de conexão.');
   }
 };
 
@@ -72,13 +33,35 @@ export const register = async (nome: string, email: string, senha: string, turma
   try {
     const response = await api.post('/auth/register', { nome, email, senha, turmaId, equipeId });
     return response.data;
-  } catch (error: any) {
-    throw new Error('Erro ao criar conta.');
-  }
+  } catch (error: any) { throw new Error('Erro ao criar conta.'); }
 };
 
-export const getMe = async () => {
-  try { const response = await api.get('/auth/me'); return response.data; } catch { return null; }
+export const getMe = async () => { try { return (await api.get('/auth/me')).data; } catch { return null; } };
+export const getUsuarios = async () => { try { return (await api.get('/usuarios')).data; } catch { return []; } };
+
+// ==============================================================================
+// 2. GERENCIAMENTO DE TURMAS E EQUIPES (Novo!)
+// ==============================================================================
+
+// TURMAS
+export const getTurmas = async () => { try { return (await api.get('/turmas')).data; } catch { return []; } };
+
+export const createTurma = async (nome: string) => {
+  const response = await api.post('/turmas', { nome });
+  return response.data;
+};
+
+export const deleteTurma = async (id: string) => {
+  const response = await api.delete(`/turmas/${id}`);
+  return response.data;
+};
+
+// EQUIPES
+export const getEquipes = async () => { try { return (await api.get('/equipes')).data; } catch { return []; } };
+
+export const createEquipe = async (nome: string, cor: string) => {
+  const response = await api.post('/equipes', { nome, cor });
+  return response.data;
 };
 
 export const updateEquipe = async (id: string, dados: any) => {
@@ -86,7 +69,15 @@ export const updateEquipe = async (id: string, dados: any) => {
   return response.data;
 };
 
-// Outros dados do servidor (Ranking, Conteúdos, Relatórios)
+export const deleteEquipe = async (id: string) => {
+  const response = await api.delete(`/equipes/${id}`);
+  return response.data;
+};
+
+// ==============================================================================
+// 3. CONTEÚDOS, RANKING E RELATÓRIOS
+// ==============================================================================
+
 export const getRankingGeral = async () => { try { return (await api.get('/ranking/geral')).data; } catch { return []; } };
 export const getRankingPorTurma = async (id: string) => { try { return (await api.get(`/ranking/turma/${id}`)).data; } catch { return []; } };
 export const getRankingAlunosEquipe = async (id: string) => { try { return (await api.get(`/ranking/alunos/${id}`)).data; } catch { return []; } };
@@ -110,79 +101,66 @@ export const restaurarItem = async (id: string, tipo: string) => (await api.post
 export const deletePermanente = async (id: string, tipo: string) => (await api.delete(`/admin/lixeira/${id}?tipo=${tipo}`)).data;
 
 // ==============================================================================
-// 2. CONFIGURAÇÕES LOCAIS (Vidas do Arcade - Salva no Celular)
+// 4. CONFIGURAÇÕES LOCAIS (Vidas do Arcade)
 // ==============================================================================
 const CONFIG_KEY = '@config_jogo_v1';
 
 export const salvarConfiguracaoJogo = async (vidas: number) => {
   try {
-    const config = { vidasPadrao: vidas };
-    await AsyncStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+    await AsyncStorage.setItem(CONFIG_KEY, JSON.stringify({ vidasPadrao: vidas }));
     return true;
-  } catch (e) { return false; }
+  } catch { return false; }
 };
 
 export const getConfiguracaoJogo = async () => {
   try {
-    const jsonValue = await AsyncStorage.getItem(CONFIG_KEY);
-    return jsonValue != null ? JSON.parse(jsonValue) : { vidasPadrao: 5 };
-  } catch(e) {
-    return { vidasPadrao: 5 };
-  }
+    const json = await AsyncStorage.getItem(CONFIG_KEY);
+    return json ? JSON.parse(json) : { vidasPadrao: 5 };
+  } catch { return { vidasPadrao: 5 }; }
 };
 
 // ==============================================================================
-// 3. JOGOS PERSONALIZADOS (Salva no Celular)
+// 5. JOGOS PERSONALIZADOS (Local)
 // ==============================================================================
 const JOGOS_KEY = '@jogos_v2';
 const CONCLUIDOS_KEY = '@jogos_concluidos_ids';
 
 export const getJogosPersonalizados = async () => {
   try {
-    const jsonValue = await AsyncStorage.getItem(JOGOS_KEY);
-    return jsonValue != null ? JSON.parse(jsonValue) : [];
-  } catch(e) { return []; }
+    const json = await AsyncStorage.getItem(JOGOS_KEY);
+    return json ? JSON.parse(json) : [];
+  } catch { return []; }
 };
 
 export const criarJogo = async (dados: any) => {
-  try {
-    const existing = await getJogosPersonalizados();
-    const novoJogo = { ...dados, id: Math.random().toString(36).substr(2, 9) };
-    const novaLista = [novoJogo, ...existing];
-    await AsyncStorage.setItem(JOGOS_KEY, JSON.stringify(novaLista));
-    return novoJogo;
-  } catch (e) { throw new Error('Erro ao salvar localmente'); }
+  const existing = await getJogosPersonalizados();
+  const novo = { ...dados, id: Math.random().toString(36).substr(2, 9) };
+  await AsyncStorage.setItem(JOGOS_KEY, JSON.stringify([novo, ...existing]));
+  return novo;
 };
 
 export const deletarJogo = async (id: string) => {
-  try {
-    const existing = await getJogosPersonalizados();
-    const novaLista = existing.filter((j: any) => j.id !== id);
-    await AsyncStorage.setItem(JOGOS_KEY, JSON.stringify(novaLista));
-    return true;
-  } catch (e) { return false; }
+  const existing = await getJogosPersonalizados();
+  await AsyncStorage.setItem(JOGOS_KEY, JSON.stringify(existing.filter((x: any) => x.id !== id)));
+  return true;
 };
 
 export const getMissoesDisponiveis = async () => {
   try {
-    const todas = await getJogosPersonalizados();
+    const jogos = await getJogosPersonalizados();
     const concluidosJson = await AsyncStorage.getItem(CONCLUIDOS_KEY);
     const concluidos = concluidosJson ? JSON.parse(concluidosJson) : [];
-    // Retorna só o que NÃO foi concluído
-    return todas.filter((m: any) => !concluidos.includes(m.id));
-  } catch (error) { return []; }
+    return jogos.filter((j: any) => !concluidos.includes(j.id));
+  } catch { return []; }
 };
 
 export const concluirMissao = async (id: string) => {
-  try {
-    const concluidosJson = await AsyncStorage.getItem(CONCLUIDOS_KEY);
-    const concluidos = concluidosJson ? JSON.parse(concluidosJson) : [];
-    if (!concluidos.includes(id)) {
-      concluidos.push(id);
-      await AsyncStorage.setItem(CONCLUIDOS_KEY, JSON.stringify(concluidos));
-    }
-    return true;
-  } catch (error) { return false; }
+  const json = await AsyncStorage.getItem(CONCLUIDOS_KEY);
+  const lista = json ? JSON.parse(json) : [];
+  if (!lista.includes(id)) {
+    lista.push(id);
+    await AsyncStorage.setItem(CONCLUIDOS_KEY, JSON.stringify(lista));
+  }
 };
 
 export default api;
