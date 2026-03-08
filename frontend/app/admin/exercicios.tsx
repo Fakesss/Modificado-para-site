@@ -45,7 +45,7 @@ export default function AdminExercicios() {
 
   const handleDelete = async (exercicioId: string) => {
     if (Platform.OS === 'web') {
-      const confirmou = window.confirm('Deseja mover este exercício para a lixeira? Você terá 7 dias para restaurá-lo.');
+      const confirmou = window.confirm('Deseja mover este exercício para a lixeira?');
       if (confirmou) {
         try {
           await api.deleteExercicio(exercicioId);
@@ -58,7 +58,7 @@ export default function AdminExercicios() {
     } else {
       Alert.alert(
         'Mover para Lixeira',
-        'Deseja mover este exercício para a lixeira? Você terá 7 dias para restaurá-lo.',
+        'Deseja mover este exercício para a lixeira?',
         [
           { text: 'Cancelar', style: 'cancel' },
           {
@@ -130,7 +130,7 @@ export default function AdminExercicios() {
                     {exercicio.modoCriacao}
                   </Text>
                 </View>
-                {exercicio.habilidadesBNCC.length > 0 && (
+                {exercicio.habilidadesBNCC && exercicio.habilidadesBNCC.length > 0 && (
                   <View style={styles.tagsBadge}>
                     <Text style={styles.tagsText}>
                       {exercicio.habilidadesBNCC.length} tags BNCC
@@ -140,6 +140,14 @@ export default function AdminExercicios() {
               </View>
             </View>
             <View style={styles.exercicioActions}>
+              {/* BOTÃO EDITAR ADICIONADO AQUI */}
+              <TouchableOpacity 
+                style={styles.actionButton} 
+                onPress={() => router.push({ pathname: '/admin/criar-exercicio', params: { id: exercicio.id } })}
+              >
+                <Ionicons name="pencil" size={20} color="#FFD700" />
+              </TouchableOpacity>
+              
               <TouchableOpacity style={styles.actionButton} onPress={() => handleDelete(exercicio.id)}>
                 <Ionicons name="trash" size={20} color="#E74C3C" />
               </TouchableOpacity>
@@ -166,114 +174,26 @@ export default function AdminExercicios() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0c0c0c',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  exercicioCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1a2e',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-  },
-  exercicioIcon: {
-    width: 56,
-    height: 56,
-    backgroundColor: '#32CD32' + '30',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  exercicioInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  exercicioTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  exercicioDesc: {
-    color: '#888',
-    fontSize: 13,
-    marginTop: 4,
-  },
-  exercicioMeta: {
-    flexDirection: 'row',
-    marginTop: 8,
-    gap: 8,
-  },
-  modoBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  modoText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  tagsBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    backgroundColor: '#FFD70030',
-  },
-  tagsText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#FFD700',
-  },
-  exercicioActions: {
-    gap: 8,
-  },
-  actionButton: {
-    padding: 8,
-  },
-  emptyState: {
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyText: {
-    color: '#666',
-    fontSize: 16,
-    marginTop: 16,
-    marginBottom: 20,
-  },
-  createButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFD700',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
-  },
-  createButtonText: {
-    color: '#000',
-    fontWeight: 'bold',
-  },
+  container: { flex: 1, backgroundColor: '#0c0c0c' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 16 },
+  exercicioCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, marginBottom: 12 },
+  exercicioIcon: { width: 56, height: 56, backgroundColor: '#32CD32' + '30', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  exercicioInfo: { flex: 1, marginLeft: 12 },
+  exercicioTitle: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  exercicioDesc: { color: '#888', fontSize: 13, marginTop: 4 },
+  exercicioMeta: { flexDirection: 'row', marginTop: 8, gap: 8 },
+  modoBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  modoText: { fontSize: 10, fontWeight: 'bold' },
+  tagsBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: '#FFD70030' },
+  tagsText: { fontSize: 10, fontWeight: 'bold', color: '#FFD700' },
+  exercicioActions: { gap: 8 },
+  actionButton: { padding: 8, backgroundColor: '#252540', borderRadius: 8 }, // Adicionei fundo para facilitar o clique
+  emptyState: { alignItems: 'center', padding: 40 },
+  emptyText: { color: '#666', fontSize: 16, marginTop: 16, marginBottom: 20 },
+  createButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD700', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, gap: 8 },
+  createButtonText: { color: '#000', fontWeight: 'bold' },
 });
