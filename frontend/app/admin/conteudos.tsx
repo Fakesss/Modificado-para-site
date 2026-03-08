@@ -14,8 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+// REMOVIDOS IMPORTS NATIVOS QUE QUEBRAM O VERCEL
 import * as api from '../../src/services/api';
 
 type TipoConteudo = 'VIDEO' | 'LINK' | 'MATERIAL';
@@ -77,35 +76,38 @@ export default function AdminConteudos() {
     setTipo(item.tipo);
     setUrl(item.urlVideo || '');
     setTurmaId(item.turmaId || '');
-    // Arquivo não carregamos de volta o base64 para economizar memória, 
-    // só mostramos se já existe
     setNomeArquivo(item.arquivo ? 'Arquivo Atual (Mantenha ou troque)' : '');
-    setArquivoBase64(null); // Só muda se o usuário selecionar outro
+    setArquivoBase64(null);
     setViewMode('FORM');
   };
 
   const handleDelete = (id: string) => {
-    Alert.alert("Excluir", "Tem certeza?", [
-      { text: "Cancelar" },
-      { text: "Sim", style: 'destructive', onPress: async () => {
-          try {
-            await api.deleteConteudo(id);
-            loadData();
-          } catch(e) { Alert.alert("Erro", "Não foi possível excluir"); }
-      }}
-    ]);
+    if (Platform.OS === 'web') {
+        if (window.confirm("Tem certeza que deseja excluir?")) {
+            api.deleteConteudo(id).then(() => loadData());
+        }
+    } else {
+        Alert.alert("Excluir", "Tem certeza?", [
+            { text: "Cancelar" },
+            { text: "Sim", style: 'destructive', onPress: async () => {
+                try {
+                    await api.deleteConteudo(id);
+                    loadData();
+                } catch(e) { Alert.alert("Erro", "Não foi possível excluir"); }
+            }}
+        ]);
+    }
   };
 
   const handlePickDocument = async () => {
     if (Platform.OS === 'web') {
-      // WEB: Usa input nativo do navegador (Funciona no Vercel)
+      // SOLUÇÃO PURA WEB (Sem bibliotecas externas)
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = '*/*'; // Aceita tudo
+      input.accept = '*/*'; 
       input.onchange = (e: any) => {
         const file = e.target.files[0];
         if (file) {
-          // Validação de tamanho simples (limite 4MB para evitar travar Vercel free tier)
           if (file.size > 4 * 1024 * 1024) {
             Alert.alert("Erro", "Arquivo muito grande (Máx 4MB na versão Web).");
             return;
@@ -115,6 +117,7 @@ export default function AdminConteudos() {
           const reader = new FileReader();
           reader.onload = () => {
             if (typeof reader.result === 'string') {
+              // Remove o cabeçalho data: para salvar apenas o base64 puro
               const base64String = reader.result.split(',')[1];
               setArquivoBase64(base64String);
               Alert.alert("Sucesso", "Arquivo carregado!");
@@ -125,26 +128,13 @@ export default function AdminConteudos() {
       };
       input.click();
     } else {
-      // MOBILE: Usa Expo Document Picker
-      try {
-        const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
-        if (result.canceled) return;
-        
-        const file = result.assets[0];
-        setNomeArquivo(file.name);
-        // No mobile precisa ler o arquivo do cache para converter em Base64
-        const base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 });
-        setArquivoBase64(base64);
-      } catch (err) {
-        Alert.alert("Erro", "Falha ao selecionar arquivo no celular.");
-      }
+      Alert.alert("Aviso", "Upload de arquivos temporariamente disponível apenas na Web.");
     }
   };
 
   const handleSave = async () => {
     if (!titulo.trim()) return Alert.alert("Erro", "Título é obrigatório.");
     if (tipo !== 'MATERIAL' && !url.trim()) return Alert.alert("Erro", "Link/URL é obrigatório.");
-    // Se for material novo, precisa de arquivo. Se for edição, pode manter o antigo (arquivoBase64 null)
     if (tipo === 'MATERIAL' && !arquivoBase64 && !editingId) return Alert.alert("Erro", "Selecione um arquivo.");
 
     setLoading(true);
@@ -158,20 +148,18 @@ export default function AdminConteudos() {
         abaCategoria: tipo === 'VIDEO' ? 'videos' : 'materiais',
       };
 
-      // Só envia arquivo se houver um novo selecionado
       if (arquivoBase64) {
         payload.arquivo = arquivoBase64;
       }
 
       if (editingId) {
-        // Atualizar
-        if (api.updateConteudo) {
-            await api.updateConteudo(editingId, payload);
+        if ((api as any).updateConteudo) {
+            await (api as any).updateConteudo(editingId, payload);
         } else {
-            throw new Error("Função de atualização não encontrada no API.");
+            // Fallback se não atualizou api.ts
+            throw new Error("Função updateConteudo não encontrada.");
         }
       } else {
-        // Criar
         await api.createConteudo(payload);
       }
       
@@ -202,7 +190,7 @@ export default function AdminConteudos() {
         </View>
 
         <ScrollView style={{padding: 16}}>
-          {loading ? <ActivityIndicator color="#FFD700" /> : conteudos.length === 0 ? (
+          {loading && conteudos.length === 0 ? <ActivityIndicator color="#FFD700" /> : conteudos.length === 0 ? (
             <Text style={{color:'#666', textAlign:'center', marginTop:20}}>Nenhum conteúdo cadastrado.</Text>
           ) : (
             conteudos.map(item => (
