@@ -1,451 +1,212 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  RefreshControl,
+  TextInput,
   ActivityIndicator,
   Alert,
-  Modal,
-  TextInput,
+  KeyboardAvoidingView,
   Platform,
+  Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import * as api from '../../src/services/api';
-import { Conteudo } from '../../src/types';
+
+type TipoConteudo = 'VIDEO' | 'LINK' | 'MATERIAL';
 
 export default function AdminConteudos() {
   const router = useRouter();
-  const [conteudos, setConteudos] = useState<Conteudo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [selectedConteudo, setSelectedConteudo] = useState<Conteudo | null>(null);
-  const [formTitulo, setFormTitulo] = useState('');
-  const [formDescricao, setFormDescricao] = useState('');
-  const [formUrl, setFormUrl] = useState('');
-  const [formTipo, setFormTipo] = useState('VIDEO');
+  const [loading, setLoading] = useState(false);
+  
+  // Estado do Formulário
+  const [titulo, setTitulo] = useState('');
+  const [descricao, setDescricao] = useState('');
+  const [tipo, setTipo] = useState<TipoConteudo>('VIDEO');
+  const [url, setUrl] = useState(''); // Para Vídeo e Link
+  
+  // Estado para Arquivo
+  const [nomeArquivo, setNomeArquivo] = useState('');
+  const [arquivoBase64, setArquivoBase64] = useState<string | null>(null);
+
+  // Destinatários (Turmas)
+  const [turmas, setTurmas] = useState<any[]>([]);
+  const [turmaId, setTurmaId] = useState('');
 
   useEffect(() => {
-    loadData();
+    loadTurmas();
   }, []);
 
-  const loadData = async () => {
+  const loadTurmas = async () => {
     try {
-      const data = await api.getConteudos();
-      setConteudos(data);
-    } catch (error) {
-      console.error('Error loading content:', error);
+      const data = await api.getTurmas();
+      setTurmas(data || []);
+    } catch (e) {
+      console.log('Erro ao carregar turmas');
+    }
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*', // Aceita qualquer arquivo (PDF, Doc, Imagem)
+        copyToCacheDirectory: true
+      });
+
+      if (result.canceled) return;
+
+      const file = result.assets[0];
+      setNomeArquivo(file.name);
+
+      // Converte para Base64 para enviar ao servidor
+      const base64 = await FileSystem.readAsStringAsync(file.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      setArquivoBase64(base64);
+      Alert.alert("Sucesso", "Arquivo selecionado!");
+
+    } catch (err) {
+      Alert.alert("Erro", "Falha ao selecionar arquivo.");
+    }
+  };
+
+  const handleSave = async () => {
+    if (!titulo.trim()) return Alert.alert("Erro", "Título é obrigatório.");
+
+    if (tipo === 'VIDEO' && !url.trim()) return Alert.alert("Erro", "URL do vídeo é obrigatória.");
+    if (tipo === 'LINK' && !url.trim()) return Alert.alert("Erro", "Link é obrigatório.");
+    if (tipo === 'MATERIAL' && !arquivoBase64) return Alert.alert("Erro", "Selecione um arquivo.");
+
+    setLoading(true);
+    try {
+      const payload = {
+        titulo,
+        descricao,
+        tipo,
+        turmaId: turmaId || null,
+        urlVideo: (tipo === 'VIDEO' || tipo === 'LINK') ? url : null,
+        arquivo: tipo === 'MATERIAL' ? arquivoBase64 : null, // Envia o arquivo aqui!
+        abaCategoria: tipo === 'VIDEO' ? 'videos' : 'materiais',
+      };
+
+      await api.createConteudo(payload);
+      
+      Alert.alert("Sucesso", "Conteúdo salvo!", [
+        { text: "OK", onPress: () => router.back() }
+      ]);
+
+    } catch (error: any) {
+      Alert.alert("Erro ao Salvar", "Verifique os dados e tente novamente.");
     } finally {
       setLoading(false);
     }
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
-
-  const openCreateModal = () => {
-    setEditMode(false);
-    setSelectedConteudo(null);
-    setFormTitulo('');
-    setFormDescricao('');
-    setFormUrl('');
-    setFormTipo('VIDEO');
-    setModalVisible(true);
-  };
-
-  const openEditModal = (conteudo: Conteudo) => {
-    setEditMode(true);
-    setSelectedConteudo(conteudo);
-    setFormTitulo(conteudo.titulo);
-    setFormDescricao(conteudo.descricao || '');
-    setFormUrl(conteudo.urlVideo || '');
-    setFormTipo(conteudo.tipo);
-    setModalVisible(true);
-  };
-
-  const handleSave = async () => {
-    if (!formTitulo.trim()) {
-      Alert.alert('Erro', 'Título é obrigatório');
-      return;
-    }
-
-    try {
-      if (editMode && selectedConteudo) {
-        await api.updateConteudo(selectedConteudo.id, {
-          titulo: formTitulo,
-          descricao: formDescricao,
-          urlVideo: formUrl,
-          tipo: formTipo,
-        });
-        Alert.alert('Sucesso', 'Conteúdo atualizado!');
-      } else {
-        await api.createConteudo({
-          titulo: formTitulo,
-          descricao: formDescricao,
-          urlVideo: formUrl,
-          tipo: formTipo,
-          abaCategoria: 'videos',
-        });
-        Alert.alert('Sucesso', 'Conteúdo criado!');
-      }
-      setModalVisible(false);
-      loadData();
-    } catch (error: any) {
-      Alert.alert('Erro', error.response?.data?.detail || 'Erro ao salvar');
-    }
-  };
-
-  const handleDelete = async (conteudoId: string) => {
-    // Esse console.log é o nosso "Grito de Alerta"
-    console.log("🚨 CLICOU NA LIXEIRA! ID do conteúdo:", conteudoId);
-
-    if (Platform.OS === 'web') {
-      const confirmou = window.confirm('Deseja mover este conteúdo para a lixeira?');
-      if (confirmou) {
-        try {
-          console.log("Enviando comando de deletar para a API...");
-          await api.deleteConteudo(conteudoId);
-          window.alert('Conteúdo movido para a lixeira com sucesso!');
-          loadData();
-        } catch (error) {
-          console.error("❌ ERRO AO DELETAR:", error);
-          window.alert('Erro ao mover conteúdo. Olhe o Console (F12).');
-        }
-      }
-    } else {
-      Alert.alert(
-        'Mover para Lixeira',
-        'Deseja mover este conteúdo para a lixeira?',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          {
-            text: 'Mover',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await api.deleteConteudo(conteudoId);
-                Alert.alert('Sucesso', 'Conteúdo movido para a lixeira');
-                loadData();
-              } catch (error) {
-                Alert.alert('Erro', 'Erro ao mover conteúdo');
-              }
-            },
-          },
-        ]
-      );
-    }
-  };
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Gerenciar Conteúdos</Text>
-        <TouchableOpacity onPress={openCreateModal}>
-          <Ionicons name="add-circle" size={28} color="#FFD700" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
-        }
-      >
-        {conteudos.map((conteudo) => (
-          <View key={conteudo.id} style={styles.conteudoCard}>
-            <View style={styles.conteudoIcon}>
-              <Ionicons
-                name={conteudo.tipo === 'VIDEO' ? 'play-circle' : 'document'}
-                size={28}
-                color="#4169E1"
-              />
-            </View>
-            <View style={styles.conteudoInfo}>
-              <Text style={styles.conteudoTitle}>{conteudo.titulo}</Text>
-              {conteudo.descricao && (
-                <Text style={styles.conteudoDesc} numberOfLines={2}>
-                  {conteudo.descricao}
-                </Text>
-              )}
-              <View style={styles.conteudoMeta}>
-                <View style={[styles.tipoBadge, { backgroundColor: conteudo.tipo === 'VIDEO' ? '#4169E130' : '#32CD3230' }]}>
-                  <Text style={[styles.tipoText, { color: conteudo.tipo === 'VIDEO' ? '#4169E1' : '#32CD32' }]}>
-                    {conteudo.tipo}
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <View style={styles.conteudoActions}>
-              <TouchableOpacity style={styles.actionButton} onPress={() => openEditModal(conteudo)}>
-                <Ionicons name="create" size={20} color="#4169E1" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={() => handleDelete(conteudo.id)}>
-                <Ionicons name="trash" size={20} color="#E74C3C" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
-
-        {conteudos.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="videocam-outline" size={48} color="#666" />
-            <Text style={styles.emptyText}>Nenhum conteúdo cadastrado</Text>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Create/Edit Modal */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{editMode ? 'Editar Conteúdo' : 'Novo Conteúdo'}</Text>
-
-            <Text style={styles.inputLabel}>Título</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Título do conteúdo"
-              placeholderTextColor="#666"
-              value={formTitulo}
-              onChangeText={setFormTitulo}
-            />
-
-            <Text style={styles.inputLabel}>Descrição</Text>
-            <TextInput
-              style={[styles.textInput, { height: 80 }]}
-              placeholder="Descrição (opcional)"
-              placeholderTextColor="#666"
-              value={formDescricao}
-              onChangeText={setFormDescricao}
-              multiline
-            />
-
-            <Text style={styles.inputLabel}>URL do Vídeo (YouTube)</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="https://www.youtube.com/watch?v=..."
-              placeholderTextColor="#666"
-              value={formUrl}
-              onChangeText={setFormUrl}
-              autoCapitalize="none"
-            />
-
-            <Text style={styles.inputLabel}>Tipo</Text>
-            <View style={styles.selectContainer}>
-              {['VIDEO', 'LINK', 'MATERIAL'].map((tipo) => (
-                <TouchableOpacity
-                  key={tipo}
-                  style={[
-                    styles.selectOption,
-                    formTipo === tipo && styles.selectOptionActive,
-                  ]}
-                  onPress={() => setFormTipo(tipo)}
-                >
-                  <Text
-                    style={[styles.selectText, formTipo === tipo && { color: '#000' }]}
-                  >
-                    {tipo}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                <Text style={styles.saveButtonText}>Salvar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+      <Modal visible={loading} transparent animationType="fade">
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#FFD700" />
+          <Text style={{color:'#fff', marginTop:10}}>Salvando...</Text>
         </View>
       </Modal>
+
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
+        <Text style={styles.headerTitle}>Novo Conteúdo</Text>
+        <TouchableOpacity onPress={handleSave}><Ionicons name="checkmark" size={28} color="#FFD700" /></TouchableOpacity>
+      </View>
+
+      <ScrollView style={{padding: 16}}>
+        
+        <Text style={styles.label}>Tipo de Conteúdo</Text>
+        <View style={styles.tabContainer}>
+          {(['VIDEO', 'LINK', 'MATERIAL'] as TipoConteudo[]).map(t => (
+            <TouchableOpacity 
+              key={t} 
+              style={[styles.tab, tipo === t && styles.tabActive]}
+              onPress={() => setTipo(t)}
+            >
+              <Text style={{color: tipo === t ? '#000' : '#fff', fontWeight:'bold'}}>{t}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.label}>Título</Text>
+        <TextInput style={styles.input} value={titulo} onChangeText={setTitulo} placeholder="Ex: Aula 01" placeholderTextColor="#666" />
+
+        <Text style={styles.label}>Descrição</Text>
+        <TextInput style={[styles.input, {height:60}]} multiline value={descricao} onChangeText={setDescricao} placeholder="Detalhes..." placeholderTextColor="#666" />
+
+        {/* LÓGICA DINÂMICA DOS CAMPOS */}
+        {tipo === 'VIDEO' && (
+          <>
+            <Text style={styles.label}>Link do YouTube</Text>
+            <TextInput style={styles.input} value={url} onChangeText={setUrl} placeholder="https://youtube.com/..." placeholderTextColor="#666" />
+          </>
+        )}
+
+        {tipo === 'LINK' && (
+          <>
+            <Text style={styles.label}>URL do Site</Text>
+            <TextInput style={styles.input} value={url} onChangeText={setUrl} placeholder="https://..." placeholderTextColor="#666" />
+          </>
+        )}
+
+        {tipo === 'MATERIAL' && (
+          <View style={{marginBottom: 20}}>
+            <Text style={styles.label}>Arquivo (PDF, Imagem, Doc)</Text>
+            <TouchableOpacity style={styles.uploadButton} onPress={handlePickDocument}>
+              <Ionicons name="cloud-upload-outline" size={24} color="#000" />
+              <Text style={styles.uploadText}>
+                {nomeArquivo ? nomeArquivo : "Selecionar Arquivo"}
+              </Text>
+            </TouchableOpacity>
+            {nomeArquivo !== '' && <Text style={{color:'#32CD32', marginTop:5, fontSize:12}}>Arquivo carregado pronto para envio.</Text>}
+          </View>
+        )}
+
+        <Text style={styles.label}>Disponível Para (Opcional)</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>
+          <TouchableOpacity onPress={() => setTurmaId('')} style={[styles.chip, !turmaId && styles.chipActive]}>
+            <Text style={{color: !turmaId ? '#000' : '#fff'}}>Geral (Todos)</Text>
+          </TouchableOpacity>
+          {turmas.map((t: any) => (
+            <TouchableOpacity key={t.id} onPress={() => setTurmaId(t.id)} 
+              style={[styles.chip, turmaId === t.id && styles.chipActive]}>
+              <Text style={{color: turmaId === t.id ? '#000' : '#fff'}}>{t.nome}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0c0c0c',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  conteudoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1a2e',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-  },
-  conteudoIcon: {
-    width: 56,
-    height: 56,
-    backgroundColor: '#4169E1' + '30',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  conteudoInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  conteudoTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  conteudoDesc: {
-    color: '#888',
-    fontSize: 13,
-    marginTop: 4,
-  },
-  conteudoMeta: {
-    flexDirection: 'row',
-    marginTop: 8,
-  },
-  tipoBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  tipoText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  conteudoActions: {
-    gap: 8,
-  },
-  actionButton: {
-    padding: 8,
-  },
-  emptyState: {
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyText: {
-    color: '#666',
-    fontSize: 16,
-    marginTop: 16,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 16,
-    padding: 20,
-  },
-  modalTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  inputLabel: {
-    color: '#888',
-    fontSize: 12,
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  textInput: {
-    backgroundColor: '#252540',
-    borderRadius: 12,
-    padding: 14,
-    color: '#fff',
-    fontSize: 16,
-  },
-  selectContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  selectOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  selectOptionActive: {
-    backgroundColor: '#FFD700',
-    borderColor: '#FFD700',
-  },
-  selectText: {
-    color: '#888',
-    fontWeight: '600',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 24,
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: '#333',
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  saveButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: '#FFD700',
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    color: '#000',
-    fontWeight: '600',
-  },
+  container: { flex: 1, backgroundColor: '#0c0c0c' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 16, alignItems: 'center', backgroundColor: '#151520', borderBottomWidth:1, borderBottomColor:'#222' },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  label: { color: '#888', fontSize: 11, marginTop: 15, marginBottom: 5, textTransform: 'uppercase', letterSpacing:1 },
+  input: { backgroundColor: '#1a1a2e', color: '#fff', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#333', fontSize:16 },
+  
+  tabContainer: { flexDirection: 'row', backgroundColor:'#1a1a2e', borderRadius:8, padding:4, marginBottom:10 },
+  tab: { flex:1, paddingVertical:10, alignItems:'center', borderRadius:6 },
+  tabActive: { backgroundColor:'#FFD700' },
+
+  uploadButton: { flexDirection:'row', alignItems:'center', justifyContent:'center', backgroundColor:'#FFD700', padding:15, borderRadius:10, gap:10 },
+  uploadText: { color:'#000', fontWeight:'bold', fontSize:16 },
+
+  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#333', marginRight: 8 },
+  chipActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
+
+  loadingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
 });
