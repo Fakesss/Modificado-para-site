@@ -13,12 +13,21 @@ import { Ionicons } from '@expo/vector-icons';
 export default function Resultado() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const acertos = parseInt(params.acertos as string) || 0;
-  const erros = parseInt(params.erros as string) || 0;
-  const total = parseInt(params.total as string) || 0;
-  const nota = parseFloat(params.nota as string) || 0;
-  const percentual = parseFloat(params.percentual as string) || 0;
-  const pontos = parseInt(params.pontos as string) || 0;
+
+  // Função segura para ler números (texto ou number)
+  const parseNumber = (val: any) => {
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    return Number(val) || 0;
+  };
+
+  const acertos = parseNumber(params.acertos);
+  const erros = parseNumber(params.erros);
+  const total = parseNumber(params.total);
+  const nota = parseNumber(params.nota);
+  const percentual = parseNumber(params.percentual);
+  const pontos = parseNumber(params.pontos);
+  
   const detalhes = params.detalhes ? JSON.parse(params.detalhes as string) : [];
 
   const getNotaColor = () => {
@@ -86,7 +95,7 @@ export default function Resultado() {
             <View
               style={[
                 styles.progressFill,
-                { width: `${percentual}%`, backgroundColor: getNotaColor() },
+                { width: `${Math.min(percentual, 100)}%`, backgroundColor: getNotaColor() },
               ]}
             />
           </View>
@@ -150,156 +159,35 @@ export default function Resultado() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0c0c0c',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  resultHeader: {
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-  notaText: {
-    fontSize: 64,
-    fontWeight: 'bold',
-    marginTop: 16,
-  },
-  notaMessage: {
-    fontSize: 20,
-    color: '#fff',
-    marginTop: 8,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#1a1a2e',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 8,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 4,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#333',
-  },
-  pointsCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFD700' + '30',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    gap: 16,
-  },
-  pointsInfo: {
-    flex: 1,
-  },
-  pointsLabel: {
-    color: '#888',
-    fontSize: 14,
-  },
-  pointsValue: {
-    color: '#FFD700',
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
-  progressContainer: {
-    marginBottom: 24,
-  },
-  progressLabel: {
-    color: '#fff',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  progressBar: {
-    height: 12,
-    backgroundColor: '#333',
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 6,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 16,
-  },
-  detalheCard: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  detalheHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  detalheNumero: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#333',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  detalheNumeroText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  detalheInfo: {
-    gap: 8,
-  },
-  detalheRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detalheLabel: {
-    color: '#888',
-    fontSize: 14,
-  },
-  detalheValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  actionsContainer: {
-    padding: 16,
-  },
-  primaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFD700',
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 8,
-  },
-  primaryButtonText: {
-    color: '#000',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  container: { flex: 1, backgroundColor: '#0c0c0c' },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 16 },
+  resultHeader: { alignItems: 'center', paddingVertical: 32 },
+  notaText: { fontSize: 64, fontWeight: 'bold', marginTop: 16 },
+  notaMessage: { fontSize: 20, color: '#fff', marginTop: 8 },
+  statsContainer: { flexDirection: 'row', backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, marginBottom: 16 },
+  statItem: { flex: 1, alignItems: 'center' },
+  statValue: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginTop: 8 },
+  statLabel: { fontSize: 12, color: '#888', marginTop: 4 },
+  statDivider: { width: 1, backgroundColor: '#333' },
+  pointsCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD700' + '30', borderRadius: 16, padding: 20, marginBottom: 16, gap: 16 },
+  pointsInfo: { flex: 1 },
+  pointsLabel: { color: '#888', fontSize: 14 },
+  pointsValue: { color: '#FFD700', fontSize: 28, fontWeight: 'bold' },
+  progressContainer: { marginBottom: 24 },
+  progressLabel: { color: '#fff', fontSize: 14, marginBottom: 8 },
+  progressBar: { height: 12, backgroundColor: '#333', borderRadius: 6, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 6 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 16 },
+  detalheCard: { backgroundColor: '#1a1a2e', borderRadius: 12, padding: 16, marginBottom: 12 },
+  detalheHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  detalheNumero: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' },
+  detalheNumeroText: { color: '#fff', fontWeight: 'bold' },
+  detalheInfo: { gap: 8 },
+  detalheRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  detalheLabel: { color: '#888', fontSize: 14 },
+  detalheValue: { fontSize: 14, fontWeight: 'bold' },
+  actionsContainer: { padding: 16 },
+  primaryButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFD700', paddingVertical: 16, borderRadius: 12, gap: 8 },
+  primaryButtonText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
 });
