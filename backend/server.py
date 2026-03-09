@@ -466,13 +466,15 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     exercicio = await db.exercicios.find_one({"id": submissao_data.exercicioId})
     if not exercicio: raise HTTPException(status_code=404, detail="Exercício não encontrado")
     questoes = await db.questoes.find({"exercicioId": submissao_data.exercicioId}).to_list(100)
+    
+    # 🚨 CORREÇÃO 1: Criado SEM acento para o Python não travar!
     questoes_map = {q["id"]: q for q in questoes}
     
     acertos, erros = 0, 0
     detalhes = []
     
     for resp in submissao_data.respostas:
-        questao = questões_map.get(resp.questaoId)
+        questao = questoes_map.get(resp.questaoId)
         if not questao: continue
         correto = resp.resposta.upper().strip() == questao.get("correta", "").upper().strip()
         if correto: acertos += 1
@@ -488,7 +490,10 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     
     total = len(questoes)
     nota = (acertos / total * 10) if total > 0 else 0
-    pontos = int((acertos / total) * 10) if total > 0 else 0
+    
+    # 🚨 CORREÇÃO 2: Pega os pontos configurados pelo professor
+    pontos_por_questao = exercicio.get("pontosPorQuestao", 1.0)
+    pontos = int(acertos * pontos_por_questao)
     
     submissao = Submissao(
         exercicioId=submissao_data.exercicioId,
@@ -501,7 +506,11 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
         detalhesQuestoes=detalhes
     )
     await db.submissoes.insert_one(submissao.dict())
+    
+    # 🚨 CORREÇÃO 3: Soma os pontos do Aluno E DA EQUIPE DELE!
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
+    if current_user.get("equipeId"):
+        await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": pontos}})
     
     # SALVA OS ERROS BNCC
     for d in detalhes:
@@ -527,6 +536,8 @@ async def retry_submissao(exercicio_id: str, current_user: dict = Depends(get_cu
         pontos = sub.get("pontosGerados", 0)
         if pontos > 0:
             await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": -pontos}})
+            if current_user.get("equipeId"):
+                await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": -pontos}})
         await db.submissoes.delete_one({"_id": sub["_id"]})
     return {"message": "Pronto para tentar novamente"}
 
@@ -589,6 +600,49 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
         await db.questoes.delete_many({"exercicioId": item_id})
         return {"message": "Deletado"}
     raise HTTPException(400, "Tipo inválido")
+
+# ============== ROTAS DE RANKING E PROGRESSO FALTANTES ==============
+
+@api_router.get("/ranking/geral")
+async def get_ranking_geral():
+    equipes = await db.equipes.find({}).sort("pontosTotais", -1).to_list(100)
+    ranking = []
+    for i, e in enumerate(equipes):
+        ranking.append({
+            "id": e["id"],
+            "posicao": i + 1,
+            "nome": e["nome"],
+            "cor": e.get("cor", "#333"),
+            "pontosTotais": e.get("pontosTotais", 0)
+        })
+    return ranking
+
+@api_router.get("/ranking/turma/{turma_id}")
+async def get_ranking_turma(turma_id: str):
+    equipes = await db.equipes.find({"turmaId": turma_id}).sort("pontosTotais", -1).to_list(100)
+    ranking = []
+    for i, e in enumerate(equipes):
+        ranking.append({
+            "id": e["id"],
+            "posicao": i + 1,
+            "nome": e["nome"],
+            "cor": e.get("cor", "#333"),
+            "pontosTotais": e.get("pontosTotais", 0)
+        })
+    return ranking
+
+@api_router.get("/usuarios/progresso")
+async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
+    submissoes = await db.submissoes.find({"usuarioId": current_user["id"]}).sort("data", -1).to_list(100)
+    
+    return {
+        "pontosTotais": current_user.get("pontosTotais", 0),
+        "totalExercicios": len(submissoes),
+        "pontosExercicios": sum(s.get("pontosGerados", 0) for s in submissoes),
+        "totalVideos": 0,
+        "pontosVideos": 0,
+        "submissoes": [{k: v for k, v in s.items() if k != '_id'} for s in submissoes]
+    }
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
