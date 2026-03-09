@@ -14,8 +14,12 @@ interface Missao {
 export default function GerenciarJogosAdmin() {
   const router = useRouter();
   const [missoes, setMissoes] = useState<Missao[]>([]);
+  
+  // Listas de Alvos
   const [listaTurmas, setListaTurmas] = useState<any[]>([]);
+  const [listaEquipes, setListaEquipes] = useState<any[]>([]); // ADICIONADO EQUIPES
   const [listaAlunos, setListaAlunos] = useState<any[]>([]);
+  
   const [carregando, setCarregando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   
@@ -25,7 +29,7 @@ export default function GerenciarJogosAdmin() {
   const [pontos, setPontos] = useState(''); 
   const [vidas, setVidas] = useState('');   
   const [limiteTentativas, setLimiteTentativas] = useState('1'); 
-  const [alvoTipo, setAlvoTipo] = useState<'GERAL' | 'TURMA' | 'INDIVIDUAL'>('GERAL');
+  const [alvoTipo, setAlvoTipo] = useState<'GERAL' | 'TURMA' | 'EQUIPE' | 'INDIVIDUAL'>('GERAL'); // EQUIPE AQUI
   const [alvoSel, setAlvoSel] = useState<{id: string, nome: string} | null>(null);
   
   const [questoes, setQuestoes] = useState<Questao[]>([]);
@@ -57,6 +61,10 @@ export default function GerenciarJogosAdmin() {
   const carregarAlvos = async () => {
     const t = await api.getTurmas(); 
     setListaTurmas(t || []);
+    
+    const e = await api.getEquipes(); // PUXANDO AS EQUIPES
+    setListaEquipes(e || []);
+    
     const u = await api.getUsuarios(); 
     setListaAlunos(u?.filter((x:any)=>x.perfil==='ALUNO') || []);
   };
@@ -125,6 +133,13 @@ export default function GerenciarJogosAdmin() {
     setAlvoTipo('GERAL'); 
     setAlvoSel(null); 
     setModalReenviar(true);
+  };
+
+  // Ajuda a renderizar a lista certa no modal
+  const getListaAtual = () => {
+    if (alvoTipo === 'TURMA') return listaTurmas;
+    if (alvoTipo === 'EQUIPE') return listaEquipes;
+    return listaAlunos;
   };
 
   return (
@@ -203,7 +218,7 @@ export default function GerenciarJogosAdmin() {
 
             <Text style={styles.label}>2. Para quem?</Text>
             <View style={{flexDirection:'row', gap:8, marginBottom:10}}>
-              {['GERAL','TURMA','INDIVIDUAL'].map((t:any) => (
+              {['GERAL','TURMA','EQUIPE','INDIVIDUAL'].map((t:any) => (
                 <TouchableOpacity key={t} style={[styles.btnSeg, alvoTipo===t && styles.btnSegAtivo]} onPress={()=>{setAlvoTipo(t); setAlvoSel(null);}}>
                   <Text style={{color: alvoTipo===t?'#000':'#666', fontWeight:'bold', fontSize:11}}>{t}</Text>
                 </TouchableOpacity>
@@ -258,7 +273,7 @@ export default function GerenciarJogosAdmin() {
             </Text>
             
             <View style={{flexDirection:'row', gap:8, marginBottom:10}}>
-              {['GERAL','TURMA','INDIVIDUAL'].map((t:any) => (
+              {['GERAL','TURMA','EQUIPE','INDIVIDUAL'].map((t:any) => (
                 <TouchableOpacity key={t} style={[styles.btnSeg, alvoTipo===t && styles.btnSegAtivo]} onPress={()=>{setAlvoTipo(t); setAlvoSel(null);}}>
                   <Text style={{color: alvoTipo===t?'#000':'#666', fontWeight:'bold', fontSize:11}}>{t}</Text>
                 </TouchableOpacity>
@@ -286,12 +301,12 @@ export default function GerenciarJogosAdmin() {
         </View>
       </Modal>
 
-      {/* MODAL SELEÇÃO (Alunos/Turmas) */}
+      {/* MODAL SELEÇÃO (Alunos/Turmas/Equipes) */}
       <Modal visible={modalSelVisivel} transparent>
         <View style={styles.overlay}>
           <View style={styles.selBox}>
             <FlatList 
-              data={alvoTipo==='TURMA'?listaTurmas:listaAlunos} 
+              data={getListaAtual()} 
               keyExtractor={(i:any)=>i.id} 
               renderItem={({item}) => (
                 <TouchableOpacity style={styles.selItem} onPress={()=>{setAlvoSel(item); setModalSelVisivel(false);}}>
