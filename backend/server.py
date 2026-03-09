@@ -6,12 +6,13 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta
 import bcrypt
 from jose import JWTError, jwt
+import base64
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -36,31 +37,6 @@ api_router = APIRouter(prefix="/api")
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# >>> TURBO MODE: INDEXAÇÃO DO BANCO DE DADOS <<<
-# Isso resolve a lentidão e o problema da cor amarela piscando
-@app.on_event("startup")
-async def startup_db_client():
-    try:
-        # Índices para busca instantânea de usuário e login
-        await db.usuarios.create_index("id", unique=True)
-        await db.usuarios.create_index("email", unique=True)
-        
-        # Índices para carregar a cor da equipe e turma instantaneamente
-        await db.usuarios.create_index("turmaId")
-        await db.usuarios.create_index("equipeId")
-        await db.equipes.create_index("id", unique=True)
-        
-        # Índices para o RANKING (Ordenação instantânea)
-        await db.usuarios.create_index([("pontosTotais", -1)])
-        await db.usuarios.create_index([("turmaId", 1), ("pontosTotais", -1)])
-        await db.usuarios.create_index([("equipeId", 1), ("pontosTotais", -1)])
-        
-        # Índices para evitar duplicidade e acelerar exercícios
-        await db.submissoes.create_index([("exercicioId", 1), ("usuarioId", 1)])
-        logger.info("✅ Índices de performance criados com sucesso!")
-    except Exception as e:
-        logger.error(f"⚠️ Erro ao criar índices: {e}")
 
 # ============== MODELS ==============
 
@@ -131,7 +107,7 @@ class ConteudoCreate(BaseModel):
     titulo: str
     descricao: Optional[str] = None
     urlVideo: Optional[str] = None
-    arquivo: Optional[str] = None
+    arquivo: Optional[str] = None  # >>> ADICIONADO AQUI PARA PERMITIR UPLOAD <<<
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
@@ -221,6 +197,41 @@ class SubmissaoCreate(BaseModel):
     exercicioId: str
     respostas: List[RespostaQuestao]
 
+class ProgressoVideo(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    conteudoId: str
+    usuarioId: str
+    tempoAssistidoSeg: int = 0
+    duracaoSeg: int = 0
+    concluido: bool = False
+    dataConclusao: Optional[str] = None
+    pontosGerados: int = 0
+
+class ProgressoVideoUpdate(BaseModel):
+    conteudoId: str
+    tempoAssistidoSeg: int
+    duracaoSeg: int
+
+class Notificacao(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    usuarioId: Optional[str] = None
+    equipeId: Optional[str] = None
+    titulo: str
+    mensagem: str
+    tipo: str = "INFO"
+    anexosRequeridos: bool = False
+    lida: bool = False
+    criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+class AbaPersonalizada(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    nome: str
+    tipo: str = "LINK"
+    conteudo: str = ""
+    urlExterna: Optional[str] = None
+    ordem: int = 0
+    ativa: bool = True
+
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -260,6 +271,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 async def require_admin(current_user: dict = Depends(get_current_user)):
     if current_user.get("perfil") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Acesso negado")
+    return current_user
+
+async def require_leader_or_admin(current_user: dict = Depends(get_current_user)):
+    if current_user.get("perfil") not in ["ADMIN", "ALUNO_LIDER"]:
         raise HTTPException(status_code=403, detail="Acesso negado")
     return current_user
 
@@ -360,39 +376,6 @@ async def get_usuarios(current_user: dict = Depends(require_admin)):
     usuarios = await db.usuarios.find({"ativo": True}).to_list(1000)
     return [{k: v for k, v in u.items() if k not in ['senha', '_id']} for u in usuarios]
 
-# >>> ROTAS DE RANKING (AGORA PROTEGIDAS E OTIMIZADAS) <<<
-@api_router.get("/ranking/geral")
-async def get_ranking_geral(current_user: dict = Depends(get_current_user)):
-    users = await db.usuarios.find({"perfil": "ALUNO", "ativo": True})\
-        .sort("pontosTotais", -1)\
-        .limit(50)\
-        .to_list(50)
-    return [{k: v for k, v in u.items() if k not in ['senha', '_id']} for u in users]
-
-@api_router.get("/ranking/turma/{turma_id}")
-async def get_ranking_turma(turma_id: str, current_user: dict = Depends(get_current_user)):
-    users = await db.usuarios.find({"perfil": "ALUNO", "ativo": True, "turmaId": turma_id})\
-        .sort("pontosTotais", -1)\
-        .limit(50)\
-        .to_list(50)
-    return [{k: v for k, v in u.items() if k not in ['senha', '_id']} for u in users]
-
-@api_router.get("/ranking/alunos/{equipe_id}")
-async def get_ranking_equipe(equipe_id: str, current_user: dict = Depends(get_current_user)):
-    users = await db.usuarios.find({"perfil": "ALUNO", "ativo": True, "equipeId": equipe_id})\
-        .sort("pontosTotais", -1)\
-        .limit(50)\
-        .to_list(50)
-    return [{k: v for k, v in u.items() if k not in ['senha', '_id']} for u in users]
-
-# Rota Extra para Ranking de Equipes (Caso o frontend precise)
-@api_router.get("/ranking/equipes")
-async def get_ranking_equipes_list(current_user: dict = Depends(get_current_user)):
-    equipes = await db.equipes.find({})\
-        .sort("pontosTotais", -1)\
-        .to_list(50)
-    return [{k: v for k, v in e.items() if k != '_id'} for e in equipes]
-
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     query = {"ativo": True, "is_deleted": {"$ne": True}}
@@ -482,25 +465,9 @@ async def delete_exercicio(exercicio_id: str, current_user: dict = Depends(requi
 async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict = Depends(get_current_user)):
     exercicio = await db.exercicios.find_one({"id": submissao_data.exercicioId})
     if not exercicio: raise HTTPException(status_code=404, detail="Exercício não encontrado")
-    
-    # BLINDAGEM CONTRA DUPLICIDADE DE NOTAS
-    # Se já existir uma nota para este exercício, NÃO soma pontos novamente.
-    existente = await db.submissoes.find_one({
-        "exercicioId": submissao_data.exercicioId,
-        "usuarioId": current_user["id"]
-    })
-    
-    if existente:
-        return {
-            "submissao": {k: v for k, v in existente.items() if k != '_id'},
-            "acertos": existente.get("acertos", 0),
-            "erros": existente.get("erros", 0),
-            "totalQuestoes": existente.get("acertos", 0) + existente.get("erros", 0),
-            "nota": existente.get("nota", 0),
-            "pontosGerados": 0 
-        }
-
     questoes = await db.questoes.find({"exercicioId": submissao_data.exercicioId}).to_list(100)
+    
+    # 🚨 CORREÇÃO 1: Criado SEM acento para o Python não travar!
     questoes_map = {q["id"]: q for q in questoes}
     
     acertos, erros = 0, 0
@@ -523,7 +490,10 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     
     total = len(questoes)
     nota = (acertos / total * 10) if total > 0 else 0
-    pontos = int((acertos / total) * 10) if total > 0 else 0
+    
+    # 🚨 CORREÇÃO 2: Pega os pontos configurados pelo professor
+    pontos_por_questao = exercicio.get("pontosPorQuestao", 1.0)
+    pontos = int(acertos * pontos_por_questao)
     
     submissao = Submissao(
         exercicioId=submissao_data.exercicioId,
@@ -536,8 +506,13 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
         detalhesQuestoes=detalhes
     )
     await db.submissoes.insert_one(submissao.dict())
-    await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
     
+    # 🚨 CORREÇÃO 3: Soma os pontos do Aluno E DA EQUIPE DELE!
+    await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
+    if current_user.get("equipeId"):
+        await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": pontos}})
+    
+    # SALVA OS ERROS BNCC
     for d in detalhes:
         if not d["acertou"]:
             for bncc in d.get("habilidadesBNCC", []):
@@ -547,14 +522,7 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
                     upsert=True
                 )
     
-    return {
-        "submissao": {k: v for k, v in submissao.dict().items() if k != '_id'}, 
-        "acertos": acertos, 
-        "erros": erros, 
-        "totalQuestoes": total, 
-        "nota": round(nota, 1), 
-        "pontosGerados": pontos
-    }
+    return {"submissao": {k: v for k, v in submissao.dict().items() if k != '_id'}, "acertos": acertos, "erros": erros, "totalQuestoes": total, "nota": round(nota, 1), "pontosGerados": pontos}
 
 @api_router.get("/submissoes/{exercicio_id}")
 async def get_submissao(exercicio_id: str, current_user: dict = Depends(get_current_user)):
@@ -568,6 +536,8 @@ async def retry_submissao(exercicio_id: str, current_user: dict = Depends(get_cu
         pontos = sub.get("pontosGerados", 0)
         if pontos > 0:
             await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": -pontos}})
+            if current_user.get("equipeId"):
+                await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": -pontos}})
         await db.submissoes.delete_one({"_id": sub["_id"]})
     return {"message": "Pronto para tentar novamente"}
 
@@ -597,6 +567,7 @@ async def delete_conteudo(conteudo_id: str, current_user: dict = Depends(require
     await db.conteudos.update_one({"id": conteudo_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}})
     return {"message": "Conteúdo movido para a lixeira"}
 
+# Outras rotas do sistema
 @api_router.get("/relatorios/geral")
 async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_u = await db.usuarios.count_documents({"ativo": True})
@@ -629,6 +600,49 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
         await db.questoes.delete_many({"exercicioId": item_id})
         return {"message": "Deletado"}
     raise HTTPException(400, "Tipo inválido")
+
+# ============== ROTAS DE RANKING E PROGRESSO FALTANTES ==============
+
+@api_router.get("/ranking/geral")
+async def get_ranking_geral():
+    equipes = await db.equipes.find({}).sort("pontosTotais", -1).to_list(100)
+    ranking = []
+    for i, e in enumerate(equipes):
+        ranking.append({
+            "id": e["id"],
+            "posicao": i + 1,
+            "nome": e["nome"],
+            "cor": e.get("cor", "#333"),
+            "pontosTotais": e.get("pontosTotais", 0)
+        })
+    return ranking
+
+@api_router.get("/ranking/turma/{turma_id}")
+async def get_ranking_turma(turma_id: str):
+    equipes = await db.equipes.find({"turmaId": turma_id}).sort("pontosTotais", -1).to_list(100)
+    ranking = []
+    for i, e in enumerate(equipes):
+        ranking.append({
+            "id": e["id"],
+            "posicao": i + 1,
+            "nome": e["nome"],
+            "cor": e.get("cor", "#333"),
+            "pontosTotais": e.get("pontosTotais", 0)
+        })
+    return ranking
+
+@api_router.get("/usuarios/progresso")
+async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
+    submissoes = await db.submissoes.find({"usuarioId": current_user["id"]}).sort("data", -1).to_list(100)
+    
+    return {
+        "pontosTotais": current_user.get("pontosTotais", 0),
+        "totalExercicios": len(submissoes),
+        "pontosExercicios": sum(s.get("pontosGerados", 0) for s in submissoes),
+        "totalVideos": 0,
+        "pontosVideos": 0,
+        "submissoes": [{k: v for k, v in s.items() if k != '_id'} for s in submissoes]
+    }
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
