@@ -644,5 +644,71 @@ async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
         "submissoes": [{k: v for k, v in s.items() if k != '_id'} for s in submissoes]
     }
 
+# ============== ROTAS DE MISSÕES / JOGOS PERSONALIZADOS ==============
+
+class MissaoQuestao(BaseModel):
+    id: str
+    texto: str
+    resposta: int
+
+class MissaoCreate(BaseModel):
+    titulo: str
+    alvoTipo: str  # GERAL, TURMA, INDIVIDUAL
+    alvoNome: str
+    alvoId: str
+    questoes: List[MissaoQuestao] = []
+    recompensa: int = 0
+    vidas: int = 3
+    criadoEm: Optional[str] = None
+
+class Missao(MissaoCreate):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    criadaPor: Optional[str] = None
+
+@api_router.get("/missoes")
+async def get_missoes(current_user: dict = Depends(require_admin)):
+    missoes = await db.missoes.find({}).sort("criadoEm", -1).to_list(1000)
+    return [{k: v for k, v in m.items() if k != '_id'} for m in missoes]
+
+@api_router.post("/missoes")
+async def create_missao(missao_data: MissaoCreate, current_user: dict = Depends(require_admin)):
+    missao = Missao(**missao_data.dict())
+    missao.criadaPor = current_user["id"]
+    await db.missoes.insert_one(missao.dict())
+    return missao.dict()
+
+@api_router.delete("/missoes/{missao_id}")
+async def delete_missao(missao_id: str, current_user: dict = Depends(require_admin)):
+    await db.missoes.delete_one({"id": missao_id})
+    return {"message": "Missão deletada com sucesso"}
+
+@api_router.get("/missoes/disponiveis")
+async def get_missoes_disponiveis(current_user: dict = Depends(get_current_user)):
+    # Entrega ao aluno apenas as missões feitas para a Turma dele, para ele mesmo, ou missões Gerais
+    query = {
+        "$or": [
+            {"alvoTipo": "GERAL"},
+            {"alvoTipo": "TURMA", "alvoId": current_user.get("turmaId")},
+            {"alvoTipo": "INDIVIDUAL", "alvoId": current_user["id"]}
+        ]
+    }
+    missoes = await db.missoes.find(query).to_list(100)
+    return [{k: v for k, v in m.items() if k != '_id'} for m in missoes]
+
+@api_router.post("/missoes/{missao_id}/concluir")
+async def concluir_missao(missao_id: str, current_user: dict = Depends(get_current_user)):
+    missao = await db.missoes.find_one({"id": missao_id})
+    if not missao:
+        raise HTTPException(status_code=404, detail="Missão não encontrada")
+    
+    # Entrega os pontos de recompensa ao usuário
+    pontos = missao.get("recompensa", 0)
+    await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
+    
+    # Soma pontos para a equipe também, se ele estiver em uma
+    if current_user.get("equipeId"):
+        await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": pontos}})
+        
+    return {"message": "Missão concluída com sucesso", "pontos": pontos}
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
