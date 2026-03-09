@@ -659,11 +659,18 @@ class MissaoCreate(BaseModel):
     questoes: List[MissaoQuestao] = []
     recompensa: int = 0
     vidas: int = 3
+    limiteTentativas: int = 1  # 0 para ilimitado, 1 padrão
     criadoEm: Optional[str] = None
+    expiraEm: Optional[str] = None
 
 class Missao(MissaoCreate):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     criadaPor: Optional[str] = None
+
+class ReenviarData(BaseModel):
+    alvoTipo: str
+    alvoNome: str
+    alvoId: str
 
 @api_router.get("/missoes")
 async def get_missoes(current_user: dict = Depends(require_admin)):
@@ -674,6 +681,10 @@ async def get_missoes(current_user: dict = Depends(require_admin)):
 async def create_missao(missao_data: MissaoCreate, current_user: dict = Depends(require_admin)):
     missao = Missao(**missao_data.dict())
     missao.criadaPor = current_user["id"]
+    agora = datetime.utcnow()
+    missao.criadoEm = agora.isoformat()
+    missao.expiraEm = (agora + timedelta(hours=24)).isoformat() # 24 horas de validade
+    
     await db.missoes.insert_one(missao.dict())
     return missao.dict()
 
@@ -684,31 +695,82 @@ async def delete_missao(missao_id: str, current_user: dict = Depends(require_adm
 
 @api_router.get("/missoes/disponiveis")
 async def get_missoes_disponiveis(current_user: dict = Depends(get_current_user)):
-    # Entrega ao aluno apenas as missões feitas para a Turma dele, para ele mesmo, ou missões Gerais
+    agora_iso = datetime.utcnow().isoformat()
+    
     query = {
-        "$or": [
-            {"alvoTipo": "GERAL"},
-            {"alvoTipo": "TURMA", "alvoId": current_user.get("turmaId")},
-            {"alvoTipo": "INDIVIDUAL", "alvoId": current_user["id"]}
+        "$and": [
+            {
+                "$or": [
+                    {"expiraEm": {"$gt": agora_iso}},
+                    {"expiraEm": {"$exists": False}} # Para não quebrar as antigas
+                ]
+            },
+            {
+                "$or": [
+                    {"alvoTipo": "GERAL"},
+                    {"alvoTipo": "TURMA", "alvoId": current_user.get("turmaId")},
+                    {"alvoTipo": "INDIVIDUAL", "alvoId": current_user["id"]}
+                ]
+            }
         ]
     }
     missoes = await db.missoes.find(query).to_list(100)
-    return [{k: v for k, v in m.items() if k != '_id'} for m in missoes]
+    resultados = []
+    
+    # Conta quantas vezes o aluno já tentou cada missão
+    for m in missoes:
+        tentativas = await db.missoes_tentativas.count_documents({"usuarioId": current_user["id"], "missaoId": m["id"]})
+        m_dict = {k: v for k, v in m.items() if k != '_id'}
+        m_dict["tentativasFeitas"] = tentativas
+        resultados.append(m_dict)
+        
+    return resultados
+
+@api_router.post("/missoes/{missao_id}/tentativa")
+async def registrar_tentativa(missao_id: str, current_user: dict = Depends(get_current_user)):
+    missao = await db.missoes.find_one({"id": missao_id})
+    if not missao: raise HTTPException(status_code=404, detail="Missão não encontrada")
+    
+    tentativas = await db.missoes_tentativas.count_documents({"usuarioId": current_user["id"], "missaoId": missao_id})
+    limite = missao.get("limiteTentativas", 1)
+    
+    # Se limite for 0 é ilimitado
+    if limite > 0 and tentativas >= limite:
+        raise HTTPException(status_code=400, detail="Limite de tentativas alcançado")
+        
+    await db.missoes_tentativas.insert_one({"usuarioId": current_user["id"], "missaoId": missao_id, "data": datetime.utcnow().isoformat()})
+    return {"message": "Tentativa registrada e permitida"}
 
 @api_router.post("/missoes/{missao_id}/concluir")
 async def concluir_missao(missao_id: str, current_user: dict = Depends(get_current_user)):
     missao = await db.missoes.find_one({"id": missao_id})
-    if not missao:
-        raise HTTPException(status_code=404, detail="Missão não encontrada")
+    if not missao: raise HTTPException(status_code=404, detail="Missão não encontrada")
     
-    # Entrega os pontos de recompensa ao usuário
     pontos = missao.get("recompensa", 0)
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
-    
-    # Soma pontos para a equipe também, se ele estiver em uma
     if current_user.get("equipeId"):
         await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": pontos}})
         
-    return {"message": "Missão concluída com sucesso", "pontos": pontos}
+    return {"message": "Missão concluída", "pontos": pontos}
+
+@api_router.post("/missoes/{missao_id}/reenviar")
+async def reenviar_missao(missao_id: str, dados: ReenviarData, current_user: dict = Depends(require_admin)):
+    old = await db.missoes.find_one({"id": missao_id})
+    if not old: raise HTTPException(status_code=404, detail="Missão não encontrada")
+    
+    # Clona a missão com novos alvos e um novo prazo de +24 horas
+    new_data = {k: v for k, v in old.items() if k not in ['_id', 'id', 'criadoEm', 'expiraEm', 'alvoTipo', 'alvoNome', 'alvoId', 'tentativasFeitas']}
+    new_missao = Missao(**new_data)
+    new_missao.alvoTipo = dados.alvoTipo
+    new_missao.alvoNome = dados.alvoNome
+    new_missao.alvoId = dados.alvoId
+    new_missao.criadaPor = current_user["id"]
+    
+    agora = datetime.utcnow()
+    new_missao.criadoEm = agora.isoformat()
+    new_missao.expiraEm = (agora + timedelta(hours=24)).isoformat()
+    
+    await db.missoes.insert_one(new_missao.dict())
+    return new_missao.dict()
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
