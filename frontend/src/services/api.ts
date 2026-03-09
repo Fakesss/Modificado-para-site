@@ -77,4 +77,9 @@ export const getLixeira = async () => (await api.get('/admin/lixeira')).data;
 export const restaurarItem = async (id: string, tipo: string) => (await api.post(`/admin/lixeira/${id}/restaurar?tipo=${tipo}`)).data;
 export const deletePermanente = async (id: string, tipo: string) => (await api.delete(`/admin/lixeira/${id}?tipo=${tipo}`)).data;
 
+// RANKING E PROGRESSO (AS FUNÇÕES QUE FALTAVAM)
+export const getRankingGeral = async () => { try { return (await api.get('/ranking/geral')).data; } catch { return []; } };
+export const getRankingPorTurma = async (turmaId: string) => { try { return (await api.get(`/ranking/turma/${turmaId}`)).data; } catch { return []; } };
+export const getMeuProgresso = async () => { try { return (await api.get('/usuarios/progresso')).data; } catch { return null; } };
+
 export default api;
