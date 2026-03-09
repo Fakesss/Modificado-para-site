@@ -461,86 +461,85 @@ async def delete_exercicio(exercicio_id: str, current_user: dict = Depends(requi
     await db.exercicios.update_one({"id": exercicio_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}})
     return {"message": "Exercício movido para a lixeira"}
 
-# 🚨 A MÁGICA ESTÁ AQUI: ROTA PROTEGIDA CONTRA ERROS
 @api_router.post("/submissoes")
 async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict = Depends(get_current_user)):
-    try:
-        exercicio = await db.exercicios.find_one({"id": submissao_data.exercicioId})
-        if not exercicio: raise HTTPException(status_code=404, detail="Exercício não encontrado")
-        
-        questoes = await db.questoes.find({"exercicioId": submissao_data.exercicioId}).to_list(100)
-        questoes_map = {q["id"]: q for q in questoes}
-        
-        acertos, erros = 0, 0
-        detalhes = []
-        
-        for resp in submissao_data.respostas:
-            questao = questoes_map.get(resp.questaoId)
-            if not questao: continue
-            
-            # Armadura contra "None" e dados vazios
-            resp_str = str(resp.resposta).upper().strip() if resp.resposta else ""
-            correta_db = questao.get("correta")
-            correta_str = str(correta_db).upper().strip() if correta_db else ""
-            
-            correto = (resp_str == correta_str)
-            if correto: acertos += 1
-            else: erros += 1
-            
-            detalhes.append({
-                "questaoId": resp.questaoId,
-                "numero": questao.get("numero"),
-                "resposta": str(resp.resposta),
-                "correta": str(correta_db) if correta_db else "",
-                "acertou": correto,
-                "habilidadesBNCC": questao.get("habilidadesBNCC", [])
-            })
-        
-        total = len(questoes)
-        nota = (acertos / total * 10) if total > 0 else 0
-        
-        pontos_bd = exercicio.get("pontosPorQuestao")
-        pontos_por_questao = float(pontos_bd) if pontos_bd else 1.0
-        pontos = int(acertos * pontos_por_questao)
-        
-        submissao = Submissao(
-            exercicioId=submissao_data.exercicioId,
-            usuarioId=current_user["id"],
-            respostas=[{"questaoId": r.questaoId, "resposta": str(r.resposta)} for r in submissao_data.respostas],
-            acertos=acertos,
-            erros=erros,
-            nota=round(nota, 1),
-            pontosGerados=pontos,
-            detalhesQuestoes=detalhes
-        )
-        await db.submissoes.insert_one(submissao.dict())
-        
-        await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
-        
-        if current_user.get("equipeId"):
-            await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": pontos}})
-        
-        for d in detalhes:
-            if not d["acertou"]:
-                for bncc in d.get("habilidadesBNCC", []):
-                    await db.erros_bncc.update_one(
-                        {"usuarioId": current_user["id"], "habilidade": bncc},
-                        {"$inc": {"count": 1}},
-                        upsert=True
-                    )
-        
+    exercicio = await db.exercicios.find_one({"id": submissao_data.exercicioId})
+    if not exercicio: raise HTTPException(status_code=404, detail="Exercício não encontrado")
+    
+    # 1. VERIFICA SE JÁ EXISTE UMA SUBMISSÃO
+    existente = await db.submissoes.find_one({
+        "exercicioId": submissao_data.exercicioId,
+        "usuarioId": current_user["id"]
+    })
+    
+    if existente:
+        # Se já existe, retorna os dados dela SEM dar pontos de novo
         return {
-            "submissao": {k: v for k, v in submissao.dict().items() if k != '_id'},
-            "acertos": acertos,
-            "erros": erros,
-            "totalQuestoes": total,
-            "nota": round(nota, 1),
-            "pontosGerados": pontos
+            "submissao": {k: v for k, v in existente.items() if k != '_id'},
+            "acertos": existente.get("acertos", 0),
+            "erros": existente.get("erros", 0),
+            "totalQuestoes": existente.get("acertos", 0) + existente.get("erros", 0),
+            "nota": existente.get("nota", 0),
+            "pontosGerados": 0  # Zero porque já ganhou antes
         }
-    except Exception as e:
-        logger.error(f"Erro em create_submissao: {e}")
-        # Retorna o erro exato para o aplicativo mostrar na tela!
-        raise HTTPException(status_code=500, detail=f"Erro interno do servidor: {str(e)}")
+
+    # 2. SE NÃO EXISTE, CALCULA E CRIA
+    questoes = await db.questoes.find({"exercicioId": submissao_data.exercicioId}).to_list(100)
+    questoes_map = {q["id"]: q for q in questoes}
+    
+    acertos, erros = 0, 0
+    detalhes = []
+    
+    for resp in submissao_data.respostas:
+        questao = questoes_map.get(resp.questaoId)
+        if not questao: continue
+        correto = resp.resposta.upper().strip() == questao.get("correta", "").upper().strip()
+        if correto: acertos += 1
+        else: erros += 1
+        detalhes.append({
+            "questaoId": resp.questaoId,
+            "numero": questao.get("numero"),
+            "resposta": resp.resposta,
+            "correta": questao.get("correta"),
+            "acertou": correto,
+            "habilidadesBNCC": questao.get("habilidadesBNCC", [])
+        })
+    
+    total = len(questoes)
+    nota = (acertos / total * 10) if total > 0 else 0
+    pontos = int((acertos / total) * 10) if total > 0 else 0
+    
+    submissao = Submissao(
+        exercicioId=submissao_data.exercicioId,
+        usuarioId=current_user["id"],
+        respostas=[{"questaoId": r.questaoId, "resposta": r.resposta} for r in submissao_data.respostas],
+        acertos=acertos,
+        erros=erros,
+        nota=round(nota, 1),
+        pontosGerados=pontos,
+        detalhesQuestoes=detalhes
+    )
+    await db.submissoes.insert_one(submissao.dict())
+    await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
+    
+    # SALVA OS ERROS BNCC
+    for d in detalhes:
+        if not d["acertou"]:
+            for bncc in d.get("habilidadesBNCC", []):
+                await db.erros_bncc.update_one(
+                    {"usuarioId": current_user["id"], "habilidade": bncc},
+                    {"$inc": {"count": 1}},
+                    upsert=True
+                )
+    
+    return {
+        "submissao": {k: v for k, v in submissao.dict().items() if k != '_id'}, 
+        "acertos": acertos, 
+        "erros": erros, 
+        "totalQuestoes": total, 
+        "nota": round(nota, 1), 
+        "pontosGerados": pontos
+    }
 
 @api_router.get("/submissoes/{exercicio_id}")
 async def get_submissao(exercicio_id: str, current_user: dict = Depends(get_current_user)):
@@ -554,8 +553,6 @@ async def retry_submissao(exercicio_id: str, current_user: dict = Depends(get_cu
         pontos = sub.get("pontosGerados", 0)
         if pontos > 0:
             await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": -pontos}})
-            if current_user.get("equipeId"):
-                await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": -pontos}})
         await db.submissoes.delete_one({"_id": sub["_id"]})
     return {"message": "Pronto para tentar novamente"}
 
@@ -618,48 +615,6 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
         await db.questoes.delete_many({"exercicioId": item_id})
         return {"message": "Deletado"}
     raise HTTPException(400, "Tipo inválido")
-
-# ROTAS DE RANKING E PROGRESSO 
-@api_router.get("/ranking/geral")
-async def get_ranking_geral():
-    equipes = await db.equipes.find({}).sort("pontosTotais", -1).to_list(100)
-    ranking = []
-    for i, e in enumerate(equipes):
-        ranking.append({
-            "id": e["id"],
-            "posicao": i + 1,
-            "nome": e["nome"],
-            "cor": e.get("cor", "#333"),
-            "pontosTotais": e.get("pontosTotais", 0)
-        })
-    return ranking
-
-@api_router.get("/ranking/turma/{turma_id}")
-async def get_ranking_turma(turma_id: str):
-    equipes = await db.equipes.find({"turmaId": turma_id}).sort("pontosTotais", -1).to_list(100)
-    ranking = []
-    for i, e in enumerate(equipes):
-        ranking.append({
-            "id": e["id"],
-            "posicao": i + 1,
-            "nome": e["nome"],
-            "cor": e.get("cor", "#333"),
-            "pontosTotais": e.get("pontosTotais", 0)
-        })
-    return ranking
-
-@api_router.get("/usuarios/progresso")
-async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
-    submissoes = await db.submissoes.find({"usuarioId": current_user["id"]}).sort("data", -1).to_list(100)
-    
-    return {
-        "pontosTotais": current_user.get("pontosTotais", 0),
-        "totalExercicios": len(submissoes),
-        "pontosExercicios": sum(s.get("pontosGerados", 0) for s in submissoes),
-        "totalVideos": 0,
-        "pontosVideos": 0,
-        "submissoes": [{k: v for k, v in s.items() if k != '_id'} for s in submissoes]
-    }
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
