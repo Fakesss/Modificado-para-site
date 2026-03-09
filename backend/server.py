@@ -6,13 +6,12 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta
 import bcrypt
 from jose import JWTError, jwt
-import base64
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -38,17 +37,30 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# >>> OTIMIZAÇÃO DE VELOCIDADE (ÍNDICES) <<<
-# Isso resolve o delay inicial e o "pisca" da cor da equipe
+# >>> TURBO MODE: INDEXAÇÃO DO BANCO DE DADOS <<<
+# Isso resolve a lentidão e o problema da cor amarela piscando
 @app.on_event("startup")
 async def startup_db_client():
-    await db.usuarios.create_index("id", unique=True)
-    await db.usuarios.create_index("email", unique=True)
-    await db.usuarios.create_index([("pontosTotais", -1)]) # Acelera o Ranking
-    await db.usuarios.create_index("turmaId") # Acelera carregamento da turma
-    await db.usuarios.create_index("equipeId") # Acelera carregamento da cor da equipe
-    await db.exercicios.create_index("id", unique=True)
-    await db.submissoes.create_index([("exercicioId", 1), ("usuarioId", 1)]) # Acelera verificação de duplicidade
+    try:
+        # Índices para busca instantânea de usuário e login
+        await db.usuarios.create_index("id", unique=True)
+        await db.usuarios.create_index("email", unique=True)
+        
+        # Índices para carregar a cor da equipe e turma instantaneamente
+        await db.usuarios.create_index("turmaId")
+        await db.usuarios.create_index("equipeId")
+        await db.equipes.create_index("id", unique=True)
+        
+        # Índices para o RANKING (Ordenação instantânea)
+        await db.usuarios.create_index([("pontosTotais", -1)])
+        await db.usuarios.create_index([("turmaId", 1), ("pontosTotais", -1)])
+        await db.usuarios.create_index([("equipeId", 1), ("pontosTotais", -1)])
+        
+        # Índices para evitar duplicidade e acelerar exercícios
+        await db.submissoes.create_index([("exercicioId", 1), ("usuarioId", 1)])
+        logger.info("✅ Índices de performance criados com sucesso!")
+    except Exception as e:
+        logger.error(f"⚠️ Erro ao criar índices: {e}")
 
 # ============== MODELS ==============
 
@@ -209,41 +221,6 @@ class SubmissaoCreate(BaseModel):
     exercicioId: str
     respostas: List[RespostaQuestao]
 
-class ProgressoVideo(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    conteudoId: str
-    usuarioId: str
-    tempoAssistidoSeg: int = 0
-    duracaoSeg: int = 0
-    concluido: bool = False
-    dataConclusao: Optional[str] = None
-    pontosGerados: int = 0
-
-class ProgressoVideoUpdate(BaseModel):
-    conteudoId: str
-    tempoAssistidoSeg: int
-    duracaoSeg: int
-
-class Notificacao(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    usuarioId: Optional[str] = None
-    equipeId: Optional[str] = None
-    titulo: str
-    mensagem: str
-    tipo: str = "INFO"
-    anexosRequeridos: bool = False
-    lida: bool = False
-    criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-
-class AbaPersonalizada(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    nome: str
-    tipo: str = "LINK"
-    conteudo: str = ""
-    urlExterna: Optional[str] = None
-    ordem: int = 0
-    ativa: bool = True
-
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -283,11 +260,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 async def require_admin(current_user: dict = Depends(get_current_user)):
     if current_user.get("perfil") != "ADMIN":
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    return current_user
-
-async def require_leader_or_admin(current_user: dict = Depends(get_current_user)):
-    if current_user.get("perfil") not in ["ADMIN", "ALUNO_LIDER"]:
         raise HTTPException(status_code=403, detail="Acesso negado")
     return current_user
 
@@ -388,7 +360,7 @@ async def get_usuarios(current_user: dict = Depends(require_admin)):
     usuarios = await db.usuarios.find({"ativo": True}).to_list(1000)
     return [{k: v for k, v in u.items() if k not in ['senha', '_id']} for u in usuarios]
 
-# >>> RANKING (RESTAURADO E OTIMIZADO) <<<
+# >>> ROTAS DE RANKING (AGORA PROTEGIDAS E OTIMIZADAS) <<<
 @api_router.get("/ranking/geral")
 async def get_ranking_geral(current_user: dict = Depends(get_current_user)):
     users = await db.usuarios.find({"perfil": "ALUNO", "ativo": True})\
@@ -412,6 +384,14 @@ async def get_ranking_equipe(equipe_id: str, current_user: dict = Depends(get_cu
         .limit(50)\
         .to_list(50)
     return [{k: v for k, v in u.items() if k not in ['senha', '_id']} for u in users]
+
+# Rota Extra para Ranking de Equipes (Caso o frontend precise)
+@api_router.get("/ranking/equipes")
+async def get_ranking_equipes_list(current_user: dict = Depends(get_current_user)):
+    equipes = await db.equipes.find({})\
+        .sort("pontosTotais", -1)\
+        .to_list(50)
+    return [{k: v for k, v in e.items() if k != '_id'} for e in equipes]
 
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
@@ -504,6 +484,7 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     if not exercicio: raise HTTPException(status_code=404, detail="Exercício não encontrado")
     
     # BLINDAGEM CONTRA DUPLICIDADE DE NOTAS
+    # Se já existir uma nota para este exercício, NÃO soma pontos novamente.
     existente = await db.submissoes.find_one({
         "exercicioId": submissao_data.exercicioId,
         "usuarioId": current_user["id"]
@@ -616,7 +597,6 @@ async def delete_conteudo(conteudo_id: str, current_user: dict = Depends(require
     await db.conteudos.update_one({"id": conteudo_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}})
     return {"message": "Conteúdo movido para a lixeira"}
 
-# Outras rotas do sistema
 @api_router.get("/relatorios/geral")
 async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_u = await db.usuarios.count_documents({"ativo": True})
