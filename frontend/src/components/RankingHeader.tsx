@@ -11,10 +11,14 @@ interface Props {
 const EMPTY_ITEM = { id: 'empty', nome: '-', cor: '#333', pontosTotais: 0, posicao: 0 };
 
 export default function RankingHeader({ ranking, loading }: Props) {
-  const sortedRanking = [...ranking].sort((a, b) => a.posicao - b.posicao);
-  const first = sortedRanking[0] || { ...EMPTY_ITEM, posicao: 1 };
-  const second = sortedRanking[1] || { ...EMPTY_ITEM, posicao: 2 };
-  const third = sortedRanking[2] || { ...EMPTY_ITEM, posicao: 3 };
+  // 🚨 CORREÇÃO 1: Agora ordena pelos PONTOS e não pela posição antiga do servidor
+  const sortedByPoints = [...ranking].sort((a, b) => b.pontosTotais - a.pontosTotais);
+
+  // Redefine as posições visuais baseadas em quem realmente tem mais pontos agora
+  const first = sortedByPoints[0] ? { ...sortedByPoints[0], posicao: 1 } : { ...EMPTY_ITEM, posicao: 1 };
+  const second = sortedByPoints[1] ? { ...sortedByPoints[1], posicao: 2 } : { ...EMPTY_ITEM, posicao: 2 };
+  const third = sortedByPoints[2] ? { ...sortedByPoints[2], posicao: 3 } : { ...EMPTY_ITEM, posicao: 3 };
+  
   const displayOrder = [second, first, third];
 
   if (loading) {
@@ -32,10 +36,15 @@ export default function RankingHeader({ ranking, loading }: Props) {
         {displayOrder.map((item, index) => {
           const isFirst = item.posicao === 1;
           const isEmpty = item.id === 'empty';
-          const podiumHeight = isFirst ? 110 : item.posicao === 2 ? 90 : 75;
           
-          // Quebra o nome em duas linhas certinhas (Ex: Equipe \n Delta)
-          const nomeFormatado = item.nome.replace(' ', '\n');
+          // 🚨 CORREÇÃO 2: Aumentei as alturas para o 3º lugar (Alfa) não vazar da caixa
+          const podiumHeight = isFirst ? 130 : item.posicao === 2 ? 110 : 90;
+          
+          // Quebra inteligente: só pula linha no primeiro espaço, evitando nomes esquisitos
+          const partesNome = item.nome.split(' ');
+          const nomeFormatado = partesNome.length > 1 
+            ? `${partesNome[0]}\n${partesNome.slice(1).join(' ')}` 
+            : item.nome;
 
           return (
             <View key={`${item.id}-${index}`} style={styles.podiumItem}>
@@ -44,15 +53,18 @@ export default function RankingHeader({ ranking, loading }: Props) {
                   {nomeFormatado}
                 </Text>
               </View>
+              
               <View style={[styles.podium, { height: podiumHeight, backgroundColor: item.cor + '30' }]}>
                 <View style={[styles.positionCircle, { backgroundColor: item.cor }]}>
                   <Text style={styles.positionText}>{item.posicao}º</Text>
                 </View>
+                
                 <Ionicons 
                   name={isEmpty ? (isFirst ? 'trophy-outline' : 'medal-outline') : (isFirst ? 'trophy' : 'medal')} 
-                  size={isFirst ? 32 : 24} 
+                  size={isFirst ? 36 : 28} 
                   color={isEmpty ? '#555' : item.cor} 
                 />
+                
                 <Text style={[styles.points, { color: isEmpty ? '#555' : item.cor }]}>
                   {isEmpty ? '- pts' : `${item.pontosTotais} pts`}
                 </Text>
@@ -82,22 +94,23 @@ const styles = StyleSheet.create({
   podiumContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    alignItems: 'flex-end', // Garante que a escadinha do pódio fique alinhada por baixo
     gap: 8,
   },
   podiumItem: {
     alignItems: 'center',
     flex: 1, 
+    justifyContent: 'flex-end',
   },
   badge: {
-    width: '100%', // Ocupa a largura total da coluna
-    minHeight: 48, // Altura exata para caber as 2 linhas sem espremer
+    width: '100%',
+    minHeight: 48,
     justifyContent: 'center',
     alignItems: 'center', 
     paddingVertical: 8,
     paddingHorizontal: 4,
-    borderRadius: 12, // Curva igual da sua imagem original
-    marginBottom: 18, // Espaço exato para a bolinha não grudar no nome
+    borderRadius: 12,
+    marginBottom: 18, 
   },
   badgeText: {
     color: '#000',
@@ -108,7 +121,7 @@ const styles = StyleSheet.create({
   },
   podium: {
     width: '100%',
-    borderRadius: 14, // Cantos suaves no pódio também
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 16,
@@ -123,6 +136,8 @@ const styles = StyleSheet.create({
     position: 'absolute', 
     top: -16, 
     zIndex: 2,
+    borderWidth: 2,
+    borderColor: '#1a1a2e',
   },
   positionText: {
     color: '#000',
