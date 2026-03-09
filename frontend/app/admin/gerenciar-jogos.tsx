@@ -20,12 +20,14 @@ export default function GerenciarJogosAdmin() {
   const [missoes, setMissoes] = useState<Missao[]>([]);
   const [listaTurmas, setListaTurmas] = useState<any[]>([]);
   const [listaAlunos, setListaAlunos] = useState<any[]>([]);
+  const [carregando, setCarregando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
   
   // Modal e Inputs
   const [modalVisivel, setModalVisivel] = useState(false);
   const [titulo, setTitulo] = useState('');
-  const [pontos, setPontos] = useState(''); // Livre digitação
-  const [vidas, setVidas] = useState('');   // Livre digitação
+  const [pontos, setPontos] = useState(''); 
+  const [vidas, setVidas] = useState('');   
   const [alvoTipo, setAlvoTipo] = useState<'GERAL' | 'TURMA' | 'INDIVIDUAL'>('GERAL');
   const [alvoSel, setAlvoSel] = useState<{id: string, nome: string} | null>(null);
   
@@ -37,8 +39,15 @@ export default function GerenciarJogosAdmin() {
   useEffect(() => { carregar(); }, []);
   
   const carregar = async () => {
-    const dados = await api.getJogosPersonalizados();
-    if(dados) setMissoes(dados);
+    setCarregando(true);
+    try {
+      const dados = await api.getJogosPersonalizados();
+      if(dados) setMissoes(dados);
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível carregar os jogos.");
+    } finally {
+      setCarregando(false);
+    }
   };
 
   const carregarAlvos = async () => {
@@ -47,33 +56,49 @@ export default function GerenciarJogosAdmin() {
   };
 
   const addQuestao = () => {
-    if(!inConta || !inResp) return Alert.alert('Erro', 'Preencha a conta e a resposta');
+    if(!inConta || !inResp) return Alert.alert('Aviso', 'Preencha a conta e a resposta');
     let txt = inConta.replace(/\s/g, '').replace(/\*/g, '×').replace(/\//g, '÷').replace(/\^/g, '^');
     setQuestoes([...questoes, { id: Math.random().toString(), texto: txt, resposta: parseInt(inResp) }]);
     setInConta(''); setInResp('');
   };
 
   const salvar = async () => {
-    if(!titulo || questoes.length===0) return Alert.alert('Erro', 'Título e questões obrigatórios');
-    if(alvoTipo!=='GERAL' && !alvoSel) return Alert.alert('Erro', 'Selecione o alvo');
+    if(!titulo || questoes.length===0) return Alert.alert('Erro', 'Título e questões são obrigatórios');
+    if(alvoTipo!=='GERAL' && !alvoSel) return Alert.alert('Erro', 'Selecione o alvo do jogo');
     if(!pontos || !vidas) return Alert.alert('Erro', 'Defina Pontos e Vidas');
 
-    const nova = {
-      titulo,
-      alvoTipo,
-      alvoNome: alvoTipo==='GERAL'?'Todos':alvoSel!.nome,
-      alvoId: alvoTipo==='GERAL'?'all':alvoSel!.id,
-      questoes,
-      recompensa: parseInt(pontos),
-      vidas: parseInt(vidas),
-      criadoEm: new Date().toISOString()
-    };
+    setSalvando(true);
+    try {
+      const nova = {
+        titulo,
+        alvoTipo,
+        alvoNome: alvoTipo==='GERAL' ? 'Todos' : alvoSel!.nome,
+        alvoId: alvoTipo==='GERAL' ? 'all' : alvoSel!.id,
+        questoes,
+        recompensa: parseInt(pontos),
+        vidas: parseInt(vidas),
+        criadoEm: new Date().toISOString()
+      };
 
-    await api.criarJogo(nova);
-    setModalVisivel(false);
-    limparForm();
-    carregar();
-    Alert.alert('Sucesso', 'Jogo Publicado!');
+      await api.criarJogo(nova);
+      
+      // Somente faz isso se salvou com sucesso
+      Alert.alert('Sucesso', 'Jogo Publicado!', [
+        { 
+          text: 'OK', 
+          onPress: () => {
+            setModalVisivel(false);
+            limparForm();
+            carregar(); // Recarrega a lista instantaneamente
+          } 
+        }
+      ]);
+    } catch (error) {
+      console.log("Erro ao salvar jogo:", error);
+      Alert.alert('Falha ao Salvar', 'Ocorreu um erro ao comunicar com o servidor.');
+    } finally {
+      setSalvando(false);
+    }
   };
 
   const limparForm = () => {
@@ -87,11 +112,17 @@ export default function GerenciarJogosAdmin() {
         <Text style={styles.title}>Gerenciar Jogos</Text>
       </View>
 
+      {carregando && <ActivityIndicator size="large" color="#FFD700" style={{marginTop: 20}} />}
+
       <ScrollView contentContainerStyle={{padding: 16}}>
         <TouchableOpacity style={styles.btnNew} onPress={() => { setModalVisivel(true); carregarAlvos(); }}>
           <Ionicons name="add-circle" size={24} color="#000" />
           <Text style={styles.btnNewTxt}>CRIAR NOVO JOGO</Text>
         </TouchableOpacity>
+
+        {!carregando && missoes.length === 0 && (
+          <Text style={{color: '#888', textAlign: 'center', marginTop: 20}}>Nenhum jogo criado ainda.</Text>
+        )}
 
         {missoes.map(m => (
           <View key={m.id} style={styles.card}>
@@ -161,7 +192,9 @@ export default function GerenciarJogosAdmin() {
               </View>
             ))}
 
-            <TouchableOpacity style={styles.btnSave} onPress={salvar}><Text style={styles.btnSaveTxt}>PUBLICAR</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.btnSave, salvando && {opacity: 0.6}]} onPress={salvar} disabled={salvando}>
+              {salvando ? <ActivityIndicator color="#000" /> : <Text style={styles.btnSaveTxt}>PUBLICAR JOGO</Text>}
+            </TouchableOpacity>
             <View style={{height:50}}/>
           </ScrollView>
         </SafeAreaView>
