@@ -10,6 +10,71 @@ const GAME_AREA_HEIGHT = height * 0.50;
 const CARD_WIDTH = 105;
 const LANE_WIDTH = width / 3;
 
+// =========================================================================
+// MOTOR DO CONTADOR DINÂMICO (Atualiza conforme a regra de tempo restante)
+// =========================================================================
+const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado: boolean }) => {
+  const [tempoRestanteStr, setTempoRestanteStr] = useState('');
+
+  useEffect(() => {
+    if (!expiraEm || esgotado) return;
+    const targetTime = new Date(expiraEm).getTime();
+    let timeoutId: NodeJS.Timeout;
+
+    const atualizar = () => {
+      const now = Date.now();
+      const r = targetTime - now;
+
+      if (r <= 0) {
+        setTempoRestanteStr('Expirado');
+        return;
+      }
+
+      // Formatação visual do tempo
+      const totalSecs = Math.round(r / 1000);
+      const h = Math.floor(totalSecs / 3600);
+      const m = Math.floor((totalSecs % 3600) / 60);
+      const s = totalSecs % 60;
+
+      if (r > 60 * 1000) {
+         setTempoRestanteStr(h > 0 ? `⏱ ${h}h ${m}m restantes` : `⏱ ${m}m restantes`);
+      } else {
+         setTempoRestanteStr(`⏱ ${s}s restantes`); // Último minuto mostra segundos
+      }
+
+      // Cálculo matemático EXATO para o próximo tick, evitando pular as faixas exigidas
+      const MIN = 60 * 1000;
+      let delay = 1000;
+
+      if (r <= 1 * MIN) {
+        delay = 1000; // < 1 min: atualiza a cada 1 seg
+      } else if (r <= 5 * MIN) {
+        delay = Math.min(r % (1 * MIN) || (1 * MIN), r - 1 * MIN); // < 5 min: atualiza a cada 1 min
+      } else if (r <= 15 * MIN) {
+        delay = Math.min(r % (5 * MIN) || (5 * MIN), r - 5 * MIN); // < 15 min: atualiza a cada 5 min
+      } else if (r <= 30 * MIN) {
+        delay = Math.min(r % (10 * MIN) || (10 * MIN), r - 15 * MIN); // < 30 min: atualiza a cada 10 min
+      } else {
+        delay = Math.min(r % (30 * MIN) || (30 * MIN), r - 30 * MIN); // > 30 min: atualiza a cada 30 min
+      }
+
+      timeoutId = setTimeout(atualizar, Math.max(delay, 100));
+    };
+
+    atualizar();
+    return () => clearTimeout(timeoutId);
+  }, [expiraEm, esgotado]);
+
+  if (esgotado || !tempoRestanteStr) return null;
+  
+  return (
+    <Text style={{ color: tempoRestanteStr === 'Expirado' ? '#FF4444' : '#FFD700', fontSize: 12, fontWeight: 'bold', marginTop: 4 }}>
+      {tempoRestanteStr}
+    </Text>
+  );
+};
+
+
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => (
   <TouchableOpacity activeOpacity={0.5} style={[styles.tecla, styleExtra]} onTouchStart={(e) => { e.stopPropagation(); onPress(valor); }}>
     {children}
@@ -79,7 +144,6 @@ export default function Jogo() {
   const iniciarJogo = async (modoEscolhido: 'single' | 'bot' | 'missao', missaoDados?: any) => {
     if (modoEscolhido === 'missao' && missaoDados) {
       try {
-        // Tenta registrar a jogada. Se o limite estourou no servidor, dá erro e bloqueia.
         await api.registrarTentativaMissao(missaoDados.id);
       } catch (e) {
         Alert.alert("Aviso", "Você já atingiu o limite de vezes que pode jogar essa missão!");
@@ -248,7 +312,7 @@ export default function Jogo() {
 
             {missoesDisponiveis.length > 0 && (
               <View style={{width: '100%', marginBottom: 20}}>
-                <Text style={styles.sectionLabel}>🎯 Missões do Professor (Vale por 24h):</Text>
+                <Text style={styles.sectionLabel}>🎯 Missões do Professor:</Text>
                 {missoesDisponiveis.map((missao, index) => {
                   const limite = missao.limiteTentativas !== undefined ? missao.limiteTentativas : 1;
                   const feitas = missao.tentativasFeitas || 0;
@@ -268,6 +332,10 @@ export default function Jogo() {
                         <Text style={[styles.missaoSub, esgotado && {color: '#666'}]}>
                           {missao.recompensa} Pts • {ilimitado ? 'Tents. Ilimitadas' : `Tentativas: ${feitas}/${limite}`}
                         </Text>
+                        {/* CONTADOR DE TEMPO INSERIDO AQUI */}
+                        {missao.expiraEm && (
+                          <ContadorExpiracao expiraEm={missao.expiraEm} esgotado={esgotado} />
+                        )}
                       </View>
                       <Ionicons name="play-circle" size={32} color={esgotado ? "#555" : "#FFF"} />
                     </TouchableOpacity>
