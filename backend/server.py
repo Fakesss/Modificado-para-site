@@ -38,6 +38,19 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# >>> OTIMIZAÇÃO DE VELOCIDADE (NOVO) <<<
+@app.on_event("startup")
+async def startup_db_client():
+    # Cria índices para buscar dados instantaneamente
+    # Isso resolve a lentidão e o "pisca" da cor amarela
+    await db.usuarios.create_index("id", unique=True)
+    await db.usuarios.create_index("email", unique=True)
+    await db.usuarios.create_index([("pontosTotais", -1)]) # Para o Ranking
+    await db.usuarios.create_index("turmaId")
+    await db.usuarios.create_index("equipeId")
+    await db.exercicios.create_index("id", unique=True)
+    await db.submissoes.create_index([("exercicioId", 1), ("usuarioId", 1)])
+
 # ============== MODELS ==============
 
 class Turma(BaseModel):
@@ -376,6 +389,32 @@ async def get_usuarios(current_user: dict = Depends(require_admin)):
     usuarios = await db.usuarios.find({"ativo": True}).to_list(1000)
     return [{k: v for k, v in u.items() if k not in ['senha', '_id']} for u in usuarios]
 
+# >>> ROTAS DE RANKING RESTAURADAS E OTIMIZADAS <<<
+@api_router.get("/ranking/geral")
+async def get_ranking_geral(current_user: dict = Depends(get_current_user)):
+    # Retorna top 50 alunos ordenados por pontos
+    users = await db.usuarios.find({"perfil": "ALUNO", "ativo": True})\
+        .sort("pontosTotais", -1)\
+        .limit(50)\
+        .to_list(50)
+    return [{k: v for k, v in u.items() if k not in ['senha', '_id']} for u in users]
+
+@api_router.get("/ranking/turma/{turma_id}")
+async def get_ranking_turma(turma_id: str, current_user: dict = Depends(get_current_user)):
+    users = await db.usuarios.find({"perfil": "ALUNO", "ativo": True, "turmaId": turma_id})\
+        .sort("pontosTotais", -1)\
+        .limit(50)\
+        .to_list(50)
+    return [{k: v for k, v in u.items() if k not in ['senha', '_id']} for u in users]
+
+@api_router.get("/ranking/alunos/{equipe_id}")
+async def get_ranking_equipe(equipe_id: str, current_user: dict = Depends(get_current_user)):
+    users = await db.usuarios.find({"perfil": "ALUNO", "ativo": True, "equipeId": equipe_id})\
+        .sort("pontosTotais", -1)\
+        .limit(50)\
+        .to_list(50)
+    return [{k: v for k, v in u.items() if k not in ['senha', '_id']} for u in users]
+
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     query = {"ativo": True, "is_deleted": {"$ne": True}}
@@ -466,24 +505,22 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     exercicio = await db.exercicios.find_one({"id": submissao_data.exercicioId})
     if not exercicio: raise HTTPException(status_code=404, detail="Exercício não encontrado")
     
-    # 1. VERIFICA SE JÁ EXISTE UMA SUBMISSÃO
+    # PROTEÇÃO CONTRA CLIQUES MÚLTIPLOS (Evita pontos dobrados)
     existente = await db.submissoes.find_one({
         "exercicioId": submissao_data.exercicioId,
         "usuarioId": current_user["id"]
     })
     
     if existente:
-        # Se já existe, retorna os dados dela SEM dar pontos de novo
         return {
             "submissao": {k: v for k, v in existente.items() if k != '_id'},
             "acertos": existente.get("acertos", 0),
             "erros": existente.get("erros", 0),
             "totalQuestoes": existente.get("acertos", 0) + existente.get("erros", 0),
             "nota": existente.get("nota", 0),
-            "pontosGerados": 0  # Zero porque já ganhou antes
+            "pontosGerados": 0 
         }
 
-    # 2. SE NÃO EXISTE, CALCULA E CRIA
     questoes = await db.questoes.find({"exercicioId": submissao_data.exercicioId}).to_list(100)
     questoes_map = {q["id"]: q for q in questoes}
     
@@ -522,7 +559,6 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     await db.submissoes.insert_one(submissao.dict())
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
     
-    # SALVA OS ERROS BNCC
     for d in detalhes:
         if not d["acertou"]:
             for bncc in d.get("habilidadesBNCC", []):
@@ -582,7 +618,6 @@ async def delete_conteudo(conteudo_id: str, current_user: dict = Depends(require
     await db.conteudos.update_one({"id": conteudo_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}})
     return {"message": "Conteúdo movido para a lixeira"}
 
-# Outras rotas do sistema
 @api_router.get("/relatorios/geral")
 async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_u = await db.usuarios.count_documents({"ativo": True})
