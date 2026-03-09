@@ -63,7 +63,9 @@ export default function Jogo() {
 
   const carregarMissoes = async () => {
     try {
+      // @ts-ignore
       if (typeof api.getMissoesDisponiveis === 'function') {
+        // @ts-ignore
         const data = await api.getMissoesDisponiveis();
         setMissoesDisponiveis(Array.isArray(data) ? data : []);
       }
@@ -84,7 +86,11 @@ export default function Jogo() {
     jogoAtivoRef.current = false;
     if(spawnTimer.current) clearTimeout(spawnTimer.current);
     
-    if(missaoAtualRef.current?.id) await api.concluirMissao(missaoAtualRef.current.id);
+    // @ts-ignore
+    if(missaoAtualRef.current?.id && typeof api.concluirMissao === 'function') {
+        // @ts-ignore
+        await api.concluirMissao(missaoAtualRef.current.id);
+    }
     setTimeout(() => setTela('resultado'), 500);
   };
 
@@ -111,20 +117,17 @@ export default function Jogo() {
     modoRef.current = modoEscolhido;
     inicioRespostaRef.current = Date.now();
 
-    // 🚨 CONFIGURAÇÃO DE VIDAS E QUESTÕES
     if (modoEscolhido === 'missao' && missaoDados) {
       missaoAtualRef.current = missaoDados;
-      // Vidas da Missão
       setVidas(missaoDados.vidas ? Number(missaoDados.vidas) : 5);
       
       const copia = missaoDados.questoes.map((q: any) => ({...q, id: q.id || Math.random().toString()}));
       filaQuestoesRef.current = copia;
     } else {
-      // 🚨 MODO ARCADE: Pega as vidas do ADMIN
+      // 🚨 CORREÇÃO DO CRASH AQUI: Removemos a chamada para a função que não existia na API!
       missaoAtualRef.current = null;
       filaQuestoesRef.current = [];
-      const config = await api.getConfiguracaoJogo();
-      setVidas(config.vidasPadrao || 5);
+      setVidas(5); // Vidas padrão do modo Arcade (Infinito)
     }
 
     setTela('jogo');
@@ -165,7 +168,6 @@ export default function Jogo() {
       novaOp = criarObjetoAnimado(questao.texto, questao.resposta, questao.id, 10000);
     } 
     else {
-      // ARCADE: Chama o gerador complexo
       const dados = gerarDadosArcade();
       if (!dados) return;
       questoesEmJogoRef.current += 1;
@@ -178,7 +180,6 @@ export default function Jogo() {
     }
   };
 
-  // 🚨 RESTAURAÇÃO: Lógica Matemática Completa
   const gerarDadosArcade = () => {
     const rodada = rodadaRef.current;
     const desempenho = desempenhoOcultoRef.current;
@@ -260,7 +261,7 @@ export default function Jogo() {
   const animarQueda = (op: any) => {
     if (!jogoAtivoRef.current) return;
     op.y.addListener(({ value }: any) => {
-      const ref = operacoesAtuaisRef.current.find(o => o.chave === op.id);
+      const ref = operacoesAtuaisRef.current.find((o:any) => o.chave === op.id);
       if (ref) ref.y = value;
     });
     Animated.timing(op.y, {
@@ -379,9 +380,9 @@ export default function Jogo() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.menuContainer}>
-          <ScrollView contentContainerStyle={styles.menuScrollContent}>
+          <ScrollView contentContainerStyle={styles.menuScrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.menuHeader}>
-              <Ionicons name="game-controller" size={56} color="#FFD700" />
+              <Ionicons name="game-controller" size={64} color="#FFD700" />
               <Text style={styles.menuTitle}>Matemática Turbo</Text>
               <Text style={styles.menuSubtitle}>Treinamento Adaptativo</Text>
             </View>
@@ -402,32 +403,41 @@ export default function Jogo() {
               </View>
             )}
 
-            <Text style={styles.sectionLabel}>Modo Arcade (Infinito):</Text>
+            <Text style={styles.sectionLabel}>Escolha seu Modo (Arcade):</Text>
             
-            {/* GRID DE MODOS RESTAURADO */}
+            {/* GRID DE MODOS LINDÃO */}
             <View style={styles.modosGrid}>
               {[
-                { id: 'misto', name: 'Jornada (Misto)', color: '#FFD700' },
-                { id: 'soma', name: 'Soma (+)', color: '#32CD32' },
-                { id: 'subtracao', name: 'Subtração (-)', color: '#FF4444' },
-                { id: 'multiplicacao', name: 'Multiplicação (×)', color: '#4169E1' },
-                { id: 'divisao', name: 'Divisão (÷)', color: '#9B59B6' },
-                { id: 'potenciacao', name: 'Potências (^)', color: '#FF8C00' },
-                { id: 'radiciacao', name: 'Raízes (√)', color: '#00CED1' },
-              ].map(m => (
-                <TouchableOpacity 
-                  key={m.id} 
-                  style={[styles.modoCardItem, modoMatematica === m.id && { borderColor: m.color, borderWidth: 2 }]}
-                  onPress={() => setModoMatematica(m.id)}
-                >
-                  <Text style={styles.modoTextItem}>{m.name}</Text>
-                </TouchableOpacity>
-              ))}
+                { id: 'misto', name: 'Jornada', color: '#FFD700', icon: 'infinite' },
+                { id: 'soma', name: 'Soma', color: '#32CD32', icon: 'add' },
+                { id: 'subtracao', name: 'Subtração', color: '#FF4444', icon: 'remove' },
+                { id: 'multiplicacao', name: 'Multiplicação', color: '#4169E1', icon: 'close' },
+                { id: 'divisao', name: 'Divisão', color: '#9B59B6', icon: 'code-slash' },
+                { id: 'potenciacao', name: 'Potências', color: '#FF8C00', icon: 'chevron-up' },
+                { id: 'radiciacao', name: 'Raízes', color: '#00CED1', icon: 'flash' },
+              ].map(m => {
+                const isSelected = modoMatematica === m.id;
+                return (
+                  <TouchableOpacity 
+                    key={m.id} 
+                    style={[
+                      styles.modoCardItem, 
+                      isSelected && { borderColor: m.color, backgroundColor: m.color + '15' } // Borda e Fundo "Neon"
+                    ]}
+                    onPress={() => setModoMatematica(m.id)}
+                  >
+                    <Ionicons name={m.icon as any} size={28} color={isSelected ? m.color : '#555'} />
+                    <Text style={[styles.modoTextItem, isSelected && { color: m.color }]}>
+                      {m.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}>
               <Ionicons name="play" size={24} color="#000" />
-              <Text style={styles.iniciarButtonText}>JOGAR ARCADE</Text>
+              <Text style={styles.iniciarButtonText}>INICIAR JOGO</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -484,20 +494,36 @@ export default function Jogo() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0c' },
   menuContainer: { flex: 1 },
-  menuScrollContent: { padding: 20, alignItems: 'center' },
-  menuHeader: { alignItems: 'center', marginBottom: 20, marginTop: 20 },
-  menuTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginTop: 10 },
-  menuSubtitle: { fontSize: 14, color: '#888' },
-  sectionLabel: { color: '#888', fontSize: 14, fontWeight: 'bold', marginBottom: 10, alignSelf: 'flex-start', marginTop: 10 },
+  menuScrollContent: { padding: 20, alignItems: 'center', paddingBottom: 40 },
+  menuHeader: { alignItems: 'center', marginBottom: 30, marginTop: 20 },
+  menuTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginTop: 12 },
+  menuSubtitle: { fontSize: 15, color: '#888', marginTop: 4 },
+  sectionLabel: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 12, alignSelf: 'flex-start', marginTop: 10 },
   missaoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF69B4', padding: 15, borderRadius: 16, marginBottom: 10, width: '100%', elevation: 3 },
   missaoIcon: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 15 },
   missaoTitle: { color: '#fff', fontSize: 18, fontWeight: '900' },
   missaoSub: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600' },
-  modosGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginBottom: 20 },
-  modoCardItem: { backgroundColor: '#1a1a2e', paddingVertical: 12, paddingHorizontal: 5, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent', minWidth: '30%' },
-  modoTextItem: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  iniciarButton: { flexDirection: 'row', backgroundColor: '#32CD32', padding: 18, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', marginBottom: 10 },
+  
+  // Nossos Botões Modernos
+  modosGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginBottom: 30 },
+  modoCardItem: { 
+    backgroundColor: '#1a1a2e', 
+    paddingVertical: 16, 
+    paddingHorizontal: 8, 
+    borderRadius: 16, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    borderWidth: 2, 
+    borderColor: 'transparent', 
+    width: '30%', 
+    gap: 8,
+    elevation: 2, // Sombra suave
+  },
+  modoTextItem: { color: '#888', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
+  
+  iniciarButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', marginTop: 10, elevation: 4 },
   iniciarButtonText: { color: '#000', fontSize: 18, fontWeight: '900' },
+  
   botButton: { flexDirection: 'row', backgroundColor: '#FF00FF', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, width: '100%' },
   botButtonText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
   gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
@@ -529,6 +555,6 @@ const styles = StyleSheet.create({
   resultadoCard: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', marginBottom: 10, width: '100%' },
   resultadoPontos: { fontSize: 64, fontWeight: '900', color: '#FFD700' },
   resultadoLabel: { fontSize: 14, color: '#888', marginTop: 4 },
-  jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#32CD32', padding: 16, borderRadius: 12, alignItems: 'center', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 10 },
+  jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 16, borderRadius: 12, alignItems: 'center', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 10 },
   jogarNovamenteText: { color: '#000', fontSize: 18, fontWeight: '900' },
 });
