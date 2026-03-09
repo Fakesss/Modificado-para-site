@@ -14,88 +14,36 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-// REMOVIDOS IMPORTS NATIVOS QUE QUEBRAM O VERCEL
+// REMOVIDAS AS BIBLIOTECAS NATIVAS QUE QUEBRAM O VERCEL
 import * as api from '../../src/services/api';
 
 type TipoConteudo = 'VIDEO' | 'LINK' | 'MATERIAL';
-type ViewMode = 'LIST' | 'FORM';
 
 export default function AdminConteudos() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('LIST');
-  const [conteudos, setConteudos] = useState<any[]>([]);
   
-  // Estado do Formulário
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [tipo, setTipo] = useState<TipoConteudo>('VIDEO');
   const [url, setUrl] = useState(''); 
+  
   const [nomeArquivo, setNomeArquivo] = useState('');
   const [arquivoBase64, setArquivoBase64] = useState<string | null>(null);
+
   const [turmas, setTurmas] = useState<any[]>([]);
   const [turmaId, setTurmaId] = useState('');
 
   useEffect(() => {
-    loadData();
+    loadTurmas();
   }, []);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadTurmas = async () => {
     try {
-      const [contData, turmasData] = await Promise.all([
-        api.getConteudos(),
-        api.getTurmas()
-      ]);
-      setConteudos(contData || []);
-      setTurmas(turmasData || []);
+      const data = await api.getTurmas();
+      setTurmas(data || []);
     } catch (e) {
-      console.log('Erro ao carregar dados', e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const startCreating = () => {
-    setEditingId(null);
-    setTitulo('');
-    setDescricao('');
-    setTipo('VIDEO');
-    setUrl('');
-    setNomeArquivo('');
-    setArquivoBase64(null);
-    setTurmaId('');
-    setViewMode('FORM');
-  };
-
-  const startEditing = (item: any) => {
-    setEditingId(item.id);
-    setTitulo(item.titulo);
-    setDescricao(item.descricao || '');
-    setTipo(item.tipo);
-    setUrl(item.urlVideo || '');
-    setTurmaId(item.turmaId || '');
-    setNomeArquivo(item.arquivo ? 'Arquivo Atual (Mantenha ou troque)' : '');
-    setArquivoBase64(null);
-    setViewMode('FORM');
-  };
-
-  const handleDelete = (id: string) => {
-    if (Platform.OS === 'web') {
-        if (window.confirm("Tem certeza que deseja excluir?")) {
-            api.deleteConteudo(id).then(() => loadData());
-        }
-    } else {
-        Alert.alert("Excluir", "Tem certeza?", [
-            { text: "Cancelar" },
-            { text: "Sim", style: 'destructive', onPress: async () => {
-                try {
-                    await api.deleteConteudo(id);
-                    loadData();
-                } catch(e) { Alert.alert("Erro", "Não foi possível excluir"); }
-            }}
-        ]);
+      console.log('Erro ao carregar turmas');
     }
   };
 
@@ -117,7 +65,6 @@ export default function AdminConteudos() {
           const reader = new FileReader();
           reader.onload = () => {
             if (typeof reader.result === 'string') {
-              // Remove o cabeçalho data: para salvar apenas o base64 puro
               const base64String = reader.result.split(',')[1];
               setArquivoBase64(base64String);
               Alert.alert("Sucesso", "Arquivo carregado!");
@@ -128,14 +75,14 @@ export default function AdminConteudos() {
       };
       input.click();
     } else {
-      Alert.alert("Aviso", "Upload de arquivos temporariamente disponível apenas na Web.");
+      Alert.alert("Aviso", "Upload de arquivos disponível apenas na versão Web no momento.");
     }
   };
 
   const handleSave = async () => {
     if (!titulo.trim()) return Alert.alert("Erro", "Título é obrigatório.");
     if (tipo !== 'MATERIAL' && !url.trim()) return Alert.alert("Erro", "Link/URL é obrigatório.");
-    if (tipo === 'MATERIAL' && !arquivoBase64 && !editingId) return Alert.alert("Erro", "Selecione um arquivo.");
+    if (tipo === 'MATERIAL' && !arquivoBase64) return Alert.alert("Erro", "Selecione um arquivo.");
 
     setLoading(true);
     try {
@@ -152,73 +99,19 @@ export default function AdminConteudos() {
         payload.arquivo = arquivoBase64;
       }
 
-      if (editingId) {
-        if ((api as any).updateConteudo) {
-            await (api as any).updateConteudo(editingId, payload);
-        } else {
-            // Fallback se não atualizou api.ts
-            throw new Error("Função updateConteudo não encontrada.");
-        }
-      } else {
-        await api.createConteudo(payload);
-      }
+      await api.createConteudo(payload);
       
       Alert.alert("Sucesso", "Conteúdo salvo!", [
-        { text: "OK", onPress: () => {
-            setViewMode('LIST');
-            loadData();
-        }}
+        { text: "OK", onPress: () => router.back() }
       ]);
 
     } catch (error: any) {
-      console.log(error);
-      Alert.alert("Erro ao Salvar", "Verifique sua conexão ou o tamanho do arquivo.");
+      Alert.alert("Erro ao Salvar", "Verifique os dados e tente novamente.");
     } finally {
       setLoading(false);
     }
   };
 
-  // --- RENDERIZAÇÃO ---
-
-  if (viewMode === 'LIST') {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color="#fff" /></TouchableOpacity>
-          <Text style={styles.headerTitle}>Gerenciar Conteúdos</Text>
-          <TouchableOpacity onPress={startCreating}><Ionicons name="add-circle" size={32} color="#FFD700" /></TouchableOpacity>
-        </View>
-
-        <ScrollView style={{padding: 16}}>
-          {loading && conteudos.length === 0 ? <ActivityIndicator color="#FFD700" /> : conteudos.length === 0 ? (
-            <Text style={{color:'#666', textAlign:'center', marginTop:20}}>Nenhum conteúdo cadastrado.</Text>
-          ) : (
-            conteudos.map(item => (
-              <View key={item.id} style={styles.card}>
-                <View style={{flex:1}}>
-                  <Text style={styles.cardTitle}>{item.titulo}</Text>
-                  <View style={{flexDirection:'row', gap:10, marginTop:4}}>
-                    <Text style={[styles.badge, {color: item.tipo==='VIDEO'?'#4169E1':item.tipo==='LINK'?'#32CD32':'#FFD700'}]}>{item.tipo}</Text>
-                    {item.turmaId ? <Text style={styles.badgeTurma}>Turma Específica</Text> : <Text style={styles.badgeTurma}>Geral</Text>}
-                  </View>
-                </View>
-                <View style={{flexDirection:'row', gap:15}}>
-                  <TouchableOpacity onPress={() => startEditing(item)}>
-                    <Ionicons name="pencil" size={20} color="#FFD700" />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleDelete(item.id)}>
-                    <Ionicons name="trash" size={20} color="#E74C3C" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // --- MODO FORMULÁRIO ---
   return (
     <SafeAreaView style={styles.container}>
       <Modal visible={loading} transparent animationType="fade">
@@ -229,8 +122,8 @@ export default function AdminConteudos() {
       </Modal>
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => setViewMode('LIST')}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
-        <Text style={styles.headerTitle}>{editingId ? "Editar Conteúdo" : "Novo Conteúdo"}</Text>
+        <TouchableOpacity onPress={() => router.back()}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
+        <Text style={styles.headerTitle}>Novo Conteúdo</Text>
         <TouchableOpacity onPress={handleSave}><Ionicons name="checkmark" size={28} color="#FFD700" /></TouchableOpacity>
       </View>
 
@@ -299,8 +192,4 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#333', marginRight: 8 },
   chipActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
   loadingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
-  card: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', backgroundColor:'#1a1a2e', padding:16, marginBottom:10, borderRadius:12 },
-  cardTitle: { color:'#fff', fontWeight:'bold', fontSize:16 },
-  badge: { fontSize:10, fontWeight:'bold', marginRight:10 },
-  badgeTurma: { fontSize:10, color:'#888' }
 });
