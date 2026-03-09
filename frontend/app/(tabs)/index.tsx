@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // 🚨 NOVA FUNÇÃO: PERGUNTAR ANTES DE SAIR DO APP
+  // 🚨 Função que pergunta antes de sair
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
@@ -35,25 +35,14 @@ export default function Home() {
           'Sair do aplicativo',
           'Você tem certeza que deseja sair?',
           [
-            {
-              text: 'Ficar',
-              style: 'cancel',
-              onPress: () => null,
-            },
-            {
-              text: 'Sair',
-              style: 'destructive',
-              onPress: () => BackHandler.exitApp(),
-            },
+            { text: 'Ficar', style: 'cancel', onPress: () => null },
+            { text: 'Sair', style: 'destructive', onPress: () => BackHandler.exitApp() },
           ]
         );
-        return true; // Isso bloqueia a ação padrão (que seria fechar na hora)
+        return true;
       };
 
-      // Adiciona o espião do botão voltar quando a tela abre
       BackHandler.addEventListener('hardwareBackPress', onBackPress);
-
-      // Remove o espião quando a tela fecha (para não bugar outras telas)
       return () => BackHandler.removeEventListener('hardwareBackPress', onBackPress);
     }, [])
   );
@@ -77,9 +66,13 @@ export default function Home() {
     }
   }, [user?.equipeId]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  // 🚨 A MÁGICA ACONTECE AQUI: Atualiza os dados TODA VEZ que a tela aparece
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+      refreshUser(); // Atualiza os pontos individuais do aluno também
+    }, [loadData])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -122,7 +115,7 @@ export default function Home() {
           </TouchableOpacity>
         </View>
 
-        {/* Ranking Header */}
+        {/* Ranking Header (O Pódio) */}
         <RankingHeader ranking={ranking} />
 
         {/* User Stats Card */}
@@ -185,91 +178,22 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0c0c0c',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  greeting: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
-  },
-  logoutButton: {
-    padding: 8,
-  },
-  statsCard: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-  },
-  statsTitle: {
-    fontSize: 16,
-    color: '#888',
-    marginBottom: 16,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 8,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  teamDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 16,
-  },
-  quickActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  actionCard: {
-    width: '47%',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-  },
-  actionText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 12,
-  },
+  container: { flex: 1, backgroundColor: '#0c0c0c' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  greeting: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
+  logoutButton: { padding: 8 },
+  statsCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, marginBottom: 20 },
+  statsTitle: { fontSize: 16, color: '#888', marginBottom: 16 },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
+  statItem: { alignItems: 'center' },
+  statValue: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginTop: 8 },
+  statLabel: { fontSize: 12, color: '#666', marginTop: 4 },
+  teamDot: { width: 28, height: 28, borderRadius: 14 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 16 },
+  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  actionCard: { width: '47%', borderRadius: 16, padding: 20, alignItems: 'center' },
+  actionText: { color: '#fff', fontSize: 14, fontWeight: '600', marginTop: 12 },
 });
