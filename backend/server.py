@@ -758,17 +758,21 @@ async def reenviar_missao(missao_id: str, dados: ReenviarData, current_user: dic
     old = await db.missoes.find_one({"id": missao_id})
     if not old: raise HTTPException(status_code=404, detail="Missão não encontrada")
     
-    # Clona a missão com novos alvos e um novo prazo de +24 horas
-    new_data = {k: v for k, v in old.items() if k not in ['_id', 'id', 'criadoEm', 'expiraEm', 'alvoTipo', 'alvoNome', 'alvoId', 'tentativasFeitas']}
-    new_missao = Missao(**new_data)
-    new_missao.alvoTipo = dados.alvoTipo
-    new_missao.alvoNome = dados.alvoNome
-    new_missao.alvoId = dados.alvoId
-    new_missao.criadaPor = current_user["id"]
+    # Filtra os campos velhos para não dar conflito
+    new_data = {k: v for k, v in old.items() if k not in ['_id', 'id', 'criadoEm', 'expiraEm', 'alvoTipo', 'alvoNome', 'alvoId', 'tentativasFeitas', 'criadaPor']}
     
     agora = datetime.utcnow()
-    new_missao.criadoEm = agora.isoformat()
-    new_missao.expiraEm = (agora + timedelta(hours=24)).isoformat()
+    
+    # Cria a nova missão injetando os dados novos DIRETAMENTE para não dar erro de validação
+    new_missao = Missao(
+        **new_data,
+        alvoTipo=dados.alvoTipo,
+        alvoNome=dados.alvoNome,
+        alvoId=dados.alvoId,
+        criadaPor=current_user["id"],
+        criadoEm=agora.isoformat(),
+        expiraEm=(agora + timedelta(hours=24)).isoformat()
+    )
     
     await db.missoes.insert_one(new_missao.dict())
     return new_missao.dict()
