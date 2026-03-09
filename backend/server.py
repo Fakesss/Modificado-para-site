@@ -38,18 +38,17 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# >>> OTIMIZAÇÃO DE VELOCIDADE (NOVO) <<<
+# >>> OTIMIZAÇÃO DE VELOCIDADE (ÍNDICES) <<<
+# Isso resolve o delay inicial e o "pisca" da cor da equipe
 @app.on_event("startup")
 async def startup_db_client():
-    # Cria índices para buscar dados instantaneamente
-    # Isso resolve a lentidão e o "pisca" da cor amarela
     await db.usuarios.create_index("id", unique=True)
     await db.usuarios.create_index("email", unique=True)
-    await db.usuarios.create_index([("pontosTotais", -1)]) # Para o Ranking
-    await db.usuarios.create_index("turmaId")
-    await db.usuarios.create_index("equipeId")
+    await db.usuarios.create_index([("pontosTotais", -1)]) # Acelera o Ranking
+    await db.usuarios.create_index("turmaId") # Acelera carregamento da turma
+    await db.usuarios.create_index("equipeId") # Acelera carregamento da cor da equipe
     await db.exercicios.create_index("id", unique=True)
-    await db.submissoes.create_index([("exercicioId", 1), ("usuarioId", 1)])
+    await db.submissoes.create_index([("exercicioId", 1), ("usuarioId", 1)]) # Acelera verificação de duplicidade
 
 # ============== MODELS ==============
 
@@ -389,10 +388,9 @@ async def get_usuarios(current_user: dict = Depends(require_admin)):
     usuarios = await db.usuarios.find({"ativo": True}).to_list(1000)
     return [{k: v for k, v in u.items() if k not in ['senha', '_id']} for u in usuarios]
 
-# >>> ROTAS DE RANKING RESTAURADAS E OTIMIZADAS <<<
+# >>> RANKING (RESTAURADO E OTIMIZADO) <<<
 @api_router.get("/ranking/geral")
 async def get_ranking_geral(current_user: dict = Depends(get_current_user)):
-    # Retorna top 50 alunos ordenados por pontos
     users = await db.usuarios.find({"perfil": "ALUNO", "ativo": True})\
         .sort("pontosTotais", -1)\
         .limit(50)\
@@ -505,7 +503,7 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     exercicio = await db.exercicios.find_one({"id": submissao_data.exercicioId})
     if not exercicio: raise HTTPException(status_code=404, detail="Exercício não encontrado")
     
-    # PROTEÇÃO CONTRA CLIQUES MÚLTIPLOS (Evita pontos dobrados)
+    # BLINDAGEM CONTRA DUPLICIDADE DE NOTAS
     existente = await db.submissoes.find_one({
         "exercicioId": submissao_data.exercicioId,
         "usuarioId": current_user["id"]
@@ -618,6 +616,7 @@ async def delete_conteudo(conteudo_id: str, current_user: dict = Depends(require
     await db.conteudos.update_one({"id": conteudo_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}})
     return {"message": "Conteúdo movido para a lixeira"}
 
+# Outras rotas do sistema
 @api_router.get("/relatorios/geral")
 async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_u = await db.usuarios.count_documents({"ativo": True})
