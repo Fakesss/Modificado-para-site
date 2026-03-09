@@ -64,36 +64,36 @@ export default function ExercicioScreen() {
   };
 
   const submitAnswers = async () => {
+    if (submitting) return; // Proteção extra contra duplo clique
     setSubmitting(true);
+    
     try {
       const respostasArray = Object.entries(respostas).map(([questaoId, resposta]) => ({
         questaoId, resposta
       }));
 
-      // Chama o servidor
       const result = await api.submitExercicio(id as string, respostasArray);
       
-      // 🚨 MUDANÇA AQUI: Sucesso blindado e simples!
-      Alert.alert(
-        "Prova Entregue!", 
-        `Parabéns! Sua nota foi ${result.nota} e você gerou ${result.pontosGerados} pontos para sua equipe!`,
-        [
-          { text: "OK", onPress: () => router.replace('/(tabs)/exercicios') }
-        ]
-      );
+      // Delay de segurança para garantir que a UI atualize antes de navegar
+      setTimeout(() => {
+        router.replace({
+          pathname: '/resultado',
+          params: {
+            exercicioId: id as string,
+            acertos: String(result.acertos),
+            erros: String(result.erros),
+            total: String(result.totalQuestoes),
+            nota: String(result.nota),
+            percentual: String(result.percentual || 0), // Garante que não vá nulo
+            pontos: String(result.pontosGerados),
+            detalhes: JSON.stringify(result.submissao?.detalhesQuestoes || []),
+          },
+        });
+      }, 500);
 
     } catch (error: any) {
-      // 🚨 MUDANÇA AQUI: Força a leitura de qualquer erro bizarro do Python
-      let msgErro = "Erro desconhecido ao tentar enviar.";
-      if (error.response?.data?.detail) {
-        const detail = error.response.data.detail;
-        msgErro = typeof detail === 'string' ? detail : JSON.stringify(detail);
-      } else if (error.message) {
-        msgErro = error.message;
-      }
-      Alert.alert('Servidor Recusou', msgErro);
-    } finally {
       setSubmitting(false);
+      Alert.alert('Erro', error.response?.data?.detail || 'Erro ao enviar respostas.');
     }
   };
 
@@ -186,8 +186,13 @@ export default function ExercicioScreen() {
         ))}
       </ScrollView>
 
+      {/* BOTÃO DE ENVIAR (Protegido contra cliques múltiplos) */}
       {!existingSubmission ? (
-        <TouchableOpacity style={[styles.submitButton, submitting && {opacity:0.5}]} onPress={handleSubmit} disabled={submitting}>
+        <TouchableOpacity 
+          style={[styles.submitButton, submitting && {opacity:0.5}]} 
+          onPress={handleSubmit} 
+          disabled={submitting}
+        >
           {submitting ? <ActivityIndicator color="#000" /> : <Text style={styles.submitButtonText}>Enviar Respostas</Text>}
         </TouchableOpacity>
       ) : (
