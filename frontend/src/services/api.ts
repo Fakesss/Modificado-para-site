@@ -1,7 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// SEU ENDEREÇO DO SERVIDOR
 const API_URL = 'https://modificado-para-site-1.onrender.com';
 
 const api = axios.create({
@@ -54,36 +53,30 @@ export const getExercicio = async (id: string) => {
   try {
     const r = await api.get(`/exercicios/${id}`);
     return r.data;
-  } catch (error) {
-    console.error("Erro ao buscar exercício único:", error);
-    return null;
-  }
+  } catch (error) { return null; }
 };
 export const createExercicio = async (d: any) => (await api.post('/exercicios', d)).data;
-export const updateExercicio = async (id: string, d: any) => {
-  const r = await api.put(`/exercicios/${id}`, d);
-  return r.data;
-};
+export const updateExercicio = async (id: string, d: any) => (await api.put(`/exercicios/${id}`, d)).data;
 export const deleteExercicio = async (id: string) => (await api.delete(`/exercicios/${id}`)).data;
 
 export const submitExercicio = async (id: string, resp: any) => (await api.post('/submissoes', { exercicioId: id, respostas: resp })).data;
 export const getSubmissao = async (id: string) => (await api.get(`/submissoes/${id}`)).data;
 export const retryExercicio = async (id: string) => (await api.delete(`/submissoes/${id}/retry`)).data;
 
-// 🎮 >>> JOGOS PERSONALIZADOS E MISSÕES (ADICIONADOS AQUI) <<< 🎮
+// JOGOS PERSONALIZADOS E MISSÕES (ATUALIZADO)
 export const getJogosPersonalizados = async () => { try { return (await api.get('/missoes')).data; } catch { return []; } };
 export const criarJogo = async (d: any) => (await api.post('/missoes', d)).data;
 export const deletarJogo = async (id: string) => (await api.delete(`/missoes/${id}`)).data;
 export const getMissoesDisponiveis = async () => { try { return (await api.get('/missoes/disponiveis')).data; } catch { return []; } };
 export const concluirMissao = async (id: string) => (await api.post(`/missoes/${id}/concluir`)).data;
+export const reenviarJogo = async (id: string, d: any) => (await api.post(`/missoes/${id}/reenviar`, d)).data;
+export const registrarTentativaMissao = async (id: string) => (await api.post(`/missoes/${id}/tentativa`)).data;
 
-// OUTROS
+// OUTROS E RANKING
 export const getRelatorioGeral = async () => { try { return (await api.get('/relatorios/geral')).data; } catch { return {}; } };
 export const getLixeira = async () => (await api.get('/admin/lixeira')).data;
 export const restaurarItem = async (id: string, tipo: string) => (await api.post(`/admin/lixeira/${id}/restaurar?tipo=${tipo}`)).data;
 export const deletePermanente = async (id: string, tipo: string) => (await api.delete(`/admin/lixeira/${id}?tipo=${tipo}`)).data;
-
-// RANKING E PROGRESSO
 export const getRankingGeral = async () => { try { return (await api.get('/ranking/geral')).data; } catch { return []; } };
 export const getRankingPorTurma = async (turmaId: string) => { try { return (await api.get(`/ranking/turma/${turmaId}`)).data; } catch { return []; } };
 export const getMeuProgresso = async () => { try { return (await api.get('/usuarios/progresso')).data; } catch { return null; } };
