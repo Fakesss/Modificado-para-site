@@ -1,50 +1,36 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { enviarPingOnline } from '../services/multiplayerApi';
 
 export default function OnlineHeartbeat() {
   const { user } = useAuth();
-  const appState = useRef(AppState.currentState);
 
   useEffect(() => {
     if (!user) return;
 
-    let isActive = true;
-    let timeoutId: NodeJS.Timeout;
-
-    const ping = () => {
-      if (isActive) enviarPingOnline(user.nome, user.turmaId, user.equipeId);
-    };
-
-    // Bate o coração a primeira vez que entra
-    ping();
-
-    // 🚨 A SOLUÇÃO: Loop com setTimeout (Imune ao efeito metralhadora)
-    const loopPing = () => {
-      if (!isActive) return;
+    const baterCoracao = () => {
       if (AppState.currentState === 'active') {
-        ping();
+        enviarPingOnline(user.nome, user.turmaId, user.equipeId);
       }
-      // Só agenda o próximo disparo DEPOIS de processar o atual
-      timeoutId = setTimeout(loopPing, 30000);
     };
 
-    // Inicia o ciclo
-    timeoutId = setTimeout(loopPing, 30000);
+    // Dispara ao entrar no app
+    baterCoracao();
 
-    // Escuta quando o celular é desbloqueado
+    // Loop contínuo (o Escudo nos protege das requisições engavetadas)
+    const interval = setInterval(baterCoracao, 25000);
+
+    // Quando o aluno desbloqueia a tela, avisa que voltou!
     const subscription = AppState.addEventListener('change', nextAppState => {
-      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-        // Celular acordou! Espera 2 segundinhos pro Wi-Fi conectar e avisa o servidor.
-        setTimeout(ping, 2000);
+      if (nextAppState === 'active') {
+        // Um pequeno delay para dar tempo do Wi-Fi/4G conectar
+        setTimeout(baterCoracao, 1500);
       }
-      appState.current = nextAppState;
     });
 
     return () => {
-      isActive = false;
-      clearTimeout(timeoutId);
+      clearInterval(interval);
       subscription.remove();
     };
   }, [user]);
