@@ -511,8 +511,11 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     await db.submissoes.insert_one(submissao.dict())
     
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
-    if current_user.get("equipeId"):
-        await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": pontos}})
+    
+    eq_raw = current_user.get("equipeId")
+    if eq_raw:
+        eq_clean = str(eq_raw).strip()
+        await db.equipes.update_one({"id": eq_clean}, {"$inc": {"pontosTotais": pontos}})
     
     for d in detalhes:
         if not d["acertou"]:
@@ -537,8 +540,10 @@ async def retry_submissao(exercicio_id: str, current_user: dict = Depends(get_cu
         pontos = sub.get("pontosGerados", 0)
         if pontos > 0:
             await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": -pontos}})
-            if current_user.get("equipeId"):
-                await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": -pontos}})
+            eq_raw = current_user.get("equipeId")
+            if eq_raw:
+                eq_clean = str(eq_raw).strip()
+                await db.equipes.update_one({"id": eq_clean}, {"$inc": {"pontosTotais": -pontos}})
         await db.submissoes.delete_one({"_id": sub["_id"]})
     return {"message": "Pronto para tentar novamente"}
 
@@ -601,44 +606,67 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
     raise HTTPException(400, "Tipo inválido")
 
 # =====================================================================
-# ROTAS DE RANKING À PROVA DE FALHAS DE DADOS (100% SEGURO)
+# ROTAS DE RANKING COM "AUTO-HEALING"
 # =====================================================================
 
 @api_router.get("/ranking/geral")
 async def get_ranking_geral():
     equipes = await db.equipes.find({}).to_list(100)
-    
     pontos_por_equipe = {}
     for e in equipes:
-        e_id_clean = str(e.get("id", "")).strip().lower()
+        e_id_clean = str(e.get("id", e.get("_id", ""))).strip().lower()
         pontos_por_equipe[e_id_clean] = 0
         
     alunos = await db.usuarios.find({}).to_list(5000)
     
     for aluno in alunos:
-        perfil = str(aluno.get("perfil", "")).strip().upper()
-        ativo = aluno.get("ativo", True)
+        perfil_raw = aluno.get("perfil")
+        if not perfil_raw:
+            perfil_raw = "ALUNO"
+        perfil = str(perfil_raw).strip().upper()
         
-        if perfil == "ALUNO" and ativo:
-            eq_id_clean = str(aluno.get("equipeId", "")).strip().lower()
-            pts = aluno.get("pontosTotais", 0)
+        ativo_val = aluno.get("ativo", True)
+        if isinstance(ativo_val, str):
+            ativo = ativo_val.lower() in ['true', '1', 't', 'y', 'yes']
+        else:
+            ativo = bool(ativo_val)
             
+        if perfil == "ALUNO" and ativo:
+            eq_id_clean = str(aluno.get("equipeId") or "").strip().lower()
+            pts_val = aluno.get("pontosTotais", 0)
             try:
-                pts = int(float(pts))
+                pts = int(float(pts_val))
             except (ValueError, TypeError):
                 pts = 0
                 
             if eq_id_clean in pontos_por_equipe:
                 pontos_por_equipe[eq_id_clean] += pts
+            else:
+                for e in equipes:
+                    e_nome = str(e.get("nome", "")).strip().lower()
+                    if eq_id_clean == e_nome:
+                        e_id_real = str(e.get("id", e.get("_id", ""))).strip().lower()
+                        if e_id_real in pontos_por_equipe:
+                            pontos_por_equipe[e_id_real] += pts
+                        break
 
     equipes_ranking = []
     for e in equipes:
-        e_id_clean = str(e.get("id", "")).strip().lower()
+        e_id_clean = str(e.get("id", e.get("_id", ""))).strip().lower()
+        pts_reais = pontos_por_equipe.get(e_id_clean, 0)
+        
+        if e.get("pontosTotais", 0) != pts_reais:
+            query_id = e.get("id")
+            if query_id:
+                await db.equipes.update_one({"id": query_id}, {"$set": {"pontosTotais": pts_reais}})
+            else:
+                await db.equipes.update_one({"_id": e["_id"]}, {"$set": {"pontosTotais": pts_reais}})
+                
         equipes_ranking.append({
             "id": str(e.get("id", "")),
             "nome": e.get("nome", "Sem Nome"),
             "cor": e.get("cor", "#333"),
-            "pontosTotais": pontos_por_equipe.get(e_id_clean, 0)
+            "pontosTotais": pts_reais
         })
         
     equipes_ranking.sort(key=lambda x: x["pontosTotais"], reverse=True)
@@ -653,34 +681,52 @@ async def get_ranking_turma(turma_id: str):
     
     pontos_por_equipe = {}
     for e in equipes:
-        e_id_clean = str(e.get("id", "")).strip().lower()
+        e_id_clean = str(e.get("id", e.get("_id", ""))).strip().lower()
         pontos_por_equipe[e_id_clean] = 0
         
     alunos = await db.usuarios.find({}).to_list(5000)
     turma_alvo_limpa = str(turma_id).strip().lower()
     
+    turma_obj = await db.turmas.find_one({"id": turma_id})
+    turma_nome_limpo = str(turma_obj.get("nome", "")).strip().lower() if turma_obj else ""
+    
     for aluno in alunos:
-        perfil = str(aluno.get("perfil", "")).strip().upper()
-        ativo = aluno.get("ativo", True)
+        perfil_raw = aluno.get("perfil")
+        if not perfil_raw:
+            perfil_raw = "ALUNO"
+        perfil = str(perfil_raw).strip().upper()
         
-        if perfil == "ALUNO" and ativo:
-            aluno_turma = str(aluno.get("turmaId", "")).strip().lower()
+        ativo_val = aluno.get("ativo", True)
+        if isinstance(ativo_val, str):
+            ativo = ativo_val.lower() in ['true', '1', 't', 'y', 'yes']
+        else:
+            ativo = bool(ativo_val)
             
-            if aluno_turma == turma_alvo_limpa:
-                eq_id_clean = str(aluno.get("equipeId", "")).strip().lower()
-                pts = aluno.get("pontosTotais", 0)
-                
+        if perfil == "ALUNO" and ativo:
+            aluno_turma = str(aluno.get("turmaId") or "").strip().lower()
+            
+            if aluno_turma == turma_alvo_limpa or (turma_nome_limpo and aluno_turma == turma_nome_limpo):
+                eq_id_clean = str(aluno.get("equipeId") or "").strip().lower()
+                pts_val = aluno.get("pontosTotais", 0)
                 try:
-                    pts = int(float(pts))
+                    pts = int(float(pts_val))
                 except (ValueError, TypeError):
                     pts = 0
                     
                 if eq_id_clean in pontos_por_equipe:
                     pontos_por_equipe[eq_id_clean] += pts
+                else:
+                    for e in equipes:
+                        e_nome = str(e.get("nome", "")).strip().lower()
+                        if eq_id_clean == e_nome:
+                            e_id_real = str(e.get("id", e.get("_id", ""))).strip().lower()
+                            if e_id_real in pontos_por_equipe:
+                                pontos_por_equipe[e_id_real] += pts
+                            break
 
     equipes_ranking = []
     for e in equipes:
-        e_id_clean = str(e.get("id", "")).strip().lower()
+        e_id_clean = str(e.get("id", e.get("_id", ""))).strip().lower()
         equipes_ranking.append({
             "id": str(e.get("id", "")),
             "nome": e.get("nome", "Sem Nome"),
@@ -808,8 +854,11 @@ async def concluir_missao(missao_id: str, current_user: dict = Depends(get_curre
     
     pontos = missao.get("recompensa", 0)
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
-    if current_user.get("equipeId"):
-        await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": pontos}})
+    
+    eq_raw = current_user.get("equipeId")
+    if eq_raw:
+        eq_clean = str(eq_raw).strip()
+        await db.equipes.update_one({"id": eq_clean}, {"$inc": {"pontosTotais": pontos}})
         
     return {"message": "Missão concluída", "pontos": pontos}
 
@@ -835,9 +884,8 @@ async def reenviar_missao(missao_id: str, dados: ReenviarData, current_user: dic
     await db.missoes.insert_one(new_missao.dict())
     return new_missao.dict()
 
-
 # =====================================================================
-# SISTEMA DE PRESENÇA ONLINE (ROBUSTO COM MONGODB)
+# SISTEMA DE PRESENÇA ONLINE (BLINDADO CONTRA ERRO 500)
 # =====================================================================
 class PingRequest(BaseModel):
     nome: str
@@ -851,8 +899,6 @@ async def ping_online(data: PingRequest, credentials: HTTPAuthorizationCredentia
         user_id = payload.get("sub")
         if user_id:
             agora = datetime.utcnow().isoformat()
-            
-            # Upsert salva no banco a data e hora exata do último sinal de vida
             await db.online_users.update_one(
                 {"id": user_id},
                 {
@@ -872,17 +918,20 @@ async def ping_online(data: PingRequest, credentials: HTTPAuthorizationCredentia
 @api_router.get("/online/users")
 async def get_online_users():
     try:
-        # Define tolerância máxima de 45 segundos de inatividade
         cutoff = (datetime.utcnow() - timedelta(seconds=45)).isoformat()
         
-        # Puxa apenas quem deu sinal de vida nos últimos 45 segundos
+        # 1. FAZ A LEITURA ISOLADA (Seguro)
         ativos = await db.online_users.find({"last_ping": {"$gte": cutoff}}).to_list(1000)
         
-        # Faxina automática: Remove do banco quem fechou o app para não encher o servidor
-        await db.online_users.delete_many({"last_ping": {"$lt": cutoff}})
-        
+        # 2. ISOLAMENTO DE FALHAS: Se o banco travar apagando, a requisição NÃO quebra.
+        try:
+            await db.online_users.delete_many({"last_ping": {"$lt": cutoff}})
+        except Exception:
+            pass # Ignora falha de faxina, salva a vida do servidor
+            
         return [{"id": u["id"], "nome": u.get("nome"), "turmaId": u.get("turmaId"), "equipeId": u.get("equipeId")} for u in ativos]
     except Exception:
+        # Se rolar pânico geral no banco, retorna vazio ao invés de Erro 500
         return []
 
 app.include_router(api_router)
