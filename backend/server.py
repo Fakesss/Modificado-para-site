@@ -423,6 +423,7 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     questoes = await db.questoes.find({"exercicioId": submissao_data.exercicioId}).to_list(100)
     
     questoes_map = {q["id"]: q for q in questoes}
+    
     acertos, erros = 0, 0
     detalhes = []
     
@@ -462,6 +463,16 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
     if current_user.get("equipeId"):
         await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": pontos}})
+    
+    # SALVA OS ERROS BNCC
+    for d in detalhes:
+        if not d["acertou"]:
+            for bncc in d.get("habilidadesBNCC", []):
+                await db.erros_bncc.update_one(
+                    {"usuarioId": current_user["id"], "habilidade": bncc},
+                    {"$inc": {"count": 1}},
+                    upsert=True
+                )
     
     return {"submissao": {k: v for k, v in submissao.dict().items() if k != '_id'}, "acertos": acertos, "erros": erros, "totalQuestoes": total, "nota": round(nota, 1), "pontosGerados": pontos}
 
@@ -514,6 +525,12 @@ async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_s = await db.submissoes.count_documents({})
     return {"totalUsuarios": total_u, "totalExercicios": total_e, "totalSubmissoes": total_s}
 
+@api_router.get("/relatorios/bncc-erros")
+async def get_bncc_erros(current_user: dict = Depends(require_admin)):
+    pipeline = [{"$group": {"_id": "$habilidade", "totalErros": {"$sum": "$count"}}}, {"$sort": {"totalErros": -1}}, {"$limit": 20}]
+    results = await db.erros_bncc.aggregate(pipeline).to_list(20)
+    return [{"habilidade": r["_id"], "totalErros": r["totalErros"]} for r in results]
+
 @api_router.get("/admin/lixeira")
 async def get_lixeira(current_user: dict = Depends(require_admin)):
     exs = await db.exercicios.find({"is_deleted": True}).to_list(100)
@@ -534,62 +551,38 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
         return {"message": "Deletado"}
     raise HTTPException(400, "Tipo inválido")
 
-
 # =====================================================================
-# ROTAS DE RANKING E PROGRESSO (COM A CORREÇÃO DE TURMA "À PROVA DE BALAS")
+# ROTAS DE RANKING E PROGRESSO 
 # =====================================================================
 
 @api_router.get("/ranking/geral")
 async def get_ranking_geral():
-    # O Ranking Geral continua puxando direto da coleção "equipes" e é o espelho global da competição
-    equipes = await db.equipes.find({}).sort("pontosTotais", -1).to_list(100)
-    ranking = []
-    for i, e in enumerate(equipes):
-        ranking.append({
-            "id": e["id"],
-            "posicao": i + 1,
-            "nome": e["nome"],
-            "cor": e.get("cor", "#333"),
-            "pontosTotais": e.get("pontosTotais", 0)
-        })
-    return ranking
-
-@api_router.get("/ranking/turma/{turma_id}")
-async def get_ranking_turma(turma_id: str):
-    # 1. Busca todas as equipes globais para não faltar ninguém na lista final
+    # 1. Puxa todas as equipes globais
     equipes = await db.equipes.find({}).to_list(100)
     
-    # 2. Inicializa o contador de pontos para cada equipe base. Usamos ".strip()" para evitar qualquer lixo de espaço.
+    # 2. Prepara o dicionário para somar os pontos dinamicamente
     pontos_por_equipe = {str(e.get("id", "")).strip(): 0 for e in equipes}
     
-    # 3. Puxa TODOS os alunos ativos do banco (como são perfis restritos, a busca é rápida)
+    # 3. Puxa TODOS os alunos ativos do banco (Fonte da verdade)
     alunos = await db.usuarios.find({
         "perfil": "ALUNO",
         "ativo": True
     }).to_list(2000)
     
-    # 4. Comparações ultra-seguras (evita falha por espaço em branco invisível no ID que o banco tenha salvo)
-    turma_alvo_limpa = str(turma_id).strip()
-    
+    # 4. Soma os pontos de todos os alunos agrupando pelas equipes
     for aluno in alunos:
-        aluno_turma = str(aluno.get("turmaId", "")).strip()
+        eq_id = str(aluno.get("equipeId", "")).strip()
+        pts = aluno.get("pontosTotais", 0)
         
-        # Só contabiliza se o aluno for estritamente da turma clicada
-        if aluno_turma == turma_alvo_limpa:
-            eq_id = str(aluno.get("equipeId", "")).strip()
-            pts = aluno.get("pontosTotais", 0)
+        try:
+            pts = int(float(pts))
+        except (ValueError, TypeError):
+            pts = 0
             
-            # Tenta converter os pontos pra garantir que texto ("10") vire número
-            try:
-                pts = int(float(pts))
-            except (ValueError, TypeError):
-                pts = 0
-                
-            # Se a equipe for válida, soma!
-            if eq_id in pontos_por_equipe:
-                pontos_por_equipe[eq_id] += pts
+        if eq_id in pontos_por_equipe:
+            pontos_por_equipe[eq_id] += pts
 
-    # 5. Prepara o formato final que o App (React Native) exige para desenhar o pódio
+    # 5. Formata os dados para o formato que o aplicativo exige
     equipes_ranking = []
     for e in equipes:
         e_id = str(e.get("id", "")).strip()
@@ -600,10 +593,53 @@ async def get_ranking_turma(turma_id: str):
             "pontosTotais": pontos_por_equipe.get(e_id, 0)
         })
         
-    # 6. Ordena as equipes pela pontuação consolidada (do maior pro menor)
+    # 6. Ordena do maior pro menor e define as posições 1º, 2º, 3º
     equipes_ranking.sort(key=lambda x: x["pontosTotais"], reverse=True)
     
-    # 7. Adiciona a posição oficial após a ordenação
+    for i, e in enumerate(equipes_ranking):
+        e["posicao"] = i + 1
+        
+    return equipes_ranking
+
+@api_router.get("/ranking/turma/{turma_id}")
+async def get_ranking_turma(turma_id: str):
+    equipes = await db.equipes.find({}).to_list(100)
+    pontos_por_equipe = {str(e.get("id", "")).strip(): 0 for e in equipes}
+    
+    alunos = await db.usuarios.find({
+        "perfil": "ALUNO",
+        "ativo": True
+    }).to_list(2000)
+    
+    turma_alvo_limpa = str(turma_id).strip()
+    
+    for aluno in alunos:
+        aluno_turma = str(aluno.get("turmaId", "")).strip()
+        
+        if aluno_turma == turma_alvo_limpa:
+            eq_id = str(aluno.get("equipeId", "")).strip()
+            pts = aluno.get("pontosTotais", 0)
+            
+            try:
+                pts = int(float(pts))
+            except (ValueError, TypeError):
+                pts = 0
+                
+            if eq_id in pontos_por_equipe:
+                pontos_por_equipe[eq_id] += pts
+
+    equipes_ranking = []
+    for e in equipes:
+        e_id = str(e.get("id", "")).strip()
+        equipes_ranking.append({
+            "id": e_id,
+            "nome": e.get("nome", "Sem Nome"),
+            "cor": e.get("cor", "#333"),
+            "pontosTotais": pontos_por_equipe.get(e_id, 0)
+        })
+        
+    equipes_ranking.sort(key=lambda x: x["pontosTotais"], reverse=True)
+    
     for i, e in enumerate(equipes_ranking):
         e["posicao"] = i + 1
         
@@ -612,7 +648,6 @@ async def get_ranking_turma(turma_id: str):
 @api_router.get("/usuarios/progresso")
 async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
     submissoes = await db.submissoes.find({"usuarioId": current_user["id"]}).sort("data", -1).to_list(100)
-    
     return {
         "pontosTotais": current_user.get("pontosTotais", 0),
         "totalExercicios": len(submissoes),
@@ -621,7 +656,6 @@ async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
         "pontosVideos": 0,
         "submissoes": [{k: v for k, v in s.items() if k != '_id'} for s in submissoes]
     }
-
 
 # ============== MISSOES / JOGOS =========================
 class MissaoQuestao(BaseModel):
@@ -644,6 +678,11 @@ class MissaoCreate(BaseModel):
 class Missao(MissaoCreate):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     criadaPor: Optional[str] = None
+
+class ReenviarData(BaseModel):
+    alvoTipo: str
+    alvoNome: str
+    alvoId: str
 
 @api_router.get("/missoes")
 async def get_missoes(current_user: dict = Depends(require_admin)):
