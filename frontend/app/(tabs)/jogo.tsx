@@ -83,6 +83,9 @@ export default function Jogo() {
   const [missoesDisponiveis, setMissoesDisponiveis] = useState<any[]>([]);
   const [modoMatematica, setModoMatematica] = useState('misto');
   
+  // CONFIGURAÇÃO FUTURA DE SKINS: Cor base do Laser Personalizável
+  const [corLaserPersonalizada, setCorLaserPersonalizada] = useState('#32CD32');
+
   const [pausado, setPausado] = useState(false);
   
   // ESTADOS DA TRANSIÇÃO DE FASE
@@ -90,6 +93,10 @@ export default function Jogo() {
   const [mostrarFase, setMostrarFase] = useState(false);
   const fadeFaseAnim = useRef(new Animated.Value(0)).current;
   const transicaoAtivaRef = useRef(false);
+  
+  // Controle de espera para limpar a tela
+  const fasePendenteRef = useRef(false);
+  const proximaFaseNumRef = useRef(1);
 
   const modoRef = useRef<'single' | 'bot' | 'missao'>('single'); 
   const modoMatematicaRef = useRef('misto'); 
@@ -105,6 +112,7 @@ export default function Jogo() {
   
   const spawnTimer = useRef<any>(null);
   const botTimer = useRef<any>(null);
+  
   const laserAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const [laserAtivo, setLaserAtivo] = useState<any>(null);
@@ -123,11 +131,20 @@ export default function Jogo() {
     } catch (e) {}
   };
 
+  // MONITOR MESTRE DO JOGO (Vitória de Missão e Transição de Fase)
   useEffect(() => {
+    // Vitória em Missão
     if (modoRef.current === 'missao' && jogoAtivoRef.current) {
       if (filaQuestoesRef.current.length === 0 && questoesEmJogoRef.current === 0 && operacoes.length === 0) {
         finalizarMissaoComSucesso();
       }
+    }
+
+    // Passagem de Fase Apenas Quando a Tela Limpar
+    if (jogoAtivoRef.current && fasePendenteRef.current && operacoes.length === 0) {
+      fasePendenteRef.current = false;
+      rodadaRef.current = proximaFaseNumRef.current; 
+      avancarFase(proximaFaseNumRef.current);
     }
   }, [operacoes]);
 
@@ -147,22 +164,19 @@ export default function Jogo() {
     if (transicaoAtivaRef.current || !jogoAtivoRef.current) return;
     transicaoAtivaRef.current = true;
     
-    // Atualiza o número no visor e mostra a tela
     setFaseAtualVisor(novaFase);
     setMostrarFase(true);
     
-    // Pausa a geração de novas contas
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
 
     fadeFaseAnim.setValue(0);
     Animated.sequence([
       Animated.timing(fadeFaseAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.delay(1200), // Mantém a mensagem visível por ~1.2s
+      Animated.delay(1500), // Mantém a mensagem visível por 1.5s com a tela limpa
       Animated.timing(fadeFaseAnim, { toValue: 0, duration: 300, useNativeDriver: true })
     ]).start(() => {
       setMostrarFase(false);
       transicaoAtivaRef.current = false;
-      // Assim que a animação some, volta a jogar contas
       if (jogoAtivoRef.current && !jogoPausadoRef.current) {
         iniciarLoopSpawner();
       }
@@ -180,17 +194,14 @@ export default function Jogo() {
     
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     
-    operacoesListRef.current.forEach(op => {
-      op.y.stopAnimation();
-    });
+    operacoesListRef.current.forEach(op => op.y.stopAnimation());
   }, []);
 
   const retomarJogo = () => {
     jogoPausadoRef.current = false;
     setPausado(false);
     
-    // Só retoma o spawner se não estiver no meio de uma transição de fase
-    if (!transicaoAtivaRef.current) {
+    if (!transicaoAtivaRef.current && !fasePendenteRef.current) {
       iniciarLoopSpawner();
     }
     
@@ -215,6 +226,7 @@ export default function Jogo() {
     jogoAtivoRef.current = false;
     jogoPausadoRef.current = false;
     transicaoAtivaRef.current = false;
+    fasePendenteRef.current = false;
     setPausado(false);
     setMostrarFase(false);
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
@@ -225,14 +237,14 @@ export default function Jogo() {
   useFocusEffect(
     useCallback(() => {
       return () => {
-        if (jogoAtivoRef.current && !jogoPausadoRef.current) {
-          pausarJogo();
-        }
+        if (jogoAtivoRef.current && !jogoPausadoRef.current) pausarJogo();
       };
     }, [pausarJogo])
   );
-  // ==========================================
 
+  // ==========================================
+  // INÍCIO DO JOGO E SPAWNER
+  // ==========================================
   const iniciarJogo = async (modoEscolhido: 'single' | 'bot' | 'missao', missaoDados?: any) => {
     if (modoEscolhido === 'missao' && missaoDados) {
       try {
@@ -253,7 +265,8 @@ export default function Jogo() {
     ultimasRespostasRef.current = []; 
     desempenhoOcultoRef.current = 0; questoesEmJogoRef.current = 0;
     jogoPausadoRef.current = false; jogoAtivoRef.current = true; 
-    rodadaRef.current = 1; transicaoAtivaRef.current = false;
+    rodadaRef.current = 1; transicaoAtivaRef.current = false; fasePendenteRef.current = false;
+    proximaFaseNumRef.current = 1;
     
     modoRef.current = modoEscolhido;
 
@@ -274,17 +287,19 @@ export default function Jogo() {
     const loop = () => {
       if (!jogoAtivoRef.current || jogoPausadoRef.current || transicaoAtivaRef.current) return;
       
-      if (modoRef.current === 'missao' && filaQuestoesRef.current.length === 0) {} 
-      else {
-        const maxOps = Math.min(8, 3 + Math.floor(pontos / 500)); 
-        if (operacoesListRef.current.length < maxOps) spawnarQuestao();
+      // O Spawner pausa a geração de novas contas se estiver aguardando limpar a tela
+      if (!fasePendenteRef.current) {
+        if (modoRef.current === 'missao' && filaQuestoesRef.current.length === 0) {} 
+        else {
+          const maxOps = Math.min(8, 3 + Math.floor(pontos / 500)); 
+          if (operacoesListRef.current.length < maxOps) spawnarQuestao();
+        }
       }
       
       if (!transicaoAtivaRef.current) {
         spawnTimer.current = setTimeout(loop, Math.max(1200, 3000 - (pontos * 2)));
       }
     };
-    
     if (!transicaoAtivaRef.current) loop();
   };
 
@@ -298,7 +313,7 @@ export default function Jogo() {
       novaOp = criarObjetoAnimado(questao.texto, questao.resposta, questao.id, 10000);
     } else {
       const dados = gerarDadosArcade();
-      if (!dados) return; // Se for null (transição ocorrendo), não spawna agora.
+      if (!dados) return; 
       questoesEmJogoRef.current += 1;
       novaOp = criarObjetoAnimado(dados.texto, dados.resposta, dados.chave, dados.speed);
     }
@@ -357,12 +372,14 @@ export default function Jogo() {
       return { texto: txt, resposta: res, chave, speed };
     }
     
-    // Esgotou opções = Sobe de fase via transição visual!
-    rodadaRef.current += 1;
-    desempenhoOcultoRef.current += 1;
-    if (rodadaRef.current > 100) ultimasRespostasRef.current = [];
+    // Se esgotar as possibilidades, agenda subida de fase pendente!
+    if (!fasePendenteRef.current) {
+        fasePendenteRef.current = true;
+        proximaFaseNumRef.current = rodadaRef.current + 1;
+        desempenhoOcultoRef.current += 1;
+        if (proximaFaseNumRef.current > 100) ultimasRespostasRef.current = [];
+    }
     
-    avancarFase(rodadaRef.current);
     return null; 
   };
 
@@ -391,6 +408,7 @@ export default function Jogo() {
     jogoAtivoRef.current = false; 
     jogoPausadoRef.current = false;
     transicaoAtivaRef.current = false;
+    fasePendenteRef.current = false;
     setPausado(false);
     if (spawnTimer.current) clearTimeout(spawnTimer.current); 
     setOperacoes([]); 
@@ -407,12 +425,13 @@ export default function Jogo() {
       
       setPontos(p => { 
         const novo = p + 10; 
-        // Lógica de avanço por pontos (A cada 50 pts sobe de fase)
+        // Agenda subida de fase a cada 50 pontos
         if (modoRef.current !== 'missao' && Math.floor(novo/50) > Math.floor(p/50)) { 
-          rodadaRef.current += 1; 
-          desempenhoOcultoRef.current += 1; 
-          // Dispara animação visual
-          avancarFase(rodadaRef.current);
+           if (!fasePendenteRef.current) {
+               fasePendenteRef.current = true;
+               proximaFaseNumRef.current = rodadaRef.current + 1;
+               desempenhoOcultoRef.current += 1; 
+           }
         } 
         return novo; 
       });
@@ -425,15 +444,49 @@ export default function Jogo() {
     setResposta('');
   };
 
+  // ==========================================
+  // O NOVO LASER GEOMÉTRICO (Estilo TuxMath)
+  // ==========================================
   const dispararLaser = (alvo: any, acertou: boolean) => {
-    const cor = acertou ? '#32CD32' : '#FF4444';
-    setLaserAtivo({ x: acertou ? alvo.posX + CARD_WIDTH/2 : width/2, y: acertou ? (alvo.y as any)._value : GAME_AREA_HEIGHT * 0.2, cor });
-    laserAnim.setValue(0);
+    // Ponto de Origem: Centro Fixo Embaixo
+    const originX = width / 2;
+    const originY = GAME_AREA_HEIGHT; 
+    
+    // Ponto de Destino: A conta
+    const targetX = acertou && alvo ? alvo.posX + CARD_WIDTH / 2 : width / 2;
+    const targetY = acertou && alvo ? (alvo.y as any)._value + 20 : GAME_AREA_HEIGHT * 0.2;
+    
+    // Pitágoras para achar Tamanho e Ângulo
+    const dx = targetX - originX;
+    const dy = targetY - originY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx) + Math.PI / 2; // Offset necessário para View Vertical
+
+    // Centro do Laser para posicionamento correto
+    const midX = originX + dx / 2;
+    const midY = originY + dy / 2;
+
+    // Aplica a cor customizável da Skin ou Vermelho Erro
+    const cor = acertou ? corLaserPersonalizada : '#FF4444';
+    
+    setLaserAtivo({ x: midX, y: midY, h: distance, angle: `${angle}rad`, cor });
+    
+    laserAnim.setValue(1); // Começa totalmente visível
     Animated.parallel([
-      Animated.timing(laserAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-      ...(acertou ? [ Animated.timing(alvo.scale, { toValue: 1.4, duration: 150, useNativeDriver: true }), Animated.timing(alvo.opacity, { toValue: 0, duration: 150, useNativeDriver: true }) ] : [])
+      Animated.timing(laserAnim, { toValue: 0, duration: 300, useNativeDriver: true }), // Apenas Fade Out
+      ...(acertou && alvo ? [ 
+        Animated.timing(alvo.scale, { toValue: 1.4, duration: 150, useNativeDriver: true }), 
+        Animated.timing(alvo.opacity, { toValue: 0, duration: 150, useNativeDriver: true }) 
+      ] : [])
     ]).start(() => setLaserAtivo(null));
-    if (!acertou) Animated.sequence([Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }), Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }), Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true })]).start();
+    
+    if (!acertou) {
+      Animated.sequence([
+        Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }), 
+        Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }), 
+        Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true })
+      ]).start();
+    }
   };
 
   const ativarPowerUp = () => {
@@ -444,6 +497,9 @@ export default function Jogo() {
     setOperacoes([]); setPowerUpDisponivel(false);
   };
 
+  // ==========================================
+  // RENDERIZAÇÃO
+  // ==========================================
   if (tela === 'menu') {
     return (
       <SafeAreaView style={styles.container}>
@@ -566,7 +622,18 @@ export default function Jogo() {
       
       <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
         {operacoes.map((op) => ( <Animated.View key={op.id} style={[styles.operacaoCard, op.especial && styles.operacaoEspecial, { transform: [{ translateY: op.y }, { scale: op.scale }], left: op.posX, opacity: op.opacity }]}> <Text style={[styles.operacaoText, op.especial && { color: '#000' }]}>{op.textoTela}</Text> </Animated.View> ))}
-        {laserAtivo && <Animated.View style={[styles.laser, { opacity: laserAnim, transform: [{ translateY: laserAnim.interpolate({ inputRange: [0, 1], outputRange: [height, laserAtivo.y] }) }], left: laserAtivo.x - 2, backgroundColor: laserAtivo.cor }]} />}
+        
+        {/* LASER CENTRALIZADO/DIAGONAL */}
+        {laserAtivo && (
+          <Animated.View style={[styles.laser, { 
+            left: laserAtivo.x - 2, // Desconto da metade da espessura
+            top: laserAtivo.y - laserAtivo.h / 2, // Centraliza verticalmente na linha
+            height: laserAtivo.h,
+            transform: [{ rotate: laserAtivo.angle }],
+            backgroundColor: laserAtivo.cor,
+            opacity: laserAnim 
+          }]} />
+        )}
       </View>
       
       <View style={styles.bottomPanel}>
@@ -607,7 +674,6 @@ const styles = StyleSheet.create({
   headerStatsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   
-  // ESTILOS DA BADGE DE FASE FIXA
   faseBadge: { backgroundColor: '#4169E1', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginLeft: 10 },
   faseBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
 
@@ -617,7 +683,10 @@ const styles = StyleSheet.create({
   operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  laser: { position: 'absolute', width: 4, height: height, zIndex: 1 },
+  
+  // Laser adaptado para girar
+  laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
+  
   bottomPanel: { paddingBottom: 15, width: '100%', alignItems: 'center' },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
@@ -638,7 +707,6 @@ const styles = StyleSheet.create({
   jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 16, borderRadius: 12, alignItems: 'center', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 10 },
   jogarNovamenteText: { color: '#000', fontSize: 18, fontWeight: '900' },
 
-  // ESTILOS DA TELA DE PAUSA
   pauseOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100, justifyContent: 'center', alignItems: 'center', padding: 20 },
   pauseTitle: { color: '#FFD700', fontSize: 32, fontWeight: '900', marginBottom: 30, letterSpacing: 2 },
   btnContinuar: { backgroundColor: '#32CD32', flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, width: '80%', justifyContent: 'center', gap: 10, marginBottom: 15 },
@@ -646,7 +714,6 @@ const styles = StyleSheet.create({
   btnSair: { backgroundColor: '#E74C3C', flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, width: '80%', justifyContent: 'center', gap: 10 },
   btnSairText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
 
-  // ESTILOS DA TRANSIÇÃO DE FASE VISUAL
   transicaoOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'rgba(0,0,0,0.4)' },
   transicaoBox: { backgroundColor: 'rgba(255, 215, 0, 0.95)', paddingVertical: 20, paddingHorizontal: 50, borderRadius: 20, elevation: 10 },
   transicaoText: { color: '#000', fontSize: 36, fontWeight: '900', letterSpacing: 3, textTransform: 'uppercase' }
