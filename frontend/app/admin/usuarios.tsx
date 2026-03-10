@@ -26,6 +26,10 @@ export default function AdminUsuarios() {
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<Usuario | null>(null);
+  
+  // Novos estados para a edição
+  const [editNome, setEditNome] = useState('');
+  const [editSenha, setEditSenha] = useState('');
   const [editPerfil, setEditPerfil] = useState('');
   const [editTurma, setEditTurma] = useState('');
   const [editEquipe, setEditEquipe] = useState('');
@@ -59,9 +63,11 @@ export default function AdminUsuarios() {
 
   const openEditModal = (user: Usuario) => {
     setSelectedUser(user);
+    setEditNome(user.nome || '');
     setEditPerfil(user.perfil);
     setEditTurma(user.turmaId || '');
     setEditEquipe(user.equipeId || '');
+    setEditSenha(''); // A senha sempre inicia em branco (só preenche se for trocar)
     setModalVisible(true);
   };
 
@@ -69,23 +75,32 @@ export default function AdminUsuarios() {
     if (!selectedUser) return;
 
     try {
-      await api.updateUsuario(selectedUser.id, {
+      // Monta os dados básicos
+      const data: any = {
+        nome: editNome,
         perfil: editPerfil,
         turmaId: editTurma || null,
         equipeId: editEquipe || null,
-      });
-      Alert.alert('Sucesso', 'Usuário atualizado!');
+      };
+
+      // Se o admin digitou algo no campo de senha, ele quer alterar!
+      if (editSenha.trim() !== '') {
+        data.senha = editSenha;
+      }
+
+      await api.updateUsuario(selectedUser.id, data);
+      Alert.alert('Sucesso', 'Usuário atualizado com sucesso!');
       setModalVisible(false);
       loadData();
     } catch (error: any) {
-      Alert.alert('Erro', error.response?.data?.detail || 'Erro ao atualizar');
+      Alert.alert('Erro', error.response?.data?.detail || 'Ocorreu um erro ao tentar salvar o usuário no banco de dados.');
     }
   };
 
   const handleDelete = async (userId: string) => {
     Alert.alert(
       'Confirmar exclusão',
-      'Deseja realmente desativar este usuário?',
+      'Deseja realmente desativar este usuário? (Ele sairá dos rankings)',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -201,106 +216,128 @@ export default function AdminUsuarios() {
         })}
       </ScrollView>
 
-      {/* Edit Modal */}
+      {/* Modal de Edição de Usuário */}
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Editar Usuário</Text>
-            <Text style={styles.modalSubtitle}>{selectedUser?.nome}</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              
+              <Text style={styles.modalTitle}>Painel do Usuário</Text>
+              <Text style={styles.modalSubtitle}>{selectedUser?.email}</Text>
 
-            <Text style={styles.inputLabel}>Perfil</Text>
-            <View style={styles.selectContainer}>
-              {['ALUNO', 'ALUNO_LIDER', 'ADMIN'].map((perfil) => (
-                <TouchableOpacity
-                  key={perfil}
-                  style={[
-                    styles.selectOption,
-                    editPerfil === perfil && { backgroundColor: getPerfilColor(perfil) },
-                  ]}
-                  onPress={() => setEditPerfil(perfil)}
-                >
-                  <Text
+              <Text style={styles.inputLabel}>Nome de Exibição</Text>
+              <TextInput 
+                style={styles.textInput}
+                value={editNome}
+                onChangeText={setEditNome}
+                placeholder="Ex: João da Silva"
+                placeholderTextColor="#666"
+              />
+
+              <Text style={styles.inputLabel}>Redefinir Senha</Text>
+              <TextInput 
+                style={styles.textInput}
+                value={editSenha}
+                onChangeText={setEditSenha}
+                placeholder="Deixe em branco para manter a atual..."
+                placeholderTextColor="#666"
+              />
+
+              <Text style={styles.inputLabel}>Nível de Permissão (Perfil)</Text>
+              <View style={styles.selectContainer}>
+                {['ALUNO', 'ALUNO_LIDER', 'ADMIN'].map((perfil) => (
+                  <TouchableOpacity
+                    key={perfil}
                     style={[
-                      styles.selectText,
-                      editPerfil === perfil && { color: '#000' },
+                      styles.selectOption,
+                      editPerfil === perfil && { backgroundColor: getPerfilColor(perfil) },
                     ]}
+                    onPress={() => setEditPerfil(perfil)}
                   >
-                    {getPerfilLabel(perfil)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                    <Text
+                      style={[
+                        styles.selectText,
+                        editPerfil === perfil && { color: '#000' },
+                      ]}
+                    >
+                      {getPerfilLabel(perfil)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-            <Text style={styles.inputLabel}>Turma</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectScroll}>
-              <TouchableOpacity
-                style={[
-                  styles.selectOption,
-                  !editTurma && styles.selectOptionActive,
-                ]}
-                onPress={() => setEditTurma('')}
-              >
-                <Text style={[styles.selectText, !editTurma && { color: '#000' }]}>Nenhuma</Text>
-              </TouchableOpacity>
-              {turmas.map((turma) => (
+              <Text style={styles.inputLabel}>Turma</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectScroll}>
                 <TouchableOpacity
-                  key={turma.id}
                   style={[
                     styles.selectOption,
-                    editTurma === turma.id && styles.selectOptionActive,
+                    !editTurma && styles.selectOptionActive,
                   ]}
-                  onPress={() => setEditTurma(turma.id)}
+                  onPress={() => setEditTurma('')}
                 >
-                  <Text
-                    style={[styles.selectText, editTurma === turma.id && { color: '#000' }]}
-                  >
-                    {turma.nome}
-                  </Text>
+                  <Text style={[styles.selectText, !editTurma && { color: '#000' }]}>Nenhuma</Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.inputLabel}>Equipe</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectScroll}>
-              <TouchableOpacity
-                style={[
-                  styles.selectOption,
-                  !editEquipe && styles.selectOptionActive,
-                ]}
-                onPress={() => setEditEquipe('')}
-              >
-                <Text style={[styles.selectText, !editEquipe && { color: '#000' }]}>Nenhuma</Text>
-              </TouchableOpacity>
-              {equipes.map((equipe) => (
-                <TouchableOpacity
-                  key={equipe.id}
-                  style={[
-                    styles.selectOption,
-                    { borderColor: equipe.cor },
-                    editEquipe === equipe.id && { backgroundColor: equipe.cor },
-                  ]}
-                  onPress={() => setEditEquipe(equipe.id)}
-                >
-                  <Text
+                {turmas.map((turma) => (
+                  <TouchableOpacity
+                    key={turma.id}
                     style={[
-                      styles.selectText,
-                      { color: editEquipe === equipe.id ? '#000' : equipe.cor },
+                      styles.selectOption,
+                      editTurma === turma.id && styles.selectOptionActive,
                     ]}
+                    onPress={() => setEditTurma(turma.id)}
                   >
-                    {equipe.nome}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+                    <Text
+                      style={[styles.selectText, editTurma === turma.id && { color: '#000' }]}
+                    >
+                      {turma.nome}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                <Text style={styles.saveButtonText}>Salvar</Text>
-              </TouchableOpacity>
-            </View>
+              <Text style={styles.inputLabel}>Equipe do Aluno</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectScroll}>
+                <TouchableOpacity
+                  style={[
+                    styles.selectOption,
+                    !editEquipe && styles.selectOptionActive,
+                  ]}
+                  onPress={() => setEditEquipe('')}
+                >
+                  <Text style={[styles.selectText, !editEquipe && { color: '#000' }]}>Nenhuma</Text>
+                </TouchableOpacity>
+                {equipes.map((equipe) => (
+                  <TouchableOpacity
+                    key={equipe.id}
+                    style={[
+                      styles.selectOption,
+                      { borderColor: equipe.cor },
+                      editEquipe === equipe.id && { backgroundColor: equipe.cor },
+                    ]}
+                    onPress={() => setEditEquipe(equipe.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.selectText,
+                        { color: editEquipe === equipe.id ? '#000' : equipe.cor },
+                      ]}
+                    >
+                      {equipe.nome}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
+                  <Text style={styles.cancelButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+                  <Text style={styles.saveButtonText}>Salvar Alterações</Text>
+                </TouchableOpacity>
+              </View>
+
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -419,6 +456,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a2e',
     borderRadius: 16,
     padding: 20,
+    maxHeight: '90%', // Impede que o modal vaze da tela
   },
   modalTitle: {
     color: '#fff',
@@ -429,13 +467,21 @@ const styles = StyleSheet.create({
   modalSubtitle: {
     color: '#888',
     fontSize: 14,
-    marginBottom: 20,
+    marginBottom: 10,
   },
   inputLabel: {
     color: '#888',
     fontSize: 12,
     marginBottom: 8,
     marginTop: 16,
+  },
+  textInput: {
+    backgroundColor: '#0c0c0c',
+    borderRadius: 12,
+    padding: 14,
+    color: '#fff',
+    borderWidth: 1,
+    borderColor: '#333',
   },
   selectContainer: {
     flexDirection: 'row',
@@ -464,6 +510,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginTop: 24,
+    paddingBottom: 10,
   },
   cancelButton: {
     flex: 1,
