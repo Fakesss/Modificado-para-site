@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
+import { useFocusEffect } from 'expo-router'; // Importação adicionada para detectar troca de abas
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.62; 
@@ -82,6 +83,9 @@ export default function Jogo() {
   const [missoesDisponiveis, setMissoesDisponiveis] = useState<any[]>([]);
   const [modoMatematica, setModoMatematica] = useState('misto');
   
+  // NOVO ESTADO DA PAUSA
+  const [pausado, setPausado] = useState(false);
+  
   const modoRef = useRef<'single' | 'bot' | 'missao'>('single'); 
   const modoMatematicaRef = useRef('misto'); 
   const missaoAtualRef = useRef<any>(null);
@@ -101,8 +105,6 @@ export default function Jogo() {
   const [laserAtivo, setLaserAtivo] = useState<any>(null);
 
   const desempenhoOcultoRef = useRef(0); 
-  
-  // RESTAURADO: Mantém o histórico das últimas RESPOSTAS (a regra original e correta)
   const ultimasRespostasRef = useRef<number[]>([]);
 
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
@@ -133,6 +135,72 @@ export default function Jogo() {
     setTimeout(() => setTela('resultado'), 500);
   };
 
+  // ==========================================
+  // SISTEMA DE PAUSA E RETOMADA
+  // ==========================================
+  const pausarJogo = useCallback(() => {
+    if (!jogoAtivoRef.current || jogoPausadoRef.current) return;
+    
+    jogoPausadoRef.current = true;
+    setPausado(true);
+    
+    // Para a geração de novas contas
+    if (spawnTimer.current) clearTimeout(spawnTimer.current);
+    
+    // Congela todas as contas que estão caindo no pixel exato
+    operacoesListRef.current.forEach(op => {
+      op.y.stopAnimation();
+    });
+  }, []);
+
+  const retomarJogo = () => {
+    jogoPausadoRef.current = false;
+    setPausado(false);
+    
+    // Volta a gerar contas
+    iniciarLoopSpawner();
+    
+    // Faz as contas voltarem a cair do lugar onde pararam com o tempo proporcional
+    operacoesListRef.current.forEach(op => {
+      const currentY = (op.y as any)._value || 0;
+      const distTotal = GAME_AREA_HEIGHT + 50;
+      const distRestante = distTotal - currentY;
+      
+      // Ajusta o tempo de queda restante
+      const duracaoRestante = Math.max(100, (distRestante / distTotal) * op.speed);
+      
+      Animated.timing(op.y, { 
+        toValue: distTotal, 
+        duration: duracaoRestante, 
+        useNativeDriver: true 
+      }).start(({ finished }) => { 
+        // Só processa o erro de deixar a conta cair se não foi interrompido por outra pausa
+        if (finished && !jogoPausadoRef.current) processarErro(op.id); 
+      });
+    });
+  };
+
+  const sairDoJogo = () => {
+    jogoAtivoRef.current = false;
+    jogoPausadoRef.current = false;
+    setPausado(false);
+    if (spawnTimer.current) clearTimeout(spawnTimer.current);
+    setOperacoes([]);
+    setTela('menu');
+  };
+
+  // PAUSA AUTOMÁTICA SE O ALUNO SAIR DA ABA OU MINIMIZAR
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        if (jogoAtivoRef.current && !jogoPausadoRef.current) {
+          pausarJogo();
+        }
+      };
+    }, [pausarJogo])
+  );
+  // ==========================================
+
   const iniciarJogo = async (modoEscolhido: 'single' | 'bot' | 'missao', missaoDados?: any) => {
     if (modoEscolhido === 'missao' && missaoDados) {
       try {
@@ -146,9 +214,9 @@ export default function Jogo() {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     if (botTimer.current) clearInterval(botTimer.current);
     
-    setOperacoes([]); setPontos(0); setResposta(''); setPowerUpDisponivel(false);
+    setOperacoes([]); setPontos(0); setResposta(''); setPowerUpDisponivel(false); setPausado(false);
     operacoesAtuaisRef.current = []; 
-    ultimasRespostasRef.current = []; // Limpa histórico ao iniciar
+    ultimasRespostasRef.current = []; 
     desempenhoOcultoRef.current = 0; questoesEmJogoRef.current = 0;
     jogoPausadoRef.current = false; jogoAtivoRef.current = true; rodadaRef.current = 1;
     modoRef.current = modoEscolhido;
@@ -228,7 +296,6 @@ export default function Jogo() {
       
       const chave = `${n1}${op}${n2}`;
       
-      // RESTAURADO: Bloqueia se a RESPOSTA for igual a uma das últimas 4, ou se a conta exata já está caindo na tela
       if (ultimasRespostasRef.current.includes(res) || operacoesAtuaisRef.current.some(o => o.chave === chave)) continue;
       
       ultimasRespostasRef.current.push(res);
@@ -237,16 +304,11 @@ export default function Jogo() {
       return { texto: txt, resposta: res, chave, speed: Math.max(3000, 8000 - (rodadaRef.current * 300)) };
     }
     
-    // SISTEMA DE AUTO-AVANÇO (O NOVO CORAÇÃO DO JOGO)
-    // Se esgotou 50 tentativas e não encontrou uma resposta "inédita", as combinações dessa rodada acabaram.
-    // Avançamos de rodada para abrir novos números e chamamos o gerador novamente!
     rodadaRef.current += 1;
     desempenhoOcultoRef.current += 1;
-    
-    // Trava de segurança extra caso o limite exploda
     if (rodadaRef.current > 100) ultimasRespostasRef.current = [];
     
-    return gerarDadosArcade(); // Tenta de novo agora com números maiores
+    return gerarDadosArcade(); 
   };
 
   const criarObjetoAnimado = (texto: string, resposta: number, chave: string, velocidade: number) => {
@@ -258,9 +320,9 @@ export default function Jogo() {
   };
 
   const animarQueda = (op: any) => {
-    if (!jogoAtivoRef.current) return;
+    if (!jogoAtivoRef.current || jogoPausadoRef.current) return;
     op.y.addListener(({ value }: any) => { const ref = operacoesAtuaisRef.current.find((o:any) => o.chave === op.id); if (ref) ref.y = value; });
-    Animated.timing(op.y, { toValue: GAME_AREA_HEIGHT + 50, duration: op.speed, useNativeDriver: true }).start(({ finished }) => { if (finished) processarErro(op.id); });
+    Animated.timing(op.y, { toValue: GAME_AREA_HEIGHT + 50, duration: op.speed, useNativeDriver: true }).start(({ finished }) => { if (finished && !jogoPausadoRef.current) processarErro(op.id); });
   };
 
   const processarErro = (opId: string) => {
@@ -270,7 +332,14 @@ export default function Jogo() {
     operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== opId);
   };
 
-  const gameOver = () => { jogoAtivoRef.current = false; if (spawnTimer.current) clearTimeout(spawnTimer.current); setOperacoes([]); setTela('resultado'); };
+  const gameOver = () => { 
+    jogoAtivoRef.current = false; 
+    jogoPausadoRef.current = false;
+    setPausado(false);
+    if (spawnTimer.current) clearTimeout(spawnTimer.current); 
+    setOperacoes([]); 
+    setTela('resultado'); 
+  };
 
   const verificarResposta = () => {
     if (jogoPausadoRef.current || !jogoAtivoRef.current || isNaN(parseInt(resposta))) return;
@@ -300,7 +369,7 @@ export default function Jogo() {
   };
 
   const ativarPowerUp = () => {
-    if (!powerUpDisponivel) return;
+    if (!powerUpDisponivel || jogoPausadoRef.current) return;
     const visiveis = operacoes.filter(o => (o.y as any)._value < GAME_AREA_HEIGHT);
     visiveis.forEach(o => o.y.stopAnimation());
     setPontos(p => p + (visiveis.length * 10)); questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - visiveis.length);
@@ -382,9 +451,29 @@ export default function Jogo() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      
+      {/* OVERLAY DE PAUSA */}
+      {pausado && (
+        <View style={styles.pauseOverlay}>
+          <Text style={styles.pauseTitle}>JOGO PAUSADO</Text>
+          <TouchableOpacity style={styles.btnContinuar} onPress={retomarJogo}>
+            <Ionicons name="play" size={24} color="#000" />
+            <Text style={styles.btnContinuarText}>CONTINUAR</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btnSair} onPress={sairDoJogo}>
+            <Ionicons name="exit" size={24} color="#fff" />
+            <Text style={styles.btnSairText}>SAIR PARA O MENU</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.gameHeader}>
         <View style={styles.headerStatsGroup}><Ionicons name="star" size={18} color="#FFD700" /><Text style={styles.statTextScore}>{pontos}</Text></View>
-        <TouchableOpacity onPress={() => { gameOver(); }} style={styles.btnPausaIcone}><Ionicons name="close" size={26} color="#fff" /></TouchableOpacity>
+        
+        {/* NOVO BOTÃO DE PAUSAR */}
+        <TouchableOpacity onPress={pausarJogo} style={styles.btnPausaIcone}>
+          <Ionicons name="pause" size={26} color="#fff" />
+        </TouchableOpacity>
       </View>
       <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />)}</View>
       
@@ -396,7 +485,6 @@ export default function Jogo() {
       <View style={styles.bottomPanel}>
         <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
         
-        {/* TECLADO REDIMENSIONADO */}
         <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
         <View style={styles.tecladoContainer}>
           {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => <View key={i} style={styles.tecladoRow}>{row.map(num => <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>{num}</Text></BotaoTeclado>)}</View>)}
@@ -433,30 +521,23 @@ const styles = StyleSheet.create({
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   btnPausaIcone: { padding: 4, marginLeft: 10 },
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingBottom: 10, height: 20 },
-  
-  // ÁREA DE JOGO FLEXÍVEL
   gameArea: { position: 'relative', width: '100%', flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
   operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   laser: { position: 'absolute', width: 4, height: height, zIndex: 1 },
-  
-  // TECLADO MAIS COMPACTO
   bottomPanel: { paddingBottom: 15, width: '100%', alignItems: 'center' },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
-  
   displayContainer: { backgroundColor: '#1a1a2e', width: 280, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  
   tecladoContainer: { width: 280, gap: 5 },
   tecladoRow: { flexDirection: 'row', gap: 5, justifyContent: 'space-between' },
   tecla: { backgroundColor: '#1a1a2e', flex: 1, height: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   teclaText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
   teclaApagar: { backgroundColor: '#E74C3C' },
   teclaEnviar: { backgroundColor: '#32CD32' },
-  
   resultadoContainer: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center' },
   resultadoTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginBottom: 15 },
   resultadoCard: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', marginBottom: 10, width: '100%' },
@@ -464,4 +545,12 @@ const styles = StyleSheet.create({
   resultadoLabel: { fontSize: 14, color: '#888', marginTop: 4 },
   jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 16, borderRadius: 12, alignItems: 'center', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 10 },
   jogarNovamenteText: { color: '#000', fontSize: 18, fontWeight: '900' },
+
+  // NOVOS ESTILOS DA TELA DE PAUSA
+  pauseOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  pauseTitle: { color: '#FFD700', fontSize: 32, fontWeight: '900', marginBottom: 30, letterSpacing: 2 },
+  btnContinuar: { backgroundColor: '#32CD32', flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, width: '80%', justifyContent: 'center', gap: 10, marginBottom: 15 },
+  btnContinuarText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
+  btnSair: { backgroundColor: '#E74C3C', flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, width: '80%', justifyContent: 'center', gap: 10 },
+  btnSairText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
 });
