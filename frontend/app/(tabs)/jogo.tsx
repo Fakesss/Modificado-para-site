@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
-import { useFocusEffect } from 'expo-router'; 
+import { useFocusEffect } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.62; 
@@ -85,6 +85,12 @@ export default function Jogo() {
   
   const [pausado, setPausado] = useState(false);
   
+  // ESTADOS DA TRANSIÇÃO DE FASE
+  const [faseAtualVisor, setFaseAtualVisor] = useState(1);
+  const [mostrarFase, setMostrarFase] = useState(false);
+  const fadeFaseAnim = useRef(new Animated.Value(0)).current;
+  const transicaoAtivaRef = useRef(false);
+
   const modoRef = useRef<'single' | 'bot' | 'missao'>('single'); 
   const modoMatematicaRef = useRef('misto'); 
   const missaoAtualRef = useRef<any>(null);
@@ -135,6 +141,35 @@ export default function Jogo() {
   };
 
   // ==========================================
+  // SISTEMA DE AVANÇO DE FASE VISUAL
+  // ==========================================
+  const avancarFase = (novaFase: number) => {
+    if (transicaoAtivaRef.current || !jogoAtivoRef.current) return;
+    transicaoAtivaRef.current = true;
+    
+    // Atualiza o número no visor e mostra a tela
+    setFaseAtualVisor(novaFase);
+    setMostrarFase(true);
+    
+    // Pausa a geração de novas contas
+    if (spawnTimer.current) clearTimeout(spawnTimer.current);
+
+    fadeFaseAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(fadeFaseAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.delay(1200), // Mantém a mensagem visível por ~1.2s
+      Animated.timing(fadeFaseAnim, { toValue: 0, duration: 300, useNativeDriver: true })
+    ]).start(() => {
+      setMostrarFase(false);
+      transicaoAtivaRef.current = false;
+      // Assim que a animação some, volta a jogar contas
+      if (jogoAtivoRef.current && !jogoPausadoRef.current) {
+        iniciarLoopSpawner();
+      }
+    });
+  };
+
+  // ==========================================
   // SISTEMA DE PAUSA E RETOMADA
   // ==========================================
   const pausarJogo = useCallback(() => {
@@ -154,7 +189,10 @@ export default function Jogo() {
     jogoPausadoRef.current = false;
     setPausado(false);
     
-    iniciarLoopSpawner();
+    // Só retoma o spawner se não estiver no meio de uma transição de fase
+    if (!transicaoAtivaRef.current) {
+      iniciarLoopSpawner();
+    }
     
     operacoesListRef.current.forEach(op => {
       const currentY = (op.y as any)._value || 0;
@@ -176,7 +214,9 @@ export default function Jogo() {
   const sairDoJogo = () => {
     jogoAtivoRef.current = false;
     jogoPausadoRef.current = false;
+    transicaoAtivaRef.current = false;
     setPausado(false);
+    setMostrarFase(false);
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     setOperacoes([]);
     setTela('menu');
@@ -206,11 +246,15 @@ export default function Jogo() {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     if (botTimer.current) clearInterval(botTimer.current);
     
-    setOperacoes([]); setPontos(0); setResposta(''); setPowerUpDisponivel(false); setPausado(false);
+    setOperacoes([]); setPontos(0); setResposta(''); setPowerUpDisponivel(false); 
+    setPausado(false); setMostrarFase(false); setFaseAtualVisor(1);
+    
     operacoesAtuaisRef.current = []; 
     ultimasRespostasRef.current = []; 
     desempenhoOcultoRef.current = 0; questoesEmJogoRef.current = 0;
-    jogoPausadoRef.current = false; jogoAtivoRef.current = true; rodadaRef.current = 1;
+    jogoPausadoRef.current = false; jogoAtivoRef.current = true; 
+    rodadaRef.current = 1; transicaoAtivaRef.current = false;
+    
     modoRef.current = modoEscolhido;
 
     if (modoEscolhido === 'missao' && missaoDados) {
@@ -228,16 +272,20 @@ export default function Jogo() {
   const iniciarLoopSpawner = () => {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     const loop = () => {
-      if (!jogoPausadoRef.current && jogoAtivoRef.current) {
-        if (modoRef.current === 'missao' && filaQuestoesRef.current.length === 0) {} 
-        else {
-          const maxOps = Math.min(8, 3 + Math.floor(pontos / 500)); 
-          if (operacoesListRef.current.length < maxOps) spawnarQuestao();
-        }
+      if (!jogoAtivoRef.current || jogoPausadoRef.current || transicaoAtivaRef.current) return;
+      
+      if (modoRef.current === 'missao' && filaQuestoesRef.current.length === 0) {} 
+      else {
+        const maxOps = Math.min(8, 3 + Math.floor(pontos / 500)); 
+        if (operacoesListRef.current.length < maxOps) spawnarQuestao();
       }
-      spawnTimer.current = setTimeout(loop, Math.max(1200, 3000 - (pontos * 2)));
+      
+      if (!transicaoAtivaRef.current) {
+        spawnTimer.current = setTimeout(loop, Math.max(1200, 3000 - (pontos * 2)));
+      }
     };
-    loop();
+    
+    if (!transicaoAtivaRef.current) loop();
   };
 
   const spawnarQuestao = () => {
@@ -250,7 +298,7 @@ export default function Jogo() {
       novaOp = criarObjetoAnimado(questao.texto, questao.resposta, questao.id, 10000);
     } else {
       const dados = gerarDadosArcade();
-      if (!dados) return;
+      if (!dados) return; // Se for null (transição ocorrendo), não spawna agora.
       questoesEmJogoRef.current += 1;
       novaOp = criarObjetoAnimado(dados.texto, dados.resposta, dados.chave, dados.speed);
     }
@@ -271,14 +319,8 @@ export default function Jogo() {
       opsPermitidas = [m==='soma'?'+': m==='subtracao'?'-': m==='multiplicacao'?'×': m==='divisao'?'÷': m==='potenciacao'?'^':'√'];
     }
 
-    // =======================================================
-    // PROGRESSÃO DE DIFICULDADE SUAVE
-    // =======================================================
-    // Começa em 8 (contas fáceis) e sobe lentamente (+2 por rodada)
     let numMax = 8 + (rodadaRef.current * 2) + Math.floor(desempenhoOcultoRef.current / 4);
-    
-    // Começa em 3 (focando em tabuadas pequenas no início) e sobe 1 a cada DUAS rodadas
-    let multMax = 3 + Math.floor(rodadaRef.current / 2); 
+    let multMax = 5 + Math.floor(rodadaRef.current / 1.5); 
 
     for (let t = 0; t < 50; t++) {
       const op = opsPermitidas[r(opsPermitidas.length)];
@@ -287,10 +329,20 @@ export default function Jogo() {
         case '+': n1=r(numMax)+1; n2=r(numMax)+1; res=n1+n2; txt=`${n1} + ${n2}`; break;
         case '-': n1=r(numMax*1.5)+5; n2=r(n1)+1; res=n1-n2; txt=`${n1} - ${n2}`; break;
         case '×': n1=r(multMax)+2; n2=r(multMax)+2; res=n1*n2; txt=`${n1} × ${n2}`; break;
-        // Ajuste sútil na Divisão: garante que existam respostas suficientes nas rodadas iniciais
-        case '÷': n2=r(multMax)+2; res=r(multMax + 2)+1; n1=n2*res; txt=`${n1} ÷ ${n2}`; break;
-        case '^': let bases=[2,3,4,5]; n1=bases[r(bases.length)]; n2=r((n1===2?5:n1===3?3:2)-1)+2; res=Math.pow(n1,n2); const s:any={2:'²',3:'³',4:'⁴',5:'⁵'}; txt=`${n1}${s[n2]||'^'+n2}`; break;
-        case '√': res=r(multMax+3)+2; n1=res*res; n2=''; txt=`√${n1}`; break;
+        case '÷': n2=r(multMax)+2; res=r(multMax + 4)+1; n1=n2*res; txt=`${n1} ÷ ${n2}`; break;
+        case '^': 
+          let maxBase = Math.min(5 + Math.floor(rodadaRef.current / 2), 20);
+          n1 = r(maxBase - 1) + 2; 
+          let maxExp = 2;
+          if (n1 === 2) maxExp = Math.min(3 + Math.floor(rodadaRef.current / 3), 7);
+          else if (n1 === 3) maxExp = Math.min(2 + Math.floor(rodadaRef.current / 4), 4);
+          else if (n1 <= 5) maxExp = Math.min(2 + Math.floor(rodadaRef.current / 10), 3);
+          n2 = r(maxExp - 1) + 2;
+          res = Math.pow(n1, n2);
+          const s:any = {2:'²',3:'³',4:'⁴',5:'⁵',6:'⁶',7:'⁷'};
+          txt = `${n1}${s[n2] || '^'+n2}`; 
+          break;
+        case '√': res=r(multMax+4)+2; n1=res*res; n2=''; txt=`√${n1}`; break;
       }
       
       const chave = `${n1}${op}${n2}`;
@@ -300,20 +352,18 @@ export default function Jogo() {
       ultimasRespostasRef.current.push(res);
       if(ultimasRespostasRef.current.length > 4) ultimasRespostasRef.current.shift();
       
-      // =======================================================
-      // VELOCIDADE DE QUEDA SUAVE
-      // =======================================================
-      // Inicia mais lento (10 segundos) e acelera devagar (-150ms por rodada)
       const speed = Math.max(3500, 10000 - (rodadaRef.current * 150));
       
       return { texto: txt, resposta: res, chave, speed };
     }
     
+    // Esgotou opções = Sobe de fase via transição visual!
     rodadaRef.current += 1;
     desempenhoOcultoRef.current += 1;
     if (rodadaRef.current > 100) ultimasRespostasRef.current = [];
     
-    return gerarDadosArcade(); 
+    avancarFase(rodadaRef.current);
+    return null; 
   };
 
   const criarObjetoAnimado = (texto: string, resposta: number, chave: string, velocidade: number) => {
@@ -340,6 +390,7 @@ export default function Jogo() {
   const gameOver = () => { 
     jogoAtivoRef.current = false; 
     jogoPausadoRef.current = false;
+    transicaoAtivaRef.current = false;
     setPausado(false);
     if (spawnTimer.current) clearTimeout(spawnTimer.current); 
     setOperacoes([]); 
@@ -353,7 +404,19 @@ export default function Jogo() {
     if (alvo) {
       alvo.y.stopAnimation();
       questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
-      setPontos(p => { const novo = p + 10; if (modoRef.current !== 'missao' && Math.floor(novo/50) > Math.floor(p/50)) { rodadaRef.current += 1; desempenhoOcultoRef.current += 1; } return novo; });
+      
+      setPontos(p => { 
+        const novo = p + 10; 
+        // Lógica de avanço por pontos (A cada 50 pts sobe de fase)
+        if (modoRef.current !== 'missao' && Math.floor(novo/50) > Math.floor(p/50)) { 
+          rodadaRef.current += 1; 
+          desempenhoOcultoRef.current += 1; 
+          // Dispara animação visual
+          avancarFase(rodadaRef.current);
+        } 
+        return novo; 
+      });
+
       if (alvo.especial && !powerUpDisponivel) setPowerUpDisponivel(true);
       dispararLaser(alvo, true);
       operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== alvo.id);
@@ -374,7 +437,7 @@ export default function Jogo() {
   };
 
   const ativarPowerUp = () => {
-    if (!powerUpDisponivel || jogoPausadoRef.current) return;
+    if (!powerUpDisponivel || jogoPausadoRef.current || transicaoAtivaRef.current) return;
     const visiveis = operacoes.filter(o => (o.y as any)._value < GAME_AREA_HEIGHT);
     visiveis.forEach(o => o.y.stopAnimation());
     setPontos(p => p + (visiveis.length * 10)); questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - visiveis.length);
@@ -457,6 +520,15 @@ export default function Jogo() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       
+      {/* TELA DE MENSAGEM DE NOVA FASE */}
+      {mostrarFase && (
+        <Animated.View style={[styles.transicaoOverlay, { opacity: fadeFaseAnim }]}>
+          <View style={styles.transicaoBox}>
+            <Text style={styles.transicaoText}>FASE {faseAtualVisor}</Text>
+          </View>
+        </Animated.View>
+      )}
+
       {/* OVERLAY DE PAUSA */}
       {pausado && (
         <View style={styles.pauseOverlay}>
@@ -473,13 +545,23 @@ export default function Jogo() {
       )}
 
       <View style={styles.gameHeader}>
-        <View style={styles.headerStatsGroup}><Ionicons name="star" size={18} color="#FFD700" /><Text style={styles.statTextScore}>{pontos}</Text></View>
+        <View style={styles.headerStatsGroup}>
+          <Ionicons name="star" size={18} color="#FFD700" />
+          <Text style={styles.statTextScore}>{pontos}</Text>
+          
+          {/* MOSTRADOR DE FASE FIXO */}
+          {modoRef.current !== 'missao' && (
+            <View style={styles.faseBadge}>
+              <Text style={styles.faseBadgeText}>Fase {faseAtualVisor}</Text>
+            </View>
+          )}
+        </View>
         
-        {/* NOVO BOTÃO DE PAUSAR */}
         <TouchableOpacity onPress={pausarJogo} style={styles.btnPausaIcone}>
           <Ionicons name="pause" size={26} color="#fff" />
         </TouchableOpacity>
       </View>
+
       <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />)}</View>
       
       <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
@@ -524,6 +606,11 @@ const styles = StyleSheet.create({
   gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
   headerStatsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  
+  // ESTILOS DA BADGE DE FASE FIXA
+  faseBadge: { backgroundColor: '#4169E1', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginLeft: 10 },
+  faseBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
+
   btnPausaIcone: { padding: 4, marginLeft: 10 },
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingBottom: 10, height: 20 },
   gameArea: { position: 'relative', width: '100%', flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
@@ -558,4 +645,9 @@ const styles = StyleSheet.create({
   btnContinuarText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
   btnSair: { backgroundColor: '#E74C3C', flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, width: '80%', justifyContent: 'center', gap: 10 },
   btnSairText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+
+  // ESTILOS DA TRANSIÇÃO DE FASE VISUAL
+  transicaoOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'rgba(0,0,0,0.4)' },
+  transicaoBox: { backgroundColor: 'rgba(255, 215, 0, 0.95)', paddingVertical: 20, paddingHorizontal: 50, borderRadius: 20, elevation: 10 },
+  transicaoText: { color: '#000', fontSize: 36, fontWeight: '900', letterSpacing: 3, textTransform: 'uppercase' }
 });
