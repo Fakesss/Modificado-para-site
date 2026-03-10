@@ -31,7 +31,11 @@ export const register = async (nome: string, email: string, senha: string, turma
   } catch (error: any) { throw new Error('Erro ao criar conta.'); }
 };
 export const getMe = async () => { try { return (await api.get('/auth/me')).data; } catch { return null; } };
+
+// >>> ROTAS DE USUÁRIOS ADICIONADAS AQUI <<<
 export const getUsuarios = async () => { try { return (await api.get('/usuarios')).data; } catch { return []; } };
+export const updateUsuario = async (id: string, d: any) => (await api.put(`/usuarios/${id}`, d)).data;
+export const deleteUsuario = async (id: string) => (await api.delete(`/usuarios/${id}`)).data;
 
 // TURMAS E EQUIPES
 export const getTurmas = async () => { try { return (await api.get('/turmas')).data; } catch { return []; } };
@@ -63,7 +67,7 @@ export const submitExercicio = async (id: string, resp: any) => (await api.post(
 export const getSubmissao = async (id: string) => (await api.get(`/submissoes/${id}`)).data;
 export const retryExercicio = async (id: string) => (await api.delete(`/submissoes/${id}/retry`)).data;
 
-// JOGOS PERSONALIZADOS E MISSÕES (ATUALIZADO)
+// JOGOS PERSONALIZADOS E MISSÕES
 export const getJogosPersonalizados = async () => { try { return (await api.get('/missoes')).data; } catch { return []; } };
 export const criarJogo = async (d: any) => (await api.post('/missoes', d)).data;
 export const deletarJogo = async (id: string) => (await api.delete(`/missoes/${id}`)).data;
