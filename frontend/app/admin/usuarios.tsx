@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   TextInput,
+  Platform, // <<< ADICIONADO PARA VERIFICAR SE É WEB
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -67,7 +68,7 @@ export default function AdminUsuarios() {
     setEditPerfil(user.perfil);
     setEditTurma(user.turmaId || '');
     setEditEquipe(user.equipeId || '');
-    setEditSenha(''); // A senha sempre inicia em branco (só preenche se for trocar)
+    setEditSenha(''); 
     setModalVisible(true);
   };
 
@@ -75,7 +76,6 @@ export default function AdminUsuarios() {
     if (!selectedUser) return;
 
     try {
-      // Monta os dados básicos
       const data: any = {
         nome: editNome,
         perfil: editPerfil,
@@ -83,7 +83,6 @@ export default function AdminUsuarios() {
         equipeId: editEquipe || null,
       };
 
-      // Se o admin digitou algo no campo de senha, ele quer alterar!
       if (editSenha.trim() !== '') {
         data.senha = editSenha;
       }
@@ -97,26 +96,41 @@ export default function AdminUsuarios() {
     }
   };
 
+  // <<< CORREÇÃO DO BOTÃO DE EXCLUIR PARA FUNCIONAR NA WEB >>>
   const handleDelete = async (userId: string) => {
-    Alert.alert(
-      'Confirmar exclusão',
-      'Deseja realmente desativar este usuário? (Ele sairá dos rankings)',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Desativar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.deleteUsuario(userId);
-              loadData();
-            } catch (error) {
-              Alert.alert('Erro', 'Erro ao desativar usuário');
-            }
+    if (Platform.OS === 'web') {
+      const confirmou = window.confirm('Deseja realmente desativar este usuário? (Ele sairá dos rankings)');
+      if (confirmou) {
+        try {
+          await api.deleteUsuario(userId);
+          Alert.alert('Sucesso', 'Usuário desativado com sucesso!');
+          loadData();
+        } catch (error) {
+          Alert.alert('Erro', 'Erro ao desativar usuário');
+        }
+      }
+    } else {
+      Alert.alert(
+        'Confirmar exclusão',
+        'Deseja realmente desativar este usuário? (Ele sairá dos rankings)',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Desativar',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await api.deleteUsuario(userId);
+                Alert.alert('Sucesso', 'Usuário desativado com sucesso!');
+                loadData();
+              } catch (error) {
+                Alert.alert('Erro', 'Erro ao desativar usuário');
+              }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const getPerfilColor = (perfil: string) => {
