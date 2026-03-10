@@ -1,4 +1,3 @@
-// src/services/multiplayerApi.ts
 import api from './api';
 
 export const enviarPingOnline = async (nome: string, turmaId?: string | null, equipeId?: string | null) => {
