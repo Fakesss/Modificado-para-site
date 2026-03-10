@@ -338,8 +338,14 @@ async def create_equipe(equipe_data: dict, current_user: dict = Depends(require_
 
 @api_router.get("/usuarios")
 async def get_usuarios(current_user: dict = Depends(require_admin)):
-    usuarios = await db.usuarios.find({"ativo": True}).to_list(1000)
-    return [{k: v for k, v in u.items() if k not in ['senha', '_id']} for u in usuarios]
+    # 🚨 Puxa todos sem filtro rígido de banco, e limpa no Python
+    usuarios_brutos = await db.usuarios.find({}).to_list(2000)
+    usuarios_ativos = []
+    for u in usuarios_brutos:
+        # Se o campo não existir, ele assume True
+        if u.get("ativo", True):
+            usuarios_ativos.append({k: v for k, v in u.items() if k not in ['senha', '_id']})
+    return usuarios_ativos
 
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
@@ -464,7 +470,6 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     if current_user.get("equipeId"):
         await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": pontos}})
     
-    # SALVA OS ERROS BNCC
     for d in detalhes:
         if not d["acertou"]:
             for bncc in d.get("habilidadesBNCC", []):
@@ -552,50 +557,50 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
     raise HTTPException(400, "Tipo inválido")
 
 # =====================================================================
-# ROTAS DE RANKING E PROGRESSO 
+# ROTAS DE RANKING À PROVA DE FALHAS DE DADOS (100% SEGURO)
 # =====================================================================
 
 @api_router.get("/ranking/geral")
 async def get_ranking_geral():
-    # 1. Puxa todas as equipes globais
     equipes = await db.equipes.find({}).to_list(100)
     
-    # 2. Prepara o dicionário para somar os pontos dinamicamente
-    pontos_por_equipe = {str(e.get("id", "")).strip(): 0 for e in equipes}
-    
-    # 3. Puxa TODOS os alunos ativos do banco (Fonte da verdade)
-    alunos = await db.usuarios.find({
-        "perfil": "ALUNO",
-        "ativo": True
-    }).to_list(2000)
-    
-    # 4. Soma os pontos de todos os alunos agrupando pelas equipes
-    for aluno in alunos:
-        eq_id = str(aluno.get("equipeId", "")).strip()
-        pts = aluno.get("pontosTotais", 0)
+    # Prepara o dicionário forçando as chaves a ficarem em minúsculo e sem espaços (Evita falhas de tipagem)
+    pontos_por_equipe = {}
+    for e in equipes:
+        e_id_clean = str(e.get("id", "")).strip().lower()
+        pontos_por_equipe[e_id_clean] = 0
         
-        try:
-            pts = int(float(pts))
-        except (ValueError, TypeError):
-            pts = 0
+    # Puxa TODOS os usuários sem restrições de busca para evitar que o banco ignore dados antigos
+    alunos = await db.usuarios.find({}).to_list(5000)
+    
+    for aluno in alunos:
+        perfil = str(aluno.get("perfil", "")).strip().upper()
+        ativo = aluno.get("ativo", True) # Se faltar no banco, assume True
+        
+        if perfil == "ALUNO" and ativo:
+            eq_id_clean = str(aluno.get("equipeId", "")).strip().lower()
+            pts = aluno.get("pontosTotais", 0)
             
-        if eq_id in pontos_por_equipe:
-            pontos_por_equipe[eq_id] += pts
+            # Força conversão rígida para número
+            try:
+                pts = int(float(pts))
+            except (ValueError, TypeError):
+                pts = 0
+                
+            if eq_id_clean in pontos_por_equipe:
+                pontos_por_equipe[eq_id_clean] += pts
 
-    # 5. Formata os dados para o formato que o aplicativo exige
     equipes_ranking = []
     for e in equipes:
-        e_id = str(e.get("id", "")).strip()
+        e_id_clean = str(e.get("id", "")).strip().lower()
         equipes_ranking.append({
-            "id": e_id,
+            "id": str(e.get("id", "")),
             "nome": e.get("nome", "Sem Nome"),
             "cor": e.get("cor", "#333"),
-            "pontosTotais": pontos_por_equipe.get(e_id, 0)
+            "pontosTotais": pontos_por_equipe.get(e_id_clean, 0)
         })
         
-    # 6. Ordena do maior pro menor e define as posições 1º, 2º, 3º
     equipes_ranking.sort(key=lambda x: x["pontosTotais"], reverse=True)
-    
     for i, e in enumerate(equipes_ranking):
         e["posicao"] = i + 1
         
@@ -604,42 +609,45 @@ async def get_ranking_geral():
 @api_router.get("/ranking/turma/{turma_id}")
 async def get_ranking_turma(turma_id: str):
     equipes = await db.equipes.find({}).to_list(100)
-    pontos_por_equipe = {str(e.get("id", "")).strip(): 0 for e in equipes}
     
-    alunos = await db.usuarios.find({
-        "perfil": "ALUNO",
-        "ativo": True
-    }).to_list(2000)
-    
-    turma_alvo_limpa = str(turma_id).strip()
+    pontos_por_equipe = {}
+    for e in equipes:
+        e_id_clean = str(e.get("id", "")).strip().lower()
+        pontos_por_equipe[e_id_clean] = 0
+        
+    alunos = await db.usuarios.find({}).to_list(5000)
+    turma_alvo_limpa = str(turma_id).strip().lower()
     
     for aluno in alunos:
-        aluno_turma = str(aluno.get("turmaId", "")).strip()
+        perfil = str(aluno.get("perfil", "")).strip().upper()
+        ativo = aluno.get("ativo", True)
         
-        if aluno_turma == turma_alvo_limpa:
-            eq_id = str(aluno.get("equipeId", "")).strip()
-            pts = aluno.get("pontosTotais", 0)
+        if perfil == "ALUNO" and ativo:
+            aluno_turma = str(aluno.get("turmaId", "")).strip().lower()
             
-            try:
-                pts = int(float(pts))
-            except (ValueError, TypeError):
-                pts = 0
+            if aluno_turma == turma_alvo_limpa:
+                eq_id_clean = str(aluno.get("equipeId", "")).strip().lower()
+                pts = aluno.get("pontosTotais", 0)
                 
-            if eq_id in pontos_por_equipe:
-                pontos_por_equipe[eq_id] += pts
+                try:
+                    pts = int(float(pts))
+                except (ValueError, TypeError):
+                    pts = 0
+                    
+                if eq_id_clean in pontos_por_equipe:
+                    pontos_por_equipe[eq_id_clean] += pts
 
     equipes_ranking = []
     for e in equipes:
-        e_id = str(e.get("id", "")).strip()
+        e_id_clean = str(e.get("id", "")).strip().lower()
         equipes_ranking.append({
-            "id": e_id,
+            "id": str(e.get("id", "")),
             "nome": e.get("nome", "Sem Nome"),
             "cor": e.get("cor", "#333"),
-            "pontosTotais": pontos_por_equipe.get(e_id, 0)
+            "pontosTotais": pontos_por_equipe.get(e_id_clean, 0)
         })
         
     equipes_ranking.sort(key=lambda x: x["pontosTotais"], reverse=True)
-    
     for i, e in enumerate(equipes_ranking):
         e["posicao"] = i + 1
         
