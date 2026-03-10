@@ -93,7 +93,7 @@ class Conteudo(BaseModel):
     titulo: str
     descricao: Optional[str] = None
     urlVideo: Optional[str] = None
-    arquivo: Optional[str] = None
+    arquivo: Optional[str] = None  # >>> ADICIONADO AQUI PARA PERMITIR UPLOAD <<<
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
@@ -107,7 +107,7 @@ class ConteudoCreate(BaseModel):
     titulo: str
     descricao: Optional[str] = None
     urlVideo: Optional[str] = None
-    arquivo: Optional[str] = None  # >>> ADICIONADO AQUI PARA PERMITIR UPLOAD <<<
+    arquivo: Optional[str] = None  
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
@@ -467,7 +467,6 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     if not exercicio: raise HTTPException(status_code=404, detail="Exercício não encontrado")
     questoes = await db.questoes.find({"exercicioId": submissao_data.exercicioId}).to_list(100)
     
-    # 🚨 CORREÇÃO 1: Criado SEM acento para o Python não travar!
     questoes_map = {q["id"]: q for q in questoes}
     
     acertos, erros = 0, 0
@@ -491,7 +490,6 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     total = len(questoes)
     nota = (acertos / total * 10) if total > 0 else 0
     
-    # 🚨 CORREÇÃO 2: Pega os pontos configurados pelo professor
     pontos_por_questao = exercicio.get("pontosPorQuestao", 1.0)
     pontos = int(acertos * pontos_por_questao)
     
@@ -507,7 +505,6 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     )
     await db.submissoes.insert_one(submissao.dict())
     
-    # 🚨 CORREÇÃO 3: Soma os pontos do Aluno E DA EQUIPE DELE!
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
     if current_user.get("equipeId"):
         await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": pontos}})
@@ -601,7 +598,8 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
         return {"message": "Deletado"}
     raise HTTPException(400, "Tipo inválido")
 
-# ============== ROTAS DE RANKING E PROGRESSO FALTANTES ==============
+
+# ============== ROTAS DE RANKING E PROGRESSO ==============
 
 @api_router.get("/ranking/geral")
 async def get_ranking_geral():
@@ -619,17 +617,38 @@ async def get_ranking_geral():
 
 @api_router.get("/ranking/turma/{turma_id}")
 async def get_ranking_turma(turma_id: str):
-    equipes = await db.equipes.find({"turmaId": turma_id}).sort("pontosTotais", -1).to_list(100)
-    ranking = []
-    for i, e in enumerate(equipes):
-        ranking.append({
+    # 1. Pega todas as equipes globais
+    equipes = await db.equipes.find({}).to_list(100)
+    
+    # 2. Pega todos os alunos ativos apenas dessa turma
+    alunos_da_turma = await db.usuarios.find({"turmaId": turma_id, "ativo": True}).to_list(1000)
+    
+    # 3. Calcula a pontuação real agrupando por equipe baseada apenas nos alunos dessa turma
+    pontos_por_equipe = {e["id"]: 0 for e in equipes}
+    
+    for aluno in alunos_da_turma:
+        eq_id = aluno.get("equipeId")
+        if eq_id in pontos_por_equipe:
+            pontos_por_equipe[eq_id] += aluno.get("pontosTotais", 0)
+            
+    # 4. Formata os dados da equipe com a nova pontuação calculada
+    equipes_ranking = []
+    for e in equipes:
+        equipes_ranking.append({
             "id": e["id"],
-            "posicao": i + 1,
             "nome": e["nome"],
             "cor": e.get("cor", "#333"),
-            "pontosTotais": e.get("pontosTotais", 0)
+            "pontosTotais": pontos_por_equipe.get(e["id"], 0)
         })
-    return ranking
+        
+    # 5. Ordena do maior para o menor (descendente)
+    equipes_ranking.sort(key=lambda x: x["pontosTotais"], reverse=True)
+    
+    # 6. Atribui as posições
+    for i, e in enumerate(equipes_ranking):
+        e["posicao"] = i + 1
+        
+    return equipes_ranking
 
 @api_router.get("/usuarios/progresso")
 async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
@@ -644,8 +663,8 @@ async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
         "submissoes": [{k: v for k, v in s.items() if k != '_id'} for s in submissoes]
     }
 
-# ============== ROTAS DE MISSÕES / JOGOS PERSONALIZADOS ==============
 
+# ============== MISSOES / JOGOS =========================
 class MissaoQuestao(BaseModel):
     id: str
     texto: str
@@ -653,13 +672,13 @@ class MissaoQuestao(BaseModel):
 
 class MissaoCreate(BaseModel):
     titulo: str
-    alvoTipo: str  # GERAL, TURMA, INDIVIDUAL
+    alvoTipo: str  
     alvoNome: str
     alvoId: str
     questoes: List[MissaoQuestao] = []
     recompensa: int = 0
     vidas: int = 3
-    limiteTentativas: int = 1  # 0 para ilimitado, 1 padrão
+    limiteTentativas: int = 1  
     criadoEm: Optional[str] = None
     expiraEm: Optional[str] = None
 
@@ -683,7 +702,7 @@ async def create_missao(missao_data: MissaoCreate, current_user: dict = Depends(
     missao.criadaPor = current_user["id"]
     agora = datetime.utcnow()
     missao.criadoEm = agora.isoformat()
-    missao.expiraEm = (agora + timedelta(hours=24)).isoformat() # 24 horas de validade
+    missao.expiraEm = (agora + timedelta(hours=24)).isoformat() 
     
     await db.missoes.insert_one(missao.dict())
     return missao.dict()
@@ -702,13 +721,14 @@ async def get_missoes_disponiveis(current_user: dict = Depends(get_current_user)
             {
                 "$or": [
                     {"expiraEm": {"$gt": agora_iso}},
-                    {"expiraEm": {"$exists": False}} # Para não quebrar as antigas
+                    {"expiraEm": {"$exists": False}}
                 ]
             },
             {
                 "$or": [
                     {"alvoTipo": "GERAL"},
                     {"alvoTipo": "TURMA", "alvoId": current_user.get("turmaId")},
+                    {"alvoTipo": "EQUIPE", "alvoId": current_user.get("equipeId")},
                     {"alvoTipo": "INDIVIDUAL", "alvoId": current_user["id"]}
                 ]
             }
@@ -717,7 +737,6 @@ async def get_missoes_disponiveis(current_user: dict = Depends(get_current_user)
     missoes = await db.missoes.find(query).to_list(100)
     resultados = []
     
-    # Conta quantas vezes o aluno já tentou cada missão
     for m in missoes:
         tentativas = await db.missoes_tentativas.count_documents({"usuarioId": current_user["id"], "missaoId": m["id"]})
         m_dict = {k: v for k, v in m.items() if k != '_id'}
@@ -734,7 +753,6 @@ async def registrar_tentativa(missao_id: str, current_user: dict = Depends(get_c
     tentativas = await db.missoes_tentativas.count_documents({"usuarioId": current_user["id"], "missaoId": missao_id})
     limite = missao.get("limiteTentativas", 1)
     
-    # Se limite for 0 é ilimitado
     if limite > 0 and tentativas >= limite:
         raise HTTPException(status_code=400, detail="Limite de tentativas alcançado")
         
@@ -758,12 +776,10 @@ async def reenviar_missao(missao_id: str, dados: ReenviarData, current_user: dic
     old = await db.missoes.find_one({"id": missao_id})
     if not old: raise HTTPException(status_code=404, detail="Missão não encontrada")
     
-    # Filtra os campos velhos para não dar conflito
     new_data = {k: v for k, v in old.items() if k not in ['_id', 'id', 'criadoEm', 'expiraEm', 'alvoTipo', 'alvoNome', 'alvoId', 'tentativasFeitas', 'criadaPor']}
     
     agora = datetime.utcnow()
     
-    # Cria a nova missão injetando os dados novos DIRETAMENTE para não dar erro de validação
     new_missao = Missao(
         **new_data,
         alvoTipo=dados.alvoTipo,
@@ -776,5 +792,6 @@ async def reenviar_missao(missao_id: str, dados: ReenviarData, current_user: dic
     
     await db.missoes.insert_one(new_missao.dict())
     return new_missao.dict()
+
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
