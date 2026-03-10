@@ -14,7 +14,7 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// AUTENTICAÇÃO
+// AUTENTICAÇÃO E USUÁRIOS
 export const login = async (email: string, senha: string) => {
   try {
     const response = await api.post('/auth/login', { email, senha });
@@ -74,49 +74,6 @@ export const getMissoesDisponiveis = async () => { try { return (await api.get('
 export const concluirMissao = async (id: string) => (await api.post(`/missoes/${id}/concluir`)).data;
 export const reenviarJogo = async (id: string, d: any) => (await api.post(`/missoes/${id}/reenviar`, d)).data;
 export const registrarTentativaMissao = async (id: string) => (await api.post(`/missoes/${id}/tentativa`)).data;
-
-// =========================================================================================
-// OFFLINE SYNC (JOGO ARCADE)
-// =========================================================================================
-
-// Rota oficial para enviar os pontos online
-export const syncArcadePontos = async (pontos: number) => (await api.post('/usuarios/arcade/pontos', { pontos })).data;
-
-// Fila Offline (Quando o celular perde o sinal)
-const CACHE_PONTOS_KEY = '@pontos_arcade_offline';
-
-export const salvarPontosOffline = async (pontos: number) => {
-  try {
-    const salvos = await AsyncStorage.getItem(CACHE_PONTOS_KEY);
-    const total = (salvos ? parseInt(salvos) : 0) + pontos;
-    await AsyncStorage.setItem(CACHE_PONTOS_KEY, total.toString());
-    return total;
-  } catch (e) {
-    console.error('Erro ao salvar pontos offline na memória do celular', e);
-  }
-};
-
-export const sincronizarPontosOffline = async () => {
-  try {
-    const salvos = await AsyncStorage.getItem(CACHE_PONTOS_KEY);
-    if (salvos) {
-      const pontos = parseInt(salvos);
-      if (pontos > 0) {
-        // Se a internet estiver de volta, a requisição passa
-        await syncArcadePontos(pontos);
-        // Zera a fila do celular
-        await AsyncStorage.removeItem(CACHE_PONTOS_KEY);
-        console.log(`✅ ${pontos} pontos offline foram sincronizados com a nuvem!`);
-        return pontos; // Retorna quantos pontos foram sincronizados para mostrar o Alerta no app
-      }
-    }
-  } catch (e) {
-    console.log('📡 Sem internet para sincronizar agora. O cache foi mantido.');
-  }
-  return 0;
-};
-// =========================================================================================
-
 
 // OUTROS E RANKING
 export const getRelatorioGeral = async () => { try { return (await api.get('/relatorios/geral')).data; } catch { return {}; } };
