@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { AppState } from 'react-native';
+import { Platform } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { enviarPingOnline } from '../services/multiplayerApi';
 
@@ -9,29 +9,56 @@ export default function OnlineHeartbeat() {
   useEffect(() => {
     if (!user) return;
 
-    const baterCoracao = () => {
-      if (AppState.currentState === 'active') {
-        enviarPingOnline(user.nome, user.turmaId, user.equipeId);
-      }
+    let isActive = true;
+    let timeoutId: NodeJS.Timeout;
+
+    const ping = () => {
+      if (isActive) enviarPingOnline(user.nome, user.turmaId, user.equipeId);
     };
 
-    // Dispara ao entrar no app
-    baterCoracao();
-
-    // Loop contínuo (o Escudo nos protege das requisições engavetadas)
-    const interval = setInterval(baterCoracao, 25000);
-
-    // Quando o aluno desbloqueia a tela, avisa que voltou!
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      if (nextAppState === 'active') {
-        // Um pequeno delay para dar tempo do Wi-Fi/4G conectar
-        setTimeout(baterCoracao, 1500);
+    // Função que verifica se a tela está acesa E o app está visível na WebView
+    const isScreenVisible = () => {
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        return document.visibilityState === 'visible';
       }
-    });
+      return true; // Fallback se não estiver na web
+    };
+
+    const loopPing = () => {
+      if (!isActive) return;
+      
+      // SÓ MANDA MENSAGEM SE A TELA ESTIVER ACESA E O APP ABERTO
+      if (isScreenVisible()) {
+        ping();
+      }
+      
+      timeoutId = setTimeout(loopPing, 30000);
+    };
+
+    // Primeiro disparo
+    ping();
+    timeoutId = setTimeout(loopPing, 30000);
+
+    // ESCUTA O BLOQUEIO DE TELA DA WEBVIEW
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          // Desbloqueou a tela! Espera 2 segundinhos pro 4G voltar e bate o coração.
+          setTimeout(() => { if (isActive) ping(); }, 2000);
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      return () => {
+        isActive = false;
+        clearTimeout(timeoutId);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+    }
 
     return () => {
-      clearInterval(interval);
-      subscription.remove();
+      isActive = false;
+      clearTimeout(timeoutId);
     };
   }, [user]);
 
