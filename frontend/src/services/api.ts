@@ -8,48 +8,40 @@ const api = axios.create({
   timeout: 30000,
 });
 
-// 1. ANTES DA REQUISIÇÃO SAIR (Adiciona o Token)
 api.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// 2. 🛡️ O ESCUDO GLOBAL: DEPOIS QUE A REQUISIÇÃO VOLTA (Anti-Erro 500 e Quedas)
+// =========================================================================
+// 🛡️ O ESCUDO GLOBAL ANTI-ERRO 500 (ESPECIAL PARA WEBVIEW)
+// =========================================================================
 api.interceptors.response.use(
-  (response) => {
-    // Se deu tudo certo, passa direto!
-    return response;
-  },
+  (response) => response,
   async (error) => {
     const originalRequest = error.config;
-
-    // Se não tiver originalRequest, é um erro bizarro, repassa o erro
     if (!originalRequest) return Promise.reject(error);
 
-    // Se o erro for 500 (Servidor engasgou), 502/503 (Render dormindo) 
-    // OU se error.response for undefined (Celular sem internet naquele exato segundo)
-    const isServerErrorOrNetworkDrop = !error.response || error.response?.status >= 500;
+    // Se o erro for de servidor (500) ou queda de rede (Network Error)
+    const isNetworkOrServerError = !error.response || error.response?.status >= 500;
 
-    // Se for um desses erros E ainda não tentamos reenviar
-    if (isServerErrorOrNetworkDrop && !originalRequest._retry) {
-      originalRequest._retry = true; // Marca que estamos tentando de novo para não criar loop infinito
+    if (isNetworkOrServerError && !originalRequest._retry) {
+      originalRequest._retry = true; 
 
-      console.log('📡 Oscilação de rede ou servidor detectada. Aguardando para tentar novamente...');
+      console.log('📡 Detectada queda ao desbloquear a tela. Aguardando estabilização...');
 
-      // Espera 2.5 segundos (Dá tempo do Wi-Fi/4G do celular estabilizar após desbloquear a tela)
-      await new Promise((resolve) => setTimeout(resolve, 2500));
+      // Pausa a requisição por 3 segundos para a WebView recuperar o acesso ao Wi-Fi
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
-      console.log('🔄 Tentando requisição novamente de forma silenciosa...');
-      
-      // Refaz a mesma requisição sem o usuário perceber nada!
+      // Tenta de novo silenciosamente
       return api(originalRequest);
     }
 
-    // Se for erro de login (401, 404), apenas repassa o erro normalmente
     return Promise.reject(error);
   }
 );
+// =========================================================================
 
 // AUTENTICAÇÃO E USUÁRIOS
 export const login = async (email: string, senha: string) => {
