@@ -10,12 +10,13 @@ import {
   Alert,
   Modal,
   TextInput,
-  Platform, // <<< ADICIONADO PARA VERIFICAR SE É WEB
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
+import { buscarUsuariosOnline } from '../../src/services/multiplayerApi'; // <<< Adicionado
 import { Usuario, Turma, Equipe } from '../../src/types';
 
 export default function AdminUsuarios() {
@@ -23,6 +24,7 @@ export default function AdminUsuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [equipes, setEquipes] = useState<Equipe[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]); // <<< Estado de Online
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -37,18 +39,30 @@ export default function AdminUsuarios() {
 
   useEffect(() => {
     loadData();
+
+    // Atualiza a lista de quem está online a cada 10 segundos
+    const interval = setInterval(async () => {
+      try {
+        const onlineData = await buscarUsuariosOnline();
+        setOnlineUsers(onlineData || []);
+      } catch (e) {}
+    }, 10000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const loadData = async () => {
     try {
-      const [usuariosData, turmasData, equipesData] = await Promise.all([
+      const [usuariosData, turmasData, equipesData, onlineData] = await Promise.all([
         api.getUsuarios(),
         api.getTurmas(),
         api.getEquipes(),
+        buscarUsuariosOnline(),
       ]);
       setUsuarios(usuariosData);
       setTurmas(turmasData);
       setEquipes(equipesData);
+      setOnlineUsers(onlineData || []);
     } catch (error) {
       console.error('Error loading users:', error);
     } finally {
@@ -96,7 +110,6 @@ export default function AdminUsuarios() {
     }
   };
 
-  // <<< CORREÇÃO DO BOTÃO DE EXCLUIR PARA FUNCIONAR NA WEB >>>
   const handleDelete = async (userId: string) => {
     if (Platform.OS === 'web') {
       const confirmou = window.confirm('Deseja realmente desativar este usuário? (Ele sairá dos rankings)');
@@ -165,6 +178,15 @@ export default function AdminUsuarios() {
     );
   }
 
+  // Ordena a lista: Quem estiver ONLINE fica primeiro. Depois ordem alfabética.
+  const sortedUsuarios = [...usuarios].sort((a, b) => {
+    const aOnline = onlineUsers.some(ou => ou.id === a.id);
+    const bOnline = onlineUsers.some(ou => ou.id === b.id);
+    if (aOnline && !bOnline) return -1;
+    if (!aOnline && bOnline) return 1;
+    return (a.nome || '').localeCompare(b.nome || '');
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -182,22 +204,33 @@ export default function AdminUsuarios() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
         }
       >
-        {usuarios.map((user) => {
+        {sortedUsuarios.map((user) => {
           const equipe = equipes.find((e) => e.id === user.equipeId);
           const turma = turmas.find((t) => t.id === user.turmaId);
+          const isOnline = onlineUsers.some(ou => ou.id === user.id);
 
           return (
             <View key={user.id} style={styles.userCard}>
               <View style={styles.userInfo}>
                 <View style={styles.userHeader}>
-                  <Text style={styles.userName}>{user.nome}</Text>
+                  <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+                    <View style={[styles.onlineDot, { backgroundColor: isOnline ? '#32CD32' : '#555' }]} />
+                    <Text style={styles.userName}>{user.nome}</Text>
+                  </View>
                   <View style={[styles.perfilBadge, { backgroundColor: getPerfilColor(user.perfil) + '30' }]}>
                     <Text style={[styles.perfilText, { color: getPerfilColor(user.perfil) }]}>
                       {getPerfilLabel(user.perfil)}
                     </Text>
                   </View>
                 </View>
-                <Text style={styles.userEmail}>{user.email}</Text>
+
+                <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 8}}>
+                    <Text style={{color: isOnline ? '#32CD32' : '#555', fontSize: 12, fontWeight: 'bold'}}>
+                        {isOnline ? 'Online agora' : 'Offline'}
+                    </Text>
+                    <Text style={styles.userEmail}> • {user.email}</Text>
+                </View>
+
                 <View style={styles.userMeta}>
                   {turma && <Text style={styles.metaText}>{turma.nome}</Text>}
                   {equipe && (
@@ -399,8 +432,13 @@ const styles = StyleSheet.create({
   userHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
     marginBottom: 4,
+  },
+  onlineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   userName: {
     color: '#fff',
@@ -419,7 +457,6 @@ const styles = StyleSheet.create({
   userEmail: {
     color: '#888',
     fontSize: 13,
-    marginBottom: 8,
   },
   userMeta: {
     flexDirection: 'row',
