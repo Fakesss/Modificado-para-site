@@ -87,6 +87,15 @@ class UsuarioUpdate(BaseModel):
     equipeId: Optional[str] = None
     ativo: Optional[bool] = None
 
+# Modelo novo para edição completa via Admin
+class AdminUsuarioUpdate(BaseModel):
+    nome: Optional[str] = None
+    perfil: Optional[str] = None
+    turmaId: Optional[str] = None
+    equipeId: Optional[str] = None
+    senha: Optional[str] = None
+    ativo: Optional[bool] = None
+
 class Conteudo(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tipo: str
@@ -358,6 +367,32 @@ async def get_usuarios(current_user: dict = Depends(require_admin)):
             usuarios_ativos.append({k: v for k, v in u.items() if k not in ['senha', '_id']})
     return usuarios_ativos
 
+# >>> ROTAS DE USUÁRIOS QUE FALTAVAM PARA O ADMINISTRADOR <<<
+@api_router.put("/usuarios/{user_id}")
+async def admin_update_usuario(user_id: str, update_data: AdminUsuarioUpdate, current_user: dict = Depends(require_admin)):
+    user = await db.usuarios.find_one({"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    update_dict = update_data.dict(exclude_unset=True)
+    
+    if "senha" in update_dict:
+        if update_dict["senha"]:
+            update_dict["senha"] = get_password_hash(update_dict["senha"])
+        else:
+            del update_dict["senha"]
+            
+    if update_dict:
+        await db.usuarios.update_one({"id": user_id}, {"$set": update_dict})
+    
+    updated_user = await db.usuarios.find_one({"id": user_id})
+    return {k: v for k, v in updated_user.items() if k not in ['senha', '_id']}
+
+@api_router.delete("/usuarios/{user_id}")
+async def admin_delete_usuario(user_id: str, current_user: dict = Depends(require_admin)):
+    await db.usuarios.update_one({"id": user_id}, {"$set": {"ativo": False}})
+    return {"message": "Usuário desativado com sucesso"}
+
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     query = {"ativo": True, "is_deleted": {"$ne": True}}
@@ -479,7 +514,6 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
     
-    # Previne que a equipe não contabilize caso o id esteja com espaço
     eq_raw = current_user.get("equipeId")
     if eq_raw:
         eq_clean = str(eq_raw).strip()
@@ -574,31 +608,25 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
     raise HTTPException(400, "Tipo inválido")
 
 # =====================================================================
-# ROTAS DE RANKING COM "AUTO-HEALING" (À PROVA DE DADOS CORROMPIDOS)
+# ROTAS DE RANKING 
 # =====================================================================
 
 @api_router.get("/ranking/geral")
 async def get_ranking_geral():
     equipes = await db.equipes.find({}).to_list(100)
-    
-    # 1. Mapeia os pontos começando do zero
     pontos_por_equipe = {}
     for e in equipes:
-        # Puxa o 'id', se não tiver puxa '_id' (Prevenção de erro de modelagem)
         e_id_clean = str(e.get("id", e.get("_id", ""))).strip().lower()
         pontos_por_equipe[e_id_clean] = 0
         
-    # 2. Busca TODOS os usuários sem restrições de busca para evitar ignorar dados antigos
     alunos = await db.usuarios.find({}).to_list(5000)
     
     for aluno in alunos:
-        # Prevenção: Se faltar o perfil, presume que é aluno.
         perfil_raw = aluno.get("perfil")
         if not perfil_raw:
             perfil_raw = "ALUNO"
         perfil = str(perfil_raw).strip().upper()
         
-        # Prevenção: Normaliza o campo 'ativo' independentemente de como foi salvo (string, bool, missing)
         ativo_val = aluno.get("ativo", True)
         if isinstance(ativo_val, str):
             ativo = ativo_val.lower() in ['true', '1', 't', 'y', 'yes']
@@ -606,22 +634,16 @@ async def get_ranking_geral():
             ativo = bool(ativo_val)
             
         if perfil == "ALUNO" and ativo:
-            # Garante que None não quebre a limpeza
             eq_id_clean = str(aluno.get("equipeId") or "").strip().lower()
-            
-            # Puxa os pontos e converte de forma segura
             pts_val = aluno.get("pontosTotais", 0)
             try:
                 pts = int(float(pts_val))
             except (ValueError, TypeError):
                 pts = 0
                 
-            # 3. Tenta encontrar a equipe pelo ID exato
             if eq_id_clean in pontos_por_equipe:
                 pontos_por_equipe[eq_id_clean] += pts
             else:
-                # 🚨 FALLBACK EXTREMO: Se o ID não bater, tenta achar a equipe pelo NOME. 
-                # (Útil caso o administrador tenha salvado o nome da equipe no lugar do ID acidentalmente)
                 for e in equipes:
                     e_nome = str(e.get("nome", "")).strip().lower()
                     if eq_id_clean == e_nome:
@@ -635,7 +657,6 @@ async def get_ranking_geral():
         e_id_clean = str(e.get("id", e.get("_id", ""))).strip().lower()
         pts_reais = pontos_por_equipe.get(e_id_clean, 0)
         
-        # 🚨 AUTO-HEALING (Auto-Cura): Atualiza o banco de dados oficial das equipes para ficar igual ao cálculo
         if e.get("pontosTotais", 0) != pts_reais:
             query_id = e.get("id")
             if query_id:
@@ -666,11 +687,8 @@ async def get_ranking_turma(turma_id: str):
         pontos_por_equipe[e_id_clean] = 0
         
     alunos = await db.usuarios.find({}).to_list(5000)
-    
-    # Limpa a turma solicitada
     turma_alvo_limpa = str(turma_id).strip().lower()
     
-    # 🚨 Puxa o objeto da turma para caso o aluno tenha o Nome salvo em vez do ID
     turma_obj = await db.turmas.find_one({"id": turma_id})
     turma_nome_limpo = str(turma_obj.get("nome", "")).strip().lower() if turma_obj else ""
     
@@ -689,10 +707,8 @@ async def get_ranking_turma(turma_id: str):
         if perfil == "ALUNO" and ativo:
             aluno_turma = str(aluno.get("turmaId") or "").strip().lower()
             
-            # Se bater com o ID DA TURMA ou com o NOME DA TURMA (Plano B)
             if aluno_turma == turma_alvo_limpa or (turma_nome_limpo and aluno_turma == turma_nome_limpo):
                 eq_id_clean = str(aluno.get("equipeId") or "").strip().lower()
-                
                 pts_val = aluno.get("pontosTotais", 0)
                 try:
                     pts = int(float(pts_val))
@@ -702,7 +718,6 @@ async def get_ranking_turma(turma_id: str):
                 if eq_id_clean in pontos_por_equipe:
                     pontos_por_equipe[eq_id_clean] += pts
                 else:
-                    # Fallback pelo Nome da Equipe
                     for e in equipes:
                         e_nome = str(e.get("nome", "")).strip().lower()
                         if eq_id_clean == e_nome:
