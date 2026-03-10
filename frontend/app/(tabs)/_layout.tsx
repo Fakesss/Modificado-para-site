@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 import { Equipe } from '../../src/types';
+import OnlineHeartbeat from '../../src/components/OnlineHeartbeat'; // <<< IMPORTAÇÃO DO SISTEMA ONLINE AQUI
 
 // Team colors map
 const TEAM_COLORS: Record<string, string> = {
@@ -76,6 +77,7 @@ export default function TabsLayout() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <OnlineHeartbeat /> {/* <<< CORAÇÃO BATENDO (AVISA QUE ESTÁ ONLINE) */}
       <AdminBanner />
       <NeonLineSimple color={teamColor} />
       <Tabs
@@ -149,6 +151,18 @@ export default function TabsLayout() {
             ),
           }}
         />
+        
+        {/* <<< NOVA ABA DE JOGADORES ONLINE >>> */}
+        <Tabs.Screen
+          name="jogadores"
+          options={{
+            title: 'Online',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="radio" size={size} color={color} /> 
+            ),
+          }}
+        />
+
         <Tabs.Screen
           name="jogo"
           options={{
