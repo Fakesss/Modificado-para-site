@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
-import { useFocusEffect } from 'expo-router'; // Importação adicionada para detectar troca de abas
+import { useFocusEffect } from 'expo-router'; 
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.62; 
@@ -83,7 +83,6 @@ export default function Jogo() {
   const [missoesDisponiveis, setMissoesDisponiveis] = useState<any[]>([]);
   const [modoMatematica, setModoMatematica] = useState('misto');
   
-  // NOVO ESTADO DA PAUSA
   const [pausado, setPausado] = useState(false);
   
   const modoRef = useRef<'single' | 'bot' | 'missao'>('single'); 
@@ -144,10 +143,8 @@ export default function Jogo() {
     jogoPausadoRef.current = true;
     setPausado(true);
     
-    // Para a geração de novas contas
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     
-    // Congela todas as contas que estão caindo no pixel exato
     operacoesListRef.current.forEach(op => {
       op.y.stopAnimation();
     });
@@ -157,16 +154,13 @@ export default function Jogo() {
     jogoPausadoRef.current = false;
     setPausado(false);
     
-    // Volta a gerar contas
     iniciarLoopSpawner();
     
-    // Faz as contas voltarem a cair do lugar onde pararam com o tempo proporcional
     operacoesListRef.current.forEach(op => {
       const currentY = (op.y as any)._value || 0;
       const distTotal = GAME_AREA_HEIGHT + 50;
       const distRestante = distTotal - currentY;
       
-      // Ajusta o tempo de queda restante
       const duracaoRestante = Math.max(100, (distRestante / distTotal) * op.speed);
       
       Animated.timing(op.y, { 
@@ -174,7 +168,6 @@ export default function Jogo() {
         duration: duracaoRestante, 
         useNativeDriver: true 
       }).start(({ finished }) => { 
-        // Só processa o erro de deixar a conta cair se não foi interrompido por outra pausa
         if (finished && !jogoPausadoRef.current) processarErro(op.id); 
       });
     });
@@ -189,7 +182,6 @@ export default function Jogo() {
     setTela('menu');
   };
 
-  // PAUSA AUTOMÁTICA SE O ALUNO SAIR DA ABA OU MINIMIZAR
   useFocusEffect(
     useCallback(() => {
       return () => {
@@ -279,8 +271,14 @@ export default function Jogo() {
       opsPermitidas = [m==='soma'?'+': m==='subtracao'?'-': m==='multiplicacao'?'×': m==='divisao'?'÷': m==='potenciacao'?'^':'√'];
     }
 
-    let numMax = 15 + (rodadaRef.current * 4) + Math.floor(desempenhoOcultoRef.current/2);
-    let multMax = 5 + rodadaRef.current; 
+    // =======================================================
+    // PROGRESSÃO DE DIFICULDADE SUAVE
+    // =======================================================
+    // Começa em 8 (contas fáceis) e sobe lentamente (+2 por rodada)
+    let numMax = 8 + (rodadaRef.current * 2) + Math.floor(desempenhoOcultoRef.current / 4);
+    
+    // Começa em 3 (focando em tabuadas pequenas no início) e sobe 1 a cada DUAS rodadas
+    let multMax = 3 + Math.floor(rodadaRef.current / 2); 
 
     for (let t = 0; t < 50; t++) {
       const op = opsPermitidas[r(opsPermitidas.length)];
@@ -289,7 +287,8 @@ export default function Jogo() {
         case '+': n1=r(numMax)+1; n2=r(numMax)+1; res=n1+n2; txt=`${n1} + ${n2}`; break;
         case '-': n1=r(numMax*1.5)+5; n2=r(n1)+1; res=n1-n2; txt=`${n1} - ${n2}`; break;
         case '×': n1=r(multMax)+2; n2=r(multMax)+2; res=n1*n2; txt=`${n1} × ${n2}`; break;
-        case '÷': n2=r(multMax)+2; res=r(multMax)+1; n1=n2*res; txt=`${n1} ÷ ${n2}`; break;
+        // Ajuste sútil na Divisão: garante que existam respostas suficientes nas rodadas iniciais
+        case '÷': n2=r(multMax)+2; res=r(multMax + 2)+1; n1=n2*res; txt=`${n1} ÷ ${n2}`; break;
         case '^': let bases=[2,3,4,5]; n1=bases[r(bases.length)]; n2=r((n1===2?5:n1===3?3:2)-1)+2; res=Math.pow(n1,n2); const s:any={2:'²',3:'³',4:'⁴',5:'⁵'}; txt=`${n1}${s[n2]||'^'+n2}`; break;
         case '√': res=r(multMax+3)+2; n1=res*res; n2=''; txt=`√${n1}`; break;
       }
@@ -301,7 +300,13 @@ export default function Jogo() {
       ultimasRespostasRef.current.push(res);
       if(ultimasRespostasRef.current.length > 4) ultimasRespostasRef.current.shift();
       
-      return { texto: txt, resposta: res, chave, speed: Math.max(3000, 8000 - (rodadaRef.current * 300)) };
+      // =======================================================
+      // VELOCIDADE DE QUEDA SUAVE
+      // =======================================================
+      // Inicia mais lento (10 segundos) e acelera devagar (-150ms por rodada)
+      const speed = Math.max(3500, 10000 - (rodadaRef.current * 150));
+      
+      return { texto: txt, resposta: res, chave, speed };
     }
     
     rodadaRef.current += 1;
@@ -546,7 +551,7 @@ const styles = StyleSheet.create({
   jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 16, borderRadius: 12, alignItems: 'center', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 10 },
   jogarNovamenteText: { color: '#000', fontSize: 18, fontWeight: '900' },
 
-  // NOVOS ESTILOS DA TELA DE PAUSA
+  // ESTILOS DA TELA DE PAUSA
   pauseOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100, justifyContent: 'center', alignItems: 'center', padding: 20 },
   pauseTitle: { color: '#FFD700', fontSize: 32, fontWeight: '900', marginBottom: 30, letterSpacing: 2 },
   btnContinuar: { backgroundColor: '#32CD32', flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, width: '80%', justifyContent: 'center', gap: 10, marginBottom: 15 },
