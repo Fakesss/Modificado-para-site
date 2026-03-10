@@ -95,10 +95,6 @@ class AdminUsuarioUpdate(BaseModel):
     senha: Optional[str] = None
     ativo: Optional[bool] = None
 
-# Modelo para o Modo Offline Arcade
-class ArcadeSync(BaseModel):
-    pontos: int
-
 class Conteudo(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tipo: str
@@ -395,34 +391,6 @@ async def admin_delete_usuario(user_id: str, current_user: dict = Depends(requir
     await db.usuarios.update_one({"id": user_id}, {"$set": {"ativo": False}})
     return {"message": "Usuário desativado com sucesso"}
 
-# =====================================================================
-# NOVA ROTA: RECEBE PONTOS DO MODO OFFLINE/ARCADE
-# =====================================================================
-@api_router.post("/usuarios/arcade/pontos")
-async def sync_arcade_pontos(data: ArcadeSync, current_user: dict = Depends(get_current_user)):
-    if data.pontos <= 0:
-        return {"message": "Nenhum ponto para adicionar"}
-        
-    # Adiciona os pontos ao aluno
-    await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": data.pontos}})
-    
-    # Atualiza a equipe com segurança (Auto-Healing)
-    eq_raw = current_user.get("equipeId")
-    if eq_raw:
-        eq_clean = str(eq_raw).strip().lower()
-        equipes = await db.equipes.find({}).to_list(100)
-        target_team_id = None
-        for e in equipes:
-            # Tenta encontrar pelo ID ou pelo Nome
-            if str(e.get("id", e.get("_id", ""))).strip().lower() == eq_clean or str(e.get("nome", "")).strip().lower() == eq_clean:
-                target_team_id = e.get("id") or e.get("_id")
-                break
-                
-        if target_team_id:
-            await db.equipes.update_one({"id": target_team_id}, {"$inc": {"pontosTotais": data.pontos}})
-            
-    return {"message": f"{data.pontos} pontos sincronizados com sucesso!"}
-
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     query = {"ativo": True, "is_deleted": {"$ne": True}}
@@ -638,7 +606,7 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
     raise HTTPException(400, "Tipo inválido")
 
 # =====================================================================
-# ROTAS DE RANKING
+# ROTAS DE RANKING COM "AUTO-HEALING"
 # =====================================================================
 
 @api_router.get("/ranking/geral")
