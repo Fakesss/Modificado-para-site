@@ -119,21 +119,9 @@ export default function Jogo() {
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
   useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
 
-  // ==========================================
-  // SINCRONIZADOR OFFLINE (A Mágica)
-  // ==========================================
   useEffect(() => { 
     if (tela === 'menu') {
       carregarMissoes(); 
-      // Quando abre o menu, verifica se tem pontos salvos sem internet
-      api.sincronizarPontosOffline().then((pts) => {
-        if (pts && pts > 0) {
-          Alert.alert(
-            'Sincronizado! ☁️', 
-            `Aqueles ${pts} pontos que você fez quando estava sem internet acabaram de ser enviados para o seu Ranking Oficial!`
-          );
-        }
-      });
     } 
   }, [tela]);
 
@@ -399,10 +387,7 @@ export default function Jogo() {
     operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== opId);
   };
 
-  // ==========================================
-  // GAMEOVER E SYNC OFFLINE (A Mágica do Offline First)
-  // ==========================================
-  const gameOver = async () => { 
+  const gameOver = () => { 
     jogoAtivoRef.current = false; 
     jogoPausadoRef.current = false;
     transicaoAtivaRef.current = false;
@@ -411,19 +396,6 @@ export default function Jogo() {
     if (spawnTimer.current) clearTimeout(spawnTimer.current); 
     setOperacoes([]); 
     setTela('resultado'); 
-
-    // NOVO: SALVAMENTO E OFFLINE SYNC
-    if (modoRef.current === 'single' && pontos > 0) {
-      try {
-        await api.syncArcadePontos(pontos);
-      } catch (e) {
-        await api.salvarPontosOffline(pontos);
-        Alert.alert(
-          'Modo Offline 📡', 
-          `Sua internet parece estar desligada ou instável. \n\nNão se preocupe! Seus ${pontos} pontos foram salvos no celular e serão enviados sozinhos pro seu Ranking quando a conexão voltar.`
-        );
-      }
-    }
   };
 
   const verificarResposta = () => {
