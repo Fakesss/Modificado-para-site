@@ -93,7 +93,7 @@ class Conteudo(BaseModel):
     titulo: str
     descricao: Optional[str] = None
     urlVideo: Optional[str] = None
-    arquivo: Optional[str] = None  # >>> ADICIONADO AQUI PARA PERMITIR UPLOAD <<<
+    arquivo: Optional[str] = None
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
@@ -197,40 +197,10 @@ class SubmissaoCreate(BaseModel):
     exercicioId: str
     respostas: List[RespostaQuestao]
 
-class ProgressoVideo(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    conteudoId: str
-    usuarioId: str
-    tempoAssistidoSeg: int = 0
-    duracaoSeg: int = 0
-    concluido: bool = False
-    dataConclusao: Optional[str] = None
-    pontosGerados: int = 0
-
-class ProgressoVideoUpdate(BaseModel):
-    conteudoId: str
-    tempoAssistidoSeg: int
-    duracaoSeg: int
-
-class Notificacao(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    usuarioId: Optional[str] = None
-    equipeId: Optional[str] = None
-    titulo: str
-    mensagem: str
-    tipo: str = "INFO"
-    anexosRequeridos: bool = False
-    lida: bool = False
-    criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-
-class AbaPersonalizada(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    nome: str
-    tipo: str = "LINK"
-    conteudo: str = ""
-    urlExterna: Optional[str] = None
-    ordem: int = 0
-    ativa: bool = True
+class ReenviarData(BaseModel):
+    alvoTipo: str
+    alvoNome: str
+    alvoId: str
 
 class Token(BaseModel):
     access_token: str
@@ -271,11 +241,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 async def require_admin(current_user: dict = Depends(get_current_user)):
     if current_user.get("perfil") != "ADMIN":
-        raise HTTPException(status_code=403, detail="Acesso negado")
-    return current_user
-
-async def require_leader_or_admin(current_user: dict = Depends(get_current_user)):
-    if current_user.get("perfil") not in ["ADMIN", "ALUNO_LIDER"]:
         raise HTTPException(status_code=403, detail="Acesso negado")
     return current_user
 
@@ -401,17 +366,7 @@ async def get_exercicio(exercicio_id: str, current_user: dict = Depends(get_curr
 
 @api_router.post("/exercicios")
 async def create_exercicio(exercicio_data: ExercicioCreate, current_user: dict = Depends(require_admin)):
-    exercicio = Exercicio(
-        titulo=exercicio_data.titulo,
-        descricao=exercicio_data.descricao,
-        modoCriacao=exercicio_data.modoCriacao,
-        pdfArquivo=exercicio_data.pdfArquivo,
-        habilidadesBNCC=exercicio_data.habilidadesBNCC,
-        turmaId=exercicio_data.turmaId,
-        equipeId=exercicio_data.equipeId,
-        alunoId=exercicio_data.alunoId,
-        pontosPorQuestao=exercicio_data.pontosPorQuestao
-    )
+    exercicio = Exercicio(**exercicio_data.dict(exclude={'questoes'}))
     await db.exercicios.insert_one(exercicio.dict())
     
     for q_data in exercicio_data.questoes:
@@ -468,7 +423,6 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     questoes = await db.questoes.find({"exercicioId": submissao_data.exercicioId}).to_list(100)
     
     questoes_map = {q["id"]: q for q in questoes}
-    
     acertos, erros = 0, 0
     detalhes = []
     
@@ -509,16 +463,6 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     if current_user.get("equipeId"):
         await db.equipes.update_one({"id": current_user["equipeId"]}, {"$inc": {"pontosTotais": pontos}})
     
-    # SALVA OS ERROS BNCC
-    for d in detalhes:
-        if not d["acertou"]:
-            for bncc in d.get("habilidadesBNCC", []):
-                await db.erros_bncc.update_one(
-                    {"usuarioId": current_user["id"], "habilidade": bncc},
-                    {"$inc": {"count": 1}},
-                    upsert=True
-                )
-    
     return {"submissao": {k: v for k, v in submissao.dict().items() if k != '_id'}, "acertos": acertos, "erros": erros, "totalQuestoes": total, "nota": round(nota, 1), "pontosGerados": pontos}
 
 @api_router.get("/submissoes/{exercicio_id}")
@@ -543,7 +487,6 @@ async def get_conteudos(categoria: Optional[str] = None, turmaId: Optional[str] 
     query = {"ativo": True, "is_deleted": {"$ne": True}}
     if categoria: query["abaCategoria"] = categoria
     if turmaId: query["$or"] = [{"turmaId": turmaId}, {"turmaId": None}]
-    
     conteudos = await db.conteudos.find(query).sort("ordem", 1).to_list(1000)
     return [{k: v for k, v in c.items() if k != '_id'} for c in conteudos]
 
@@ -564,19 +507,12 @@ async def delete_conteudo(conteudo_id: str, current_user: dict = Depends(require
     await db.conteudos.update_one({"id": conteudo_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}})
     return {"message": "Conteúdo movido para a lixeira"}
 
-# Outras rotas do sistema
 @api_router.get("/relatorios/geral")
 async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_u = await db.usuarios.count_documents({"ativo": True})
     total_e = await db.exercicios.count_documents({"ativo": True})
     total_s = await db.submissoes.count_documents({})
     return {"totalUsuarios": total_u, "totalExercicios": total_e, "totalSubmissoes": total_s}
-
-@api_router.get("/relatorios/bncc-erros")
-async def get_bncc_erros(current_user: dict = Depends(require_admin)):
-    pipeline = [{"$group": {"_id": "$habilidade", "totalErros": {"$sum": "$count"}}}, {"$sort": {"totalErros": -1}}, {"$limit": 20}]
-    results = await db.erros_bncc.aggregate(pipeline).to_list(20)
-    return [{"habilidade": r["_id"], "totalErros": r["totalErros"]} for r in results]
 
 @api_router.get("/admin/lixeira")
 async def get_lixeira(current_user: dict = Depends(require_admin)):
@@ -599,10 +535,13 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
     raise HTTPException(400, "Tipo inválido")
 
 
-# ============== ROTAS DE RANKING E PROGRESSO ==============
+# =====================================================================
+# ROTAS DE RANKING E PROGRESSO (COM A CORREÇÃO DE TURMA "À PROVA DE BALAS")
+# =====================================================================
 
 @api_router.get("/ranking/geral")
 async def get_ranking_geral():
+    # O Ranking Geral continua puxando direto da coleção "equipes" e é o espelho global da competição
     equipes = await db.equipes.find({}).sort("pontosTotais", -1).to_list(100)
     ranking = []
     for i, e in enumerate(equipes):
@@ -617,34 +556,54 @@ async def get_ranking_geral():
 
 @api_router.get("/ranking/turma/{turma_id}")
 async def get_ranking_turma(turma_id: str):
-    # 1. Pega todas as equipes globais
+    # 1. Busca todas as equipes globais para não faltar ninguém na lista final
     equipes = await db.equipes.find({}).to_list(100)
     
-    # 2. Pega todos os alunos ativos apenas dessa turma
-    alunos_da_turma = await db.usuarios.find({"turmaId": turma_id, "ativo": True}).to_list(1000)
+    # 2. Inicializa o contador de pontos para cada equipe base. Usamos ".strip()" para evitar qualquer lixo de espaço.
+    pontos_por_equipe = {str(e.get("id", "")).strip(): 0 for e in equipes}
     
-    # 3. Calcula a pontuação real agrupando por equipe baseada apenas nos alunos dessa turma
-    pontos_por_equipe = {e["id"]: 0 for e in equipes}
+    # 3. Puxa TODOS os alunos ativos do banco (como são perfis restritos, a busca é rápida)
+    alunos = await db.usuarios.find({
+        "perfil": "ALUNO",
+        "ativo": True
+    }).to_list(2000)
     
-    for aluno in alunos_da_turma:
-        eq_id = aluno.get("equipeId")
-        if eq_id in pontos_por_equipe:
-            pontos_por_equipe[eq_id] += aluno.get("pontosTotais", 0)
+    # 4. Comparações ultra-seguras (evita falha por espaço em branco invisível no ID que o banco tenha salvo)
+    turma_alvo_limpa = str(turma_id).strip()
+    
+    for aluno in alunos:
+        aluno_turma = str(aluno.get("turmaId", "")).strip()
+        
+        # Só contabiliza se o aluno for estritamente da turma clicada
+        if aluno_turma == turma_alvo_limpa:
+            eq_id = str(aluno.get("equipeId", "")).strip()
+            pts = aluno.get("pontosTotais", 0)
             
-    # 4. Formata os dados da equipe com a nova pontuação calculada
+            # Tenta converter os pontos pra garantir que texto ("10") vire número
+            try:
+                pts = int(float(pts))
+            except (ValueError, TypeError):
+                pts = 0
+                
+            # Se a equipe for válida, soma!
+            if eq_id in pontos_por_equipe:
+                pontos_por_equipe[eq_id] += pts
+
+    # 5. Prepara o formato final que o App (React Native) exige para desenhar o pódio
     equipes_ranking = []
     for e in equipes:
+        e_id = str(e.get("id", "")).strip()
         equipes_ranking.append({
-            "id": e["id"],
-            "nome": e["nome"],
+            "id": e_id,
+            "nome": e.get("nome", "Sem Nome"),
             "cor": e.get("cor", "#333"),
-            "pontosTotais": pontos_por_equipe.get(e["id"], 0)
+            "pontosTotais": pontos_por_equipe.get(e_id, 0)
         })
         
-    # 5. Ordena do maior para o menor (descendente)
+    # 6. Ordena as equipes pela pontuação consolidada (do maior pro menor)
     equipes_ranking.sort(key=lambda x: x["pontosTotais"], reverse=True)
     
-    # 6. Atribui as posições
+    # 7. Adiciona a posição oficial após a ordenação
     for i, e in enumerate(equipes_ranking):
         e["posicao"] = i + 1
         
@@ -685,11 +644,6 @@ class MissaoCreate(BaseModel):
 class Missao(MissaoCreate):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     criadaPor: Optional[str] = None
-
-class ReenviarData(BaseModel):
-    alvoTipo: str
-    alvoNome: str
-    alvoId: str
 
 @api_router.get("/missoes")
 async def get_missoes(current_user: dict = Depends(require_admin)):
