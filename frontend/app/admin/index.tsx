@@ -111,28 +111,28 @@ export default function AdminHome() {
           </TouchableOpacity>
         </View>
 
-        {/* Stats Grid */}
+        {/* Stats Grid - AGORA SÃO BOTÕES CLICÁVEIS */}
         <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
+          <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/usuarios')}>
             <Ionicons name="people" size={28} color="#4169E1" />
             <Text style={styles.statValue}>{stats?.totalUsuarios || 0}</Text>
             <Text style={styles.statLabel}>Usuários</Text>
-          </View>
-          <View style={styles.statCard}>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/conteudos')}>
             <Ionicons name="play-circle" size={28} color="#32CD32" />
             <Text style={styles.statValue}>{stats?.totalVideos || 0}</Text>
             <Text style={styles.statLabel}>Vídeos</Text>
-          </View>
-          <View style={styles.statCard}>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/exercicios')}>
             <Ionicons name="document-text" size={28} color="#FFD700" />
             <Text style={styles.statValue}>{stats?.totalExercicios || 0}</Text>
             <Text style={styles.statLabel}>Exercícios</Text>
-          </View>
-          <View style={styles.statCard}>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/relatorios')}>
             <Ionicons name="checkmark-circle" size={28} color="#9B59B6" />
             <Text style={styles.statValue}>{stats?.totalSubmissoes || 0}</Text>
             <Text style={styles.statLabel}>Submissões</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Average Grade */}
@@ -180,7 +180,6 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
-        {/* ---------------- NOVO BOTÃO DE JOGOS AQUI ---------------- */}
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/gerenciar-jogos')}>
           <View style={[styles.menuIcon, { backgroundColor: '#FF69B4' + '30' }]}>
             <Ionicons name="game-controller" size={24} color="#FF69B4" />
@@ -191,7 +190,6 @@ export default function AdminHome() {
           </View>
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
-        {/* ---------------------------------------------------------- */}
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/relatorios')}>
           <View style={[styles.menuIcon, { backgroundColor: '#9B59B6' + '30' }]}>
