@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router'; // 🚨 A mágica da atualização ao vivo
+import { useFocusEffect } from 'expo-router'; 
 import * as api from '../../src/services/api';
 import { RankingItem, Turma } from '../../src/types';
 
@@ -24,7 +24,13 @@ export default function Ranking() {
   const loadData = useCallback(async () => {
     try {
       const [turmasData] = await Promise.all([api.getTurmas()]);
-      setTurmas(turmasData);
+      
+      // 🚨 CORREÇÃO: Ordena as turmas de forma numérica/alfabética (ex: 6º Ano antes de 7º Ano)
+      const turmasOrdenadas = (turmasData || []).sort((a, b) => 
+        a.nome.localeCompare(b.nome, undefined, { numeric: true, sensitivity: 'base' })
+      );
+      
+      setTurmas(turmasOrdenadas);
       await loadRanking(selectedTurma);
     } catch (error) {
       console.error('Error loading ranking:', error);
@@ -39,7 +45,6 @@ export default function Ranking() {
         ? await api.getRankingPorTurma(turmaId)
         : await api.getRankingGeral();
       
-      // 🚨 MÁGICA 2: Força a ordenação pelos pontos, do maior para o menor!
       const sortedData = (data || []).sort((a: RankingItem, b: RankingItem) => b.pontosTotais - a.pontosTotais);
       setRanking(sortedData);
     } catch (error) {
@@ -47,7 +52,6 @@ export default function Ranking() {
     }
   };
 
-  // Atualiza toda vez que a aba é aberta
   useFocusEffect(
     useCallback(() => {
       loadData();
@@ -77,7 +81,7 @@ export default function Ranking() {
         <Text style={styles.title}>Ranking das Equipes</Text>
       </View>
 
-      {/* Turma Filter */}
+      {/* FILTRO DE TURMAS ORGANIZADO */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -200,7 +204,7 @@ export default function Ranking() {
         {/* LISTA COMPLETA */}
         <Text style={styles.sectionTitle}>Classificação Completa</Text>
         {ranking.map((item, index) => {
-          const posicaoReal = index + 1; // Garante que a posição visual faça sentido
+          const posicaoReal = index + 1;
           return (
             <View key={item.id} style={[styles.rankingItem, { borderLeftColor: item.cor, borderLeftWidth: 4 }]}>
               <View style={[styles.positionBadge, { backgroundColor: item.cor }]}>
