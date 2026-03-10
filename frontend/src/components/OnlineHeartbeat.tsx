@@ -10,31 +10,41 @@ export default function OnlineHeartbeat() {
   useEffect(() => {
     if (!user) return;
 
-    // Função que avisa o servidor que estamos vivos
-    const ping = () => enviarPingOnline(user.nome, user.turmaId, user.equipeId);
+    let isActive = true;
+    let timeoutId: NodeJS.Timeout;
+
+    const ping = () => {
+      if (isActive) enviarPingOnline(user.nome, user.turmaId, user.equipeId);
+    };
 
     // Bate o coração a primeira vez que entra
     ping();
 
-    // Configura o relógio para bater a cada 30 segundos
-    let interval = setInterval(() => {
-      // SÓ ENVIA SE O APLICATIVO ESTIVER ABERTO E COM A TELA LIGADA
+    // 🚨 A SOLUÇÃO: Loop com setTimeout (Imune ao efeito metralhadora)
+    const loopPing = () => {
+      if (!isActive) return;
       if (AppState.currentState === 'active') {
         ping();
       }
-    }, 30000);
+      // Só agenda o próximo disparo DEPOIS de processar o atual
+      timeoutId = setTimeout(loopPing, 30000);
+    };
 
-    // Escuta quando o aluno minimiza o app ou bloqueia a tela
+    // Inicia o ciclo
+    timeoutId = setTimeout(loopPing, 30000);
+
+    // Escuta quando o celular é desbloqueado
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-        // O celular acabou de ser desbloqueado! Avisa o servidor na hora.
-        ping();
+        // Celular acordou! Espera 2 segundinhos pro Wi-Fi conectar e avisa o servidor.
+        setTimeout(ping, 2000);
       }
       appState.current = nextAppState;
     });
 
     return () => {
-      clearInterval(interval);
+      isActive = false;
+      clearTimeout(timeoutId);
       subscription.remove();
     };
   }, [user]);
