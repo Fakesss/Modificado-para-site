@@ -6,12 +6,12 @@ import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 
 const { width, height } = Dimensions.get('window');
-const GAME_AREA_HEIGHT = height * 0.50; 
+const GAME_AREA_HEIGHT = height * 0.62; 
 const CARD_WIDTH = 105;
 const LANE_WIDTH = width / 3;
 
 // =========================================================================
-// MOTOR DO CONTADOR DINÂMICO (Atualiza conforme a regra de tempo restante)
+// MOTOR DO CONTADOR DINÂMICO
 // =========================================================================
 const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado: boolean }) => {
   const [tempoRestanteStr, setTempoRestanteStr] = useState('');
@@ -30,7 +30,6 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
         return;
       }
 
-      // Formatação visual do tempo
       const totalSecs = Math.round(r / 1000);
       const h = Math.floor(totalSecs / 3600);
       const m = Math.floor((totalSecs % 3600) / 60);
@@ -39,24 +38,17 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
       if (r > 60 * 1000) {
          setTempoRestanteStr(h > 0 ? `⏱ ${h}h ${m}m restantes` : `⏱ ${m}m restantes`);
       } else {
-         setTempoRestanteStr(`⏱ ${s}s restantes`); // Último minuto mostra segundos
+         setTempoRestanteStr(`⏱ ${s}s restantes`); 
       }
 
-      // Cálculo matemático EXATO para o próximo tick, evitando pular as faixas exigidas
       const MIN = 60 * 1000;
       let delay = 1000;
 
-      if (r <= 1 * MIN) {
-        delay = 1000; // < 1 min: atualiza a cada 1 seg
-      } else if (r <= 5 * MIN) {
-        delay = Math.min(r % (1 * MIN) || (1 * MIN), r - 1 * MIN); // < 5 min: atualiza a cada 1 min
-      } else if (r <= 15 * MIN) {
-        delay = Math.min(r % (5 * MIN) || (5 * MIN), r - 5 * MIN); // < 15 min: atualiza a cada 5 min
-      } else if (r <= 30 * MIN) {
-        delay = Math.min(r % (10 * MIN) || (10 * MIN), r - 15 * MIN); // < 30 min: atualiza a cada 10 min
-      } else {
-        delay = Math.min(r % (30 * MIN) || (30 * MIN), r - 30 * MIN); // > 30 min: atualiza a cada 30 min
-      }
+      if (r <= 1 * MIN) delay = 1000;
+      else if (r <= 5 * MIN) delay = Math.min(r % (1 * MIN) || (1 * MIN), r - 1 * MIN); 
+      else if (r <= 15 * MIN) delay = Math.min(r % (5 * MIN) || (5 * MIN), r - 5 * MIN); 
+      else if (r <= 30 * MIN) delay = Math.min(r % (10 * MIN) || (10 * MIN), r - 15 * MIN); 
+      else delay = Math.min(r % (30 * MIN) || (30 * MIN), r - 30 * MIN);
 
       timeoutId = setTimeout(atualizar, Math.max(delay, 100));
     };
@@ -73,7 +65,6 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
     </Text>
   );
 };
-
 
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => (
   <TouchableOpacity activeOpacity={0.5} style={[styles.tecla, styleExtra]} onTouchStart={(e) => { e.stopPropagation(); onPress(valor); }}>
@@ -110,8 +101,9 @@ export default function Jogo() {
   const [laserAtivo, setLaserAtivo] = useState<any>(null);
 
   const desempenhoOcultoRef = useRef(0); 
-  const questoesAcertadasRef = useRef<Set<string>>(new Set()); 
-  const ultimasRespostasRef = useRef<number[]>([]); 
+  
+  // RESTAURADO: Mantém o histórico das últimas RESPOSTAS (a regra original e correta)
+  const ultimasRespostasRef = useRef<number[]>([]);
 
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
   useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
@@ -155,7 +147,8 @@ export default function Jogo() {
     if (botTimer.current) clearInterval(botTimer.current);
     
     setOperacoes([]); setPontos(0); setResposta(''); setPowerUpDisponivel(false);
-    operacoesAtuaisRef.current = []; questoesAcertadasRef.current.clear();
+    operacoesAtuaisRef.current = []; 
+    ultimasRespostasRef.current = []; // Limpa histórico ao iniciar
     desempenhoOcultoRef.current = 0; questoesEmJogoRef.current = 0;
     jogoPausadoRef.current = false; jogoAtivoRef.current = true; rodadaRef.current = 1;
     modoRef.current = modoEscolhido;
@@ -204,7 +197,7 @@ export default function Jogo() {
     if (novaOp) { setOperacoes(prev => [...prev, novaOp]); setTimeout(() => animarQueda(novaOp), 50); }
   };
 
-  const gerarDadosArcade = () => {
+  const gerarDadosArcade = (): any => {
     const r = (max: number) => Math.floor(Math.random() * max);
     let opsPermitidas = ['+'];
     if (modoMatematicaRef.current === 'misto') {
@@ -218,8 +211,8 @@ export default function Jogo() {
       opsPermitidas = [m==='soma'?'+': m==='subtracao'?'-': m==='multiplicacao'?'×': m==='divisao'?'÷': m==='potenciacao'?'^':'√'];
     }
 
-    let numMax = 10 + (rodadaRef.current * 3) + Math.floor(desempenhoOcultoRef.current/2);
-    let multMax = 3 + Math.floor(rodadaRef.current/2);
+    let numMax = 15 + (rodadaRef.current * 4) + Math.floor(desempenhoOcultoRef.current/2);
+    let multMax = 5 + rodadaRef.current; 
 
     for (let t = 0; t < 50; t++) {
       const op = opsPermitidas[r(opsPermitidas.length)];
@@ -232,13 +225,28 @@ export default function Jogo() {
         case '^': let bases=[2,3,4,5]; n1=bases[r(bases.length)]; n2=r((n1===2?5:n1===3?3:2)-1)+2; res=Math.pow(n1,n2); const s:any={2:'²',3:'³',4:'⁴',5:'⁵'}; txt=`${n1}${s[n2]||'^'+n2}`; break;
         case '√': res=r(multMax+3)+2; n1=res*res; n2=''; txt=`√${n1}`; break;
       }
+      
       const chave = `${n1}${op}${n2}`;
+      
+      // RESTAURADO: Bloqueia se a RESPOSTA for igual a uma das últimas 4, ou se a conta exata já está caindo na tela
       if (ultimasRespostasRef.current.includes(res) || operacoesAtuaisRef.current.some(o => o.chave === chave)) continue;
+      
       ultimasRespostasRef.current.push(res);
       if(ultimasRespostasRef.current.length > 4) ultimasRespostasRef.current.shift();
+      
       return { texto: txt, resposta: res, chave, speed: Math.max(3000, 8000 - (rodadaRef.current * 300)) };
     }
-    return null; 
+    
+    // SISTEMA DE AUTO-AVANÇO (O NOVO CORAÇÃO DO JOGO)
+    // Se esgotou 50 tentativas e não encontrou uma resposta "inédita", as combinações dessa rodada acabaram.
+    // Avançamos de rodada para abrir novos números e chamamos o gerador novamente!
+    rodadaRef.current += 1;
+    desempenhoOcultoRef.current += 1;
+    
+    // Trava de segurança extra caso o limite exploda
+    if (rodadaRef.current > 100) ultimasRespostasRef.current = [];
+    
+    return gerarDadosArcade(); // Tenta de novo agora com números maiores
   };
 
   const criarObjetoAnimado = (texto: string, resposta: number, chave: string, velocidade: number) => {
@@ -332,7 +340,6 @@ export default function Jogo() {
                         <Text style={[styles.missaoSub, esgotado && {color: '#666'}]}>
                           {missao.recompensa} Pts • {ilimitado ? 'Tents. Ilimitadas' : `Tentativas: ${feitas}/${limite}`}
                         </Text>
-                        {/* CONTADOR DE TEMPO INSERIDO AQUI */}
                         {missao.expiraEm && (
                           <ContadorExpiracao expiraEm={missao.expiraEm} esgotado={esgotado} />
                         )}
@@ -380,19 +387,23 @@ export default function Jogo() {
         <TouchableOpacity onPress={() => { gameOver(); }} style={styles.btnPausaIcone}><Ionicons name="close" size={26} color="#fff" /></TouchableOpacity>
       </View>
       <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />)}</View>
+      
       <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
         {operacoes.map((op) => ( <Animated.View key={op.id} style={[styles.operacaoCard, op.especial && styles.operacaoEspecial, { transform: [{ translateY: op.y }, { scale: op.scale }], left: op.posX, opacity: op.opacity }]}> <Text style={[styles.operacaoText, op.especial && { color: '#000' }]}>{op.textoTela}</Text> </Animated.View> ))}
         {laserAtivo && <Animated.View style={[styles.laser, { opacity: laserAnim, transform: [{ translateY: laserAnim.interpolate({ inputRange: [0, 1], outputRange: [height, laserAtivo.y] }) }], left: laserAtivo.x - 2, backgroundColor: laserAtivo.cor }]} />}
       </View>
+      
       <View style={styles.bottomPanel}>
         <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
+        
+        {/* TECLADO REDIMENSIONADO */}
         <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
         <View style={styles.tecladoContainer}>
           {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => <View key={i} style={styles.tecladoRow}>{row.map(num => <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>{num}</Text></BotaoTeclado>)}</View>)}
           <View style={styles.tecladoRow}>
-            <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}><Ionicons name="close" size={26} color="#fff" /></BotaoTeclado>
+            <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}><Ionicons name="close" size={24} color="#fff" /></BotaoTeclado>
             <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>0</Text></BotaoTeclado>
-            <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}><Ionicons name="checkmark" size={30} color="#fff" /></BotaoTeclado>
+            <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}><Ionicons name="checkmark" size={28} color="#fff" /></BotaoTeclado>
           </View>
         </View>
       </View>
@@ -422,23 +433,30 @@ const styles = StyleSheet.create({
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   btnPausaIcone: { padding: 4, marginLeft: 10 },
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingBottom: 10, height: 20 },
+  
+  // ÁREA DE JOGO FLEXÍVEL
   gameArea: { position: 'relative', width: '100%', flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
   operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   laser: { position: 'absolute', width: 4, height: height, zIndex: 1 },
-  bottomPanel: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 20, width: '100%' },
-  powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 10, height: 40 },
+  
+  // TECLADO MAIS COMPACTO
+  bottomPanel: { paddingBottom: 15, width: '100%', alignItems: 'center' },
+  powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
-  displayContainer: { backgroundColor: '#1a1a2e', width: 250, height: 55, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  displayText: { color: '#fff', fontSize: 26, fontWeight: 'bold' },
-  tecladoContainer: { width: 250, gap: 6 },
-  tecladoRow: { flexDirection: 'row', gap: 6, justifyContent: 'space-between' },
-  tecla: { backgroundColor: '#1a1a2e', flex: 1, height: 55, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  teclaText: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
+  
+  displayContainer: { backgroundColor: '#1a1a2e', width: 280, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+  
+  tecladoContainer: { width: 280, gap: 5 },
+  tecladoRow: { flexDirection: 'row', gap: 5, justifyContent: 'space-between' },
+  tecla: { backgroundColor: '#1a1a2e', flex: 1, height: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  teclaText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
   teclaApagar: { backgroundColor: '#E74C3C' },
   teclaEnviar: { backgroundColor: '#32CD32' },
+  
   resultadoContainer: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center' },
   resultadoTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginBottom: 15 },
   resultadoCard: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', marginBottom: 10, width: '100%' },
