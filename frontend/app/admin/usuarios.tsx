@@ -11,7 +11,7 @@ import {
   Modal,
   TextInput,
   Platform,
-  AppState, // <<< ADICIONADO AQUI
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -40,17 +40,32 @@ export default function AdminUsuarios() {
   useEffect(() => {
     loadData();
 
-    const interval = setInterval(async () => {
-      // 🚨 SE A TELA ESTIVER BLOQUEADA, IGNORA A BUSCA PARA NÃO DAR ERRO 500
-      if (AppState.currentState !== 'active') return;
+    let isActive = true;
+    let timeoutId: NodeJS.Timeout;
 
-      try {
-        const onlineData = await buscarUsuariosOnline();
-        setOnlineUsers(onlineData || []);
-      } catch (e) {}
-    }, 10000);
+    // 🚨 A SOLUÇÃO: Loop recursivo inteligente
+    const checkOnline = async () => {
+      if (!isActive) return;
+      
+      if (AppState.currentState === 'active') {
+        try {
+          const onlineData = await buscarUsuariosOnline();
+          if (isActive) setOnlineUsers(onlineData || []);
+        } catch (e) {}
+      }
+      
+      // Só agenda a próxima checagem após 10s se o componente ainda existir
+      if (isActive) {
+        timeoutId = setTimeout(checkOnline, 10000);
+      }
+    };
+
+    timeoutId = setTimeout(checkOnline, 10000);
     
-    return () => clearInterval(interval);
+    return () => {
+      isActive = false;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const loadData = async () => {
@@ -90,25 +105,15 @@ export default function AdminUsuarios() {
 
   const handleSave = async () => {
     if (!selectedUser) return;
-
     try {
-      const data: any = {
-        nome: editNome,
-        perfil: editPerfil,
-        turmaId: editTurma || null,
-        equipeId: editEquipe || null,
-      };
-
-      if (editSenha.trim() !== '') {
-        data.senha = editSenha;
-      }
-
+      const data: any = { nome: editNome, perfil: editPerfil, turmaId: editTurma || null, equipeId: editEquipe || null };
+      if (editSenha.trim() !== '') data.senha = editSenha;
       await api.updateUsuario(selectedUser.id, data);
       Alert.alert('Sucesso', 'Usuário atualizado com sucesso!');
       setModalVisible(false);
       loadData();
     } catch (error: any) {
-      Alert.alert('Erro', error.response?.data?.detail || 'Ocorreu um erro ao tentar salvar o usuário no banco de dados.');
+      Alert.alert('Erro', error.response?.data?.detail || 'Erro ao salvar.');
     }
   };
 
@@ -120,31 +125,20 @@ export default function AdminUsuarios() {
           await api.deleteUsuario(userId);
           Alert.alert('Sucesso', 'Usuário desativado com sucesso!');
           loadData();
-        } catch (error) {
-          Alert.alert('Erro', 'Erro ao desativar usuário');
-        }
+        } catch (error) { Alert.alert('Erro', 'Erro ao desativar usuário'); }
       }
     } else {
-      Alert.alert(
-        'Confirmar exclusão',
-        'Deseja realmente desativar este usuário?',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          {
-            text: 'Desativar',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await api.deleteUsuario(userId);
-                Alert.alert('Sucesso', 'Usuário desativado com sucesso!');
-                loadData();
-              } catch (error) {
-                Alert.alert('Erro', 'Erro ao desativar usuário');
-              }
-            },
-          },
-        ]
-      );
+      Alert.alert('Confirmar exclusão', 'Deseja desativar este usuário?', [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Desativar', style: 'destructive', onPress: async () => {
+            try {
+              await api.deleteUsuario(userId);
+              Alert.alert('Sucesso', 'Usuário desativado!');
+              loadData();
+            } catch (error) { Alert.alert('Erro', 'Erro ao desativar usuário'); }
+          }
+        },
+      ]);
     }
   };
 
@@ -188,13 +182,7 @@ export default function AdminUsuarios() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
-        }
-      >
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />}>
         {sortedUsuarios.map((user) => {
           const equipe = equipes.find((e) => e.id === user.equipeId);
           const turma = turmas.find((t) => t.id === user.turmaId);
@@ -209,9 +197,7 @@ export default function AdminUsuarios() {
                     <Text style={styles.userName}>{user.nome}</Text>
                   </View>
                   <View style={[styles.perfilBadge, { backgroundColor: getPerfilColor(user.perfil) + '30' }]}>
-                    <Text style={[styles.perfilText, { color: getPerfilColor(user.perfil) }]}>
-                      {getPerfilLabel(user.perfil)}
-                    </Text>
+                    <Text style={[styles.perfilText, { color: getPerfilColor(user.perfil) }]}>{getPerfilLabel(user.perfil)}</Text>
                   </View>
                 </View>
 
@@ -231,23 +217,13 @@ export default function AdminUsuarios() {
                   )}
                 </View>
                 <View style={styles.userStats}>
-                  <View style={styles.statItem}>
-                    <Ionicons name="star" size={14} color="#FFD700" />
-                    <Text style={styles.statText}>{user.pontosTotais} pts</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Ionicons name="flame" size={14} color="#FF6B35" />
-                    <Text style={styles.statText}>{user.streakDias} dias</Text>
-                  </View>
+                  <View style={styles.statItem}><Ionicons name="star" size={14} color="#FFD700" /><Text style={styles.statText}>{user.pontosTotais} pts</Text></View>
+                  <View style={styles.statItem}><Ionicons name="flame" size={14} color="#FF6B35" /><Text style={styles.statText}>{user.streakDias} dias</Text></View>
                 </View>
               </View>
               <View style={styles.userActions}>
-                <TouchableOpacity style={styles.actionButton} onPress={() => openEditModal(user)}>
-                  <Ionicons name="create" size={20} color="#4169E1" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleDelete(user.id)}>
-                  <Ionicons name="trash" size={20} color="#E74C3C" />
-                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={() => openEditModal(user)}><Ionicons name="create" size={20} color="#4169E1" /></TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleDelete(user.id)}><Ionicons name="trash" size={20} color="#E74C3C" /></TouchableOpacity>
               </View>
             </View>
           );
@@ -259,39 +235,19 @@ export default function AdminUsuarios() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <ScrollView showsVerticalScrollIndicator={false}>
-              
               <Text style={styles.modalTitle}>Painel do Usuário</Text>
               <Text style={styles.modalSubtitle}>{selectedUser?.email}</Text>
 
               <Text style={styles.inputLabel}>Nome de Exibição</Text>
-              <TextInput 
-                style={styles.textInput}
-                value={editNome}
-                onChangeText={setEditNome}
-                placeholder="Ex: João da Silva"
-                placeholderTextColor="#666"
-              />
+              <TextInput style={styles.textInput} value={editNome} onChangeText={setEditNome} placeholder="Ex: João da Silva" placeholderTextColor="#666" />
 
               <Text style={styles.inputLabel}>Redefinir Senha</Text>
-              <TextInput 
-                style={styles.textInput}
-                value={editSenha}
-                onChangeText={setEditSenha}
-                placeholder="Deixe em branco para manter a atual..."
-                placeholderTextColor="#666"
-              />
+              <TextInput style={styles.textInput} value={editSenha} onChangeText={setEditSenha} placeholder="Deixe em branco para manter a atual..." placeholderTextColor="#666" />
 
               <Text style={styles.inputLabel}>Nível de Permissão (Perfil)</Text>
               <View style={styles.selectContainer}>
                 {['ALUNO', 'ALUNO_LIDER', 'ADMIN'].map((perfil) => (
-                  <TouchableOpacity
-                    key={perfil}
-                    style={[
-                      styles.selectOption,
-                      editPerfil === perfil && { backgroundColor: getPerfilColor(perfil) },
-                    ]}
-                    onPress={() => setEditPerfil(perfil)}
-                  >
+                  <TouchableOpacity key={perfil} style={[styles.selectOption, editPerfil === perfil && { backgroundColor: getPerfilColor(perfil) }]} onPress={() => setEditPerfil(perfil)}>
                     <Text style={[styles.selectText, editPerfil === perfil && { color: '#000' }]}>{getPerfilLabel(perfil)}</Text>
                   </TouchableOpacity>
                 ))}
@@ -299,15 +255,9 @@ export default function AdminUsuarios() {
 
               <Text style={styles.inputLabel}>Turma</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectScroll}>
-                <TouchableOpacity style={[styles.selectOption, !editTurma && styles.selectOptionActive]} onPress={() => setEditTurma('')}>
-                  <Text style={[styles.selectText, !editTurma && { color: '#000' }]}>Nenhuma</Text>
-                </TouchableOpacity>
+                <TouchableOpacity style={[styles.selectOption, !editTurma && styles.selectOptionActive]} onPress={() => setEditTurma('')}><Text style={[styles.selectText, !editTurma && { color: '#000' }]}>Nenhuma</Text></TouchableOpacity>
                 {turmas.map((turma) => (
-                  <TouchableOpacity
-                    key={turma.id}
-                    style={[styles.selectOption, editTurma === turma.id && styles.selectOptionActive]}
-                    onPress={() => setEditTurma(turma.id)}
-                  >
+                  <TouchableOpacity key={turma.id} style={[styles.selectOption, editTurma === turma.id && styles.selectOptionActive]} onPress={() => setEditTurma(turma.id)}>
                     <Text style={[styles.selectText, editTurma === turma.id && { color: '#000' }]}>{turma.nome}</Text>
                   </TouchableOpacity>
                 ))}
@@ -315,29 +265,18 @@ export default function AdminUsuarios() {
 
               <Text style={styles.inputLabel}>Equipe do Aluno</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectScroll}>
-                <TouchableOpacity style={[styles.selectOption, !editEquipe && styles.selectOptionActive]} onPress={() => setEditEquipe('')}>
-                  <Text style={[styles.selectText, !editEquipe && { color: '#000' }]}>Nenhuma</Text>
-                </TouchableOpacity>
+                <TouchableOpacity style={[styles.selectOption, !editEquipe && styles.selectOptionActive]} onPress={() => setEditEquipe('')}><Text style={[styles.selectText, !editEquipe && { color: '#000' }]}>Nenhuma</Text></TouchableOpacity>
                 {equipes.map((equipe) => (
-                  <TouchableOpacity
-                    key={equipe.id}
-                    style={[styles.selectOption, { borderColor: equipe.cor }, editEquipe === equipe.id && { backgroundColor: equipe.cor }]}
-                    onPress={() => setEditEquipe(equipe.id)}
-                  >
+                  <TouchableOpacity key={equipe.id} style={[styles.selectOption, { borderColor: equipe.cor }, editEquipe === equipe.id && { backgroundColor: equipe.cor }]} onPress={() => setEditEquipe(equipe.id)}>
                     <Text style={[styles.selectText, { color: editEquipe === equipe.id ? '#000' : equipe.cor }]}>{equipe.nome}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
 
               <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
-                  <Text style={styles.cancelButtonText}>Cancelar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                  <Text style={styles.saveButtonText}>Salvar Alterações</Text>
-                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}><Text style={styles.cancelButtonText}>Cancelar</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.saveButton} onPress={handleSave}><Text style={styles.saveButtonText}>Salvar Alterações</Text></TouchableOpacity>
               </View>
-
             </ScrollView>
           </View>
         </View>
