@@ -1,23 +1,43 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { enviarPingOnline } from '../services/multiplayerApi';
 
 export default function OnlineHeartbeat() {
   const { user } = useAuth();
+  const appState = useRef(AppState.currentState);
 
   useEffect(() => {
     if (!user) return;
 
-    // Dispara o primeiro ping assim que entra
-    enviarPingOnline(user.nome, user.turmaId, user.equipeId);
+    // Função que avisa o servidor que estamos vivos
+    const ping = () => enviarPingOnline(user.nome, user.turmaId, user.equipeId);
 
-    // Fica avisando o servidor a cada 30 segundos que ainda está aqui
-    const interval = setInterval(() => {
-      enviarPingOnline(user.nome, user.turmaId, user.equipeId);
+    // Bate o coração a primeira vez que entra
+    ping();
+
+    // Configura o relógio para bater a cada 30 segundos
+    let interval = setInterval(() => {
+      // SÓ ENVIA SE O APLICATIVO ESTIVER ABERTO E COM A TELA LIGADA
+      if (AppState.currentState === 'active') {
+        ping();
+      }
     }, 30000);
 
-    return () => clearInterval(interval);
+    // Escuta quando o aluno minimiza o app ou bloqueia a tela
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        // O celular acabou de ser desbloqueado! Avisa o servidor na hora.
+        ping();
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
   }, [user]);
 
-  return null; // É um componente fantasma, não desenha nada na tela
+  return null;
 }
