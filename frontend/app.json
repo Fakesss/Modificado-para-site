@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "Matemática Turbo",
-    "slug": "matematica-turbo",
+    "name": "Tríade Matemática",
+    "slug": "triade-matematica",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "matematicaturbo",
+    "scheme": "triadematematica",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "package": "com.matematicaturbo.app",
+      "package": "com.triadematematica.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000"
