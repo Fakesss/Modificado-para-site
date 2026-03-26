@@ -1,5 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const API_URL = 'https://modificado-para-site-1.onrender.com';
 
@@ -15,7 +16,7 @@ api.interceptors.request.use(async (config) => {
 });
 
 // =========================================================================
-// 🛡️ O ESCUDO GLOBAL ANTI-ERRO 500 (ESPECIAL PARA WEBVIEW)
+// 🛡️ O ESCUDO GLOBAL ANTI-ERRO 500 (AGORA UNIVERSAL: WEB E APP)
 // =========================================================================
 api.interceptors.response.use(
   (response) => response,
@@ -29,10 +30,11 @@ api.interceptors.response.use(
     if (isNetworkOrServerError && !originalRequest._retry) {
       originalRequest._retry = true; 
 
-      console.log('📡 Detectada queda ao desbloquear a tela. Aguardando estabilização...');
+      console.log('📡 Detectada queda. Aguardando estabilização...');
 
-      // Pausa a requisição por 3 segundos para a WebView recuperar o acesso ao Wi-Fi
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // SE FOR WEB (Vercel): Aguarda 3 segundos. SE FOR APP: Aguarda apenas 100ms para não crashar o Android.
+      const tempoEspera = Platform.OS === 'web' ? 3000 : 100;
+      await new Promise((resolve) => setTimeout(resolve, tempoEspera));
 
       // Tenta de novo silenciosamente
       return api(originalRequest);
