@@ -6,9 +6,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 import { Equipe } from '../../src/types';
-import OnlineHeartbeat from '../../src/components/OnlineHeartbeat'; // <<< IMPORTAÇÃO DO SISTEMA ONLINE AQUI
+import OnlineHeartbeat from '../../src/components/OnlineHeartbeat';
 
-// Team colors map
 const TEAM_COLORS: Record<string, string> = {
   'equipe-alfa': '#FFD700',
   'equipe-delta': '#4169E1',
@@ -53,16 +52,14 @@ export default function TabsLayout() {
 
   const loadTeamColor = async () => {
     try {
-      // 1. SE FOR ADMIN NO MODO VISUALIZAÇÃO: Puxa a cor salva no celular
       if (isAdminViewingAsStudent || user?.perfil === 'ADMIN') {
         const savedAdminColor = await AsyncStorage.getItem('adminPreviewColor');
         if (savedAdminColor) {
           setTeamColor(savedAdminColor);
-          return; // Para a função aqui. Não puxa cor de equipe nenhuma.
+          return;
         }
       }
 
-      // 2. SE FOR ALUNO NORMAL: Puxa a cor da equipe no banco de dados
       if (user?.equipeId) {
         const equipes = await api.getEquipes();
         const userEquipe = equipes.find((e: Equipe) => e.id === user?.equipeId);
@@ -77,7 +74,7 @@ export default function TabsLayout() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <OnlineHeartbeat /> {/* <<< CORAÇÃO BATENDO (AVISA QUE ESTÁ ONLINE) */}
+      <OnlineHeartbeat />
       <AdminBanner />
       <NeonLineSimple color={teamColor} />
       <Tabs
@@ -87,16 +84,16 @@ export default function TabsLayout() {
             backgroundColor: '#1a1a2e',
             borderTopColor: teamColor + '40',
             borderTopWidth: 2,
-            paddingBottom: Platform.OS === 'ios' ? 20 : 12, // Dá mais espaço embaixo no Android (12) e no iOS (20)
+            paddingBottom: Platform.OS === 'ios' ? 20 : 12,
             paddingTop: 8,
-            height: Platform.OS === 'ios' ? 85 : 70, // Aumenta a altura total da barra
+            height: Platform.OS === 'ios' ? 85 : 70,
           },
           tabBarActiveTintColor: teamColor,
           tabBarInactiveTintColor: '#666',
           tabBarLabelStyle: {
             fontSize: 12,
             fontWeight: '600',
-            marginBottom: Platform.OS === 'android' ? 4 : 0, // Ajuste fino pro texto não encostar
+            marginBottom: Platform.OS === 'android' ? 4 : 0,
           },
         }}
       >
@@ -151,8 +148,6 @@ export default function TabsLayout() {
             ),
           }}
         />
-        
-        {/* <<< NOVA ABA DE JOGADORES ONLINE >>> */}
         <Tabs.Screen
           name="jogadores"
           options={{
@@ -162,7 +157,6 @@ export default function TabsLayout() {
             ),
           }}
         />
-
         <Tabs.Screen
           name="jogo"
           options={{
@@ -174,8 +168,6 @@ export default function TabsLayout() {
             tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 },
           }}
         />
-        
-        {/* Usando o href para esconder a aba caso não seja líder, sem causar erro na Vercel */}
         <Tabs.Screen
           name="equipe"
           options={{
