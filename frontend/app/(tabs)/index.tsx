@@ -27,7 +27,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // 🚨 Função que pergunta antes de sair
+  // 🚨 Função que pergunta antes de sair (Corrigida para a versão nova do RN)
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
@@ -42,8 +42,9 @@ export default function Home() {
         return true;
       };
 
-      BackHandler.addEventListener('hardwareBackPress', onBackPress);
-      return () => BackHandler.removeEventListener('hardwareBackPress', onBackPress);
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      
+      return () => subscription.remove();
     }, [])
   );
 
