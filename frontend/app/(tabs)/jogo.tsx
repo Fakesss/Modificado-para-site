@@ -68,7 +68,11 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
 };
 
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => (
-  <TouchableOpacity activeOpacity={0.5} style={[styles.tecla, styleExtra]} onPress={() => onPress(valor)}>
+  <TouchableOpacity 
+    activeOpacity={0.5} 
+    style={[styles.tecla, styleExtra]} 
+    onTouchStart={(e) => { e.stopPropagation(); onPress(valor); }}
+  >
     {children}
   </TouchableOpacity>
 );
