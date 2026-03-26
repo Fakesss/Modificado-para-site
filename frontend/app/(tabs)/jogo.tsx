@@ -68,7 +68,7 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
 };
 
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => (
-  <TouchableOpacity activeOpacity={0.5} style={[styles.tecla, styleExtra]} onTouchStart={(e) => { e.stopPropagation(); onPress(valor); }}>
+  <TouchableOpacity activeOpacity={0.5} style={[styles.tecla, styleExtra]} onPress={() => onPress(valor)}>
     {children}
   </TouchableOpacity>
 );
@@ -519,10 +519,18 @@ export default function Jogo() {
             <View style={styles.modosGrid}>
               {[ { id: 'misto', name: 'Jornada', color: '#FFD700', icon: 'infinite' }, { id: 'soma', name: 'Soma', color: '#32CD32', icon: 'add' }, { id: 'subtracao', name: 'Subtração', color: '#FF4444', icon: 'remove' }, { id: 'multiplicacao', name: 'Multiplicação', color: '#4169E1', icon: 'close' }, { id: 'divisao', name: 'Divisão', color: '#9B59B6', icon: 'code-slash' }, { id: 'potenciacao', name: 'Potências', color: '#FF8C00', icon: 'chevron-up' }, { id: 'radiciacao', name: 'Raízes', color: '#00CED1', icon: 'flash' } ].map(m => {
                 const isSelected = modoMatematica === m.id;
-                return ( <TouchableOpacity key={m.id} style={[ styles.modoCardItem, isSelected && { borderColor: m.color, backgroundColor: m.color + '15' } ]} onPress={() => setModoMatematica(m.id)}> <Ionicons name={m.icon as any} size={28} color={isSelected ? m.color : '#555'} /> <Text style={[styles.modoTextItem, isSelected && { color: m.color }]}>{m.name}</Text> </TouchableOpacity> );
+                return ( 
+                  <TouchableOpacity key={m.id} style={[ styles.modoCardItem, isSelected && { borderColor: m.color, backgroundColor: m.color + '15' } ]} onPress={() => setModoMatematica(m.id)}> 
+                    <Ionicons name={m.icon as any} size={28} color={isSelected ? m.color : '#555'} /> 
+                    <Text style={[styles.modoTextItem, isSelected && { color: m.color }]}>{m.name}</Text> 
+                  </TouchableOpacity> 
+                );
               })}
             </View>
-            <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}><Ionicons name="play" size={24} color="#000" /><Text style={styles.iniciarButtonText}>INICIAR MODO LIVRE</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}>
+              <Ionicons name="play" size={24} color="#000" />
+              <Text style={styles.iniciarButtonText}>INICIAR MODO LIVRE</Text>
+            </TouchableOpacity>
           </ScrollView>
         </View>
       </SafeAreaView>
@@ -538,7 +546,10 @@ export default function Jogo() {
           <Text style={styles.resultadoTitle}>{venceu ? '🎯 Missão Cumprida!' : 'Fim de Jogo!'}</Text>
           {venceu && <View style={[styles.resultadoCard, {backgroundColor: '#32CD3220'}]}><Text style={[styles.resultadoPontos, {color: '#32CD32', fontSize:32}]}>+{missaoAtualRef.current?.recompensa} Pts Bônus</Text></View>}
           <View style={styles.resultadoCard}><Text style={styles.resultadoPontos}>{pontos}</Text><Text style={styles.resultadoLabel}>Pontos Totais</Text></View>
-          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => setTela('menu')}><Ionicons name="home" size={22} color="#000" /><Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => setTela('menu')}>
+            <Ionicons name="home" size={22} color="#000" />
+            <Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -586,10 +597,18 @@ export default function Jogo() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />)}</View>
+      <View style={styles.vidasContainer}>
+        {Array.from({ length: Math.max(0, vidas) }).map((_, i) => (
+          <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />
+        ))}
+      </View>
       
       <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
-        {operacoes.map((op) => ( <Animated.View key={op.id} style={[styles.operacaoCard, op.especial && styles.operacaoEspecial, { transform: [{ translateY: op.y }, { scale: op.scale }], left: op.posX, opacity: op.opacity }]}> <Text style={[styles.operacaoText, op.especial && { color: '#000' }]}>{op.textoTela}</Text> </Animated.View> ))}
+        {operacoes.map((op) => ( 
+          <Animated.View key={op.id} style={[styles.operacaoCard, op.especial && styles.operacaoEspecial, { transform: [{ translateY: op.y }, { scale: op.scale }], left: op.posX, opacity: op.opacity }]}> 
+            <Text style={[styles.operacaoText, op.especial && { color: '#000' }]}>{op.textoTela}</Text> 
+          </Animated.View> 
+        ))}
         
         {laserAtivo && (
           <Animated.View style={[styles.laser, { 
@@ -604,15 +623,39 @@ export default function Jogo() {
       </View>
       
       <View style={styles.bottomPanel}>
-        <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
+        <View style={styles.powerUpContainer}>
+          {powerUpDisponivel && (
+            <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}>
+              <Ionicons name="flash" size={18} color="#000" />
+              <Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         
-        <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
+        <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}>
+          <Text style={styles.displayText}>{resposta || ' '}</Text>
+        </Animated.View>
+        
         <View style={styles.tecladoContainer}>
-          {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => <View key={i} style={styles.tecladoRow}>{row.map(num => <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>{num}</Text></BotaoTeclado>)}</View>)}
+          {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
+            <View key={i} style={styles.tecladoRow}>
+              {row.map(num => (
+                <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r + v)}>
+                  <Text style={styles.teclaText}>{num}</Text>
+                </BotaoTeclado>
+              ))}
+            </View>
+          ))}
           <View style={styles.tecladoRow}>
-            <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}><Ionicons name="close" size={24} color="#fff" /></BotaoTeclado>
-            <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>0</Text></BotaoTeclado>
-            <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}><Ionicons name="checkmark" size={28} color="#fff" /></BotaoTeclado>
+            <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </BotaoTeclado>
+            <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r + v)}>
+              <Text style={styles.teclaText}>0</Text>
+            </BotaoTeclado>
+            <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}>
+              <Ionicons name="checkmark" size={28} color="#fff" />
+            </BotaoTeclado>
           </View>
         </View>
       </View>
