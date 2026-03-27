@@ -103,28 +103,33 @@ const Particula = ({ char }: { char: string }) => {
 };
 
 // =========================================================================
-// O TECLADO PIANO DEFINITIVO (Usando PointerEvents padrão W3C/Web)
+// O TECLADO PIANO DEFINITIVO (Trava de recarregamento isolada)
 // =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
   const [pressed, setPressed] = useState(false);
-  const timeoutRef = useRef<any>(null);
-
-  const handlePointerDown = (e: any) => {
-    e.stopPropagation();
-    onPress(valor);
-    
-    // Feedback visual ultrarrápido
-    setPressed(true);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => {
-      setPressed(false);
-    }, 120); 
-  };
+  const isHolding = useRef(false);
 
   return (
     <View 
       style={[styles.tecla, styleExtra, pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
-      onPointerDown={handlePointerDown} 
+      onTouchStart={(e) => { 
+        e.stopPropagation();
+        if (!isHolding.current) {
+          isHolding.current = true;
+          setPressed(true);
+          onPress(valor); 
+        }
+      }}
+      onTouchEnd={(e) => {
+        e.stopPropagation();
+        isHolding.current = false;
+        setPressed(false);
+      }}
+      onTouchCancel={(e) => {
+        e.stopPropagation();
+        isHolding.current = false;
+        setPressed(false);
+      }}
     >
       {children}
     </View>
