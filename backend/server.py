@@ -94,6 +94,7 @@ class AdminUsuarioUpdate(BaseModel):
     equipeId: Optional[str] = None
     senha: Optional[str] = None
     ativo: Optional[bool] = None
+    pontosTotais: Optional[int] = None  # AQUI ESTÁ A CHAVE: Agora o backend aceita edição de pontos!
 
 class Conteudo(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -204,11 +205,6 @@ class Submissao(BaseModel):
 class SubmissaoCreate(BaseModel):
     exercicioId: str
     respostas: List[RespostaQuestao]
-
-class ReenviarData(BaseModel):
-    alvoTipo: str
-    alvoNome: str
-    alvoId: str
 
 class Token(BaseModel):
     access_token: str
@@ -351,6 +347,11 @@ async def create_equipe(equipe_data: dict, current_user: dict = Depends(require_
     await db.equipes.insert_one(equipe.dict())
     return equipe.dict()
 
+@api_router.delete("/equipes/{equipe_id}")
+async def delete_equipe(equipe_id: str, current_user: dict = Depends(require_admin)):
+    await db.equipes.update_one({"id": equipe_id}, {"$set": {"ativa": False}})
+    return {"message": "Equipe desativada"}
+
 @api_router.get("/usuarios")
 async def get_usuarios(current_user: dict = Depends(require_admin)):
     usuarios_brutos = await db.usuarios.find({}).to_list(5000)
@@ -390,6 +391,19 @@ async def admin_update_usuario(user_id: str, update_data: AdminUsuarioUpdate, cu
 async def admin_delete_usuario(user_id: str, current_user: dict = Depends(require_admin)):
     await db.usuarios.update_one({"id": user_id}, {"$set": {"ativo": False}})
     return {"message": "Usuário desativado com sucesso"}
+
+# =====================================================================
+# A ROTA DE MESTRE DO JUÍZO FINAL (Zera os pontos de todo mundo)
+# =====================================================================
+@api_router.post("/usuarios/zerar-pontos")
+async def zerar_todos_pontos(current_user: dict = Depends(require_admin)):
+    # Zera os pontos de todos os usuários da coleção de usuários
+    await db.usuarios.update_many({}, {"$set": {"pontosTotais": 0}})
+    # Zera os pontos pré-calculados nas tabelas de equipes
+    await db.equipes.update_many({}, {"$set": {"pontosTotais": 0}})
+    
+    return {"message": "Todos os pontos foram zerados com sucesso."}
+
 
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
