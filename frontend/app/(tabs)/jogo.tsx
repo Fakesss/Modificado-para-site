@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
@@ -9,7 +9,6 @@ import { useFocusEffect } from 'expo-router';
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.62; 
 const CARD_WIDTH = 105;
-const LANE_WIDTH = width / 3;
 
 // =========================================================================
 // MOTOR DO CONTADOR DINÂMICO
@@ -67,14 +66,20 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
   );
 };
 
+// =========================================================================
+// O NOVO BOTÃO TECLADO NINJA (Permite toques simultâneos)
+// =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => (
-  <TouchableOpacity 
-    activeOpacity={0.5} 
-    style={[styles.tecla, styleExtra]} 
-    onTouchStart={(e) => { e.stopPropagation(); onPress(valor); }}
+  <Pressable 
+    style={({ pressed }) => [
+      styles.tecla, 
+      styleExtra,
+      pressed && { opacity: 0.6 } // Efeito visual de clique afundando
+    ]} 
+    onPressIn={() => onPress(valor)} // Atira no exato milissegundo que encosta
   >
     {children}
-  </TouchableOpacity>
+  </Pressable>
 );
 
 export default function Jogo() {
@@ -87,14 +92,18 @@ export default function Jogo() {
   const [missoesDisponiveis, setMissoesDisponiveis] = useState<any[]>([]);
   const [modoMatematica, setModoMatematica] = useState('misto');
   
+  // CONFIGURAÇÃO FUTURA DE SKINS: Cor base do Laser Personalizável
   const [corLaserPersonalizada, setCorLaserPersonalizada] = useState('#32CD32');
+
   const [pausado, setPausado] = useState(false);
   
+  // ESTADOS DA TRANSIÇÃO DE FASE
   const [faseAtualVisor, setFaseAtualVisor] = useState(1);
   const [mostrarFase, setMostrarFase] = useState(false);
   const fadeFaseAnim = useRef(new Animated.Value(0)).current;
   const transicaoAtivaRef = useRef(false);
   
+  // Controle de espera para limpar a tela
   const fasePendenteRef = useRef(false);
   const proximaFaseNumRef = useRef(1);
 
@@ -113,21 +122,17 @@ export default function Jogo() {
   const spawnTimer = useRef<any>(null);
   const botTimer = useRef<any>(null);
   
+  // Animações dos Lasers
   const laserAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
-  const [laserAtivo, setLaserAtivo] = useState<any>(null);
+  const [lasersAtivos, setLasersAtivos] = useState<any[]>([]);
 
   const desempenhoOcultoRef = useRef(0); 
   const ultimasRespostasRef = useRef<number[]>([]);
 
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
   useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
-
-  useEffect(() => { 
-    if (tela === 'menu') {
-      carregarMissoes(); 
-    } 
-  }, [tela]);
+  useEffect(() => { if (tela === 'menu') carregarMissoes(); }, [tela]);
 
   const carregarMissoes = async () => {
     try {
@@ -136,13 +141,16 @@ export default function Jogo() {
     } catch (e) {}
   };
 
+  // MONITOR MESTRE DO JOGO (Vitória de Missão e Transição de Fase)
   useEffect(() => {
+    // Vitória em Missão
     if (modoRef.current === 'missao' && jogoAtivoRef.current) {
       if (filaQuestoesRef.current.length === 0 && questoesEmJogoRef.current === 0 && operacoes.length === 0) {
         finalizarMissaoComSucesso();
       }
     }
 
+    // Passagem de Fase Apenas Quando a Tela Limpar
     if (jogoAtivoRef.current && fasePendenteRef.current && operacoes.length === 0) {
       fasePendenteRef.current = false;
       rodadaRef.current = proximaFaseNumRef.current; 
@@ -159,6 +167,9 @@ export default function Jogo() {
     setTimeout(() => setTela('resultado'), 500);
   };
 
+  // ==========================================
+  // SISTEMA DE AVANÇO DE FASE VISUAL
+  // ==========================================
   const avancarFase = (novaFase: number) => {
     if (transicaoAtivaRef.current || !jogoAtivoRef.current) return;
     transicaoAtivaRef.current = true;
@@ -171,7 +182,7 @@ export default function Jogo() {
     fadeFaseAnim.setValue(0);
     Animated.sequence([
       Animated.timing(fadeFaseAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.delay(1500), 
+      Animated.delay(1500), // Mantém a mensagem visível por 1.5s com a tela limpa
       Animated.timing(fadeFaseAnim, { toValue: 0, duration: 300, useNativeDriver: true })
     ]).start(() => {
       setMostrarFase(false);
@@ -182,11 +193,17 @@ export default function Jogo() {
     });
   };
 
+  // ==========================================
+  // SISTEMA DE PAUSA E RETOMADA
+  // ==========================================
   const pausarJogo = useCallback(() => {
     if (!jogoAtivoRef.current || jogoPausadoRef.current) return;
+    
     jogoPausadoRef.current = true;
     setPausado(true);
+    
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
+    
     operacoesListRef.current.forEach(op => op.y.stopAnimation());
   }, []);
 
@@ -235,6 +252,9 @@ export default function Jogo() {
     }, [pausarJogo])
   );
 
+  // ==========================================
+  // INÍCIO DO JOGO E SPAWNER
+  // ==========================================
   const iniciarJogo = async (modoEscolhido: 'single' | 'bot' | 'missao', missaoDados?: any) => {
     if (modoEscolhido === 'missao' && missaoDados) {
       try {
@@ -277,19 +297,43 @@ export default function Jogo() {
     const loop = () => {
       if (!jogoAtivoRef.current || jogoPausadoRef.current || transicaoAtivaRef.current) return;
       
+      // O Spawner pausa a geração de novas contas se estiver aguardando limpar a tela
       if (!fasePendenteRef.current) {
         if (modoRef.current === 'missao' && filaQuestoesRef.current.length === 0) {} 
         else {
-          const maxOps = Math.min(8, 3 + Math.floor(pontos / 500)); 
+          // Aumentado o limite máximo para criar o caos nas fases altas
+          const maxOps = Math.min(15, 3 + Math.floor(pontos / 200)); 
           if (operacoesListRef.current.length < maxOps) spawnarQuestao();
         }
       }
       
       if (!transicaoAtivaRef.current) {
-        spawnTimer.current = setTimeout(loop, Math.max(1200, 3000 - (pontos * 2)));
+        // Velocidade de spawn fica mais rápida também
+        spawnTimer.current = setTimeout(loop, Math.max(800, 2500 - (pontos * 1.5)));
       }
     };
     if (!transicaoAtivaRef.current) loop();
+  };
+
+  // ==========================================
+  // CÂMERA INTELIGENTE (ADAPTAÇÃO DE TELA)
+  // ==========================================
+  const getDynamicSettings = () => {
+    const r = rodadaRef.current;
+    let numLanes = 3;
+    
+    // A Câmera vai se afastando e criando mais pistas
+    if (r >= 4) numLanes = 4;
+    if (r >= 7) numLanes = 5;
+    if (r >= 10) numLanes = 6;
+    
+    const laneWidth = width / numLanes;
+    const baseScale = 3 / numLanes; // O tamanho do card diminui proporcionalmente
+    
+    // Permite que contas caiam mais perto umas das outras à medida que a fase sobe
+    const minDropDistance = Math.max(0.08, 0.25 - (numLanes * 0.03)); 
+    
+    return { numLanes, laneWidth, baseScale, minDropDistance };
   };
 
   const spawnarQuestao = () => {
@@ -361,21 +405,51 @@ export default function Jogo() {
       return { texto: txt, resposta: res, chave, speed };
     }
     
+    // Se esgotar as possibilidades, agenda subida de fase pendente!
     if (!fasePendenteRef.current) {
         fasePendenteRef.current = true;
         proximaFaseNumRef.current = rodadaRef.current + 1;
         desempenhoOcultoRef.current += 1;
         if (proximaFaseNumRef.current > 100) ultimasRespostasRef.current = [];
     }
+    
     return null; 
   };
 
   const criarObjetoAnimado = (texto: string, resposta: number, chave: string, velocidade: number) => {
-    const pistas = [0, 1, 2].filter(p => !operacoesAtuaisRef.current.find(o => o.lane === p) || operacoesAtuaisRef.current.find(o => o.lane === p)?.y > GAME_AREA_HEIGHT * 0.25);
-    const lane = pistas.length > 0 ? pistas[Math.floor(Math.random() * pistas.length)] : Math.floor(Math.random() * 3);
+    const { numLanes, laneWidth, baseScale, minDropDistance } = getDynamicSettings();
+    
+    // Filtra as pistas disponíveis permitindo que caiam mais contas ao mesmo tempo
+    const pistasDisponiveis = Array.from({length: numLanes}, (_, i) => i).filter(p => 
+      !operacoesAtuaisRef.current.find(o => o.lane === p) || 
+      operacoesAtuaisRef.current.find(o => o.lane === p)?.y > GAME_AREA_HEIGHT * minDropDistance
+    );
+    
+    const lane = pistasDisponiveis.length > 0 ? pistasDisponiveis[Math.floor(Math.random() * pistasDisponiveis.length)] : Math.floor(Math.random() * numLanes);
     const id = Math.random().toString();
     operacoesAtuaisRef.current.push({ lane, y: 0, chave: id });
-    return { id, chaveOriginal: chave, resposta, textoTela: texto, y: new Animated.Value(0), speed: velocidade, posX: (lane * LANE_WIDTH) + (LANE_WIDTH - CARD_WIDTH) / 2, lane, especial: Math.random() < 0.1, opacity: new Animated.Value(1), scale: new Animated.Value(1) };
+    
+    // Sistema de Power-ups
+    let tipoEspecial = 'nenhum';
+    const rand = Math.random();
+    if (rand < 0.01) {
+       // 1% de chance (Super Raro) - Coração (+1 Vida)
+       tipoEspecial = 'vida';
+    } else if (rand < 0.05) {
+       // 4% de chance (Raro) - Destruir Tudo
+       tipoEspecial = 'destruir';
+    }
+
+    // Calcula exatamente o centro da pista independentemente da escala
+    const posX = (lane * laneWidth) + (laneWidth / 2) - (CARD_WIDTH / 2);
+
+    return { 
+      id, chaveOriginal: chave, resposta, textoTela: texto, 
+      y: new Animated.Value(0), speed: velocidade, 
+      posX, lane, 
+      tipoEspecial, baseScale,
+      opacity: new Animated.Value(1), scale: new Animated.Value(baseScale) 
+    };
   };
 
   const animarQueda = (op: any) => {
@@ -412,6 +486,7 @@ export default function Jogo() {
       
       setPontos(p => { 
         const novo = p + 10; 
+        // Agenda subida de fase a cada 50 pontos
         if (modoRef.current !== 'missao' && Math.floor(novo/50) > Math.floor(p/50)) { 
            if (!fasePendenteRef.current) {
                fasePendenteRef.current = true;
@@ -422,15 +497,28 @@ export default function Jogo() {
         return novo; 
       });
 
-      if (alvo.especial && !powerUpDisponivel) setPowerUpDisponivel(true);
-      dispararLaser(alvo, true);
+      // Aplica efeitos do Power-Up
+      if (alvo.tipoEspecial === 'destruir' && !powerUpDisponivel) {
+        setPowerUpDisponivel(true);
+      } else if (alvo.tipoEspecial === 'vida') {
+        setVidas(v => Math.min(v + 1, 7)); // Limite máximo de 7 corações na tela
+      }
+
+      dispararLaserUnico(alvo, true);
+      
       operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== alvo.id);
       setTimeout(() => { setOperacoes(prev => prev.filter(o => o.id !== alvo.id)); }, 300);
-    } else { dispararLaser(null, false); processarErro('nenhum'); }
+    } else { 
+      dispararLaserUnico(null, false); 
+      processarErro('nenhum'); 
+    }
     setResposta('');
   };
 
-  const dispararLaser = (alvo: any, acertou: boolean) => {
+  // ==========================================
+  // O NOVO SISTEMA DE LASERS MULTIPLOS
+  // ==========================================
+  const calcularDadosLaser = (alvo: any, acertou: boolean) => {
     const originX = width / 2;
     const originY = GAME_AREA_HEIGHT; 
     
@@ -447,16 +535,21 @@ export default function Jogo() {
 
     const cor = acertou ? corLaserPersonalizada : '#FF4444';
     
-    setLaserAtivo({ x: midX, y: midY, h: distance, angle: `${angle}rad`, cor });
+    return { x: midX, y: midY, h: distance, angle: `${angle}rad`, cor };
+  };
+
+  const dispararLaserUnico = (alvo: any, acertou: boolean) => {
+    const laserInfo = calcularDadosLaser(alvo, acertou);
+    setLasersAtivos([laserInfo]);
     
-    laserAnim.setValue(1); 
+    laserAnim.setValue(1);
     Animated.parallel([
       Animated.timing(laserAnim, { toValue: 0, duration: 300, useNativeDriver: true }), 
       ...(acertou && alvo ? [ 
-        Animated.timing(alvo.scale, { toValue: 1.4, duration: 150, useNativeDriver: true }), 
+        Animated.timing(alvo.scale, { toValue: alvo.baseScale * 1.4, duration: 150, useNativeDriver: true }), 
         Animated.timing(alvo.opacity, { toValue: 0, duration: 150, useNativeDriver: true }) 
       ] : [])
-    ]).start(() => setLaserAtivo(null));
+    ]).start(() => setLasersAtivos([]));
     
     if (!acertou) {
       Animated.sequence([
@@ -467,14 +560,44 @@ export default function Jogo() {
     }
   };
 
+  // Agora dispara múltiplos lasers visuais para todos os alvos!
   const ativarPowerUp = () => {
     if (!powerUpDisponivel || jogoPausadoRef.current || transicaoAtivaRef.current) return;
     const visiveis = operacoes.filter(o => (o.y as any)._value < GAME_AREA_HEIGHT);
+    
+    if (visiveis.length === 0) {
+      setPowerUpDisponivel(false);
+      return;
+    }
+    
     visiveis.forEach(o => o.y.stopAnimation());
-    setPontos(p => p + (visiveis.length * 10)); questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - visiveis.length);
-    setOperacoes([]); setPowerUpDisponivel(false);
+    
+    // Calcula um laser para cada conta visível
+    const novosLasers = visiveis.map(alvo => calcularDadosLaser(alvo, true));
+    setLasersAtivos(novosLasers);
+
+    laserAnim.setValue(1);
+    Animated.parallel([
+      Animated.timing(laserAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ...visiveis.flatMap(alvo => [
+          Animated.timing(alvo.scale, { toValue: alvo.baseScale * 1.5, duration: 200, useNativeDriver: true }),
+          Animated.timing(alvo.opacity, { toValue: 0, duration: 200, useNativeDriver: true })
+      ])
+    ]).start(() => {
+       setLasersAtivos([]);
+       setPontos(p => p + (visiveis.length * 10));
+       questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - visiveis.length);
+       
+       setOperacoes(prev => prev.filter(o => !visiveis.includes(o)));
+       operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => !visiveis.some(v => v.chave === o.chave));
+    });
+    
+    setPowerUpDisponivel(false);
   };
 
+  // ==========================================
+  // RENDERIZAÇÃO
+  // ==========================================
   if (tela === 'menu') {
     return (
       <SafeAreaView style={styles.container}>
@@ -523,18 +646,10 @@ export default function Jogo() {
             <View style={styles.modosGrid}>
               {[ { id: 'misto', name: 'Jornada', color: '#FFD700', icon: 'infinite' }, { id: 'soma', name: 'Soma', color: '#32CD32', icon: 'add' }, { id: 'subtracao', name: 'Subtração', color: '#FF4444', icon: 'remove' }, { id: 'multiplicacao', name: 'Multiplicação', color: '#4169E1', icon: 'close' }, { id: 'divisao', name: 'Divisão', color: '#9B59B6', icon: 'code-slash' }, { id: 'potenciacao', name: 'Potências', color: '#FF8C00', icon: 'chevron-up' }, { id: 'radiciacao', name: 'Raízes', color: '#00CED1', icon: 'flash' } ].map(m => {
                 const isSelected = modoMatematica === m.id;
-                return ( 
-                  <TouchableOpacity key={m.id} style={[ styles.modoCardItem, isSelected && { borderColor: m.color, backgroundColor: m.color + '15' } ]} onPress={() => setModoMatematica(m.id)}> 
-                    <Ionicons name={m.icon as any} size={28} color={isSelected ? m.color : '#555'} /> 
-                    <Text style={[styles.modoTextItem, isSelected && { color: m.color }]}>{m.name}</Text> 
-                  </TouchableOpacity> 
-                );
+                return ( <TouchableOpacity key={m.id} style={[ styles.modoCardItem, isSelected && { borderColor: m.color, backgroundColor: m.color + '15' } ]} onPress={() => setModoMatematica(m.id)}> <Ionicons name={m.icon as any} size={28} color={isSelected ? m.color : '#555'} /> <Text style={[styles.modoTextItem, isSelected && { color: m.color }]}>{m.name}</Text> </TouchableOpacity> );
               })}
             </View>
-            <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}>
-              <Ionicons name="play" size={24} color="#000" />
-              <Text style={styles.iniciarButtonText}>INICIAR MODO LIVRE</Text>
-            </TouchableOpacity>
+            <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}><Ionicons name="play" size={24} color="#000" /><Text style={styles.iniciarButtonText}>INICIAR MODO LIVRE</Text></TouchableOpacity>
           </ScrollView>
         </View>
       </SafeAreaView>
@@ -550,10 +665,7 @@ export default function Jogo() {
           <Text style={styles.resultadoTitle}>{venceu ? '🎯 Missão Cumprida!' : 'Fim de Jogo!'}</Text>
           {venceu && <View style={[styles.resultadoCard, {backgroundColor: '#32CD3220'}]}><Text style={[styles.resultadoPontos, {color: '#32CD32', fontSize:32}]}>+{missaoAtualRef.current?.recompensa} Pts Bônus</Text></View>}
           <View style={styles.resultadoCard}><Text style={styles.resultadoPontos}>{pontos}</Text><Text style={styles.resultadoLabel}>Pontos Totais</Text></View>
-          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => setTela('menu')}>
-            <Ionicons name="home" size={22} color="#000" />
-            <Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text>
-          </TouchableOpacity>
+          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => setTela('menu')}><Ionicons name="home" size={22} color="#000" /><Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -562,6 +674,7 @@ export default function Jogo() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       
+      {/* TELA DE MENSAGEM DE NOVA FASE */}
       {mostrarFase && (
         <Animated.View style={[styles.transicaoOverlay, { opacity: fadeFaseAnim }]}>
           <View style={styles.transicaoBox}>
@@ -570,6 +683,7 @@ export default function Jogo() {
         </Animated.View>
       )}
 
+      {/* OVERLAY DE PAUSA */}
       {pausado && (
         <View style={styles.pauseOverlay}>
           <Text style={styles.pauseTitle}>JOGO PAUSADO</Text>
@@ -589,6 +703,7 @@ export default function Jogo() {
           <Ionicons name="star" size={18} color="#FFD700" />
           <Text style={styles.statTextScore}>{pontos}</Text>
           
+          {/* MOSTRADOR DE FASE FIXO (Consertado com <Text> nas mensagens anteriores) */}
           {modoRef.current !== 'missao' && (
             <View style={styles.faseBadge}>
               <Text style={styles.faseBadgeText}>Fase {faseAtualVisor}</Text>
@@ -601,65 +716,53 @@ export default function Jogo() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.vidasContainer}>
-        {Array.from({ length: Math.max(0, vidas) }).map((_, i) => (
-          <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />
-        ))}
-      </View>
+      <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />)}</View>
       
       <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
         {operacoes.map((op) => ( 
-          <Animated.View key={op.id} style={[styles.operacaoCard, op.especial && styles.operacaoEspecial, { transform: [{ translateY: op.y }, { scale: op.scale }], left: op.posX, opacity: op.opacity }]}> 
-            <Text style={[styles.operacaoText, op.especial && { color: '#000' }]}>{op.textoTela}</Text> 
+          <Animated.View 
+            key={op.id} 
+            style={[
+              styles.operacaoCard, 
+              op.tipoEspecial === 'destruir' && styles.operacaoEspecial,
+              op.tipoEspecial === 'vida' && styles.operacaoVida,
+              { 
+                transform: [{ translateY: op.y }, { scale: op.scale }], 
+                left: op.posX, 
+                opacity: op.opacity,
+                width: CARD_WIDTH // Mantém a largura base para o flexbox centralizar o texto internamente
+              }
+            ]}
+          > 
+            <Text style={[styles.operacaoText, op.tipoEspecial !== 'nenhum' && { color: '#000' }]}>
+              {op.textoTela} {op.tipoEspecial === 'vida' ? '❤' : ''}
+            </Text> 
           </Animated.View> 
         ))}
         
-        {laserAtivo && (
-          <Animated.View style={[styles.laser, { 
-            left: laserAtivo.x - 2, 
-            top: laserAtivo.y - laserAtivo.h / 2, 
-            height: laserAtivo.h,
-            transform: [{ rotate: laserAtivo.angle }],
-            backgroundColor: laserAtivo.cor,
+        {/* RENDERIZA MÚLTIPLOS LASERS */}
+        {lasersAtivos.map((laserInfo, index) => (
+          <Animated.View key={`laser-${index}`} style={[styles.laser, { 
+            left: laserInfo.x - 2, 
+            top: laserInfo.y - laserInfo.h / 2, 
+            height: laserInfo.h,
+            transform: [{ rotate: laserInfo.angle }],
+            backgroundColor: laserInfo.cor,
             opacity: laserAnim 
           }]} />
-        )}
+        ))}
       </View>
       
       <View style={styles.bottomPanel}>
-        <View style={styles.powerUpContainer}>
-          {powerUpDisponivel && (
-            <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}>
-              <Ionicons name="flash" size={18} color="#000" />
-              <Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
         
-        <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}>
-          <Text style={styles.displayText}>{resposta || ' '}</Text>
-        </Animated.View>
-        
+        <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
         <View style={styles.tecladoContainer}>
-          {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
-            <View key={i} style={styles.tecladoRow}>
-              {row.map(num => (
-                <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r + v)}>
-                  <Text style={styles.teclaText}>{num}</Text>
-                </BotaoTeclado>
-              ))}
-            </View>
-          ))}
+          {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => <View key={i} style={styles.tecladoRow}>{row.map(num => <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>{num}</Text></BotaoTeclado>)}</View>)}
           <View style={styles.tecladoRow}>
-            <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}>
-              <Ionicons name="close" size={24} color="#fff" />
-            </BotaoTeclado>
-            <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r + v)}>
-              <Text style={styles.teclaText}>0</Text>
-            </BotaoTeclado>
-            <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}>
-              <Ionicons name="checkmark" size={28} color="#fff" />
-            </BotaoTeclado>
+            <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}><Ionicons name="close" size={24} color="#fff" /></BotaoTeclado>
+            <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>0</Text></BotaoTeclado>
+            <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}><Ionicons name="checkmark" size={28} color="#fff" /></BotaoTeclado>
           </View>
         </View>
       </View>
@@ -687,15 +790,21 @@ const styles = StyleSheet.create({
   gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
   headerStatsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  
   faseBadge: { backgroundColor: '#4169E1', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginLeft: 10 },
   faseBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
+
   btnPausaIcone: { padding: 4, marginLeft: 10 },
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingBottom: 10, height: 20 },
   gameArea: { position: 'relative', width: '100%', flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
-  operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, width: CARD_WIDTH, alignItems: 'center', zIndex: 10 },
+  
+  operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
+  operacaoVida: { backgroundColor: '#32CD32', borderWidth: 2, borderColor: '#fff' }, // O Novo card verde/branco de +1 Vida
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
+  
   bottomPanel: { paddingBottom: 15, width: '100%', alignItems: 'center' },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
@@ -715,12 +824,14 @@ const styles = StyleSheet.create({
   resultadoLabel: { fontSize: 14, color: '#888', marginTop: 4 },
   jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 16, borderRadius: 12, alignItems: 'center', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 10 },
   jogarNovamenteText: { color: '#000', fontSize: 18, fontWeight: '900' },
+
   pauseOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100, justifyContent: 'center', alignItems: 'center', padding: 20 },
   pauseTitle: { color: '#FFD700', fontSize: 32, fontWeight: '900', marginBottom: 30, letterSpacing: 2 },
   btnContinuar: { backgroundColor: '#32CD32', flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, width: '80%', justifyContent: 'center', gap: 10, marginBottom: 15 },
   btnContinuarText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
   btnSair: { backgroundColor: '#E74C3C', flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, width: '80%', justifyContent: 'center', gap: 10 },
   btnSairText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+
   transicaoOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'rgba(0,0,0,0.4)' },
   transicaoBox: { backgroundColor: 'rgba(255, 215, 0, 0.95)', paddingVertical: 20, paddingHorizontal: 50, borderRadius: 20, elevation: 10 },
   transicaoText: { color: '#000', fontSize: 36, fontWeight: '900', letterSpacing: 3, textTransform: 'uppercase' }
