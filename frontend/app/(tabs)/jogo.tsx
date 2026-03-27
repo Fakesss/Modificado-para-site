@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
@@ -67,20 +67,29 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
 };
 
 // =========================================================================
-// O NOVO BOTÃO TECLADO NINJA (Permite toques simultâneos)
+// O NOVO BOTÃO TECLADO NINJA (Toques simultâneos e trava anti-repetição)
 // =========================================================================
-const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => (
-  <Pressable 
-    style={({ pressed }) => [
-      styles.tecla, 
-      styleExtra,
-      pressed && { opacity: 0.6 } // Efeito visual de clique afundando
-    ]} 
-    onPressIn={() => onPress(valor)} // Atira no exato milissegundo que encosta
-  >
-    {children}
-  </Pressable>
-);
+const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
+  const [isPressed, setIsPressed] = useState(false);
+
+  return (
+    <TouchableOpacity 
+      activeOpacity={0.5} 
+      style={[styles.tecla, styleExtra]} 
+      onTouchStart={(e) => { 
+        e.stopPropagation(); 
+        if (!isPressed) {
+          setIsPressed(true);
+          onPress(valor); 
+        }
+      }}
+      onTouchEnd={() => setIsPressed(false)}
+      onTouchCancel={() => setIsPressed(false)}
+    >
+      {children}
+    </TouchableOpacity>
+  );
+};
 
 export default function Jogo() {
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
@@ -92,18 +101,14 @@ export default function Jogo() {
   const [missoesDisponiveis, setMissoesDisponiveis] = useState<any[]>([]);
   const [modoMatematica, setModoMatematica] = useState('misto');
   
-  // CONFIGURAÇÃO FUTURA DE SKINS: Cor base do Laser Personalizável
   const [corLaserPersonalizada, setCorLaserPersonalizada] = useState('#32CD32');
-
   const [pausado, setPausado] = useState(false);
   
-  // ESTADOS DA TRANSIÇÃO DE FASE
   const [faseAtualVisor, setFaseAtualVisor] = useState(1);
   const [mostrarFase, setMostrarFase] = useState(false);
   const fadeFaseAnim = useRef(new Animated.Value(0)).current;
   const transicaoAtivaRef = useRef(false);
   
-  // Controle de espera para limpar a tela
   const fasePendenteRef = useRef(false);
   const proximaFaseNumRef = useRef(1);
 
@@ -122,7 +127,6 @@ export default function Jogo() {
   const spawnTimer = useRef<any>(null);
   const botTimer = useRef<any>(null);
   
-  // Animações dos Lasers
   const laserAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const [lasersAtivos, setLasersAtivos] = useState<any[]>([]);
@@ -141,16 +145,13 @@ export default function Jogo() {
     } catch (e) {}
   };
 
-  // MONITOR MESTRE DO JOGO (Vitória de Missão e Transição de Fase)
   useEffect(() => {
-    // Vitória em Missão
     if (modoRef.current === 'missao' && jogoAtivoRef.current) {
       if (filaQuestoesRef.current.length === 0 && questoesEmJogoRef.current === 0 && operacoes.length === 0) {
         finalizarMissaoComSucesso();
       }
     }
 
-    // Passagem de Fase Apenas Quando a Tela Limpar
     if (jogoAtivoRef.current && fasePendenteRef.current && operacoes.length === 0) {
       fasePendenteRef.current = false;
       rodadaRef.current = proximaFaseNumRef.current; 
@@ -167,9 +168,6 @@ export default function Jogo() {
     setTimeout(() => setTela('resultado'), 500);
   };
 
-  // ==========================================
-  // SISTEMA DE AVANÇO DE FASE VISUAL
-  // ==========================================
   const avancarFase = (novaFase: number) => {
     if (transicaoAtivaRef.current || !jogoAtivoRef.current) return;
     transicaoAtivaRef.current = true;
@@ -182,7 +180,7 @@ export default function Jogo() {
     fadeFaseAnim.setValue(0);
     Animated.sequence([
       Animated.timing(fadeFaseAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.delay(1500), // Mantém a mensagem visível por 1.5s com a tela limpa
+      Animated.delay(1500), 
       Animated.timing(fadeFaseAnim, { toValue: 0, duration: 300, useNativeDriver: true })
     ]).start(() => {
       setMostrarFase(false);
@@ -193,9 +191,6 @@ export default function Jogo() {
     });
   };
 
-  // ==========================================
-  // SISTEMA DE PAUSA E RETOMADA
-  // ==========================================
   const pausarJogo = useCallback(() => {
     if (!jogoAtivoRef.current || jogoPausadoRef.current) return;
     
@@ -252,9 +247,6 @@ export default function Jogo() {
     }, [pausarJogo])
   );
 
-  // ==========================================
-  // INÍCIO DO JOGO E SPAWNER
-  // ==========================================
   const iniciarJogo = async (modoEscolhido: 'single' | 'bot' | 'missao', missaoDados?: any) => {
     if (modoEscolhido === 'missao' && missaoDados) {
       try {
@@ -297,60 +289,58 @@ export default function Jogo() {
     const loop = () => {
       if (!jogoAtivoRef.current || jogoPausadoRef.current || transicaoAtivaRef.current) return;
       
-      // O Spawner pausa a geração de novas contas se estiver aguardando limpar a tela
       if (!fasePendenteRef.current) {
         if (modoRef.current === 'missao' && filaQuestoesRef.current.length === 0) {} 
         else {
-          // Aumentado o limite máximo para criar o caos nas fases altas
           const maxOps = Math.min(15, 3 + Math.floor(pontos / 200)); 
           if (operacoesListRef.current.length < maxOps) spawnarQuestao();
         }
       }
       
       if (!transicaoAtivaRef.current) {
-        // Velocidade de spawn fica mais rápida também
         spawnTimer.current = setTimeout(loop, Math.max(800, 2500 - (pontos * 1.5)));
       }
     };
     if (!transicaoAtivaRef.current) loop();
   };
 
-  // ==========================================
-  // CÂMERA INTELIGENTE (ADAPTAÇÃO DE TELA)
-  // ==========================================
   const getDynamicSettings = () => {
     const r = rodadaRef.current;
     let numLanes = 3;
     
-    // A Câmera vai se afastando e criando mais pistas
     if (r >= 4) numLanes = 4;
     if (r >= 7) numLanes = 5;
     if (r >= 10) numLanes = 6;
     
     const laneWidth = width / numLanes;
-    const baseScale = 3 / numLanes; // O tamanho do card diminui proporcionalmente
+    const baseScale = 3 / numLanes; 
     
-    // Permite que contas caiam mais perto umas das outras à medida que a fase sobe
-    const minDropDistance = Math.max(0.08, 0.25 - (numLanes * 0.03)); 
+    const minDropDistance = 0.25; // Garante sempre que precisa ter 25% da tela livre para nascer outro
     
     return { numLanes, laneWidth, baseScale, minDropDistance };
   };
 
   const spawnarQuestao = () => {
-    let novaOp = null;
-    if (modoRef.current === 'missao') {
+    let dados = null;
+    let isMissao = modoRef.current === 'missao';
+    
+    if (isMissao) {
       if (filaQuestoesRef.current.length === 0) return;
-      const questao = filaQuestoesRef.current.shift();
-      if (!questao) return;
-      questoesEmJogoRef.current += 1;
-      novaOp = criarObjetoAnimado(questao.texto, questao.resposta, questao.id, 10000);
+      dados = filaQuestoesRef.current[0]; 
     } else {
-      const dados = gerarDadosArcade();
+      dados = gerarDadosArcade();
       if (!dados) return; 
-      questoesEmJogoRef.current += 1;
-      novaOp = criarObjetoAnimado(dados.texto, dados.resposta, dados.chave, dados.speed);
     }
-    if (novaOp) { setOperacoes(prev => [...prev, novaOp]); setTimeout(() => animarQueda(novaOp), 50); }
+
+    const novaOp = criarObjetoAnimado(dados.texto, dados.resposta, dados.chave || dados.id, dados.speed || 10000);
+    
+    // Se novaOp for NULL a pista está cheia, aborta e tenta de novo depois para não encavalar
+    if (novaOp) { 
+      if (isMissao) filaQuestoesRef.current.shift(); 
+      questoesEmJogoRef.current += 1;
+      setOperacoes(prev => [...prev, novaOp]); 
+      setTimeout(() => animarQueda(novaOp), 50); 
+    }
   };
 
   const gerarDadosArcade = (): any => {
@@ -405,7 +395,6 @@ export default function Jogo() {
       return { texto: txt, resposta: res, chave, speed };
     }
     
-    // Se esgotar as possibilidades, agenda subida de fase pendente!
     if (!fasePendenteRef.current) {
         fasePendenteRef.current = true;
         proximaFaseNumRef.current = rodadaRef.current + 1;
@@ -419,28 +408,28 @@ export default function Jogo() {
   const criarObjetoAnimado = (texto: string, resposta: number, chave: string, velocidade: number) => {
     const { numLanes, laneWidth, baseScale, minDropDistance } = getDynamicSettings();
     
-    // Filtra as pistas disponíveis permitindo que caiam mais contas ao mesmo tempo
-    const pistasDisponiveis = Array.from({length: numLanes}, (_, i) => i).filter(p => 
-      !operacoesAtuaisRef.current.find(o => o.lane === p) || 
-      operacoesAtuaisRef.current.find(o => o.lane === p)?.y > GAME_AREA_HEIGHT * minDropDistance
-    );
+    // Rastreador seguro de colunas livres para impedir contas uma em cima da outra
+    const pistasDisponiveis = Array.from({length: numLanes}, (_, i) => i).filter(p => {
+      const opsNaPista = operacoesAtuaisRef.current.filter(o => o.lane === p);
+      if (opsNaPista.length === 0) return true;
+      const menorY = Math.min(...opsNaPista.map(o => o.y));
+      return menorY > (GAME_AREA_HEIGHT * minDropDistance);
+    });
     
-    const lane = pistasDisponiveis.length > 0 ? pistasDisponiveis[Math.floor(Math.random() * pistasDisponiveis.length)] : Math.floor(Math.random() * numLanes);
+    if (pistasDisponiveis.length === 0) return null;
+    
+    const lane = pistasDisponiveis[Math.floor(Math.random() * pistasDisponiveis.length)];
     const id = Math.random().toString();
     operacoesAtuaisRef.current.push({ lane, y: 0, chave: id });
     
-    // Sistema de Power-ups
     let tipoEspecial = 'nenhum';
     const rand = Math.random();
     if (rand < 0.01) {
-       // 1% de chance (Super Raro) - Coração (+1 Vida)
        tipoEspecial = 'vida';
-    } else if (rand < 0.05) {
-       // 4% de chance (Raro) - Destruir Tudo
+    } else if (rand < 0.04) {
        tipoEspecial = 'destruir';
     }
 
-    // Calcula exatamente o centro da pista independentemente da escala
     const posX = (lane * laneWidth) + (laneWidth / 2) - (CARD_WIDTH / 2);
 
     return { 
@@ -459,6 +448,24 @@ export default function Jogo() {
   };
 
   const processarErro = (opId: string) => {
+    // Erro do usuário ao digitar (id vem como 'nenhum')
+    if (opId === 'nenhum') {
+      setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
+      return;
+    }
+
+    // Busca a conta exata na memória atualizada do radar
+    const opInfo = operacoesListRef.current.find(o => o.id === opId);
+
+    // Se um poder mágico (bônus) cair no chão, NÃO tira vida do jogador!
+    if (opInfo && (opInfo.tipoEspecial === 'vida' || opInfo.tipoEspecial === 'destruir')) {
+      questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
+      setOperacoes(prev => prev.filter(o => o.id !== opId));
+      operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== opId);
+      return;
+    }
+
+    // Conta normal caiu no chão: Perde vida
     questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
     setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
     setOperacoes(prev => prev.filter(o => o.id !== opId));
@@ -486,7 +493,6 @@ export default function Jogo() {
       
       setPontos(p => { 
         const novo = p + 10; 
-        // Agenda subida de fase a cada 50 pontos
         if (modoRef.current !== 'missao' && Math.floor(novo/50) > Math.floor(p/50)) { 
            if (!fasePendenteRef.current) {
                fasePendenteRef.current = true;
@@ -497,11 +503,10 @@ export default function Jogo() {
         return novo; 
       });
 
-      // Aplica efeitos do Power-Up
       if (alvo.tipoEspecial === 'destruir' && !powerUpDisponivel) {
         setPowerUpDisponivel(true);
       } else if (alvo.tipoEspecial === 'vida') {
-        setVidas(v => Math.min(v + 1, 7)); // Limite máximo de 7 corações na tela
+        setVidas(v => Math.min(v + 1, 7)); 
       }
 
       dispararLaserUnico(alvo, true);
@@ -515,9 +520,6 @@ export default function Jogo() {
     setResposta('');
   };
 
-  // ==========================================
-  // O NOVO SISTEMA DE LASERS MULTIPLOS
-  // ==========================================
   const calcularDadosLaser = (alvo: any, acertou: boolean) => {
     const originX = width / 2;
     const originY = GAME_AREA_HEIGHT; 
@@ -560,7 +562,6 @@ export default function Jogo() {
     }
   };
 
-  // Agora dispara múltiplos lasers visuais para todos os alvos!
   const ativarPowerUp = () => {
     if (!powerUpDisponivel || jogoPausadoRef.current || transicaoAtivaRef.current) return;
     const visiveis = operacoes.filter(o => (o.y as any)._value < GAME_AREA_HEIGHT);
@@ -572,7 +573,6 @@ export default function Jogo() {
     
     visiveis.forEach(o => o.y.stopAnimation());
     
-    // Calcula um laser para cada conta visível
     const novosLasers = visiveis.map(alvo => calcularDadosLaser(alvo, true));
     setLasersAtivos(novosLasers);
 
@@ -595,9 +595,6 @@ export default function Jogo() {
     setPowerUpDisponivel(false);
   };
 
-  // ==========================================
-  // RENDERIZAÇÃO
-  // ==========================================
   if (tela === 'menu') {
     return (
       <SafeAreaView style={styles.container}>
@@ -649,8 +646,15 @@ export default function Jogo() {
                 return ( <TouchableOpacity key={m.id} style={[ styles.modoCardItem, isSelected && { borderColor: m.color, backgroundColor: m.color + '15' } ]} onPress={() => setModoMatematica(m.id)}> <Ionicons name={m.icon as any} size={28} color={isSelected ? m.color : '#555'} /> <Text style={[styles.modoTextItem, isSelected && { color: m.color }]}>{m.name}</Text> </TouchableOpacity> );
               })}
             </View>
-            <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}><Ionicons name="play" size={24} color="#000" /><Text style={styles.iniciarButtonText}>INICIAR MODO LIVRE</Text></TouchableOpacity>
           </ScrollView>
+
+          {/* O BOTÃO AGORA FICA PREGADO FORA DO SCROLL PARA APARECER SEMPRE! */}
+          <View style={styles.btnIniciarWrapper}>
+            <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}>
+              <Ionicons name="play" size={24} color="#000" />
+              <Text style={styles.iniciarButtonText}>INICIAR MODO LIVRE</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -674,7 +678,6 @@ export default function Jogo() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       
-      {/* TELA DE MENSAGEM DE NOVA FASE */}
       {mostrarFase && (
         <Animated.View style={[styles.transicaoOverlay, { opacity: fadeFaseAnim }]}>
           <View style={styles.transicaoBox}>
@@ -683,7 +686,6 @@ export default function Jogo() {
         </Animated.View>
       )}
 
-      {/* OVERLAY DE PAUSA */}
       {pausado && (
         <View style={styles.pauseOverlay}>
           <Text style={styles.pauseTitle}>JOGO PAUSADO</Text>
@@ -703,7 +705,6 @@ export default function Jogo() {
           <Ionicons name="star" size={18} color="#FFD700" />
           <Text style={styles.statTextScore}>{pontos}</Text>
           
-          {/* MOSTRADOR DE FASE FIXO (Consertado com <Text> nas mensagens anteriores) */}
           {modoRef.current !== 'missao' && (
             <View style={styles.faseBadge}>
               <Text style={styles.faseBadgeText}>Fase {faseAtualVisor}</Text>
@@ -730,7 +731,7 @@ export default function Jogo() {
                 transform: [{ translateY: op.y }, { scale: op.scale }], 
                 left: op.posX, 
                 opacity: op.opacity,
-                width: CARD_WIDTH // Mantém a largura base para o flexbox centralizar o texto internamente
+                width: CARD_WIDTH
               }
             ]}
           > 
@@ -740,7 +741,6 @@ export default function Jogo() {
           </Animated.View> 
         ))}
         
-        {/* RENDERIZA MÚLTIPLOS LASERS */}
         {lasersAtivos.map((laserInfo, index) => (
           <Animated.View key={`laser-${index}`} style={[styles.laser, { 
             left: laserInfo.x - 2, 
@@ -773,7 +773,7 @@ export default function Jogo() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0c' },
   menuContainer: { flex: 1 },
-  menuScrollContent: { padding: 20, alignItems: 'center', paddingBottom: 40 },
+  menuScrollContent: { padding: 20, alignItems: 'center', paddingBottom: 20 },
   menuHeader: { alignItems: 'center', marginBottom: 30, marginTop: 20 },
   menuTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginTop: 12 },
   menuSubtitle: { fontSize: 15, color: '#888', marginTop: 4 },
@@ -785,8 +785,12 @@ const styles = StyleSheet.create({
   modosGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginBottom: 30 },
   modoCardItem: { backgroundColor: '#1a1a2e', paddingVertical: 16, paddingHorizontal: 8, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent', width: '30%', gap: 8, elevation: 2 },
   modoTextItem: { color: '#888', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
-  iniciarButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', marginTop: 10, elevation: 4 },
+  
+  // Estilos da caixa fixa do botão Iniciar
+  btnIniciarWrapper: { paddingHorizontal: 20, paddingBottom: 20, paddingTop: 10, backgroundColor: '#0c0c0c', borderTopWidth: 1, borderTopColor: '#1a1a2e' },
+  iniciarButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', elevation: 4 },
   iniciarButtonText: { color: '#000', fontSize: 18, fontWeight: '900' },
+  
   gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
   headerStatsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
@@ -795,12 +799,14 @@ const styles = StyleSheet.create({
   faseBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
 
   btnPausaIcone: { padding: 4, marginLeft: 10 },
-  vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingBottom: 10, height: 20 },
+  
+  // Corrigida a caixa que engolia metade dos corações
+  vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingBottom: 10, minHeight: 25 },
   gameArea: { position: 'relative', width: '100%', flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
   
   operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
-  operacaoVida: { backgroundColor: '#32CD32', borderWidth: 2, borderColor: '#fff' }, // O Novo card verde/branco de +1 Vida
+  operacaoVida: { backgroundColor: '#32CD32', borderWidth: 2, borderColor: '#fff' }, 
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
