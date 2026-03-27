@@ -7,8 +7,8 @@ import * as api from '../../src/services/api';
 import { useFocusEffect } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
-const GAME_AREA_HEIGHT = height * 0.62; 
 const CARD_WIDTH = 105;
+const DROP_LIMIT = height - 120; // A Linha da Morte (fica exatamente atrás das teclas)
 
 // =========================================================================
 // MOTOR DO CONTADOR DINÂMICO
@@ -67,20 +67,21 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
 };
 
 // =========================================================================
-// O VERDADEIRO TECLADO NINJA (Sem travas nativas do Android)
+// O TECLADO PIANO (Sem travas de toque! Permite acordes de vários dedos)
 // =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
   const [pressed, setPressed] = useState(false);
 
   return (
     <View 
-      style={[styles.tecla, styleExtra, pressed && { opacity: 0.6 }]} 
-      onTouchStart={() => { 
+      style={[styles.tecla, styleExtra, pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
+      onStartShouldSetResponder={() => true} // O segredo: isola o toque de outros botões!
+      onResponderGrant={() => { 
         setPressed(true);
         onPress(valor); 
       }}
-      onTouchEnd={() => setPressed(false)}
-      onTouchCancel={() => setPressed(false)}
+      onResponderRelease={() => setPressed(false)}
+      onResponderTerminate={() => setPressed(false)}
     >
       {children}
     </View>
@@ -126,6 +127,8 @@ export default function Jogo() {
   const laserAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const [lasersAtivos, setLasersAtivos] = useState<any[]>([]);
+  
+  const [explosoes, setExplosoes] = useState<any[]>([]); // Novo Estado para as Explosões Visuais
 
   const desempenhoOcultoRef = useRef(0); 
   const ultimasRespostasRef = useRef<number[]>([]);
@@ -133,6 +136,51 @@ export default function Jogo() {
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
   useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
   useEffect(() => { if (tela === 'menu') carregarMissoes(); }, [tela]);
+
+  // Função centralizada para processar os erros (Amarrada numa Ref para os listeners enxergarem sempre atualizado)
+  const processarErroRef = useRef<any>(null);
+
+  const processarErro = useCallback((opId: string) => {
+    // Tratamento de erro do jogador digitando errado (se for o caso)
+    if (opId === 'nenhum') {
+      setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
+      return;
+    }
+
+    const opInfo = operacoesListRef.current.find(o => o.id === opId);
+    if (!opInfo) return;
+
+    // Congela a operação no lugar em que estava (Linha da Morte)
+    opInfo.y.stopAnimation();
+
+    // Cria a Explosão Visual!
+    const expId = Math.random().toString();
+    const anim = new Animated.Value(1);
+    setExplosoes(prev => [...prev, {
+        id: expId,
+        x: opInfo.posX,
+        y: (opInfo.y as any)._value || DROP_LIMIT,
+        texto: opInfo.textoTela,
+        anim
+    }]);
+
+    Animated.timing(anim, { toValue: 0, duration: 800, useNativeDriver: true }).start(() => {
+        setExplosoes(prev => prev.filter(e => e.id !== expId));
+    });
+
+    // Desconta a vida instantaneamente
+    if (opInfo.tipoEspecial !== 'vida' && opInfo.tipoEspecial !== 'destruir') {
+      setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
+    }
+
+    questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
+    setOperacoes(prev => prev.filter(o => o.id !== opId));
+    operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== opId);
+  }, []);
+
+  useEffect(() => {
+    processarErroRef.current = processarErro;
+  }, [processarErro]);
 
   const carregarMissoes = async () => {
     try {
@@ -208,18 +256,15 @@ export default function Jogo() {
     
     operacoesListRef.current.forEach(op => {
       const currentY = (op.y as any)._value || 0;
-      const distTotal = GAME_AREA_HEIGHT + 50;
+      const distTotal = height + 50; 
       const distRestante = distTotal - currentY;
-      
       const duracaoRestante = Math.max(100, (distRestante / distTotal) * op.speed);
       
       Animated.timing(op.y, { 
         toValue: distTotal, 
         duration: duracaoRestante, 
         useNativeDriver: true 
-      }).start(({ finished }) => { 
-        if (finished && !jogoPausadoRef.current) processarErro(op.id); 
-      });
+      }).start();
     });
   };
 
@@ -232,6 +277,7 @@ export default function Jogo() {
     setMostrarFase(false);
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     setOperacoes([]);
+    setExplosoes([]);
     setTela('menu');
   };
 
@@ -256,7 +302,7 @@ export default function Jogo() {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     if (botTimer.current) clearInterval(botTimer.current);
     
-    setOperacoes([]); setPontos(0); setResposta(''); setPowerUpDisponivel(false); 
+    setOperacoes([]); setExplosoes([]); setPontos(0); setResposta(''); setPowerUpDisponivel(false); 
     setPausado(false); setMostrarFase(false); setFaseAtualVisor(1);
     
     operacoesAtuaisRef.current = []; 
@@ -311,7 +357,7 @@ export default function Jogo() {
     const laneWidth = width / numLanes;
     const baseScale = 3 / numLanes; 
     
-    const minDropDistance = 0.25; 
+    const minDropDistance = 0.20; 
     
     return { numLanes, laneWidth, baseScale, minDropDistance };
   };
@@ -407,14 +453,14 @@ export default function Jogo() {
       const opsNaPista = operacoesAtuaisRef.current.filter(o => o.lane === p);
       if (opsNaPista.length === 0) return true;
       const menorY = Math.min(...opsNaPista.map(o => o.y));
-      return menorY > (GAME_AREA_HEIGHT * minDropDistance);
+      return menorY > (DROP_LIMIT * minDropDistance);
     });
     
     if (pistasDisponiveis.length === 0) return null;
     
     const lane = pistasDisponiveis[Math.floor(Math.random() * pistasDisponiveis.length)];
     const id = Math.random().toString();
-    operacoesAtuaisRef.current.push({ lane, y: 0, chave: id });
+    operacoesAtuaisRef.current.push({ lane, y: 0, chave: id, missed: false });
     
     let tipoEspecial = 'nenhum';
     const rand = Math.random();
@@ -425,10 +471,23 @@ export default function Jogo() {
     }
 
     const posX = (lane * laneWidth) + (laneWidth / 2) - (CARD_WIDTH / 2);
+    
+    // O Radar Implacável: Avisa instantaneamente quando a operação atinge a Linha da Morte
+    const yValue = new Animated.Value(0);
+    yValue.addListener(({ value }: any) => {
+      const ref = operacoesAtuaisRef.current.find((o:any) => o.chave === id);
+      if (ref) {
+         ref.y = value;
+         if (value >= DROP_LIMIT && !ref.missed) {
+            ref.missed = true;
+            if (processarErroRef.current) processarErroRef.current(id);
+         }
+      }
+    });
 
     return { 
       id, chaveOriginal: chave, resposta, textoTela: texto, 
-      y: new Animated.Value(0), speed: velocidade, 
+      y: yValue, speed: velocidade, 
       posX, lane, 
       tipoEspecial, baseScale,
       opacity: new Animated.Value(1), scale: new Animated.Value(baseScale) 
@@ -437,30 +496,8 @@ export default function Jogo() {
 
   const animarQueda = (op: any) => {
     if (!jogoAtivoRef.current || jogoPausadoRef.current) return;
-    op.y.addListener(({ value }: any) => { const ref = operacoesAtuaisRef.current.find((o:any) => o.chave === op.id); if (ref) ref.y = value; });
-    Animated.timing(op.y, { toValue: GAME_AREA_HEIGHT + 50, duration: op.speed, useNativeDriver: true }).start(({ finished }) => { if (finished && !jogoPausadoRef.current) processarErro(op.id); });
-  };
-
-  const processarErro = (opId: string) => {
-    if (opId === 'nenhum') {
-      setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
-      return;
-    }
-
-    const opInfo = operacoesListRef.current.find(o => o.id === opId);
-
-    // Bônus caindo no chão não tiram vida (como acordado, isso só muda depois!)
-    if (opInfo && (opInfo.tipoEspecial === 'vida' || opInfo.tipoEspecial === 'destruir')) {
-      questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
-      setOperacoes(prev => prev.filter(o => o.id !== opId));
-      operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== opId);
-      return;
-    }
-
-    questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
-    setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
-    setOperacoes(prev => prev.filter(o => o.id !== opId));
-    operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== opId);
+    // Ele tenta cair além do limite, mas nosso Listener do Radar intercepta ele perfeitamente no ar!
+    Animated.timing(op.y, { toValue: height + 100, duration: op.speed, useNativeDriver: true }).start();
   };
 
   const gameOver = () => { 
@@ -471,6 +508,7 @@ export default function Jogo() {
     setPausado(false);
     if (spawnTimer.current) clearTimeout(spawnTimer.current); 
     setOperacoes([]); 
+    setExplosoes([]);
     setTela('resultado'); 
   };
 
@@ -513,10 +551,10 @@ export default function Jogo() {
 
   const calcularDadosLaser = (alvo: any, acertou: boolean) => {
     const originX = width / 2;
-    const originY = GAME_AREA_HEIGHT; 
+    const originY = DROP_LIMIT + 30; // Laser sai sempre por baixo da área
     
     const targetX = acertou && alvo ? alvo.posX + CARD_WIDTH / 2 : width / 2;
-    const targetY = acertou && alvo ? (alvo.y as any)._value + 20 : GAME_AREA_HEIGHT * 0.2;
+    const targetY = acertou && alvo ? (alvo.y as any)._value + 20 : DROP_LIMIT * 0.2;
     
     const dx = targetX - originX;
     const dy = targetY - originY;
@@ -555,7 +593,7 @@ export default function Jogo() {
 
   const ativarPowerUp = () => {
     if (!powerUpDisponivel || jogoPausadoRef.current || transicaoAtivaRef.current) return;
-    const visiveis = operacoes.filter(o => (o.y as any)._value < GAME_AREA_HEIGHT);
+    const visiveis = operacoes.filter(o => (o.y as any)._value < DROP_LIMIT);
     
     if (visiveis.length === 0) {
       setPowerUpDisponivel(false);
@@ -657,6 +695,7 @@ export default function Jogo() {
               })}
             </View>
           </ScrollView>
+
           <View style={styles.btnIniciarWrapper}>
             <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}>
               <Ionicons name="play" size={24} color="#000" />
@@ -727,7 +766,7 @@ export default function Jogo() {
 
       <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />)}</View>
       
-      <View style={[styles.gameArea, { height: GAME_AREA_HEIGHT }]}>
+      <View style={styles.gameArea}>
         {operacoes.map((op) => ( 
           <Animated.View 
             key={op.id} 
@@ -749,6 +788,17 @@ export default function Jogo() {
           </Animated.View> 
         ))}
         
+        {/* RENDERIZADOR DAS EXPLOSÕES */}
+        {explosoes.map(exp => (
+          <Animated.View key={exp.id} style={[styles.explosaoContainer, { 
+             left: exp.x, top: exp.y, opacity: exp.anim,
+             transform: [{ scale: exp.anim.interpolate({ inputRange: [0, 1], outputRange: [1.8, 1] }) }] 
+          }]}>
+             <Text style={styles.explosaoEmoji}>💥</Text>
+             <Text style={styles.explosaoTexto}>{exp.texto}</Text>
+          </Animated.View>
+        ))}
+
         {lasersAtivos.map((laserInfo, index) => (
           <Animated.View key={`laser-${index}`} style={[styles.laser, { 
             left: laserInfo.x - 2, 
@@ -761,6 +811,7 @@ export default function Jogo() {
         ))}
       </View>
       
+      {/* O FUNDO DO TECLADO AGORA É TRANSPARENTE E ABSOLUTO, SOBREPOSTO AO JOGO */}
       <View style={styles.bottomPanel}>
         <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
         
@@ -803,24 +854,37 @@ const styles = StyleSheet.create({
   faseBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
   btnPausaIcone: { padding: 4, marginLeft: 10 },
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, height: 30 },
-  gameArea: { position: 'relative', width: '100%', flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
+  
+  // Game Area toma a tela toda, e não esconde o que passa dos limites!
+  gameArea: { flex: 1, width: '100%', backgroundColor: '#0a0a0a', zIndex: 1 },
+  
   operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
   operacaoVida: { backgroundColor: '#32CD32', borderWidth: 2, borderColor: '#fff' }, 
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  
+  explosaoContainer: { position: 'absolute', width: CARD_WIDTH, alignItems: 'center', zIndex: 15 },
+  explosaoEmoji: { fontSize: 45 },
+  explosaoTexto: { color: '#FF4444', fontWeight: '900', fontSize: 18, textDecorationLine: 'line-through', textShadowColor: '#000', textShadowRadius: 5, marginTop: -15 },
+
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
-  bottomPanel: { paddingBottom: 15, width: '100%', alignItems: 'center' },
+  
+  // O Teclado agora flutua por cima do jogo de forma absoluta
+  bottomPanel: { position: 'absolute', bottom: 0, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10 },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
-  displayContainer: { backgroundColor: '#1a1a2e', width: 280, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  
+  // Visor e botões Translúcidos estilo vidro fumê!
+  displayContainer: { backgroundColor: 'rgba(26, 26, 46, 0.7)', width: 280, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
   tecladoContainer: { width: 280, gap: 5 },
   tecladoRow: { flexDirection: 'row', gap: 5, justifyContent: 'space-between' },
-  tecla: { backgroundColor: '#1a1a2e', flex: 1, height: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  tecla: { backgroundColor: 'rgba(26, 26, 46, 0.75)', flex: 1, height: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   teclaText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  teclaApagar: { backgroundColor: '#E74C3C' },
-  teclaEnviar: { backgroundColor: '#32CD32' },
+  teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)' },
+  teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)' },
+  
   resultadoContainer: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center' },
   resultadoTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginBottom: 15 },
   resultadoCard: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', marginBottom: 10, width: '100%' },
