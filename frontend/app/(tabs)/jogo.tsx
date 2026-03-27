@@ -7,8 +7,9 @@ import * as api from '../../src/services/api';
 import { useFocusEffect } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
+const GAME_AREA_HEIGHT = height * 0.62; 
 const CARD_WIDTH = 105;
-const DROP_LIMIT = height - 120; // A Linha da Morte (fica exatamente atrás das teclas)
+const DROP_LIMIT = GAME_AREA_HEIGHT - 30; // A Linha da Morte onde as contas são fritadas
 
 // =========================================================================
 // MOTOR DO CONTADOR DINÂMICO
@@ -67,21 +68,62 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
 };
 
 // =========================================================================
-// O TECLADO PIANO (Sem travas de toque! Permite acordes de vários dedos)
+// O MOTOR DE PARTÍCULAS (Faz a conta se despedaçar na Linha Elétrica)
+// =========================================================================
+const Particula = ({ char }: { char: string }) => {
+  const anim = useRef(new Animated.Value(0)).current;
+  const [randomX] = useState((Math.random() - 0.5) * 200); 
+  const [randomY] = useState((Math.random() - 0.5) * 250 - 80); 
+  const [randomRot] = useState((Math.random() - 0.5) * 720); 
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 700,
+      useNativeDriver: true
+    }).start();
+  }, []);
+
+  return (
+    <Animated.Text style={[
+      styles.particulaTexto,
+      {
+        transform: [
+          { translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [0, randomX] }) },
+          { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [0, randomY] }) },
+          { rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', `${randomRot}deg`] }) },
+          { scale: anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [1, 1.8, 0] }) } 
+        ],
+        opacity: anim.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] })
+      }
+    ]}>
+      {char}
+    </Animated.Text>
+  );
+};
+
+// =========================================================================
+// O TECLADO PIANO (Permite Acordes e Digitação Frenética)
 // =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
   const [pressed, setPressed] = useState(false);
+  const lastPress = useRef(0);
 
   return (
     <View 
       style={[styles.tecla, styleExtra, pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
-      onStartShouldSetResponder={() => true} // O segredo: isola o toque de outros botões!
-      onResponderGrant={() => { 
-        setPressed(true);
-        onPress(valor); 
+      onTouchStart={() => { 
+        const now = Date.now();
+        // O debounce individual garante que um mesmo botão não dispare duplo erro
+        // Mas permite que botões DIFERENTES sejam tocados no mesmo milissegundo!
+        if (now - lastPress.current > 80) { 
+          lastPress.current = now;
+          setPressed(true);
+          onPress(valor); 
+        }
       }}
-      onResponderRelease={() => setPressed(false)}
-      onResponderTerminate={() => setPressed(false)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
     >
       {children}
     </View>
@@ -128,7 +170,7 @@ export default function Jogo() {
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const [lasersAtivos, setLasersAtivos] = useState<any[]>([]);
   
-  const [explosoes, setExplosoes] = useState<any[]>([]); // Novo Estado para as Explosões Visuais
+  const [explosoes, setExplosoes] = useState<any[]>([]); 
 
   const desempenhoOcultoRef = useRef(0); 
   const ultimasRespostasRef = useRef<number[]>([]);
@@ -137,11 +179,12 @@ export default function Jogo() {
   useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
   useEffect(() => { if (tela === 'menu') carregarMissoes(); }, [tela]);
 
-  // Função centralizada para processar os erros (Amarrada numa Ref para os listeners enxergarem sempre atualizado)
+  // ==========================================
+  // O INTERCEPTADOR DE ERROS
+  // ==========================================
   const processarErroRef = useRef<any>(null);
 
   const processarErro = useCallback((opId: string) => {
-    // Tratamento de erro do jogador digitando errado (se for o caso)
     if (opId === 'nenhum') {
       setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
       return;
@@ -150,28 +193,26 @@ export default function Jogo() {
     const opInfo = operacoesListRef.current.find(o => o.id === opId);
     if (!opInfo) return;
 
-    // Congela a operação no lugar em que estava (Linha da Morte)
+    // Trava o meteoro imediatamente no lugar da linha elétrica
     opInfo.y.stopAnimation();
 
-    // Cria a Explosão Visual!
+    // Cria a Explosão Estilhaçada
     const expId = Math.random().toString();
-    const anim = new Animated.Value(1);
     setExplosoes(prev => [...prev, {
         id: expId,
         x: opInfo.posX,
-        y: (opInfo.y as any)._value || DROP_LIMIT,
+        y: DROP_LIMIT,
         texto: opInfo.textoTela,
-        anim
+        corEspecial: opInfo.tipoEspecial !== 'nenhum'
     }]);
 
-    Animated.timing(anim, { toValue: 0, duration: 800, useNativeDriver: true }).start(() => {
+    // Limpa os estilhaços após a animação
+    setTimeout(() => {
         setExplosoes(prev => prev.filter(e => e.id !== expId));
-    });
+    }, 800);
 
-    // Desconta a vida instantaneamente
-    if (opInfo.tipoEspecial !== 'vida' && opInfo.tipoEspecial !== 'destruir') {
-      setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
-    }
+    // Como você pediu, TODOS os blocos tiram vida se caírem (incluindo power-ups)
+    setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
 
     questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
     setOperacoes(prev => prev.filter(o => o.id !== opId));
@@ -181,6 +222,7 @@ export default function Jogo() {
   useEffect(() => {
     processarErroRef.current = processarErro;
   }, [processarErro]);
+
 
   const carregarMissoes = async () => {
     try {
@@ -472,12 +514,13 @@ export default function Jogo() {
 
     const posX = (lane * laneWidth) + (laneWidth / 2) - (CARD_WIDTH / 2);
     
-    // O Radar Implacável: Avisa instantaneamente quando a operação atinge a Linha da Morte
+    // O Radar de Interceptação da Linha Elétrica!
     const yValue = new Animated.Value(0);
     yValue.addListener(({ value }: any) => {
       const ref = operacoesAtuaisRef.current.find((o:any) => o.chave === id);
       if (ref) {
          ref.y = value;
+         // Assim que toca a linha e se ainda não foi marcado, explode e tira vida!
          if (value >= DROP_LIMIT && !ref.missed) {
             ref.missed = true;
             if (processarErroRef.current) processarErroRef.current(id);
@@ -496,7 +539,7 @@ export default function Jogo() {
 
   const animarQueda = (op: any) => {
     if (!jogoAtivoRef.current || jogoPausadoRef.current) return;
-    // Ele tenta cair além do limite, mas nosso Listener do Radar intercepta ele perfeitamente no ar!
+    // O destino final é bem abaixo da tela, mas o Listener vai pará-lo exatamente na Linha Elétrica
     Animated.timing(op.y, { toValue: height + 100, duration: op.speed, useNativeDriver: true }).start();
   };
 
@@ -551,7 +594,7 @@ export default function Jogo() {
 
   const calcularDadosLaser = (alvo: any, acertou: boolean) => {
     const originX = width / 2;
-    const originY = DROP_LIMIT + 30; // Laser sai sempre por baixo da área
+    const originY = DROP_LIMIT + 30; // Laser sempre brota do centro baixo
     
     const targetX = acertou && alvo ? alvo.posX + CARD_WIDTH / 2 : width / 2;
     const targetY = acertou && alvo ? (alvo.y as any)._value + 20 : DROP_LIMIT * 0.2;
@@ -767,6 +810,13 @@ export default function Jogo() {
       <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />)}</View>
       
       <View style={styles.gameArea}>
+        
+        {/* A LINHA ELÉTRICA DA MORTE VISUAL */}
+        <View style={styles.linhaEletricaContainer}>
+           <View style={styles.linhaEletricaCore} />
+           <View style={styles.linhaEletricaGlow} />
+        </View>
+
         {operacoes.map((op) => ( 
           <Animated.View 
             key={op.id} 
@@ -788,15 +838,14 @@ export default function Jogo() {
           </Animated.View> 
         ))}
         
-        {/* RENDERIZADOR DAS EXPLOSÕES */}
+        {/* RENDERIZADOR DAS PARTÍCULAS ESTILHAÇADAS */}
         {explosoes.map(exp => (
-          <Animated.View key={exp.id} style={[styles.explosaoContainer, { 
-             left: exp.x, top: exp.y, opacity: exp.anim,
-             transform: [{ scale: exp.anim.interpolate({ inputRange: [0, 1], outputRange: [1.8, 1] }) }] 
-          }]}>
-             <Text style={styles.explosaoEmoji}>💥</Text>
-             <Text style={styles.explosaoTexto}>{exp.texto}</Text>
-          </Animated.View>
+          <View key={exp.id} style={[styles.explosaoContainer, { left: exp.x, top: exp.y }]}>
+             {/* Quebra a string "12 + 5" em ['1','2',' ','+',' ','5'] e cria uma partícula para cada! */}
+             {exp.texto.split('').map((char: string, i: number) => (
+               <Particula key={i} char={char} />
+             ))}
+          </View>
         ))}
 
         {lasersAtivos.map((laserInfo, index) => (
@@ -811,7 +860,6 @@ export default function Jogo() {
         ))}
       </View>
       
-      {/* O FUNDO DO TECLADO AGORA É TRANSPARENTE E ABSOLUTO, SOBREPOSTO AO JOGO */}
       <View style={styles.bottomPanel}>
         <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
         
@@ -855,27 +903,29 @@ const styles = StyleSheet.create({
   btnPausaIcone: { padding: 4, marginLeft: 10 },
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, height: 30 },
   
-  // Game Area toma a tela toda, e não esconde o que passa dos limites!
   gameArea: { flex: 1, width: '100%', backgroundColor: '#0a0a0a', zIndex: 1 },
   
+  // Estilos da Linha Elétrica Neon
+  linhaEletricaContainer: { position: 'absolute', top: DROP_LIMIT, width: '100%', height: 10, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
+  linhaEletricaCore: { width: '100%', height: 2, backgroundColor: '#00FFFF', shadowColor: '#00FFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 8, elevation: 8 },
+  linhaEletricaGlow: { position: 'absolute', width: '100%', height: 8, backgroundColor: 'rgba(0, 255, 255, 0.3)' },
+
   operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
   operacaoVida: { backgroundColor: '#32CD32', borderWidth: 2, borderColor: '#fff' }, 
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   
-  explosaoContainer: { position: 'absolute', width: CARD_WIDTH, alignItems: 'center', zIndex: 15 },
-  explosaoEmoji: { fontSize: 45 },
-  explosaoTexto: { color: '#FF4444', fontWeight: '900', fontSize: 18, textDecorationLine: 'line-through', textShadowColor: '#000', textShadowRadius: 5, marginTop: -15 },
+  // Estilos dos Estilhaços (Partículas)
+  explosaoContainer: { position: 'absolute', width: CARD_WIDTH, height: 40, alignItems: 'center', justifyContent: 'center', zIndex: 15 },
+  particulaTexto: { position: 'absolute', color: '#00FFFF', fontSize: 22, fontWeight: '900', textShadowColor: '#00FFFF', textShadowRadius: 10 },
 
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
   
-  // O Teclado agora flutua por cima do jogo de forma absoluta
   bottomPanel: { position: 'absolute', bottom: 0, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10 },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
   
-  // Visor e botões Translúcidos estilo vidro fumê!
   displayContainer: { backgroundColor: 'rgba(26, 26, 46, 0.7)', width: 280, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
   tecladoContainer: { width: 280, gap: 5 },
