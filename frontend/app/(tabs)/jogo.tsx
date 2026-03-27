@@ -103,34 +103,28 @@ const Particula = ({ char }: { char: string }) => {
 };
 
 // =========================================================================
-// O VERDADEIRO TECLADO PIANO (Com Trava Absoluta de Hardware)
+// O TECLADO PIANO DEFINITIVO (Usando PointerEvents padrão W3C/Web)
 // =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
-  const [isPressedUI, setIsPressedUI] = useState(false);
-  const isPressedLock = useRef(false); // Trava absoluta que ignora o erro de toques duplos do Android
+  const [pressed, setPressed] = useState(false);
+  const timeoutRef = useRef<any>(null);
+
+  const handlePointerDown = (e: any) => {
+    e.stopPropagation();
+    onPress(valor);
+    
+    // Feedback visual ultrarrápido
+    setPressed(true);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      setPressed(false);
+    }, 120); 
+  };
 
   return (
     <View 
-      style={[styles.tecla, styleExtra, isPressedUI && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
-      pointerEvents="box-only" // Impede que o texto dentro do botão bagunce o sensor de toque
-      onTouchStart={(e) => { 
-        e.stopPropagation();
-        if (!isPressedLock.current) {
-          isPressedLock.current = true;
-          setIsPressedUI(true);
-          onPress(valor); 
-        }
-      }}
-      onTouchEnd={(e) => {
-        e.stopPropagation();
-        isPressedLock.current = false;
-        setIsPressedUI(false);
-      }}
-      onTouchCancel={(e) => {
-        e.stopPropagation();
-        isPressedLock.current = false;
-        setIsPressedUI(false);
-      }}
+      style={[styles.tecla, styleExtra, pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
+      onPointerDown={handlePointerDown} 
     >
       {children}
     </View>
@@ -187,7 +181,7 @@ export default function Jogo() {
   useEffect(() => { if (tela === 'menu') carregarMissoes(); }, [tela]);
 
   // ==========================================
-  // O INTERCEPTADOR DE ERROS
+  // O INTERCEPTADOR DE ERROS (Dano imediato)
   // ==========================================
   const processarErroRef = useRef<any>(null);
 
@@ -200,10 +194,8 @@ export default function Jogo() {
     const opInfo = operacoesListRef.current.find(o => o.id === opId);
     if (!opInfo) return;
 
-    // Trava o meteoro imediatamente no lugar da linha elétrica
     opInfo.y.stopAnimation();
 
-    // Cria a Explosão Estilhaçada
     const expId = Math.random().toString();
     setExplosoes(prev => [...prev, {
         id: expId,
@@ -213,12 +205,11 @@ export default function Jogo() {
         corEspecial: opInfo.tipoEspecial !== 'nenhum'
     }]);
 
-    // Limpa os estilhaços após a animação
     setTimeout(() => {
         setExplosoes(prev => prev.filter(e => e.id !== expId));
     }, 800);
 
-    // Como você pediu, TODOS os blocos tiram vida se caírem (incluindo power-ups)
+    // Como combinado, penalidade se aplica mesmo para bônus que caiam!
     setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
 
     questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
@@ -521,13 +512,11 @@ export default function Jogo() {
 
     const posX = (lane * laneWidth) + (laneWidth / 2) - (CARD_WIDTH / 2);
     
-    // O Radar de Interceptação da Linha Elétrica!
     const yValue = new Animated.Value(0);
     yValue.addListener(({ value }: any) => {
       const ref = operacoesAtuaisRef.current.find((o:any) => o.chave === id);
       if (ref) {
          ref.y = value;
-         // Assim que toca a linha e se ainda não foi marcado, explode e tira vida!
          if (value >= DROP_LIMIT && !ref.missed) {
             ref.missed = true;
             if (processarErroRef.current) processarErroRef.current(id);
@@ -546,7 +535,6 @@ export default function Jogo() {
 
   const animarQueda = (op: any) => {
     if (!jogoAtivoRef.current || jogoPausadoRef.current) return;
-    // O destino final é bem abaixo da tela, mas o Listener vai pará-lo exatamente na Linha Elétrica
     Animated.timing(op.y, { toValue: height + 100, duration: op.speed, useNativeDriver: true }).start();
   };
 
@@ -601,7 +589,7 @@ export default function Jogo() {
 
   const calcularDadosLaser = (alvo: any, acertou: boolean) => {
     const originX = width / 2;
-    const originY = DROP_LIMIT + 30; // Laser sempre brota do centro baixo
+    const originY = DROP_LIMIT + 30; 
     
     const targetX = acertou && alvo ? alvo.posX + CARD_WIDTH / 2 : width / 2;
     const targetY = acertou && alvo ? (alvo.y as any)._value + 20 : DROP_LIMIT * 0.2;
@@ -818,7 +806,6 @@ export default function Jogo() {
       
       <View style={styles.gameArea}>
         
-        {/* A LINHA ELÉTRICA DA MORTE VISUAL */}
         <View style={styles.linhaEletricaContainer}>
            <View style={styles.linhaEletricaCore} />
            <View style={styles.linhaEletricaGlow} />
@@ -845,10 +832,8 @@ export default function Jogo() {
           </Animated.View> 
         ))}
         
-        {/* RENDERIZADOR DAS PARTÍCULAS ESTILHAÇADAS */}
         {explosoes.map(exp => (
           <View key={exp.id} style={[styles.explosaoContainer, { left: exp.x, top: exp.y }]}>
-             {/* Quebra a string "12 + 5" em ['1','2',' ','+',' ','5'] e cria uma partícula para cada! */}
              {exp.texto.split('').map((char: string, i: number) => (
                <Particula key={i} char={char} />
              ))}
@@ -912,7 +897,6 @@ const styles = StyleSheet.create({
   
   gameArea: { flex: 1, width: '100%', backgroundColor: '#0a0a0a', zIndex: 1 },
   
-  // Estilos da Linha Elétrica Neon
   linhaEletricaContainer: { position: 'absolute', top: DROP_LIMIT, width: '100%', height: 10, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
   linhaEletricaCore: { width: '100%', height: 2, backgroundColor: '#00FFFF', shadowColor: '#00FFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 8, elevation: 8 },
   linhaEletricaGlow: { position: 'absolute', width: '100%', height: 8, backgroundColor: 'rgba(0, 255, 255, 0.3)' },
@@ -922,7 +906,6 @@ const styles = StyleSheet.create({
   operacaoVida: { backgroundColor: '#32CD32', borderWidth: 2, borderColor: '#fff' }, 
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
   
-  // Estilos dos Estilhaços (Partículas)
   explosaoContainer: { position: 'absolute', width: CARD_WIDTH, height: 40, alignItems: 'center', justifyContent: 'center', zIndex: 15 },
   particulaTexto: { position: 'absolute', color: '#00FFFF', fontSize: 22, fontWeight: '900', textShadowColor: '#00FFFF', textShadowRadius: 10 },
 
