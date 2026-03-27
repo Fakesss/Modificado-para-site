@@ -67,6 +67,9 @@ export const getUsuarios = async () => { try { return (await api.get('/usuarios'
 export const updateUsuario = async (id: string, d: any) => (await api.put(`/usuarios/${id}`, d)).data;
 export const deleteUsuario = async (id: string) => (await api.delete(`/usuarios/${id}`)).data;
 
+// NOVO: Comando de Mestre para zerar os pontos de todo mundo
+export const zerarTodosPontos = async () => (await api.post('/usuarios/zerar-pontos')).data;
+
 // TURMAS E EQUIPES
 export const getTurmas = async () => { try { return (await api.get('/turmas')).data; } catch { return []; } };
 export const createTurma = async (nome: string) => (await api.post('/turmas', { nome })).data;
