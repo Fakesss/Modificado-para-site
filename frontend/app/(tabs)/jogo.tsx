@@ -103,27 +103,34 @@ const Particula = ({ char }: { char: string }) => {
 };
 
 // =========================================================================
-// O TECLADO PIANO (Permite Acordes e Digitação Frenética)
+// O VERDADEIRO TECLADO PIANO (Com Trava Absoluta de Hardware)
 // =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
-  const [pressed, setPressed] = useState(false);
-  const lastPress = useRef(0);
+  const [isPressedUI, setIsPressedUI] = useState(false);
+  const isPressedLock = useRef(false); // Trava absoluta que ignora o erro de toques duplos do Android
 
   return (
     <View 
-      style={[styles.tecla, styleExtra, pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
-      onTouchStart={() => { 
-        const now = Date.now();
-        // O debounce individual garante que um mesmo botão não dispare duplo erro
-        // Mas permite que botões DIFERENTES sejam tocados no mesmo milissegundo!
-        if (now - lastPress.current > 80) { 
-          lastPress.current = now;
-          setPressed(true);
+      style={[styles.tecla, styleExtra, isPressedUI && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
+      pointerEvents="box-only" // Impede que o texto dentro do botão bagunce o sensor de toque
+      onTouchStart={(e) => { 
+        e.stopPropagation();
+        if (!isPressedLock.current) {
+          isPressedLock.current = true;
+          setIsPressedUI(true);
           onPress(valor); 
         }
       }}
-      onTouchEnd={() => setPressed(false)}
-      onTouchCancel={() => setPressed(false)}
+      onTouchEnd={(e) => {
+        e.stopPropagation();
+        isPressedLock.current = false;
+        setIsPressedUI(false);
+      }}
+      onTouchCancel={(e) => {
+        e.stopPropagation();
+        isPressedLock.current = false;
+        setIsPressedUI(false);
+      }}
     >
       {children}
     </View>
