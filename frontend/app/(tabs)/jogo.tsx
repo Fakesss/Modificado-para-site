@@ -67,27 +67,23 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
 };
 
 // =========================================================================
-// O NOVO BOTÃO TECLADO NINJA (Toques simultâneos e trava anti-repetição)
+// O VERDADEIRO TECLADO NINJA (Sem travas nativas do Android)
 // =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
-  const [isPressed, setIsPressed] = useState(false);
+  const [pressed, setPressed] = useState(false);
 
   return (
-    <TouchableOpacity 
-      activeOpacity={0.5} 
-      style={[styles.tecla, styleExtra]} 
-      onTouchStart={(e) => { 
-        e.stopPropagation(); 
-        if (!isPressed) {
-          setIsPressed(true);
-          onPress(valor); 
-        }
+    <View 
+      style={[styles.tecla, styleExtra, pressed && { opacity: 0.6 }]} 
+      onTouchStart={() => { 
+        setPressed(true);
+        onPress(valor); 
       }}
-      onTouchEnd={() => setIsPressed(false)}
-      onTouchCancel={() => setIsPressed(false)}
+      onTouchEnd={() => setPressed(false)}
+      onTouchCancel={() => setPressed(false)}
     >
       {children}
-    </TouchableOpacity>
+    </View>
   );
 };
 
@@ -315,7 +311,7 @@ export default function Jogo() {
     const laneWidth = width / numLanes;
     const baseScale = 3 / numLanes; 
     
-    const minDropDistance = 0.25; // Garante sempre que precisa ter 25% da tela livre para nascer outro
+    const minDropDistance = 0.25; 
     
     return { numLanes, laneWidth, baseScale, minDropDistance };
   };
@@ -334,7 +330,6 @@ export default function Jogo() {
 
     const novaOp = criarObjetoAnimado(dados.texto, dados.resposta, dados.chave || dados.id, dados.speed || 10000);
     
-    // Se novaOp for NULL a pista está cheia, aborta e tenta de novo depois para não encavalar
     if (novaOp) { 
       if (isMissao) filaQuestoesRef.current.shift(); 
       questoesEmJogoRef.current += 1;
@@ -408,7 +403,6 @@ export default function Jogo() {
   const criarObjetoAnimado = (texto: string, resposta: number, chave: string, velocidade: number) => {
     const { numLanes, laneWidth, baseScale, minDropDistance } = getDynamicSettings();
     
-    // Rastreador seguro de colunas livres para impedir contas uma em cima da outra
     const pistasDisponiveis = Array.from({length: numLanes}, (_, i) => i).filter(p => {
       const opsNaPista = operacoesAtuaisRef.current.filter(o => o.lane === p);
       if (opsNaPista.length === 0) return true;
@@ -448,16 +442,14 @@ export default function Jogo() {
   };
 
   const processarErro = (opId: string) => {
-    // Erro do usuário ao digitar (id vem como 'nenhum')
     if (opId === 'nenhum') {
       setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
       return;
     }
 
-    // Busca a conta exata na memória atualizada do radar
     const opInfo = operacoesListRef.current.find(o => o.id === opId);
 
-    // Se um poder mágico (bônus) cair no chão, NÃO tira vida do jogador!
+    // Bônus caindo no chão não tiram vida (como acordado, isso só muda depois!)
     if (opInfo && (opInfo.tipoEspecial === 'vida' || opInfo.tipoEspecial === 'destruir')) {
       questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
       setOperacoes(prev => prev.filter(o => o.id !== opId));
@@ -465,7 +457,6 @@ export default function Jogo() {
       return;
     }
 
-    // Conta normal caiu no chão: Perde vida
     questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
     setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
     setOperacoes(prev => prev.filter(o => o.id !== opId));
@@ -596,10 +587,20 @@ export default function Jogo() {
   };
 
   if (tela === 'menu') {
+    const modosArcade = [
+      { id: 'misto', name: 'Jornada', color: '#FFD700', icon: 'infinite' },
+      { id: 'soma', name: 'Soma', color: '#32CD32', icon: 'add' },
+      { id: 'subtracao', name: 'Subtração', color: '#FF4444', icon: 'remove' },
+      { id: 'multiplicacao', name: 'Multiplicação', color: '#4169E1', icon: 'close' },
+      { id: 'divisao', name: 'Divisão', color: '#9B59B6', icon: 'code-slash' },
+      { id: 'potenciacao', name: 'Potências', color: '#FF8C00', icon: 'chevron-up' },
+      { id: 'radiciacao', name: 'Raízes', color: '#00CED1', icon: 'flash' }
+    ];
+
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.menuContainer}>
-          <ScrollView contentContainerStyle={styles.menuScrollContent} showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.menuScrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.menuHeader}>
               <Ionicons name="game-controller" size={64} color="#FFD700" />
               <Text style={styles.menuTitle}>Matemática Turbo</Text>
@@ -641,14 +642,21 @@ export default function Jogo() {
 
             <Text style={styles.sectionLabel}>Escolha seu Modo Livre (Arcade):</Text>
             <View style={styles.modosGrid}>
-              {[ { id: 'misto', name: 'Jornada', color: '#FFD700', icon: 'infinite' }, { id: 'soma', name: 'Soma', color: '#32CD32', icon: 'add' }, { id: 'subtracao', name: 'Subtração', color: '#FF4444', icon: 'remove' }, { id: 'multiplicacao', name: 'Multiplicação', color: '#4169E1', icon: 'close' }, { id: 'divisao', name: 'Divisão', color: '#9B59B6', icon: 'code-slash' }, { id: 'potenciacao', name: 'Potências', color: '#FF8C00', icon: 'chevron-up' }, { id: 'radiciacao', name: 'Raízes', color: '#00CED1', icon: 'flash' } ].map(m => {
+              {modosArcade.map(m => {
                 const isSelected = modoMatematica === m.id;
-                return ( <TouchableOpacity key={m.id} style={[ styles.modoCardItem, isSelected && { borderColor: m.color, backgroundColor: m.color + '15' } ]} onPress={() => setModoMatematica(m.id)}> <Ionicons name={m.icon as any} size={28} color={isSelected ? m.color : '#555'} /> <Text style={[styles.modoTextItem, isSelected && { color: m.color }]}>{m.name}</Text> </TouchableOpacity> );
+                return (
+                  <TouchableOpacity 
+                    key={m.id} 
+                    style={[styles.modoCardItem, isSelected && { borderColor: m.color, backgroundColor: m.color + '15' }]} 
+                    onPress={() => setModoMatematica(m.id)}
+                  >
+                    <Ionicons name={m.icon as any} size={28} color={isSelected ? m.color : '#555'} />
+                    <Text style={[styles.modoTextItem, isSelected && { color: m.color }]}>{m.name}</Text>
+                  </TouchableOpacity>
+                );
               })}
             </View>
           </ScrollView>
-
-          {/* O BOTÃO AGORA FICA PREGADO FORA DO SCROLL PARA APARECER SEMPRE! */}
           <View style={styles.btnIniciarWrapper}>
             <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}>
               <Ionicons name="play" size={24} color="#000" />
@@ -785,32 +793,22 @@ const styles = StyleSheet.create({
   modosGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginBottom: 30 },
   modoCardItem: { backgroundColor: '#1a1a2e', paddingVertical: 16, paddingHorizontal: 8, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent', width: '30%', gap: 8, elevation: 2 },
   modoTextItem: { color: '#888', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
-  
-  // Estilos da caixa fixa do botão Iniciar
   btnIniciarWrapper: { paddingHorizontal: 20, paddingBottom: 20, paddingTop: 10, backgroundColor: '#0c0c0c', borderTopWidth: 1, borderTopColor: '#1a1a2e' },
   iniciarButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', elevation: 4 },
   iniciarButtonText: { color: '#000', fontSize: 18, fontWeight: '900' },
-  
   gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
   headerStatsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  
   faseBadge: { backgroundColor: '#4169E1', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginLeft: 10 },
   faseBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
-
   btnPausaIcone: { padding: 4, marginLeft: 10 },
-  
-  // Corrigida a caixa que engolia metade dos corações
-  vidasContainer: { flexDirection: 'row', justifyContent: 'center', gap: 4, paddingBottom: 10, minHeight: 25 },
+  vidasContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, height: 30 },
   gameArea: { position: 'relative', width: '100%', flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden' },
-  
   operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
   operacaoVida: { backgroundColor: '#32CD32', borderWidth: 2, borderColor: '#fff' }, 
   operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
-  
   bottomPanel: { paddingBottom: 15, width: '100%', alignItems: 'center' },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
@@ -830,14 +828,12 @@ const styles = StyleSheet.create({
   resultadoLabel: { fontSize: 14, color: '#888', marginTop: 4 },
   jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 16, borderRadius: 12, alignItems: 'center', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 10 },
   jogarNovamenteText: { color: '#000', fontSize: 18, fontWeight: '900' },
-
   pauseOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100, justifyContent: 'center', alignItems: 'center', padding: 20 },
   pauseTitle: { color: '#FFD700', fontSize: 32, fontWeight: '900', marginBottom: 30, letterSpacing: 2 },
   btnContinuar: { backgroundColor: '#32CD32', flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, width: '80%', justifyContent: 'center', gap: 10, marginBottom: 15 },
   btnContinuarText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
   btnSair: { backgroundColor: '#E74C3C', flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, width: '80%', justifyContent: 'center', gap: 10 },
   btnSairText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-
   transicaoOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'rgba(0,0,0,0.4)' },
   transicaoBox: { backgroundColor: 'rgba(255, 215, 0, 0.95)', paddingVertical: 20, paddingHorizontal: 50, borderRadius: 20, elevation: 10 },
   transicaoText: { color: '#000', fontSize: 36, fontWeight: '900', letterSpacing: 3, textTransform: 'uppercase' }
