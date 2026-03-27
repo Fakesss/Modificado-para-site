@@ -9,7 +9,7 @@ import { useFocusEffect } from 'expo-router';
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.62; 
 const CARD_WIDTH = 105;
-const DROP_LIMIT = GAME_AREA_HEIGHT - 30; // A Linha da Morte onde as contas são fritadas
+const DROP_LIMIT = GAME_AREA_HEIGHT - 30; 
 
 // =========================================================================
 // MOTOR DO CONTADOR DINÂMICO
@@ -68,7 +68,7 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
 };
 
 // =========================================================================
-// O MOTOR DE PARTÍCULAS (Faz a conta se despedaçar na Linha Elétrica)
+// O MOTOR DE PARTÍCULAS
 // =========================================================================
 const Particula = ({ char }: { char: string }) => {
   const anim = useRef(new Animated.Value(0)).current;
@@ -103,33 +103,27 @@ const Particula = ({ char }: { char: string }) => {
 };
 
 // =========================================================================
-// O TECLADO PIANO DEFINITIVO (Trava de recarregamento isolada)
+// TECLADO
 // =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
   const [pressed, setPressed] = useState(false);
-  const isHolding = useRef(false);
+  const timeoutRef = useRef<any>(null);
+
+  const handlePointerDown = (e: any) => {
+    e.stopPropagation();
+    onPress(valor);
+    
+    setPressed(true);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      setPressed(false);
+    }, 120); 
+  };
 
   return (
     <View 
       style={[styles.tecla, styleExtra, pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
-      onTouchStart={(e) => { 
-        e.stopPropagation();
-        if (!isHolding.current) {
-          isHolding.current = true;
-          setPressed(true);
-          onPress(valor); 
-        }
-      }}
-      onTouchEnd={(e) => {
-        e.stopPropagation();
-        isHolding.current = false;
-        setPressed(false);
-      }}
-      onTouchCancel={(e) => {
-        e.stopPropagation();
-        isHolding.current = false;
-        setPressed(false);
-      }}
+      onPointerDown={handlePointerDown} 
     >
       {children}
     </View>
@@ -137,6 +131,7 @@ const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
 };
 
 export default function Jogo() {
+  const { user } = useAuth(); // Usado para checar se é ADMIN
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [pontos, setPontos] = useState(0);
   const [vidas, setVidas] = useState(5); 
@@ -185,9 +180,6 @@ export default function Jogo() {
   useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
   useEffect(() => { if (tela === 'menu') carregarMissoes(); }, [tela]);
 
-  // ==========================================
-  // O INTERCEPTADOR DE ERROS (Dano imediato)
-  // ==========================================
   const processarErroRef = useRef<any>(null);
 
   const processarErro = useCallback((opId: string) => {
@@ -214,7 +206,6 @@ export default function Jogo() {
         setExplosoes(prev => prev.filter(e => e.id !== expId));
     }, 800);
 
-    // Como combinado, penalidade se aplica mesmo para bônus que caiam!
     setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
 
     questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
@@ -226,12 +217,37 @@ export default function Jogo() {
     processarErroRef.current = processarErro;
   }, [processarErro]);
 
-
   const carregarMissoes = async () => {
     try {
       const data = await api.getMissoesDisponiveis();
       setMissoesDisponiveis(Array.isArray(data) ? data : []);
     } catch (e) {}
+  };
+
+  // Função exclusiva do Admin para deletar missões travadas
+  const confirmarDelecaoMissao = (id: string) => {
+    Alert.alert(
+      "Apagar Missão Personalizada",
+      "Tem certeza que deseja apagar esta missão do sistema para todos os jogadores?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { 
+          text: "Apagar", 
+          style: "destructive", 
+          onPress: async () => {
+            try {
+              // Chama a API para deletar no banco (precisa existir no api.ts)
+              await api.deletarMissao(id);
+              Alert.alert("Sucesso", "A missão foi apagada.");
+              carregarMissoes(); // Recarrega a lista sem a missão apagada
+            } catch (error) {
+              console.error("Erro ao apagar missão", error);
+              Alert.alert("Erro", "Falha ao apagar. Verifique se a rota existe no backend.");
+            }
+          }
+        }
+      ]
+    );
   };
 
   useEffect(() => {
@@ -698,24 +714,35 @@ export default function Jogo() {
                   const esgotado = !ilimitado && feitas >= limite;
                   
                   return (
-                    <TouchableOpacity 
-                      key={missao.id || index} 
-                      style={[styles.missaoCard, esgotado && { backgroundColor: '#333' }]} 
-                      onPress={() => !esgotado && iniciarJogo('missao', missao)}
-                      activeOpacity={esgotado ? 1 : 0.7}
-                    >
-                      <View style={styles.missaoIcon}><Ionicons name={esgotado ? "lock-closed" : "trophy"} size={24} color="#FFF" /></View>
-                      <View style={{flex: 1}}>
-                        <Text style={[styles.missaoTitle, esgotado && {color: '#888'}]}>{missao.titulo}</Text>
-                        <Text style={[styles.missaoSub, esgotado && {color: '#666'}]}>
-                          {missao.recompensa} Pts • {ilimitado ? 'Tents. Ilimitadas' : `Tentativas: ${feitas}/${limite}`}
-                        </Text>
-                        {missao.expiraEm && (
-                          <ContadorExpiracao expiraEm={missao.expiraEm} esgotado={esgotado} />
+                    <View key={missao.id || index} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                        <TouchableOpacity 
+                          style={[styles.missaoCard, esgotado && { backgroundColor: '#333' }, { flex: 1, marginBottom: 0 }]} 
+                          onPress={() => !esgotado && iniciarJogo('missao', missao)}
+                          activeOpacity={esgotado ? 1 : 0.7}
+                        >
+                          <View style={styles.missaoIcon}><Ionicons name={esgotado ? "lock-closed" : "trophy"} size={24} color="#FFF" /></View>
+                          <View style={{flex: 1}}>
+                            <Text style={[styles.missaoTitle, esgotado && {color: '#888'}]}>{missao.titulo}</Text>
+                            <Text style={[styles.missaoSub, esgotado && {color: '#666'}]}>
+                              {missao.recompensa} Pts • {ilimitado ? 'Tents. Ilimitadas' : `Tentativas: ${feitas}/${limite}`}
+                            </Text>
+                            {missao.expiraEm && (
+                              <ContadorExpiracao expiraEm={missao.expiraEm} esgotado={esgotado} />
+                            )}
+                          </View>
+                          <Ionicons name="play-circle" size={32} color={esgotado ? "#555" : "#FFF"} />
+                        </TouchableOpacity>
+
+                        {/* BOTÃO EXCLUSIVO DO ADMIN PARA APAGAR MISSÃO TRAVADA */}
+                        {user?.perfil === 'ADMIN' && (
+                          <TouchableOpacity
+                            style={{ backgroundColor: '#E74C3C', padding: 15, borderRadius: 12, marginLeft: 8, justifyContent: 'center', alignItems: 'center' }}
+                            onPress={() => confirmarDelecaoMissao(missao.id)}
+                          >
+                            <Ionicons name="trash" size={24} color="#FFF" />
+                          </TouchableOpacity>
                         )}
-                      </View>
-                      <Ionicons name="play-circle" size={32} color={esgotado ? "#555" : "#FFF"} />
-                    </TouchableOpacity>
+                    </View>
                   );
                 })}
               </View>
@@ -882,7 +909,7 @@ const styles = StyleSheet.create({
   menuTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginTop: 12 },
   menuSubtitle: { fontSize: 15, color: '#888', marginTop: 4 },
   sectionLabel: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 12, alignSelf: 'flex-start', marginTop: 10 },
-  missaoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF69B4', padding: 15, borderRadius: 16, marginBottom: 10, width: '100%', elevation: 3 },
+  missaoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF69B4', padding: 15, borderRadius: 16, width: '100%', elevation: 3 },
   missaoIcon: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 15 },
   missaoTitle: { color: '#fff', fontSize: 18, fontWeight: '900' },
   missaoSub: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600', marginTop: 2 },
