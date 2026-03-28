@@ -6,6 +6,7 @@ import { useAuth } from '../src/context/AuthContext';
 import * as api from '../src/services/api';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 
+// IMPORTA A CONEXÃO E A MEMÓRIA GLOBAL DO JOGO
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
 
 const { width, height } = Dimensions.get('window');
@@ -250,7 +251,6 @@ export default function Arcade() {
   const setupMultiplayerMatch = (data: any) => {
       setModo('multi'); modoRef.current = 'multi';
       
-      // O SEGREDO DO MULTIPLAYER: Usa o modo enviado pelo convite
       setModoMatematica(data.modo_operacao || 'misto');
       modoMatematicaRef.current = data.modo_operacao || 'misto';
 
@@ -343,7 +343,7 @@ export default function Arcade() {
   const processarErro = useCallback((opId: string) => {
     if (opId === 'nenhum') {
       if (modoRef.current === 'multi') {
-         // Multiplayer não perde vida no erro intencional de botão pra não punir clique duplo
+         // Não pune erro intencional de botão no multi pra não punir clique duplo
       } else {
          setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
       }
@@ -815,7 +815,7 @@ export default function Arcade() {
             </View>
           </View>
       ) : (modo === 'multi' && meuStatus === 'morto') ? (
-          <View style={[styles.bottomPanel, {justifyContent: 'center', height: 250}]}><Ionicons name="skull" size={48} color="#FF4444" /><Text style={{color: '#FFF', fontSize: 20, fontWeight: 'bold', marginTop: 10}}>VOCÊ MORREU</Text><Text style={{color: '#888', marginTop: 5}}>Assistindo partida...</Text></View>
+          <View style={[styles.bottomPanel, {justifyContent: 'center', height: 250, backgroundColor: 'rgba(26, 26, 46, 0.85)', borderRadius: 20}]}><Ionicons name="skull" size={48} color="#FF4444" /><Text style={{color: '#FFF', fontSize: 20, fontWeight: 'bold', marginTop: 10}}>VOCÊ MORREU</Text><Text style={{color: '#888', marginTop: 5}}>Assistindo partida...</Text></View>
       ) : null}
     </SafeAreaView>
   );
@@ -861,11 +861,11 @@ const styles = StyleSheet.create({
   particulaTexto: { position: 'absolute', color: '#00FFFF', fontSize: 22, fontWeight: '900', textShadowColor: '#00FFFF', textShadowRadius: 10 },
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
   
-  bottomPanel: { position: 'absolute', bottom: 0, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10, backgroundColor: '#1a1a2e', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 15 },
+  // TECLADO TRANSPARENTE RESTAURADO
+  bottomPanel: { position: 'absolute', bottom: 0, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10 },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
-  
   displayContainer: { backgroundColor: 'rgba(26, 26, 46, 0.7)', width: 280, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
   tecladoContainer: { width: 280, gap: 5 },
