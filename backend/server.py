@@ -94,7 +94,7 @@ class AdminUsuarioUpdate(BaseModel):
     equipeId: Optional[str] = None
     senha: Optional[str] = None
     ativo: Optional[bool] = None
-    pontosTotais: Optional[int] = None  # AQUI ESTÁ A CHAVE: Agora o backend aceita edição de pontos!
+    pontosTotais: Optional[int] = None
 
 class Conteudo(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -210,6 +210,12 @@ class Token(BaseModel):
     access_token: str
     token_type: str
     usuario: Dict[str, Any]
+
+# NOVOS MODELOS DE ATUALIZAÇÃO DA EQUIPE
+class EquipeUpdate(BaseModel):
+    nome: Optional[str] = None
+    cor: Optional[str] = None
+    ativa: Optional[bool] = None
 
 # ============== HELPERS ==============
 
@@ -347,6 +353,17 @@ async def create_equipe(equipe_data: dict, current_user: dict = Depends(require_
     await db.equipes.insert_one(equipe.dict())
     return equipe.dict()
 
+# A ROTA RECUPERADA PARA MUDAR A COR DA EQUIPE
+@api_router.put("/equipes/{equipe_id}")
+async def update_equipe(equipe_id: str, update_data: EquipeUpdate, current_user: dict = Depends(require_admin)):
+    update_dict = update_data.dict(exclude_unset=True)
+    if update_dict:
+        await db.equipes.update_one({"id": equipe_id}, {"$set": update_dict})
+    equipe = await db.equipes.find_one({"id": equipe_id})
+    if not equipe:
+        raise HTTPException(status_code=404, detail="Equipe não encontrada")
+    return {k: v for k, v in equipe.items() if k != '_id'}
+
 @api_router.delete("/equipes/{equipe_id}")
 async def delete_equipe(equipe_id: str, current_user: dict = Depends(require_admin)):
     await db.equipes.update_one({"id": equipe_id}, {"$set": {"ativa": False}})
@@ -397,11 +414,8 @@ async def admin_delete_usuario(user_id: str, current_user: dict = Depends(requir
 # =====================================================================
 @api_router.post("/usuarios/zerar-pontos")
 async def zerar_todos_pontos(current_user: dict = Depends(require_admin)):
-    # Zera os pontos de todos os usuários da coleção de usuários
     await db.usuarios.update_many({}, {"$set": {"pontosTotais": 0}})
-    # Zera os pontos pré-calculados nas tabelas de equipes
     await db.equipes.update_many({}, {"$set": {"pontosTotais": 0}})
-    
     return {"message": "Todos os pontos foram zerados com sucesso."}
 
 
@@ -937,15 +951,14 @@ async def get_online_users():
         # 1. FAZ A LEITURA ISOLADA (Seguro)
         ativos = await db.online_users.find({"last_ping": {"$gte": cutoff}}).to_list(1000)
         
-        # 2. ISOLAMENTO DE FALHAS: Se o banco travar apagando, a requisição NÃO quebra.
+        # 2. ISOLAMENTO DE FALHAS
         try:
             await db.online_users.delete_many({"last_ping": {"$lt": cutoff}})
         except Exception:
-            pass # Ignora falha de faxina, salva a vida do servidor
+            pass 
             
         return [{"id": u["id"], "nome": u.get("nome"), "turmaId": u.get("turmaId"), "equipeId": u.get("equipeId")} for u in ativos]
     except Exception:
-        # Se rolar pânico geral no banco, retorna vazio ao invés de Erro 500
         return []
 
 app.include_router(api_router)
