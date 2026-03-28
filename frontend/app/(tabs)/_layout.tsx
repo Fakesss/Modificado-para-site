@@ -80,7 +80,10 @@ export default function TabsLayout() {
     socket.on('connect', onConnect);
 
     const identityInterval = setInterval(() => {
-        if (socket.connected) registrarJogador();
+        if (socket.connected) {
+            registrarJogador();
+            socket.emit('update_status', { status: 'MENU' }); // <- Adicionamos o envio do status aqui também
+        }
     }, 10000);
 
     const onReceiveInvite = (data: any) => setConvite(data);
