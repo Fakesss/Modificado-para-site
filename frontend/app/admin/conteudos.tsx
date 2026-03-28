@@ -14,7 +14,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-// REMOVIDAS AS BIBLIOTECAS NATIVAS QUE QUEBRAM O VERCEL
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import * as api from '../../src/services/api';
 
 type TipoConteudo = 'VIDEO' | 'LINK' | 'MATERIAL';
@@ -48,34 +49,59 @@ export default function AdminConteudos() {
   };
 
   const handlePickDocument = async () => {
-    if (Platform.OS === 'web') {
-      // SOLUÇÃO PURA WEB (Sem bibliotecas externas)
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '*/*'; 
-      input.onchange = (e: any) => {
-        const file = e.target.files[0];
-        if (file) {
-          if (file.size > 4 * 1024 * 1024) {
-            Alert.alert("Erro", "Arquivo muito grande (Máx 4MB na versão Web).");
-            return;
-          }
-          
-          setNomeArquivo(file.name);
-          const reader = new FileReader();
-          reader.onload = () => {
-            if (typeof reader.result === 'string') {
-              const base64String = reader.result.split(',')[1];
-              setArquivoBase64(base64String);
-              Alert.alert("Sucesso", "Arquivo carregado!");
-            }
-          };
-          reader.readAsDataURL(file);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*', // Aceita qualquer tipo de arquivo (PDF, DOCX, Imagens)
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const file = result.assets[0];
+
+        // Validação de tamanho (4MB)
+        if (file.size && file.size > 4 * 1024 * 1024) {
+          Alert.alert("Erro", "O arquivo é muito grande. O limite máximo é 4MB.");
+          return;
         }
-      };
-      input.click();
-    } else {
-      Alert.alert("Aviso", "Upload de arquivos disponível apenas na versão Web no momento.");
+
+        setNomeArquivo(file.name);
+
+        // Lógica universal para converter o arquivo em Base64
+        if (Platform.OS === 'web') {
+          // Na Web, usamos a API do navegador para ler o blob/file
+          if (file.file) {
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result === 'string') {
+                const base64String = reader.result.split(',')[1];
+                setArquivoBase64(base64String);
+              }
+            };
+            reader.readAsDataURL(file.file);
+          } else {
+            // Fallback Web se file.file não estiver disponível
+            const response = await fetch(file.uri);
+            const blob = await response.blob();
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (typeof reader.result === 'string') {
+                const base64String = reader.result.split(',')[1];
+                setArquivoBase64(base64String);
+              }
+            };
+            reader.readAsDataURL(blob);
+          }
+        } else {
+          // No Mobile (Android/iOS), usamos o expo-file-system
+          const base64 = await FileSystem.readAsStringAsync(file.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          setArquivoBase64(base64);
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Erro", "Não foi possível selecionar o arquivo.");
     }
   };
 
@@ -156,7 +182,7 @@ export default function AdminConteudos() {
               <Ionicons name="cloud-upload-outline" size={24} color="#000" />
               <Text style={styles.uploadText}>{nomeArquivo || "Selecionar Arquivo"}</Text>
             </TouchableOpacity>
-            <Text style={{color:'#666', fontSize:12, marginTop:5}}>* Limite recomendado: 4MB (Web)</Text>
+            <Text style={{color:'#666', fontSize:12, marginTop:5}}>* Limite recomendado: 4MB</Text>
           </View>
         )}
 
