@@ -22,7 +22,6 @@ matchmaking_queues = {
 
 @sio.event
 async def connect(sid, environ):
-    print(f'Client connected: {sid}')
     players_online[sid] = {
         'sid': sid,
         'name': 'Visitante',
@@ -43,8 +42,7 @@ async def disconnect(sid):
         if sid in matchmaking_queues[q_name]:
             matchmaking_queues[q_name].remove(sid)
     
-    await broadcast_online_users()
-
+    # LIMPEZA FANTASMA: Se o jogador cair, limpa a sala e libera o oponente!
     for room_id, room in list(rooms.items()):
         if sid in room['players']:
             other_players = [p for p in room['players'] if p != sid]
@@ -53,8 +51,14 @@ async def disconnect(sid):
                 await sio.emit('opponent_disconnected', {}, room=other_sid)
             for spec_sid in room.get('spectators', []):
                 await sio.emit('match_ended', {}, room=spec_sid)
+            
+            # Devolve o status do outro jogador para MENU
+            for p in room['players']:
+                if p in players_online: players_online[p]['status'] = 'MENU'
             del rooms[room_id]
             break
+
+    await broadcast_online_users()
 
 @sio.event
 async def register_player(sid, data):
@@ -221,19 +225,15 @@ async def cancel_matchmaking(sid):
         if sid in matchmaking_queues[q_name]:
             matchmaking_queues[q_name].remove(sid)
 
-
 # =========================================================================
 # LÓGICA DO JOGO DA VELHA (TIC-TAC-TOE)
 # =========================================================================
 def gerar_operacao_simples():
     ops = ['+', '-', 'x']
     op = random.choice(ops)
-    if op == '+':
-        n1 = random.randint(1, 20); n2 = random.randint(1, 20); res = n1 + n2
-    elif op == '-':
-        n1 = random.randint(10, 30); n2 = random.randint(1, n1); res = n1 - n2
-    else: 
-        n1 = random.randint(1, 10); n2 = random.randint(1, 10); res = n1 * n2
+    if op == '+': n1 = random.randint(1, 20); n2 = random.randint(1, 20); res = n1 + n2
+    elif op == '-': n1 = random.randint(10, 30); n2 = random.randint(1, n1); res = n1 - n2
+    else: n1 = random.randint(1, 10); n2 = random.randint(1, 10); res = n1 * n2
     return {"texto": f"{n1} {op} {n2}", "resposta": res, "marcadoPor": None}
 
 def check_win(board):
@@ -247,10 +247,8 @@ def check_win(board):
 
 async def start_tictactoe_match(p1_sid, p2_sid):
     room_id = f"ttt_{p1_sid[:5]}_{p2_sid[:5]}"
-    if random.choice([True, False]):
-        x_sid, o_sid = p1_sid, p2_sid
-    else:
-        x_sid, o_sid = p2_sid, p1_sid
+    if random.choice([True, False]): x_sid, o_sid = p1_sid, p2_sid
+    else: x_sid, o_sid = p2_sid, p1_sid
 
     board = [gerar_operacao_simples() for _ in range(9)]
 
@@ -296,7 +294,10 @@ async def make_move(sid, data):
         ganhador = check_win(room['board'])
         if ganhador:
             await sio.emit('game_over', {'ganhador': ganhador, 'board': room['board']}, room=room_id)
+            for p in room['players']:
+                if p in players_online: players_online[p]['status'] = 'MENU'
             del rooms[room_id]
+            await broadcast_online_users()
             return
         else:
             room['turn'] = 'O' if my_symbol == 'X' else 'X'
@@ -305,13 +306,15 @@ async def make_move(sid, data):
         if room['vidas'][sid] <= 0:
             ganhador = 'O' if my_symbol == 'X' else 'X'
             await sio.emit('game_over', {'ganhador': ganhador, 'board': room['board']}, room=room_id)
+            for p in room['players']:
+                if p in players_online: players_online[p]['status'] = 'MENU'
             del rooms[room_id]
+            await broadcast_online_users()
             return
         else:
             room['turn'] = 'O' if my_symbol == 'X' else 'X'
 
     await sio.emit('board_update', {'board': room['board'], 'turn': room['turn'], 'vidas': room['vidas']}, room=room_id)
-
 
 # =========================================================================
 # ARCADE MULTIPLAYER (Chuva de Meteoros Sincronizada)
@@ -355,7 +358,6 @@ async def arcade_answer(sid, data):
     
     if room_id not in rooms or rooms[room_id]['type'] != 'arcade': return
     room = rooms[room_id]
-    
     if op_id in room['destroyed_ops']: return 
 
     room['destroyed_ops'].add(op_id)
@@ -374,11 +376,7 @@ async def arcade_miss(sid, data):
     room = rooms[room_id]
 
     room['vidas'][sid] -= 1
-    
-    await sio.emit('arcade_state_update', {
-        'vidas': room['vidas'],
-        'pontos': room['pontos']
-    }, room=room_id)
+    await sio.emit('arcade_state_update', {'vidas': room['vidas'], 'pontos': room['pontos']}, room=room_id)
 
     p1, p2 = room['players']
     if room['vidas'][p1] <= 0 and room['vidas'][p2] <= 0:
@@ -387,7 +385,12 @@ async def arcade_miss(sid, data):
         else: ganhador = 'Empate'
         
         await sio.emit('game_over', {'ganhador': ganhador, 'pontos': room['pontos']}, room=room_id)
+        
+        # LIMPEZA FANTASMA
+        for p in room['players']:
+            if p in players_online: players_online[p]['status'] = 'MENU'
         del rooms[room_id]
+        await broadcast_online_users()
 
 @sio.event
 async def leave_match(sid, data):
@@ -400,6 +403,11 @@ async def leave_match(sid, data):
             
         for spec_sid in rooms[room_id].get('spectators', []):
             await sio.emit('match_ended', {}, room=spec_sid)
+        
+        # LIMPEZA FANTASMA
+        for p in rooms[room_id]['players']:
+            if p in players_online: players_online[p]['status'] = 'MENU'
         del rooms[room_id]
+        await broadcast_online_users()
 
 app = socketio.ASGIApp(sio)
