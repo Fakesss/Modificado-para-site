@@ -59,8 +59,14 @@ export default function ArcadeMultiplayer() {
   const filaMultiplayerRef = useRef<any[]>([]); 
   const operacoesAtuaisRef = useRef<any[]>([]);
   const operacoesListRef = useRef<any[]>([]); 
+  
+  // MEMÓRIAS BLINDADAS (Previnem o "Fantasma" dos loops)
   const rodadaRef = useRef(1);
   const jogoAtivoRef = useRef(false);
+  const isHostRef = useRef(false);
+  const modoMatematicaRef = useRef('misto');
+  const meuStatusRef = useRef<'vivo' | 'morto'>('vivo');
+  const modoRef = useRef<'multi' | 'espectador'>('multi');
   
   const spawnTimer = useRef<any>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
@@ -70,12 +76,15 @@ export default function ArcadeMultiplayer() {
 
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
 
+  // ==========================================
+  // O CÉREBRO DO ARCADE ONLINE & ESPECTADOR
+  // ==========================================
   useEffect(() => {
     socket.emit('update_status', { status: 'JOGANDO_ONLINE' });
 
     const onArcadeNewBatch = (data: any) => {
         filaMultiplayerRef.current.push(...data.ops);
-        if (modo === 'espectador' && filaMultiplayerRef.current.length > 0 && !jogoAtivoRef.current) {
+        if (modoRef.current === 'espectador' && filaMultiplayerRef.current.length > 0 && !jogoAtivoRef.current) {
             jogoAtivoRef.current = true;
             iniciarLoopSpawner();
         }
@@ -85,7 +94,7 @@ export default function ArcadeMultiplayer() {
         const { op_id, winner_sid, pontos: novosPontos } = data;
         const opInfo = operacoesListRef.current.find(o => o.chaveOriginal === op_id);
         
-        if (modo === 'espectador') {
+        if (modoRef.current === 'espectador') {
             const sids = Object.keys(novosPontos);
             setPontos(novosPontos[sids[0]]);
             setPontosOponente(novosPontos[sids[1]]);
@@ -99,19 +108,19 @@ export default function ArcadeMultiplayer() {
         if (opInfo) {
             opInfo.y.stopAnimation();
             const isMe = winner_sid === socket.id;
-            if (modo === 'espectador') {
+            if (modoRef.current === 'espectador') {
                 const playerIndex = Object.keys(novosPontos).indexOf(winner_sid);
                 dispararLaserUnico(opInfo, true, false, true, playerIndex);
             } else {
                 dispararLaserUnico(opInfo, true, isMe, false, 0);
             }
             setOperacoes(prev => prev.filter(o => o.chaveOriginal !== op_id));
-            operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== op_id);
+            operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chaveOriginal !== op_id);
         }
     };
 
     const onArcadeStateUpdate = (data: any) => {
-        if (modo === 'espectador') {
+        if (modoRef.current === 'espectador') {
             const sids = Object.keys(data.vidas);
             setVidas(data.vidas[sids[0]]);
             setVidasOponente(data.vidas[sids[1]]);
@@ -122,8 +131,9 @@ export default function ArcadeMultiplayer() {
             const oppSid = Object.keys(data.vidas).find(sid => sid !== mySid);
             if(oppSid) setVidasOponente(data.vidas[oppSid]);
 
-            if (newMyLives <= 0 && meuStatus === 'vivo') {
+            if (newMyLives <= 0 && meuStatusRef.current === 'vivo') {
                 setMeuStatus('morto');
+                meuStatusRef.current = 'morto';
                 setResposta('');
             }
         }
@@ -136,7 +146,7 @@ export default function ArcadeMultiplayer() {
 
     const onOpponentDisconnected = () => {
         Alert.alert("Fim de Jogo", "Um dos jogadores abandonou a partida.");
-        setGanhador(modo === 'espectador' ? 'Empate' : socket.id);
+        setGanhador(modoRef.current === 'espectador' ? 'Empate' : socket.id);
         gameOver();
     };
 
@@ -168,7 +178,7 @@ export default function ArcadeMultiplayer() {
         socket.off('spectator_joined', onSpectatorJoined);
         socket.emit('update_status', { status: 'MENU' });
     };
-  }, [modo, meuStatus]);
+  }, []);
 
   useEffect(() => {
       if (activeMatchData && activeMatchData.game_type === 'arcade') {
@@ -179,14 +189,23 @@ export default function ArcadeMultiplayer() {
   }, [activeMatchData, params.spectate]);
 
   const setupMultiplayerMatch = (data: any) => {
-      setModo('multi');
+      setModo('multi'); 
+      modoRef.current = 'multi';
+      
       setModoMatematica(data.modo_operacao || 'misto');
+      modoMatematicaRef.current = data.modo_operacao || 'misto';
+
       roomIdRef.current = data.room_id;
       setOponenteNome(data.opponentName);
+      
       setIsHost(data.is_host);
+      isHostRef.current = data.is_host; // BLINDAGEM DO LOOP
+
       setVidas(5); setVidasOponente(5);
       setPontos(0); setPontosOponente(0);
       setMeuStatus('vivo');
+      meuStatusRef.current = 'vivo';
+
       filaMultiplayerRef.current = [];
       setOperacoes([]); setExplosoes([]); setResposta('');
       operacoesAtuaisRef.current = []; rodadaRef.current = 1;
@@ -199,7 +218,9 @@ export default function ArcadeMultiplayer() {
   };
 
   const setupSpectatorMode = (roomId: string) => {
-      setModo('espectador');
+      setModo('espectador'); 
+      modoRef.current = 'espectador';
+      
       roomIdRef.current = roomId;
       setVidas(5); setVidasOponente(5);
       setPontos(0); setPontosOponente(0);
@@ -210,15 +231,12 @@ export default function ArcadeMultiplayer() {
       setTela('jogo');
   };
 
-  // ==========================================
-  // O ABANDONO DE PARTIDA CORRIGIDO PARA WEB
-  // ==========================================
   const abandonarPartida = () => {
-      const msg = modo === 'espectador' ? "Deseja parar de assistir?" : "Deseja abandonar a partida? Você perderá o jogo.";
+      const msg = modoRef.current === 'espectador' ? "Deseja parar de assistir?" : "Deseja abandonar a partida? Você perderá o jogo.";
       
       const executarSaida = () => {
-          if (modo === 'espectador') socket.emit('leave_spectator', { room_id: roomIdRef.current });
-          else if (modo === 'multi') socket.emit('leave_match', { room_id: roomIdRef.current });
+          if (modoRef.current === 'espectador') socket.emit('leave_spectator', { room_id: roomIdRef.current });
+          else if (modoRef.current === 'multi') socket.emit('leave_match', { room_id: roomIdRef.current });
           setActiveMatchData(null);
           socket.emit('update_status', { status: 'MENU' });
           router.back();
@@ -279,11 +297,12 @@ export default function ArcadeMultiplayer() {
     const loop = () => {
       if (!jogoAtivoRef.current) return;
       if (filaMultiplayerRef.current.length > 0) {
-          const maxOps = modo === 'espectador' ? 15 : Math.min(15, 3 + Math.floor(pontos / 150)); 
+          const maxOps = modoRef.current === 'espectador' ? 15 : Math.min(15, 3 + Math.floor(pontos / 150)); 
           if (operacoesListRef.current.length < maxOps) spawnarQuestao();
       }
-      if (isHost && filaMultiplayerRef.current.length < 5) {
-          gerarEnviarBatchMultiplayer(modoMatematica);
+      // O LOOP DE CHUVA AGORA É BLINDADO PARA NUNCA PARAR
+      if (isHostRef.current && filaMultiplayerRef.current.length < 5) {
+          gerarEnviarBatchMultiplayer(modoMatematicaRef.current);
       }
       spawnTimer.current = setTimeout(loop, Math.max(800, 2500 - (rodadaRef.current * 100)));
     };
@@ -301,7 +320,6 @@ export default function ArcadeMultiplayer() {
     const pistasDisponiveis = Array.from({length: numLanes}, (_, i) => i).filter(p => {
       const opsNaPista = operacoesAtuaisRef.current.filter(o => o.lane === p);
       if (opsNaPista.length === 0) return true;
-      // O BUG DO NAVEGADOR RESOLVIDO AQUI: Lendo o _value com segurança
       const menorY = Math.min(...opsNaPista.map(o => (o.y as any)._value || 0));
       return menorY > (DROP_LIMIT * minDropDistance);
     });
@@ -322,6 +340,7 @@ export default function ArcadeMultiplayer() {
       const ref = operacoesAtuaisRef.current.find((o:any) => o.chave === id);
       if (ref) {
          ref.y = value;
+         // VERIFICA SE BATEU NO CHÃO
          if (value >= DROP_LIMIT && !ref.missed) {
             ref.missed = true;
             processarErro(id);
@@ -340,10 +359,12 @@ export default function ArcadeMultiplayer() {
     }, 50); 
   };
 
+  // REMOÇÃO DA VIDA CONSERTADA
   const processarErro = useCallback((opId: string) => {
     if (opId === 'nenhum') return; 
 
-    const opInfo = operacoesListRef.current.find(o => o.chave === opId);
+    // Busca pela ID unica (chave) do objeto na tela, e nao mais pela original matematica
+    const opInfo = operacoesListRef.current.find(o => o.id === opId);
     if (!opInfo) return;
     opInfo.y.stopAnimation();
 
@@ -351,13 +372,13 @@ export default function ArcadeMultiplayer() {
     setExplosoes(prev => [...prev, { id: expId, x: opInfo.posX, y: DROP_LIMIT, texto: opInfo.textoTela, corEspecial: false }]);
     setTimeout(() => { setExplosoes(prev => prev.filter(e => e.id !== expId)); }, 800);
 
-    if (meuStatus === 'vivo' && modo !== 'espectador') {
+    if (meuStatusRef.current === 'vivo' && modoRef.current !== 'espectador') {
         socket.emit('arcade_miss', { room_id: roomIdRef.current, op_id: opInfo.chaveOriginal });
     }
 
-    setOperacoes(prev => prev.filter(o => o.chave !== opId));
+    setOperacoes(prev => prev.filter(o => o.id !== opId));
     operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== opId);
-  }, [meuStatus, modo]);
+  }, []);
 
   const gameOver = () => { 
     jogoAtivoRef.current = false;
@@ -366,7 +387,7 @@ export default function ArcadeMultiplayer() {
   };
 
   const verificarResposta = () => {
-    if (!jogoAtivoRef.current || isNaN(parseInt(resposta)) || meuStatus === 'morto') return;
+    if (!jogoAtivoRef.current || isNaN(parseInt(resposta)) || meuStatusRef.current === 'morto') return;
     const alvo = operacoes.find(op => op.resposta === parseInt(resposta));
 
     if (alvo) {
@@ -378,31 +399,27 @@ export default function ArcadeMultiplayer() {
     setResposta('');
   };
 
+  // MATEMÁTICA CORRIGIDA DOS LASERS
   const dispararLaserUnico = (alvo: any, acertou: boolean, isMe: boolean, isSpectator: boolean, playerIndex: number) => {
     let originX = width / 2;
+    // O SEGREDO DO LASER: A origem é SEMPRE embaixo, não importa se é vc ou o inimigo!
     let originY = DROP_LIMIT + 30;
 
-    if ((!isMe && !isSpectator) || (isSpectator && playerIndex === 1)) {
-        originY = 0;
-    }
-
     let targetX = width / 2;
-    let targetY = DROP_LIMIT * 0.2; 
+    let targetY = 0; // Se errou, o laser foge pro teto
 
     if (acertou && alvo) {
         targetX = alvo.posX + CARD_WIDTH / 2;
         targetY = (alvo.y as any)._value + 20;
-    } else if (!isMe || (isSpectator && playerIndex === 1)) {
-        targetY = DROP_LIMIT; 
-    }
+    } 
 
     const dx = targetX - originX;
     const dy = targetY - originY;
     const distance = Math.sqrt(dx * dx + dy * dy);
     const angle = Math.atan2(dy, dx) + Math.PI / 2; 
 
-    let cor = '#32CD32'; 
-    if (!isMe && !isSpectator) cor = '#FF4444'; 
+    // O SEGREDO DA COR: Seu laser = Verde. Laser do Inimigo = Vermelho
+    let cor = isMe ? corLaserPersonalizada : '#FF4444'; 
     if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : '#32CD32'; 
 
     if (!acertou) cor = '#FF4444'; 
@@ -433,7 +450,7 @@ export default function ArcadeMultiplayer() {
 
   if (tela === 'resultado') {
     let titulo = ganhador === socket.id ? 'Você Venceu!' : (ganhador === 'Empate' ? 'Empate Técnico!' : 'Você Perdeu!');
-    if (modo === 'espectador') titulo = 'Partida Encerrada';
+    if (modoRef.current === 'espectador') titulo = 'Partida Encerrada';
 
     return (
       <SafeAreaView style={styles.container}>
@@ -455,11 +472,11 @@ export default function ArcadeMultiplayer() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {modo === 'espectador' && (<View style={{backgroundColor: '#E74C3C', padding: 5, alignItems: 'center', borderRadius: 8, marginBottom: 5}}><Text style={{color: '#FFF', fontWeight: 'bold'}}>👁 ASSISTINDO AO VIVO</Text></View>)}
+      {modoRef.current === 'espectador' && (<View style={{backgroundColor: '#E74C3C', padding: 5, alignItems: 'center', borderRadius: 8, marginBottom: 5}}><Text style={{color: '#FFF', fontWeight: 'bold'}}>👁 ASSISTINDO AO VIVO</Text></View>)}
 
       <View style={{flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 10}}>
           <View>
-              <Text style={{color: modo==='espectador'?'#32CD32':'#32CD32', fontWeight: 'bold'}}>{modo === 'espectador' ? player1Name.toUpperCase() : 'VOCÊ'}</Text>
+              <Text style={{color: modoRef.current==='espectador'?'#32CD32':'#32CD32', fontWeight: 'bold'}}>{modoRef.current === 'espectador' ? player1Name.toUpperCase() : 'VOCÊ'}</Text>
               <Text style={{color: '#FFF', fontSize: 18, fontWeight: '900'}}>{pontos} pts</Text>
               <View style={{flexDirection: 'row', marginTop: 2}}>{Array.from({length: Math.max(0, vidas)}).map((_,i) => <Ionicons key={`v1_${i}`} name="heart" size={12} color="#FF4444" style={{marginRight:2}}/>)}</View>
           </View>
@@ -484,7 +501,7 @@ export default function ArcadeMultiplayer() {
         {lasersAtivos.map((laserInfo, index) => (<Animated.View key={`laser-${index}`} style={[styles.laser, { left: laserInfo.x - 2, top: laserInfo.y - laserInfo.h / 2, height: laserInfo.h, transform: [{ rotate: laserInfo.angle }], backgroundColor: laserInfo.cor, opacity: laserAnim }]} />))}
       </View>
       
-      {modo !== 'espectador' && meuStatus === 'vivo' ? (
+      {modoRef.current !== 'espectador' && meuStatus === 'vivo' ? (
           <View style={styles.bottomPanel}>
             <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
             <View style={styles.tecladoContainer}>
@@ -496,7 +513,7 @@ export default function ArcadeMultiplayer() {
               </View>
             </View>
           </View>
-      ) : (modo === 'multi' && meuStatus === 'morto') ? (
+      ) : (modoRef.current === 'multi' && meuStatus === 'morto') ? (
           <View style={[styles.bottomPanel, {justifyContent: 'center', height: 250, backgroundColor: 'rgba(26, 26, 46, 0.85)', borderRadius: 20}]}><Ionicons name="skull" size={48} color="#FF4444" /><Text style={{color: '#FFF', fontSize: 20, fontWeight: 'bold', marginTop: 10}}>VOCÊ MORREU</Text><Text style={{color: '#888', marginTop: 5}}>Assistindo partida...</Text></View>
       ) : null}
     </SafeAreaView>
