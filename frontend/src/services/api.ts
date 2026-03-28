@@ -67,15 +67,16 @@ export const getUsuarios = async () => { try { return (await api.get('/usuarios'
 export const updateUsuario = async (id: string, d: any) => (await api.put(`/usuarios/${id}`, d)).data;
 export const deleteUsuario = async (id: string) => (await api.delete(`/usuarios/${id}`)).data;
 
-// NOVO: Comando de Mestre para zerar os pontos de todo mundo
-export const zerarTodosPontos = async () => (await api.post('/usuarios/zerar-pontos')).data;
-
 // TURMAS E EQUIPES
 export const getTurmas = async () => { try { return (await api.get('/turmas')).data; } catch { return []; } };
 export const createTurma = async (nome: string) => (await api.post('/turmas', { nome })).data;
 export const deleteTurma = async (id: string) => (await api.delete(`/turmas/${id}`)).data;
 export const getEquipes = async () => { try { return (await api.get('/equipes')).data; } catch { return []; } };
 export const createEquipe = async (nome: string, cor: string) => (await api.post('/equipes', { nome, cor })).data;
+
+// A ROTA RECUPERADA! AGORA VOCÊ PODE ALTERAR A COR E O NOME DAS EQUIPES NOVAMENTE.
+export const updateEquipe = async (id: string, d: any) => (await api.put(`/equipes/${id}`, d)).data;
+
 export const deleteEquipe = async (id: string) => (await api.delete(`/equipes/${id}`)).data;
 
 // CONTEÚDOS
@@ -117,5 +118,7 @@ export const deletePermanente = async (id: string, tipo: string) => (await api.d
 export const getRankingGeral = async () => { try { return (await api.get('/ranking/geral')).data; } catch { return []; } };
 export const getRankingPorTurma = async (turmaId: string) => { try { return (await api.get(`/ranking/turma/${turmaId}`)).data; } catch { return []; } };
 export const getMeuProgresso = async () => { try { return (await api.get('/usuarios/progresso')).data; } catch { return null; } };
+
+export const zerarTodosPontos = async () => (await api.post('/usuarios/zerar-pontos')).data;
 
 export default api;
