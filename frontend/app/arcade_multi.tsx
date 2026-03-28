@@ -54,6 +54,8 @@ export default function ArcadeMultiplayer() {
   const [resposta, setResposta] = useState('');
   const [operacoes, setOperacoes] = useState<any[]>([]); 
   
+  const [corLaserPersonalizada, setCorLaserPersonalizada] = useState('#32CD32');
+
   const filaMultiplayerRef = useRef<any[]>([]); 
   const operacoesAtuaisRef = useRef<any[]>([]);
   const operacoesListRef = useRef<any[]>([]); 
@@ -190,7 +192,7 @@ export default function ArcadeMultiplayer() {
       roomIdRef.current = data.room_id;
       setOponenteNome(data.opponentName);
       
-      setIsHost(data.is_host);
+      // O BUG DO CRASH CORRIGIDO AQUI!
       isHostRef.current = data.is_host; 
 
       setVidas(5); setVidasOponente(5);
@@ -388,9 +390,6 @@ export default function ArcadeMultiplayer() {
     setResposta('');
   };
 
-  // ==========================================
-  // O LASER AGORA FOI CONSERTADO (Variável Hardcoded)
-  // ==========================================
   const dispararLaserUnico = (alvo: any, acertou: boolean, isMe: boolean, isSpectator: boolean, playerIndex: number) => {
     let originX = width / 2;
     let originY = DROP_LIMIT + 30;
@@ -408,9 +407,9 @@ export default function ArcadeMultiplayer() {
     const distance = Math.sqrt(dx * dx + dy * dy);
     const angle = Math.atan2(dy, dx) + Math.PI / 2; 
 
-    // O CRASH RESOLVIDO: Cores injetadas diretamente na função (Sem precisar de estado React)
-    let cor = isMe ? '#32CD32' : '#FF4444'; 
-    if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : '#32CD32'; 
+    let cor = isMe ? corLaserPersonalizada : '#FF4444'; 
+    if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : corLaserPersonalizada; 
+
     if (!acertou) cor = '#FF4444'; 
 
     const midX = originX + dx / 2;
