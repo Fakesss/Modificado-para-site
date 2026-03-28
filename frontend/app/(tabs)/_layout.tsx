@@ -63,16 +63,25 @@ export default function TabsLayout() {
 
     const registrarJogador = () => {
         socket.emit('register_player', { name: user.nome, user_id: user.id });
-        socket.emit('update_status', { status: 'MENU' });
     };
 
     if (socket.connected) {
         registrarJogador();
+        socket.emit('update_status', { status: 'MENU' });
     } else {
         socket.connect();
     }
 
-    socket.on('connect', registrarJogador);
+    const onConnect = () => {
+        registrarJogador();
+        socket.emit('update_status', { status: 'MENU' });
+    };
+
+    socket.on('connect', onConnect);
+
+    const identityInterval = setInterval(() => {
+        if (socket.connected) registrarJogador();
+    }, 10000);
 
     const onReceiveInvite = (data: any) => setConvite(data);
     const onInviteFeedback = (data: any) => Alert.alert('Central de Jogos', data.msg);
@@ -82,7 +91,6 @@ export default function TabsLayout() {
     const onMatchFound = (data: any) => {
       setActiveMatchData(data);
       setConvite(null);
-      // ROTA CORRIGIDA PARA O NOVO ARQUIVO MULTIPLAYER
       if (data.game_type === 'arcade') {
           router.push('/arcade_multi');
       } else {
@@ -97,7 +105,8 @@ export default function TabsLayout() {
     socket.on('match_found', onMatchFound);
 
     return () => {
-      socket.off('connect', registrarJogador);
+      clearInterval(identityInterval);
+      socket.off('connect', onConnect);
       socket.off('receive_invite', onReceiveInvite);
       socket.off('invite_feedback', onInviteFeedback);
       socket.off('invite_error', onInviteError);
