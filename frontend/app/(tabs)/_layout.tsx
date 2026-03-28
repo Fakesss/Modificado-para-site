@@ -79,10 +79,11 @@ export default function TabsLayout() {
 
     socket.on('connect', onConnect);
 
+    // CORREÇÃO AQUI: Agora o intervalo reforça quem você é E que você está no MENU!
     const identityInterval = setInterval(() => {
         if (socket.connected) {
             registrarJogador();
-            socket.emit('update_status', { status: 'MENU' }); // <- Adicionamos o envio do status aqui também
+            socket.emit('update_status', { status: 'MENU' });
         }
     }, 10000);
 
