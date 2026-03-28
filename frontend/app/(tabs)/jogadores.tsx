@@ -61,8 +61,13 @@ export default function JogadoresOnline() {
     }
   };
 
-  const assistirPartida = (roomId: string) => {
-    router.push(`/tictactoe?spectate=${roomId}`);
+  // A ROTA DO ESPECTADOR CORRIGIDA PARA O NOVO ARQUIVO MULTIPLAYER
+  const assistirPartida = (roomId: string, gameType: string) => {
+    if (gameType === 'arcade') {
+      router.push(`/arcade_multi?spectate=${roomId}`);
+    } else {
+      router.push(`/tictactoe?spectate=${roomId}`);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -138,7 +143,7 @@ export default function JogadoresOnline() {
               <Text style={styles.name}>{match.player1} <Text style={{color: '#FF4444'}}>vs</Text> {match.player2}</Text>
               <Text style={styles.statusText}>👁 {match.spectators_count} assistindo</Text>
             </View>
-            <TouchableOpacity style={[styles.btnAcao, { backgroundColor: '#4169E1' }]} onPress={() => assistirPartida(match.room_id)}>
+            <TouchableOpacity style={[styles.btnAcao, { backgroundColor: '#4169E1' }]} onPress={() => assistirPartida(match.room_id, match.game_type)}>
               <Ionicons name="eye" size={20} color="#FFF" />
               <Text style={styles.btnAcaoText}>Assistir</Text>
             </TouchableOpacity>
