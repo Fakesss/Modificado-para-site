@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../src/context/AuthContext';
-import * as api from '../../src/services/api';
-import { useFocusEffect } from 'expo-router';
+import { useAuth } from '../src/context/AuthContext'; // CAMINHO CORRIGIDO AQUI (../)
+import * as api from '../src/services/api'; // CAMINHO CORRIGIDO AQUI (../)
+import { useFocusEffect, useRouter } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.62; 
@@ -103,11 +103,10 @@ const Particula = ({ char }: { char: string }) => {
 };
 
 // =========================================================================
-// O TECLADO PIANO BLINDADO (Com Pressable e Trava de Eco)
+// O TECLADO PIANO BLINDADO
 // =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
   const lastPress = useRef(0);
-
   return (
     <Pressable 
       style={({ pressed }) => [
@@ -117,8 +116,6 @@ const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
       ]}
       onPressIn={() => {
         const now = Date.now();
-        // Trava de 150ms IMPEDE que o MESMO botão dispare duplo erro ao segurar
-        // Mas permite que você aperte o 1 e o 6 em sequência imediata e perfeita!
         if (now - lastPress.current > 150) {
           lastPress.current = now;
           onPress(valor);
@@ -130,7 +127,8 @@ const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
   );
 };
 
-export default function Jogo() {
+export default function Arcade() {
+  const router = useRouter();
   const { user } = useAuth(); 
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [pontos, setPontos] = useState(0);
@@ -702,6 +700,11 @@ export default function Jogo() {
       <SafeAreaView style={styles.container}>
         <View style={styles.menuContainer}>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.menuScrollContent} showsVerticalScrollIndicator={false}>
+            
+            <TouchableOpacity style={{ alignSelf: 'flex-start' }} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={28} color="#FFF" />
+            </TouchableOpacity>
+
             <View style={styles.menuHeader}>
               <Ionicons name="game-controller" size={64} color="#FFD700" />
               <Text style={styles.menuTitle}>Matemática Turbo</Text>
