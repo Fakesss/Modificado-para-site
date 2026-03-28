@@ -1,192 +1,122 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Platform
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
+  ActivityIndicator, Alert, Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
 import * as api from '../../src/services/api';
+import { Conteudo } from '../../src/types';
 
-type TipoConteudo = 'VIDEO' | 'LINK' | 'MATERIAL';
-
-export default function AdminConteudos() {
+export default function AdminGerenciarConteudos() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  
-  const [titulo, setTitulo] = useState('');
-  const [descricao, setDescricao] = useState('');
-  const [tipo, setTipo] = useState<TipoConteudo>('VIDEO');
-  const [url, setUrl] = useState(''); 
-  
-  const [nomeArquivo, setNomeArquivo] = useState('');
-  const [arquivoBase64, setArquivoBase64] = useState<string | null>(null);
-
-  const [turmas, setTurmas] = useState<any[]>([]);
-  const [turmaId, setTurmaId] = useState('');
+  const [conteudos, setConteudos] = useState<Conteudo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    loadTurmas();
+    loadData();
   }, []);
 
-  const loadTurmas = async () => {
+  const loadData = async () => {
     try {
-      const data = await api.getTurmas();
-      setTurmas(data || []);
-    } catch (e) {
-      console.log('Erro ao carregar turmas');
-    }
-  };
-
-  const handlePickDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*', 
-        copyToCacheDirectory: true, // Garante que o arquivo venha para a memória do app
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const file = result.assets[0];
-
-        // Trava de tamanho de 4MB
-        if (file.size && file.size > 4 * 1024 * 1024) {
-          Alert.alert("Erro", "O arquivo é muito grande. O limite máximo é 4MB.");
-          return;
-        }
-
-        setNomeArquivo(file.name);
-
-        // MOTOR UNIVERSAL PARA LER O ARQUIVO (Sem expo-file-system)
-        if (Platform.OS === 'web' && file.file) {
-          // Otimizado para Web
-          const reader = new FileReader();
-          reader.onload = () => {
-            if (typeof reader.result === 'string') {
-              setArquivoBase64(reader.result.split(',')[1]);
-            }
-          };
-          reader.readAsDataURL(file.file);
-        } else {
-          // Mobile (Android/iOS) e Fallback Web
-          const response = await fetch(file.uri);
-          const blob = await response.blob();
-          const reader = new FileReader();
-          reader.onload = () => {
-            if (typeof reader.result === 'string') {
-              setArquivoBase64(reader.result.split(',')[1]);
-            }
-          };
-          reader.readAsDataURL(blob);
-        }
-      }
+      const data = await api.getConteudos();
+      setConteudos(data);
     } catch (error) {
-      console.log("Erro no picker: ", error);
-      Alert.alert("Erro", "Não foi possível selecionar o arquivo.");
-    }
-  };
-
-  const handleSave = async () => {
-    if (!titulo.trim()) return Alert.alert("Erro", "Título é obrigatório.");
-    if (tipo !== 'MATERIAL' && !url.trim()) return Alert.alert("Erro", "Link/URL é obrigatório.");
-    if (tipo === 'MATERIAL' && !arquivoBase64) return Alert.alert("Erro", "Selecione um arquivo.");
-
-    setLoading(true);
-    try {
-      const payload: any = {
-        titulo,
-        descricao,
-        tipo,
-        turmaId: turmaId || null,
-        urlVideo: (tipo === 'VIDEO' || tipo === 'LINK') ? url : null,
-        abaCategoria: tipo === 'VIDEO' ? 'videos' : 'materiais',
-      };
-
-      if (arquivoBase64) {
-        payload.arquivo = arquivoBase64;
-      }
-
-      await api.createConteudo(payload);
-      
-      Alert.alert("Sucesso", "Conteúdo salvo!", [
-        { text: "OK", onPress: () => router.back() }
-      ]);
-
-    } catch (error: any) {
-      Alert.alert("Erro ao Salvar", "Verifique os dados e tente novamente.");
+      console.error('Error loading conteudos:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (Platform.OS === 'web') {
+      const confirmou = window.confirm('Deseja mover este conteúdo para a lixeira?');
+      if (confirmou) {
+        try {
+          await api.deleteConteudo(id); // Chamada da API para deletar
+          window.alert('Conteúdo movido para a lixeira!');
+          loadData();
+        } catch (error) { window.alert('Erro ao mover conteúdo'); }
+      }
+    } else {
+      Alert.alert('Mover para Lixeira', 'Deseja mover este conteúdo para a lixeira?', [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Mover', style: 'destructive', onPress: async () => {
+            try {
+              await api.deleteConteudo(id);
+              Alert.alert('Sucesso', 'Conteúdo movido para a lixeira');
+              loadData();
+            } catch (error) { Alert.alert('Erro', 'Erro ao mover conteúdo'); }
+          },
+        },
+      ]);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      <Modal visible={loading} transparent animationType="fade">
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#FFD700" />
-          <Text style={{color:'#fff', marginTop:10}}>Salvando...</Text>
-        </View>
-      </Modal>
-
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Novo Conteúdo</Text>
-        <TouchableOpacity onPress={handleSave}><Ionicons name="checkmark" size={28} color="#FFD700" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color="#fff" /></TouchableOpacity>
+        <Text style={styles.headerTitle}>Gerenciar Conteúdos</Text>
+        <TouchableOpacity onPress={() => router.push('/admin/criar-conteudo')}>
+          <Ionicons name="add-circle" size={28} color="#FFD700" />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView style={{padding: 16}}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />}>
         
-        <Text style={styles.label}>Tipo</Text>
-        <View style={styles.tabContainer}>
-          {(['VIDEO', 'LINK', 'MATERIAL'] as TipoConteudo[]).map(t => (
-            <TouchableOpacity key={t} style={[styles.tab, tipo === t && styles.tabActive]} onPress={() => setTipo(t)}>
-              <Text style={{color: tipo === t ? '#000' : '#fff', fontWeight:'bold'}}>{t}</Text>
+        {conteudos.map((conteudo) => (
+          <View key={conteudo.id} style={styles.card}>
+            <View style={styles.cardIcon}>
+              <Ionicons 
+                name={conteudo.tipo === 'VIDEO' ? 'play' : conteudo.tipo === 'LINK' ? 'link' : 'document'} 
+                size={28} 
+                color={conteudo.tipo === 'VIDEO' ? '#4169E1' : conteudo.tipo === 'LINK' ? '#32CD32' : '#FFD700'} 
+              />
+            </View>
+            <View style={styles.cardInfo}>
+              <Text style={styles.cardTitle}>{conteudo.titulo}</Text>
+              <View style={styles.cardMeta}>
+                <View style={styles.badge}><Text style={styles.badgeText}>{conteudo.tipo}</Text></View>
+              </View>
+            </View>
+            <View style={styles.cardActions}>
+              <TouchableOpacity style={styles.actionButton} onPress={() => router.push({ pathname: '/admin/criar-conteudo', params: { id: conteudo.id } })}>
+                <Ionicons name="pencil" size={20} color="#FFD700" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton} onPress={() => handleDelete(conteudo.id)}>
+                <Ionicons name="trash" size={20} color="#E74C3C" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))}
+
+        {conteudos.length === 0 && (
+          <View style={styles.emptyState}>
+            <Ionicons name="folder-open-outline" size={48} color="#666" />
+            <Text style={styles.emptyText}>Nenhum conteúdo cadastrado</Text>
+            <TouchableOpacity style={styles.createButton} onPress={() => router.push('/admin/criar-conteudo')}>
+              <Ionicons name="add" size={20} color="#000" />
+              <Text style={styles.createButtonText}>Criar Primeiro Conteúdo</Text>
             </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.label}>Título</Text>
-        <TextInput style={styles.input} value={titulo} onChangeText={setTitulo} placeholder="Título do conteúdo" placeholderTextColor="#666" />
-
-        <Text style={styles.label}>Descrição</Text>
-        <TextInput style={[styles.input, {height:60}]} multiline value={descricao} onChangeText={setDescricao} placeholder="Opcional" placeholderTextColor="#666" />
-
-        {tipo !== 'MATERIAL' ? (
-          <>
-            <Text style={styles.label}>{tipo === 'VIDEO' ? 'Link do YouTube' : 'URL do Link'}</Text>
-            <TextInput style={styles.input} value={url} onChangeText={setUrl} placeholder="https://..." placeholderTextColor="#666" />
-          </>
-        ) : (
-          <View style={{marginBottom: 20}}>
-            <Text style={styles.label}>Arquivo (PDF, Doc, Imagem)</Text>
-            <TouchableOpacity style={styles.uploadButton} onPress={handlePickDocument}>
-              <Ionicons name="cloud-upload-outline" size={24} color="#000" />
-              <Text style={styles.uploadText}>{nomeArquivo || "Selecionar Arquivo"}</Text>
-            </TouchableOpacity>
-            <Text style={{color:'#666', fontSize:12, marginTop:5}}>* Limite recomendado: 4MB</Text>
           </View>
         )}
-
-        <Text style={styles.label}>Disponível Para</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 20}}>
-          <TouchableOpacity onPress={() => setTurmaId('')} style={[styles.chip, !turmaId && styles.chipActive]}>
-            <Text style={{color: !turmaId ? '#000' : '#fff'}}>Geral (Todos)</Text>
-          </TouchableOpacity>
-          {turmas.map((t: any) => (
-            <TouchableOpacity key={t.id} onPress={() => setTurmaId(t.id)} 
-              style={[styles.chip, turmaId === t.id && styles.chipActive]}>
-              <Text style={{color: turmaId === t.id ? '#000' : '#fff'}}>{t.nome}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
 
       </ScrollView>
     </SafeAreaView>
@@ -195,16 +125,22 @@ export default function AdminConteudos() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0c' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 16, alignItems: 'center', backgroundColor: '#151520', borderBottomWidth:1, borderBottomColor:'#222' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  label: { color: '#888', fontSize: 11, marginTop: 15, marginBottom: 5, textTransform: 'uppercase', letterSpacing:1 },
-  input: { backgroundColor: '#1a1a2e', color: '#fff', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#333', fontSize:16 },
-  tabContainer: { flexDirection: 'row', backgroundColor:'#1a1a2e', borderRadius:8, padding:4, marginBottom:10 },
-  tab: { flex:1, paddingVertical:10, alignItems:'center', borderRadius:6 },
-  tabActive: { backgroundColor:'#FFD700' },
-  uploadButton: { flexDirection:'row', alignItems:'center', justifyContent:'center', backgroundColor:'#FFD700', padding:15, borderRadius:10, gap:10 },
-  uploadText: { color:'#000', fontWeight:'bold', fontSize:16 },
-  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#333', marginRight: 8 },
-  chipActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
-  loadingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 16 },
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, marginBottom: 12 },
+  cardIcon: { width: 56, height: 56, backgroundColor: '#ffffff10', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  cardInfo: { flex: 1, marginLeft: 12 },
+  cardTitle: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  cardMeta: { flexDirection: 'row', marginTop: 8 },
+  badge: { backgroundColor: '#333', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  badgeText: { fontSize: 10, fontWeight: 'bold', color: '#fff' },
+  cardActions: { gap: 8 },
+  actionButton: { padding: 8, backgroundColor: '#252540', borderRadius: 8 },
+  emptyState: { alignItems: 'center', padding: 40 },
+  emptyText: { color: '#666', fontSize: 16, marginTop: 16, marginBottom: 20 },
+  createButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD700', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, gap: 8 },
+  createButtonText: { color: '#000', fontWeight: 'bold' },
 });
