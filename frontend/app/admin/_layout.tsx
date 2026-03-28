@@ -15,6 +15,7 @@ export default function AdminLayout() {
       <Stack.Screen name="exercicios" />
       <Stack.Screen name="relatorios" />
       <Stack.Screen name="criar-exercicio" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="criar-conteudo" options={{ presentation: 'modal' }} />
     </Stack>
   );
 }
