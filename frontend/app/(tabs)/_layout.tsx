@@ -8,7 +8,6 @@ import * as api from '../../src/services/api';
 import { Equipe } from '../../src/types';
 import OnlineHeartbeat from '../../src/components/OnlineHeartbeat';
 
-// IMPORTAÇÕES DO MULTIPLAYER GLOBAL
 import { socket, setActiveMatchData } from '../../src/services/socket';
 
 const TEAM_COLORS: Record<string, string> = {
@@ -40,7 +39,6 @@ export default function TabsLayout() {
   const isLeader = user?.perfil === 'ALUNO_LIDER';
   const [teamColor, setTeamColor] = useState<string>('#FFD700');
 
-  // ESTADOS DO MULTIPLAYER
   const [convite, setConvite] = useState<any>(null);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
 
@@ -60,26 +58,31 @@ export default function TabsLayout() {
     } catch (error) { console.error(error); }
   };
 
-  // ==========================================================
-  // O CÉREBRO GLOBAL DO MULTIPLAYER FICA AQUI
-  // ==========================================================
   useEffect(() => {
     if (!user) return;
 
-    socket.connect();
-    socket.emit('register_player', { name: user.nome, user_id: user.id });
-    socket.emit('update_status', { status: 'MENU' }); // Avisa que está livre
+    // A MÁGICA ANTI-FANTASMA: Sempre que conectar (ou reconectar), registra quem é você.
+    const registrarJogador = () => {
+        socket.emit('register_player', { name: user.nome, user_id: user.id });
+        socket.emit('update_status', { status: 'MENU' });
+    };
+
+    if (socket.connected) {
+        registrarJogador();
+    } else {
+        socket.connect();
+    }
+
+    socket.on('connect', registrarJogador);
 
     const onReceiveInvite = (data: any) => setConvite(data);
     const onInviteFeedback = (data: any) => Alert.alert('Central de Jogos', data.msg);
     const onInviteError = (data: any) => Alert.alert('Aviso', data.msg);
     const onOnlineUsersList = (data: any[]) => setOnlineUsers(data);
     
-    // Alguém aceitou nosso convite ou fomos pareados pelo servidor!
     const onMatchFound = (data: any) => {
       setActiveMatchData(data);
       setConvite(null);
-      // Puxa o jogador para a tela do jogo automaticamente
       router.push('/tictactoe'); 
     };
 
@@ -90,6 +93,7 @@ export default function TabsLayout() {
     socket.on('match_found', onMatchFound);
 
     return () => {
+      socket.off('connect', registrarJogador);
       socket.off('receive_invite', onReceiveInvite);
       socket.off('invite_feedback', onInviteFeedback);
       socket.off('invite_error', onInviteError);
@@ -98,7 +102,6 @@ export default function TabsLayout() {
     };
   }, [user]);
 
-  // Ações do Convite
   const aceitarConvite = () => {
     socket.emit('accept_invite', { from_sid: convite.from_sid, game_type: convite.game_type });
     setConvite(null);
@@ -110,7 +113,6 @@ export default function TabsLayout() {
   };
 
   const bloquearJogador = () => {
-    // Procura o ID real do usuário na lista online para bloquear no servidor
     const target = onlineUsers.find(u => u.sid === convite.from_sid);
     if (target) {
       socket.emit('block_player_invites', { user_id_to_block: target.user_id });
@@ -125,9 +127,6 @@ export default function TabsLayout() {
       <AdminBanner />
       <NeonLineSimple color={teamColor} />
 
-      {/* ========================================================= */}
-      {/* O POPUP GLOBAL DE CONVITE */}
-      {/* ========================================================= */}
       <Modal visible={!!convite} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -136,7 +135,7 @@ export default function TabsLayout() {
             </View>
             <Text style={styles.modalTitle}>DESAFIO RECEBIDO!</Text>
             <Text style={styles.modalText}>
-              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para uma partida de Matemática!
+              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : 'Arcade'}!
             </Text>
 
             <View style={{ width: '100%', gap: 10, marginTop: 20 }}>
