@@ -14,13 +14,12 @@ export default function JogadoresOnline() {
   const [refreshing, setRefreshing] = useState(false);
   const [abaAtual, setAbaAtual] = useState<'jogadores' | 'partidas'>('jogadores');
   const [aceitaConvites, setAceitaConvites] = useState(true);
+  
   const [jogadorParaConvidar, setJogadorParaConvidar] = useState<any>(null);
+  const [mostrarModosArcade, setMostrarModosArcade] = useState(false);
 
   useEffect(() => {
-    // Avisa que estamos na tela de Menu
     socket.emit('update_status', { status: 'MENU' });
-    
-    // Puxa a lista de partidas ao abrir a tela
     socket.emit('get_active_matches');
 
     const atualizaJogadores = (data: any[]) => {
@@ -29,7 +28,6 @@ export default function JogadoresOnline() {
       setOnlineUsers(data.filter((u: any) => u.user_id !== user?.id));
     };
 
-    // O Socket escuta passivamente. O servidor avisa sozinho quando a lista muda!
     socket.on('online_users_list', atualizaJogadores);
     socket.on('active_matches_list', setActiveMatches);
 
@@ -41,8 +39,8 @@ export default function JogadoresOnline() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    socket.emit('get_active_matches'); // Atualiza as partidas ao vivo quando arrastar pra baixo
-    socket.emit('update_status', { status: 'MENU' }); // Garante que o status está atualizado
+    socket.emit('get_active_matches');
+    socket.emit('update_status', { status: 'MENU' }); 
     setTimeout(() => setRefreshing(false), 1000);
   };
 
@@ -51,10 +49,15 @@ export default function JogadoresOnline() {
     socket.emit('toggle_invites', { accepts: valor });
   };
 
-  const enviarConvite = (gameType: string) => {
+  const enviarConviteFinal = (gameType: string, modoOperacao: string = 'misto') => {
     if (jogadorParaConvidar) {
-      socket.emit('send_invite', { target_sid: jogadorParaConvidar.sid, game_type: gameType });
+      socket.emit('send_invite', { 
+        target_sid: jogadorParaConvidar.sid, 
+        game_type: gameType,
+        modo_operacao: modoOperacao
+      });
       setJogadorParaConvidar(null);
+      setMostrarModosArcade(false);
     }
   };
 
@@ -116,7 +119,7 @@ export default function JogadoresOnline() {
             </View>
 
             {jogador.aceita_convites ? (
-              <TouchableOpacity style={styles.btnAcao} onPress={() => setJogadorParaConvidar(jogador)}>
+              <TouchableOpacity style={styles.btnAcao} onPress={() => {setJogadorParaConvidar(jogador); setMostrarModosArcade(false);}}>
                 <Ionicons name="game-controller" size={20} color="#FFF" />
                 <Text style={styles.btnAcaoText}>Desafiar</Text>
               </TouchableOpacity>
@@ -153,25 +156,51 @@ export default function JogadoresOnline() {
       <Modal visible={!!jogadorParaConvidar} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalGameContent}>
-            <Text style={styles.modalTitle}>DESAFIAR JOGADOR</Text>
-            <Text style={styles.modalText}>Qual jogo você quer jogar com {jogadorParaConvidar?.name}?</Text>
-            
-            <TouchableOpacity style={styles.gameOptionBtn} onPress={() => enviarConvite('tictactoe')}>
-                <View style={[styles.iconContainer, {backgroundColor: '#32CD3220'}]}><Ionicons name="grid" size={28} color="#32CD32" /></View>
-                <Text style={styles.gameOptionText}>Jogo da Velha</Text>
-                <Ionicons name="chevron-forward" size={20} color="#888" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.gameOptionBtn} onPress={() => enviarConvite('arcade')}>
-                <View style={[styles.iconContainer, {backgroundColor: '#4169E120'}]}><Ionicons name="rocket" size={28} color="#4169E1" /></View>
-                <View style={{flex: 1}}>
-                   <Text style={styles.gameOptionText}>Arcade Turbo</Text>
-                   <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Chuva de Meteoros</Text>
+            {!mostrarModosArcade ? (
+              <>
+                <Text style={styles.modalTitle}>DESAFIAR JOGADOR</Text>
+                <Text style={styles.modalText}>Qual jogo você quer jogar com {jogadorParaConvidar?.name}?</Text>
+                
+                <TouchableOpacity style={styles.gameOptionBtn} onPress={() => enviarConviteFinal('tictactoe')}>
+                    <View style={[styles.iconContainer, {backgroundColor: '#32CD3220'}]}><Ionicons name="grid" size={28} color="#32CD32" /></View>
+                    <Text style={styles.gameOptionText}>Jogo da Velha</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#888" />
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={styles.gameOptionBtn} onPress={() => setMostrarModosArcade(true)}>
+                    <View style={[styles.iconContainer, {backgroundColor: '#4169E120'}]}><Ionicons name="rocket" size={28} color="#4169E1" /></View>
+                    <View style={{flex: 1}}>
+                       <Text style={styles.gameOptionText}>Arcade Turbo</Text>
+                       <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Escolher operação...</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#888" />
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>MODO ARCADE</Text>
+                <Text style={styles.modalText}>Selecione o desafio para {jogadorParaConvidar?.name}:</Text>
+                
+                <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center'}}>
+                    {[
+                        {id: 'misto', nome: 'Jornada', cor: '#FFD700'},
+                        {id: 'soma', nome: 'Soma', cor: '#32CD32'},
+                        {id: 'subtracao', nome: 'Subtr.', cor: '#FF4444'},
+                        {id: 'multiplicacao', nome: 'Mult.', cor: '#4169E1'},
+                        {id: 'potenciacao', nome: 'Potên.', cor: '#FF8C00'},
+                    ].map(m => (
+                        <TouchableOpacity key={m.id} style={{backgroundColor: '#0c0c0c', padding: 15, borderRadius: 10, width: '45%', borderLeftWidth: 4, borderLeftColor: m.cor}} onPress={() => enviarConviteFinal('arcade', m.id)}>
+                            <Text style={{color: '#FFF', fontWeight: 'bold', textAlign: 'center'}}>{m.nome}</Text>
+                        </TouchableOpacity>
+                    ))}
                 </View>
-                <Ionicons name="chevron-forward" size={20} color="#888" />
-            </TouchableOpacity>
+                <TouchableOpacity style={{marginTop: 25, padding: 10}} onPress={() => setMostrarModosArcade(false)}>
+                    <Text style={{color: '#888', textAlign: 'center'}}>Voltar</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setJogadorParaConvidar(null)}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => {setJogadorParaConvidar(null); setMostrarModosArcade(false);}}>
                 <Text style={styles.cancelBtnText}>Cancelar</Text>
             </TouchableOpacity>
           </View>
