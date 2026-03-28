@@ -15,12 +15,23 @@ const Particula = ({ char }: { char: string }) => {
   const [randomX] = useState((Math.random() - 0.5) * 200); 
   const [randomY] = useState((Math.random() - 0.5) * 250 - 80); 
   const [randomRot] = useState((Math.random() - 0.5) * 720); 
-  useEffect(() => { Animated.timing(anim, { toValue: 1, duration: 700, useNativeDriver: true }).start(); }, []);
+  
+  useEffect(() => { 
+    Animated.timing(anim, { toValue: 1, duration: 700, useNativeDriver: true }).start(); 
+  }, []);
+  
   return (
     <Animated.Text style={[styles.particulaTexto, {
-        transform: [ { translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [0, randomX] }) }, { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [0, randomY] }) }, { rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', `${randomRot}deg`] }) }, { scale: anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [1, 1.8, 0] }) } ],
+        transform: [ 
+          { translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [0, randomX] }) }, 
+          { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [0, randomY] }) }, 
+          { rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', `${randomRot}deg`] }) }, 
+          { scale: anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [1, 1.8, 0] }) } 
+        ],
         opacity: anim.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] })
-      }]}>{char}</Animated.Text>
+      }]}>
+      {char}
+    </Animated.Text>
   );
 };
 
@@ -28,7 +39,15 @@ const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
   const lastPress = useRef(0);
   return (
     <Pressable style={({ pressed }) => [styles.tecla, styleExtra, pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]}
-      onPressIn={() => { const now = Date.now(); if (now - lastPress.current > 150) { lastPress.current = now; onPress(valor); } }}>{children}</Pressable>
+      onPressIn={() => { 
+        const now = Date.now(); 
+        if (now - lastPress.current > 150) { 
+          lastPress.current = now; 
+          onPress(valor); 
+        } 
+      }}>
+      {children}
+    </Pressable>
   );
 };
 
@@ -50,10 +69,8 @@ export default function ArcadeMultiplayer() {
   const [ganhador, setGanhador] = useState<string | null>(null);
   
   const roomIdRef = useRef<string>('');
-
   const [resposta, setResposta] = useState('');
   const [operacoes, setOperacoes] = useState<any[]>([]); 
-  
   const [corLaserPersonalizada, setCorLaserPersonalizada] = useState('#32CD32');
 
   const filaMultiplayerRef = useRef<any[]>([]); 
@@ -111,7 +128,7 @@ export default function ArcadeMultiplayer() {
                 dispararLaserUnico(opInfo, true, isMe, false, 0);
             }
             
-            // O SEGREDO DO LASER VISÍVEL: Dá 300ms para a animação do laser bater antes de eliminar a conta
+            // Dá 300ms para a animação do laser bater antes de eliminar a conta
             setTimeout(() => {
                 setOperacoes(prev => prev.filter(o => o.chaveOriginal !== op_id));
                 operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chaveOriginal !== op_id);
@@ -353,7 +370,6 @@ export default function ArcadeMultiplayer() {
     
     setTimeout(() => {
         if (jogoAtivoRef.current) {
-            // O SEGREDO DA SINCRONIZAÇÃO: Normaliza a velocidade para garantir que Android e Windows demorem o mesmo tempo a atingir a linha.
             const realDuration = novaOp.speed * ((height + 100) / DROP_LIMIT);
             Animated.timing(novaOp.y, { toValue: height + 100, duration: realDuration, useNativeDriver: true }).start();
         }
@@ -400,9 +416,7 @@ export default function ArcadeMultiplayer() {
 
   const dispararLaserUnico = (alvo: any, acertou: boolean, isMe: boolean, isSpectator: boolean, playerIndex: number) => {
     let originX = width / 2;
-    // O SEGREDO DO LASER: A origem é SEMPRE na base do ecrã, para ambos os jogadores!
     let originY = DROP_LIMIT + 30;
-
     let targetX = width / 2;
     let targetY = 0; 
 
@@ -416,10 +430,8 @@ export default function ArcadeMultiplayer() {
     const distance = Math.sqrt(dx * dx + dy * dy);
     const angle = Math.atan2(dy, dx) + Math.PI / 2; 
 
-    // O SEGREDO DA COR: O laser do teu inimigo brilhará a Vermelho, o teu a Verde.
     let cor = isMe ? corLaserPersonalizada : '#FF4444'; 
     if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : corLaserPersonalizada; 
-
     if (!acertou) cor = '#FF4444'; 
 
     const midX = originX + dx / 2;
@@ -454,7 +466,10 @@ export default function ArcadeMultiplayer() {
       <SafeAreaView style={styles.container}>
         <View style={styles.resultadoContainer}>
           <Text style={styles.resultadoTitle}>{titulo}</Text>
-          <View style={styles.resultadoCard}><Text style={styles.resultadoPontos}>{pontos}</Text><Text style={styles.resultadoLabel}>Seus Pontos Totais</Text></View>
+          <View style={styles.resultadoCard}>
+            <Text style={styles.resultadoPontos}>{pontos}</Text>
+            <Text style={styles.resultadoLabel}>Seus Pontos Totais</Text>
+          </View>
           <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => { 
               setActiveMatchData(null); 
               socket.emit('update_status', { status: 'MENU' });
@@ -470,8 +485,173 @@ export default function ArcadeMultiplayer() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {modoRef.current === 'espectador' && (<View style={{backgroundColor: '#E74C3C', padding: 5, alignItems: 'center', borderRadius: 8, marginBottom: 5}}><Text style={{color: '#FFF', fontWeight: 'bold'}}>👁 ASSISTINDO AO VIVO</Text></View>)}
+      {modoRef.current === 'espectador' && (
+        <View style={styles.badgeEspectador}>
+          <Text style={styles.textoBadgeEspectador}>👁 ASSISTINDO AO VIVO</Text>
+        </View>
+      )}
 
-      <View style={{flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 10}}>
-          <View>
-              <Text style={{color: modoRef.current==='espectador'?'#32CD32':'#32CD32', fontWeight: 'bold
+      {/* Header do Jogo */}
+      <View style={styles.headerContainer}>
+        <View>
+          <Text style={[styles.nomeJogador, { color: modoRef.current === 'espectador' ? '#32CD32' : '#32CD32' }]}>
+            {modoRef.current === 'espectador' ? player1Name : 'Você'}
+          </Text>
+          <Text style={styles.textoPlacar}>Pontos: {pontos}</Text>
+          <Text style={styles.textoVidas}>Vidas: {'❤️'.repeat(Math.max(0, vidas))}</Text>
+        </View>
+
+        <TouchableOpacity onPress={abandonarPartida} style={styles.btnSair}>
+          <Ionicons name="exit-outline" size={24} color="#FFF" />
+        </TouchableOpacity>
+
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={[styles.nomeJogador, { color: '#FF4444' }]}>{oponenteNome}</Text>
+          <Text style={styles.textoPlacar}>Pontos: {pontosOponente}</Text>
+          <Text style={styles.textoVidas}>Vidas: {'❤️'.repeat(Math.max(0, vidasOponente))}</Text>
+        </View>
+      </View>
+
+      {/* Área Principal de Jogo */}
+      <View style={styles.gameArea}>
+        {operacoes.map((op) => (
+          <Animated.View
+            key={op.id}
+            style={[
+              styles.cardOperacao,
+              {
+                left: op.posX,
+                transform: [{ translateY: op.y }, { scale: op.scale }],
+                opacity: op.opacity,
+              },
+            ]}
+          >
+            <Text style={styles.textoOperacao}>{op.textoTela}</Text>
+          </Animated.View>
+        ))}
+
+        {explosoes.map((exp) => (
+          <View key={exp.id} style={[styles.containerExplosao, { left: exp.x, top: exp.y - 20 }]}>
+            <Particula char="💥" />
+          </View>
+        ))}
+
+        {lasersAtivos.map((laser, index) => (
+          <Animated.View
+            key={`laser-${index}`}
+            style={{
+              position: 'absolute',
+              left: laser.x,
+              top: laser.y,
+              width: 4,
+              height: laser.h,
+              backgroundColor: laser.cor,
+              transform: [
+                { translateY: -laser.h / 2 },
+                { rotate: laser.angle },
+              ],
+              opacity: laserAnim,
+              shadowColor: laser.cor,
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.8,
+              shadowRadius: 10,
+              elevation: 5,
+            }}
+          />
+        ))}
+
+        <View style={[styles.linhaBase, { top: DROP_LIMIT }]} />
+      </View>
+
+      {/* Teclado */}
+      {modoRef.current !== 'espectador' && meuStatus === 'vivo' && (
+        <View style={styles.containerTecladoTotal}>
+          <Animated.View style={[styles.visor, { transform: [{ translateX: shakeAnim }] }]}>
+            <Text style={styles.textoVisor}>{resposta || '?'}</Text>
+          </Animated.View>
+          
+          <View style={styles.linhaTeclado}>
+            {[1, 2, 3].map((num) => (
+              <BotaoTeclado key={num} valor={num} onPress={(v: number) => setResposta((p) => p.length < 5 ? p + v : p)}>
+                <Text style={styles.textoTecla}>{num}</Text>
+              </BotaoTeclado>
+            ))}
+          </View>
+          <View style={styles.linhaTeclado}>
+            {[4, 5, 6].map((num) => (
+              <BotaoTeclado key={num} valor={num} onPress={(v: number) => setResposta((p) => p.length < 5 ? p + v : p)}>
+                <Text style={styles.textoTecla}>{num}</Text>
+              </BotaoTeclado>
+            ))}
+          </View>
+          <View style={styles.linhaTeclado}>
+            {[7, 8, 9].map((num) => (
+              <BotaoTeclado key={num} valor={num} onPress={(v: number) => setResposta((p) => p.length < 5 ? p + v : p)}>
+                <Text style={styles.textoTecla}>{num}</Text>
+              </BotaoTeclado>
+            ))}
+          </View>
+          <View style={styles.linhaTeclado}>
+            <BotaoTeclado valor="del" onPress={() => setResposta((p) => p.slice(0, -1))} styleExtra={styles.teclaApagar}>
+              <Ionicons name="backspace" size={28} color="#FFF" />
+            </BotaoTeclado>
+            <BotaoTeclado valor={0} onPress={(v: number) => setResposta((p) => p.length < 5 ? p + v : p)}>
+              <Text style={styles.textoTecla}>0</Text>
+            </BotaoTeclado>
+            <BotaoTeclado valor="enter" onPress={verificarResposta} styleExtra={styles.teclaEnviar}>
+              <Ionicons name="send" size={28} color="#FFF" />
+            </BotaoTeclado>
+          </View>
+        </View>
+      )}
+
+      {meuStatus === 'morto' && modoRef.current !== 'espectador' && (
+        <View style={styles.containerMorto}>
+          <Text style={styles.textoMorto}>Você foi destruído!</Text>
+          <Text style={styles.subTextoMorto}>Aguarde o fim da partida...</Text>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#1A1A2E' },
+  particulaTexto: { fontSize: 30, position: 'absolute' },
+  tecla: { flex: 1, backgroundColor: '#333', margin: 4, borderRadius: 10, justifyContent: 'center', alignItems: 'center', height: 60, elevation: 3, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 3, shadowOffset: { width: 0, height: 2 } },
+  
+  resultadoContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  resultadoTitle: { fontSize: 32, fontWeight: 'bold', color: '#FFF', marginBottom: 30 },
+  resultadoCard: { backgroundColor: '#2A2A4A', padding: 30, borderRadius: 20, alignItems: 'center', marginBottom: 40, width: '80%', elevation: 5 },
+  resultadoPontos: { fontSize: 60, fontWeight: 'bold', color: '#32CD32', marginBottom: 10 },
+  resultadoLabel: { fontSize: 18, color: '#A0A0B0' },
+  jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#32CD32', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 25, alignItems: 'center' },
+  jogarNovamenteText: { fontSize: 18, fontWeight: 'bold', color: '#000', marginLeft: 10 },
+  
+  badgeEspectador: { backgroundColor: '#E74C3C', padding: 5, alignItems: 'center', borderRadius: 8, marginBottom: 5, marginHorizontal: 15 },
+  textoBadgeEspectador: { color: '#FFF', fontWeight: 'bold' },
+  
+  headerContainer: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 10, alignItems: 'center' },
+  nomeJogador: { fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
+  textoPlacar: { color: '#FFF', fontSize: 14, marginBottom: 2 },
+  textoVidas: { color: '#FFF', fontSize: 12 },
+  btnSair: { padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
+  
+  gameArea: { height: GAME_AREA_HEIGHT, backgroundColor: '#0F0F1A', overflow: 'hidden', position: 'relative' },
+  cardOperacao: { position: 'absolute', width: CARD_WIDTH, backgroundColor: '#2A2A4A', padding: 10, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#4A4A6A' },
+  textoOperacao: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  containerExplosao: { position: 'absolute', width: 60, height: 60, justifyContent: 'center', alignItems: 'center' },
+  linhaBase: { position: 'absolute', left: 0, right: 0, height: 2, backgroundColor: 'rgba(255, 68, 68, 0.3)' },
+  
+  containerTecladoTotal: { flex: 1, padding: 10, justifyContent: 'flex-end', paddingBottom: 20 },
+  visor: { backgroundColor: '#2A2A4A', marginHorizontal: 4, marginBottom: 10, borderRadius: 10, height: 60, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#4A4A6A' },
+  textoVisor: { color: '#FFF', fontSize: 32, fontWeight: 'bold', letterSpacing: 2 },
+  linhaTeclado: { flexDirection: 'row', justifyContent: 'space-between' },
+  textoTecla: { color: '#FFF', fontSize: 28, fontWeight: 'bold' },
+  teclaApagar: { backgroundColor: '#FF4444' },
+  teclaEnviar: { backgroundColor: '#32CD32' },
+  
+  containerMorto: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.8)' },
+  textoMorto: { color: '#FF4444', fontSize: 30, fontWeight: 'bold', marginBottom: 10 },
+  subTextoMorto: { color: '#FFF', fontSize: 16 }
+});
