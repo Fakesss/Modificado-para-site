@@ -51,14 +51,13 @@ export default function AdminConteudos() {
   const handlePickDocument = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*', // Aceita qualquer tipo de arquivo (PDF, DOCX, Imagens)
+        type: '*/*', 
         copyToCacheDirectory: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const file = result.assets[0];
 
-        // Validação de tamanho (4MB)
         if (file.size && file.size > 4 * 1024 * 1024) {
           Alert.alert("Erro", "O arquivo é muito grande. O limite máximo é 4MB.");
           return;
@@ -66,9 +65,7 @@ export default function AdminConteudos() {
 
         setNomeArquivo(file.name);
 
-        // Lógica universal para converter o arquivo em Base64
         if (Platform.OS === 'web') {
-          // Na Web, usamos a API do navegador para ler o blob/file
           if (file.file) {
             const reader = new FileReader();
             reader.onload = () => {
@@ -79,7 +76,6 @@ export default function AdminConteudos() {
             };
             reader.readAsDataURL(file.file);
           } else {
-            // Fallback Web se file.file não estiver disponível
             const response = await fetch(file.uri);
             const blob = await response.blob();
             const reader = new FileReader();
@@ -92,9 +88,9 @@ export default function AdminConteudos() {
             reader.readAsDataURL(blob);
           }
         } else {
-          // No Mobile (Android/iOS), usamos o expo-file-system
+          // CORREÇÃO: Usando string literal 'base64' para evitar o erro de undefined no Expo Go
           const base64 = await FileSystem.readAsStringAsync(file.uri, {
-            encoding: FileSystem.EncodingType.Base64,
+            encoding: 'base64', 
           });
           setArquivoBase64(base64);
         }
