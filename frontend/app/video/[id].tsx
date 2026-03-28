@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import YoutubePlayer from 'react-native-youtube-iframe';
 import * as api from '../../src/services/api';
 import { Conteudo } from '../../src/types';
 
 export default function VideoPlayer() {
-  const [isMounted, setIsMounted] = useState(false);
   const params = useLocalSearchParams();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
@@ -15,12 +15,19 @@ export default function VideoPlayer() {
   const [video, setVideo] = useState<Conteudo | null>(null);
   const [loading, setLoading] = useState(true);
   
+  // Estados do Sistema Anti-Trapaça
+  const playerRef = useRef<any>(null);
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [watchedTime, setWatchedTime] = useState(0); // Tempo real assistido em segundos
   const [completed, setCompleted] = useState(false);
   const [pointsEarned, setPointsEarned] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  // Calcula a porcentagem do tempo assistido em relação à meta (90% do vídeo)
+  const metaTempo = duration > 0 ? duration * 0.9 : 0;
+  const progressoReal = metaTempo > 0 ? Math.min((watchedTime / metaTempo) * 100, 100) : 0;
+  const isLiberado = progressoReal >= 100;
 
   const getYouTubeId = (url: string) => {
     if (!url) return null;
@@ -32,12 +39,12 @@ export default function VideoPlayer() {
   const youtubeId = video?.urlVideo ? getYouTubeId(video.urlVideo) : null;
 
   useEffect(() => {
-    if (id && isMounted) loadVideo();
-  }, [id, isMounted]);
+    if (id) loadVideo();
+  }, [id]);
 
   const loadVideo = async () => {
     try {
-      const conteudos = await api.getConteudos('videos');
+      const conteudos = await api.getConteudos();
       const videoData = conteudos.find((v: Conteudo) => v.id === id);
       setVideo(videoData || null);
 
@@ -46,6 +53,7 @@ export default function VideoPlayer() {
           const progressData = await api.getProgressoVideo(videoData.id);
           if (progressData && progressData.concluido) {
             setCompleted(true);
+            setWatchedTime(9999); // Joga lá pra cima pra travar em 100%
             setPointsEarned(progressData.pontosGerados || 0);
           }
         } catch (error) {}
@@ -56,29 +64,60 @@ export default function VideoPlayer() {
     }
   };
 
+  // Cronômetro Anti-Trapaça: Só roda se o vídeo estiver tocando!
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (playing && !completed && metaTempo > 0) {
+      interval = setInterval(() => {
+        setWatchedTime((prev) => {
+          const next = prev + 1;
+          if (next >= metaTempo && !isLiberado) {
+             // Atingiu os 90%! O botão será liberado.
+          }
+          return next;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [playing, completed, metaTempo, isLiberado]);
+
+  const onStateChange = useCallback((state: string) => {
+    if (state === 'playing') setPlaying(true);
+    else setPlaying(false);
+  }, []);
+
+  const onReady = useCallback(() => {
+    playerRef.current?.getDuration().then((dur: number) => {
+      setDuration(dur);
+    });
+  }, []);
+
   const handleComplete = async () => {
     if (completed) {
       router.back();
       return;
     }
 
+    if (!isLiberado) return; // Trava de segurança extra
+
+    setSubmitting(true);
     try {
-      // Força o salvamento simulando conclusão sem consultar o YouTube
-      const result = await api.updateProgressoVideo(id as string, 300, 300);
+      const result = await api.updateProgressoVideo(id as string, watchedTime, duration);
       setCompleted(true);
       setPointsEarned(result.pontosGerados);
       
-      if (typeof window !== 'undefined' && window.alert) window.alert(`Parabéns! Você ganhou ${result.pontosGerados} pontos!`);
-      router.back();
+      Alert.alert('Parabéns!', `Você concluiu a aula e ganhou ${result.pontosGerados} pontos!`, [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
     } catch (error) {
-      if (typeof window !== 'undefined' && window.alert) window.alert('Erro ao marcar como concluído.');
+      Alert.alert('Erro', 'Erro ao marcar como concluído.');
+      setSubmitting(false);
     }
   };
-
-  // 🛡️ Impede a Vercel de travar no servidor (Erro 500 de SSR)
-  if (!isMounted) {
-    return <View style={styles.container} />;
-  }
 
   if (loading) {
     return (
@@ -104,28 +143,31 @@ export default function VideoPlayer() {
     );
   }
 
-  const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://youtube.com';
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {video.titulo}
-        </Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{video.titulo}</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <View style={styles.playerContainer}>
         {youtubeId ? (
-          // O IFRAME BLINDADO: Sem travas de Platform, roda em qualquer Android nativo ou Web
-          <iframe
-            style={{ width: '100%', height: '100%', borderWidth: 0 }}
-            src={`https://www.youtube.com/embed/${youtubeId}?rel=0&modestbranding=1&playsinline=1&origin=${appOrigin}`}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-            allowFullScreen
+          <YoutubePlayer
+            ref={playerRef}
+            height={250}
+            play={playing}
+            videoId={youtubeId}
+            onChangeState={onStateChange}
+            onReady={onReady}
+            initialPlayerParams={{
+              controls: true,
+              preventFullScreen: false,
+              rel: false,
+              modestbranding: true,
+            }}
           />
         ) : (
           <View style={styles.noVideo}>
@@ -133,6 +175,24 @@ export default function VideoPlayer() {
             <Text style={styles.noVideoText}>URL do vídeo inválida</Text>
           </View>
         )}
+      </View>
+
+      {/* BARRA DE PROGRESSO ANTI-TRAPAÇA */}
+      <View style={styles.progressSection}>
+        <View style={styles.progressHeader}>
+          <Text style={styles.progressLabel}>Progresso da Aula</Text>
+          <Text style={[styles.progressPercent, isLiberado && { color: '#32CD32' }]}>
+            {Math.floor(progressoReal)}%
+          </Text>
+        </View>
+        <View style={styles.progressBarBg}>
+          <View style={[styles.progressBarFill, { width: `${progressoReal}%`, backgroundColor: isLiberado ? '#32CD32' : '#FFD700' }]} />
+        </View>
+        <Text style={styles.progressHint}>
+          {isLiberado 
+            ? "Aula concluída! Você já pode resgatar seus pontos." 
+            : "Assista pelo menos 90% do vídeo sem pular para ganhar os pontos."}
+        </Text>
       </View>
 
       <View style={styles.infoContainer}>
@@ -156,21 +216,33 @@ export default function VideoPlayer() {
       </View>
 
       <TouchableOpacity
-        style={[styles.completeButton, completed && styles.completeButtonDone]}
+        style={[
+          styles.completeButton, 
+          (!isLiberado && !completed) && styles.completeButtonDisabled,
+          completed && styles.completeButtonDone
+        ]}
         onPress={handleComplete}
+        disabled={(!isLiberado && !completed) || submitting}
       >
-        <Ionicons
-          name={completed ? 'checkmark-circle' : 'play-circle'}
-          size={24}
-          color={completed ? '#fff' : '#000'}
-        />
-        <Text style={[styles.completeButtonText, completed && { color: '#fff' }]}>
-          {completed ? 'Vídeo Concluído - Voltar' : 'Marcar como Concluído'}
-        </Text>
+        {submitting ? (
+          <ActivityIndicator color="#000" />
+        ) : (
+          <>
+            <Ionicons
+              name={completed ? 'checkmark-circle' : (!isLiberado ? 'lock-closed' : 'play-circle')}
+              size={24}
+              color={completed ? '#fff' : (!isLiberado ? '#666' : '#000')}
+            />
+            <Text style={[
+              styles.completeButtonText, 
+              completed && { color: '#fff' },
+              (!isLiberado && !completed) && { color: '#666' }
+            ]}>
+              {completed ? 'Vídeo Concluído - Voltar' : (!isLiberado ? 'Assista para Liberar' : 'Marcar como Concluído')}
+            </Text>
+          </>
+        )}
       </TouchableOpacity>
-
-      {/* RASTREADOR DE VERSÃO - Para garantir que o Android não está puxando cache velho */}
-      <Text style={{ color: '#333', fontSize: 10, textAlign: 'center', marginTop: 10 }}>v3</Text>
 
     </SafeAreaView>
   );
@@ -185,9 +257,19 @@ const styles = StyleSheet.create({
   backButtonText: { color: '#000', fontWeight: 'bold' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   headerTitle: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center', marginHorizontal: 16 },
-  playerContainer: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' },
+  
+  playerContainer: { width: '100%', height: 250, backgroundColor: '#000', justifyContent: 'center' },
   noVideo: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   noVideoText: { color: '#666', marginTop: 12, fontSize: 16 },
+  
+  progressSection: { padding: 16, backgroundColor: '#151520', borderBottomWidth: 1, borderBottomColor: '#222' },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  progressLabel: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  progressPercent: { color: '#FFD700', fontWeight: 'bold', fontSize: 14 },
+  progressBarBg: { height: 8, backgroundColor: '#333', borderRadius: 4, overflow: 'hidden' },
+  progressBarFill: { height: '100%', borderRadius: 4 },
+  progressHint: { color: '#888', fontSize: 12, marginTop: 8 },
+
   infoContainer: { padding: 16 },
   title: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
   description: { color: '#888', fontSize: 14, marginTop: 8, lineHeight: 20 },
@@ -196,7 +278,9 @@ const styles = StyleSheet.create({
   completedText: { color: '#32CD32', fontWeight: '600' },
   pointsBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD70030', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, gap: 6 },
   pointsText: { color: '#FFD700', fontWeight: '600' },
-  completeButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#32CD32', margin: 16, paddingVertical: 16, borderRadius: 12, gap: 8 },
-  completeButtonDone: { backgroundColor: '#1a1a2e' },
+  
+  completeButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFD700', margin: 16, paddingVertical: 16, borderRadius: 12, gap: 8 },
+  completeButtonDisabled: { backgroundColor: '#222' },
+  completeButtonDone: { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#32CD32' },
   completeButtonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
 });
