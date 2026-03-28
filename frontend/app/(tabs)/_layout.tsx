@@ -61,7 +61,6 @@ export default function TabsLayout() {
   useEffect(() => {
     if (!user) return;
 
-    // A MÁGICA ANTI-FANTASMA: Sempre que conectar (ou reconectar), registra quem é você.
     const registrarJogador = () => {
         socket.emit('register_player', { name: user.nome, user_id: user.id });
         socket.emit('update_status', { status: 'MENU' });
@@ -83,7 +82,12 @@ export default function TabsLayout() {
     const onMatchFound = (data: any) => {
       setActiveMatchData(data);
       setConvite(null);
-      router.push('/tictactoe'); 
+      // ROTA CORRIGIDA AQUI
+      if (data.game_type === 'arcade') {
+          router.push('/arcade');
+      } else {
+          router.push('/tictactoe'); 
+      }
     };
 
     socket.on('receive_invite', onReceiveInvite);
@@ -103,7 +107,11 @@ export default function TabsLayout() {
   }, [user]);
 
   const aceitarConvite = () => {
-    socket.emit('accept_invite', { from_sid: convite.from_sid, game_type: convite.game_type });
+    socket.emit('accept_invite', { 
+        from_sid: convite.from_sid, 
+        game_type: convite.game_type,
+        modo_operacao: convite.modo_operacao
+    });
     setConvite(null);
   };
 
@@ -135,7 +143,7 @@ export default function TabsLayout() {
             </View>
             <Text style={styles.modalTitle}>DESAFIO RECEBIDO!</Text>
             <Text style={styles.modalText}>
-              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : 'Arcade'}!
+              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : 'Arcade Turbo'}!
             </Text>
 
             <View style={{ width: '100%', gap: 10, marginTop: 20 }}>
