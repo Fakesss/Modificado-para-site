@@ -54,14 +54,10 @@ export default function ArcadeMultiplayer() {
   const [resposta, setResposta] = useState('');
   const [operacoes, setOperacoes] = useState<any[]>([]); 
   
-  // VARIÁVEL DA COR DO LASER RESTAURADA (Isso causava o Crash e o Congelamento)
-  const [corLaserPersonalizada, setCorLaserPersonalizada] = useState('#32CD32');
-
   const filaMultiplayerRef = useRef<any[]>([]); 
   const operacoesAtuaisRef = useRef<any[]>([]);
   const operacoesListRef = useRef<any[]>([]); 
   
-  // MEMÓRIAS BLINDADAS (Previnem o "Fantasma" dos loops)
   const rodadaRef = useRef(1);
   const jogoAtivoRef = useRef(false);
   const isHostRef = useRef(false);
@@ -77,9 +73,6 @@ export default function ArcadeMultiplayer() {
 
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
 
-  // ==========================================
-  // O CÉREBRO DO ARCADE ONLINE & ESPECTADOR
-  // ==========================================
   useEffect(() => {
     socket.emit('update_status', { status: 'JOGANDO_ONLINE' });
 
@@ -230,9 +223,6 @@ export default function ArcadeMultiplayer() {
       setTela('jogo');
   };
 
-  // ==========================================
-  // O ABANDONO DE PARTIDA CORRIGIDO PARA WEB
-  // ==========================================
   const abandonarPartida = () => {
       const msg = modoRef.current === 'espectador' ? "Deseja parar de assistir?" : "Deseja abandonar a partida? Você perderá o jogo.";
       
@@ -303,7 +293,6 @@ export default function ArcadeMultiplayer() {
           if (operacoesListRef.current.length < maxOps) spawnarQuestao();
       }
       
-      // BLINDAGEM DA CHUVA (Não para nunca!)
       if (isHostRef.current && filaMultiplayerRef.current.length < 5) {
           gerarEnviarBatchMultiplayer(modoMatematicaRef.current);
       }
@@ -323,7 +312,6 @@ export default function ArcadeMultiplayer() {
     const pistasDisponiveis = Array.from({length: numLanes}, (_, i) => i).filter(p => {
       const opsNaPista = operacoesAtuaisRef.current.filter(o => o.lane === p);
       if (opsNaPista.length === 0) return true;
-      // O BUG DO NAVEGADOR RESOLVIDO AQUI
       const menorY = Math.min(...opsNaPista.map(o => (o.y as any)._value || 0));
       return menorY > (DROP_LIMIT * minDropDistance);
     });
@@ -344,7 +332,6 @@ export default function ArcadeMultiplayer() {
       const ref = operacoesAtuaisRef.current.find((o:any) => o.chave === id);
       if (ref) {
          ref.y = value;
-         // VERIFICA SE BATEU NO CHÃO E TIRA A VIDA CORRETAMENTE
          if (value >= DROP_LIMIT && !ref.missed) {
             ref.missed = true;
             processarErro(id);
@@ -366,7 +353,6 @@ export default function ArcadeMultiplayer() {
   const processarErro = useCallback((opId: string) => {
     if (opId === 'nenhum') return; 
 
-    // ID DA TELA PARA TIRAR A VIDA CERTA (Resolve o Bug de não perder vida)
     const opInfo = operacoesListRef.current.find(o => o.id === opId);
     if (!opInfo) return;
     opInfo.y.stopAnimation();
@@ -403,15 +389,14 @@ export default function ArcadeMultiplayer() {
   };
 
   // ==========================================
-  // MATEMÁTICA CORRIGIDA DOS LASERS
+  // O LASER AGORA FOI CONSERTADO (Variável Hardcoded)
   // ==========================================
   const dispararLaserUnico = (alvo: any, acertou: boolean, isMe: boolean, isSpectator: boolean, playerIndex: number) => {
     let originX = width / 2;
-    // O SEGREDO DO LASER: A origem é SEMPRE embaixo, não importa se é vc ou o inimigo!
     let originY = DROP_LIMIT + 30;
 
     let targetX = width / 2;
-    let targetY = 0; // Se errou, o laser foge pro teto
+    let targetY = 0; 
 
     if (acertou && alvo) {
         targetX = alvo.posX + CARD_WIDTH / 2;
@@ -423,10 +408,9 @@ export default function ArcadeMultiplayer() {
     const distance = Math.sqrt(dx * dx + dy * dy);
     const angle = Math.atan2(dy, dx) + Math.PI / 2; 
 
-    // O SEGREDO DA COR: Seu laser = Verde. Laser do Inimigo = Vermelho
-    let cor = isMe ? corLaserPersonalizada : '#FF4444'; 
-    if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : corLaserPersonalizada; 
-
+    // O CRASH RESOLVIDO: Cores injetadas diretamente na função (Sem precisar de estado React)
+    let cor = isMe ? '#32CD32' : '#FF4444'; 
+    if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : '#32CD32'; 
     if (!acertou) cor = '#FF4444'; 
 
     const midX = originX + dx / 2;
