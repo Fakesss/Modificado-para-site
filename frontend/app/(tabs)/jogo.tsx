@@ -19,7 +19,7 @@ export default function HubJogos() {
           <Text style={styles.subtitle}>Escolha seu modo de treinamento</Text>
         </View>
 
-        {/* BOTÃO DO NOVO JOGO DA VELHA */}
+        {/* BOTÃO DO JOGO DA VELHA */}
         <TouchableOpacity 
           style={[styles.gameCard, { borderColor: '#32CD32', borderWidth: 2 }]} 
           onPress={() => router.push('/tictactoe')}
@@ -29,15 +29,14 @@ export default function HubJogos() {
             <Ionicons name="grid" size={40} color="#32CD32" />
           </View>
           <View style={styles.gameInfo}>
-            <Text style={styles.gameTitle}>Jogo da Velha (Tic-Tac-Toe)</Text>
+            <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
+              Jogo da Velha
+            </Text>
             <Text style={styles.gameDesc}>Modo Clássico 3x3. Resolva a operação para marcar seu X ou O. Jogue offline ou online!</Text>
-            <View style={styles.badgeContainer}>
-              <Text style={styles.badgeText}>🔥 NOVO</Text>
-            </View>
           </View>
         </TouchableOpacity>
 
-        {/* BOTÃO DO JOGO DE LASER ANTIGO */}
+        {/* BOTÃO DO MATEMÁTICA TURBO */}
         <TouchableOpacity 
           style={styles.gameCard} 
           onPress={() => router.push('/arcade')}
@@ -47,7 +46,9 @@ export default function HubJogos() {
             <Ionicons name="rocket" size={40} color="#4169E1" />
           </View>
           <View style={styles.gameInfo}>
-            <Text style={styles.gameTitle}>Arcade Turbo (Chuva de Meteoros)</Text>
+            <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
+              Matemática Turbo
+            </Text>
             <Text style={styles.gameDesc}>Atire lasers nas contas que caem do céu antes que elas destruam a base.</Text>
           </View>
         </TouchableOpacity>
@@ -83,14 +84,5 @@ const styles = StyleSheet.create({
   },
   gameInfo: { flex: 1 },
   gameTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 6 },
-  gameDesc: { color: '#aaa', fontSize: 13, lineHeight: 18 },
-  badgeContainer: { 
-    backgroundColor: '#FF4444', 
-    alignSelf: 'flex-start', 
-    paddingHorizontal: 8, 
-    paddingVertical: 4, 
-    borderRadius: 8, 
-    marginTop: 10 
-  },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: '900' }
+  gameDesc: { color: '#aaa', fontSize: 13, lineHeight: 18 }
 });
