@@ -170,14 +170,6 @@ export default function JogadoresOnline() {
                 <Ionicons name="chevron-forward" size={20} color="#888" />
             </TouchableOpacity>
             
-            <TouchableOpacity style={[styles.gameOptionBtn, {opacity: 0.5}]} disabled>
-                <View style={[styles.iconContainer, {backgroundColor: '#4169E120'}]}><Ionicons name="rocket" size={28} color="#4169E1" /></View>
-                <View style={{flex: 1}}>
-                   <Text style={styles.gameOptionText}>Arcade Turbo</Text>
-                   <Text style={{color: '#FF4444', fontSize: 10, fontWeight: 'bold'}}>Em Breve</Text>
-                </View>
-                <Ionicons name="lock-closed" size={20} color="#888" />
-            </TouchableOpacity>
 
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setJogadorParaConvidar(null)}>
                 <Text style={styles.cancelBtnText}>Cancelar</Text>
