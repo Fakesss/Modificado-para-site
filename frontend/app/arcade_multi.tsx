@@ -54,6 +54,7 @@ export default function ArcadeMultiplayer() {
   const [resposta, setResposta] = useState('');
   const [operacoes, setOperacoes] = useState<any[]>([]); 
   
+  // A COR VOLTOU! Fim do Erro da Tela Branca.
   const [corLaserPersonalizada, setCorLaserPersonalizada] = useState('#32CD32');
 
   const filaMultiplayerRef = useRef<any[]>([]); 
@@ -192,7 +193,6 @@ export default function ArcadeMultiplayer() {
       roomIdRef.current = data.room_id;
       setOponenteNome(data.opponentName);
       
-      // O BUG DO CRASH CORRIGIDO AQUI!
       isHostRef.current = data.is_host; 
 
       setVidas(5); setVidasOponente(5);
