@@ -55,9 +55,6 @@ export default function ArcadeMultiplayer() {
   const router = useRouter();
   const params = useLocalSearchParams();
   
-  // ==========================================
-  // ESTADOS E REFS
-  // ==========================================
   const [tela, setTela] = useState<'jogo' | 'resultado'>('jogo');
   const [modo, setModo] = useState<'multi' | 'espectador'>('multi');
   
@@ -94,9 +91,6 @@ export default function ArcadeMultiplayer() {
   const [lasersAtivos, setLasersAtivos] = useState<any[]>([]);
   const [explosoes, setExplosoes] = useState<any[]>([]); 
 
-  // ==========================================
-  // FUNÇÕES DO JOGO
-  // ==========================================
   const gameOver = () => { 
     jogoAtivoRef.current = false;
     if (spawnTimer.current) clearTimeout(spawnTimer.current); 
@@ -339,7 +333,8 @@ export default function ArcadeMultiplayer() {
           if (modoRef.current === 'espectador') socket.emit('leave_spectator', { room_id: roomIdRef.current });
           else if (modoRef.current === 'multi') socket.emit('leave_match', { room_id: roomIdRef.current });
           setActiveMatchData(null);
-          socket.emit('update_status', { status: 'ONLINE' });
+          // GARANTIDO: Status MENU ao sair
+          socket.emit('update_status', { status: 'MENU' });
           router.back();
       };
 
@@ -353,13 +348,9 @@ export default function ArcadeMultiplayer() {
       }
   };
 
-  // ==========================================
-  // EFEITOS (USEEFFECTS)
-  // ==========================================
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
   useEffect(() => { respostaRef.current = resposta; }, [resposta]);
 
-  // EFEITO 1: Escuta do Teclado Físico na Web
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const handleKeyDownLocal = (e: any) => {
@@ -377,16 +368,14 @@ export default function ArcadeMultiplayer() {
     }
   }, []);
 
-  // EFEITO 2: Punição por mudança de aba na Web
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const handleVisibilityChange = () => {
-        // Se a aba foi ocultada e o jogador está ativo na partida
         if (document.hidden && jogoAtivoRef.current && meuStatusRef.current === 'vivo' && modoRef.current !== 'espectador') {
           const opsNaTela = [...operacoesAtuaisRef.current];
           opsNaTela.forEach(op => {
             if (!op.missed) {
-              op.missed = true; // Marca como perdida para não dar erro duplicado
+              op.missed = true; 
               processarErro(op.chave);
             }
           });
@@ -398,7 +387,6 @@ export default function ArcadeMultiplayer() {
     }
   }, [processarErro]);
 
-  // EFEITO 3: Comunicação com o Servidor (Sockets)
   useEffect(() => {
     socket.emit('update_status', { status: 'JOGANDO_ONLINE' });
 
@@ -499,7 +487,8 @@ export default function ArcadeMultiplayer() {
         socket.off('opponent_disconnected', onOpponentDisconnected);
         socket.off('match_ended', onOpponentDisconnected);
         socket.off('spectator_joined', onSpectatorJoined);
-        socket.emit('update_status', { status: 'ONLINE' });
+        // GARANTIDO: Status MENU ao desmontar a tela
+        socket.emit('update_status', { status: 'MENU' });
     };
   }, []);
 
@@ -511,9 +500,6 @@ export default function ArcadeMultiplayer() {
       }
   }, [activeMatchData, params.spectate]);
 
-  // ==========================================
-  // RENDERIZAÇÃO DA TELA
-  // ==========================================
   if (tela === 'resultado') {
     let titulo = ganhador === socket.id ? 'Você Venceu!' : (ganhador === 'Empate' ? 'Empate Técnico!' : 'Você Perdeu!');
     if (modoRef.current === 'espectador') titulo = 'Partida Encerrada';
@@ -528,7 +514,8 @@ export default function ArcadeMultiplayer() {
           </View>
           <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => { 
               setActiveMatchData(null); 
-              socket.emit('update_status', { status: 'ONLINE' });
+              // GARANTIDO: Status MENU ao fechar tela de resultado
+              socket.emit('update_status', { status: 'MENU' });
               router.back(); 
           }}>
             <Ionicons name="home" size={22} color="#000" />
