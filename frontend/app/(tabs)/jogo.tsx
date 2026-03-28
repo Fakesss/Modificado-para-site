@@ -21,7 +21,7 @@ export default function HubJogos() {
 
         {/* BOTÃO DO JOGO DA VELHA */}
         <TouchableOpacity 
-          style={[styles.gameCard, { borderColor: '#32CD32', borderWidth: 2 }]} 
+          style={styles.gameCard} 
           onPress={() => router.push('/tictactoe')}
           activeOpacity={0.8}
         >
