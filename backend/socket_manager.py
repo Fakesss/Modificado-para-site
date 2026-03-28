@@ -15,7 +15,6 @@ sio = socketio.AsyncServer(
 players_online: Dict[str, dict] = {}
 rooms: Dict[str, dict] = {}
 
-# Filas separadas para cada jogo
 matchmaking_queues = {
     'tictactoe': [],
     'arcade': []
@@ -99,6 +98,7 @@ async def broadcast_online_users():
 async def send_invite(sid, data):
     target_sid = data.get('target_sid')
     game_type = data.get('game_type', 'tictactoe')
+    modo_operacao = data.get('modo_operacao', 'misto')
     
     if target_sid not in players_online or sid not in players_online:
         return await sio.emit('invite_error', {'msg': 'Jogador não encontrado.'}, room=sid)
@@ -119,6 +119,7 @@ async def send_invite(sid, data):
         'from_sid': sid,
         'from_name': sender['name'],
         'game_type': game_type,
+        'modo_operacao': modo_operacao,
         'room_id_proposta': f"priv_{sid[:5]}_{target_sid[:5]}"
     }
 
@@ -141,12 +142,13 @@ async def block_player_invites(sid, data):
 async def accept_invite(sid, data):
     from_sid = data.get('from_sid')
     game_type = data.get('game_type')
+    modo_operacao = data.get('modo_operacao', 'misto')
     
     if from_sid in players_online:
         if game_type == 'tictactoe':
             await start_tictactoe_match(from_sid, sid)
         elif game_type == 'arcade':
-            await start_arcade_match(from_sid, sid)
+            await start_arcade_match(from_sid, sid, modo_operacao)
 
 @sio.event
 async def decline_invite(sid, data):
@@ -177,7 +179,6 @@ async def spectate_match(sid, data):
             rooms[room_id]['spectators'] = []
         rooms[room_id]['spectators'].append(sid)
         
-        # Envia estado inicial dependendo do tipo do jogo
         if rooms[room_id]['type'] == 'tictactoe':
             await sio.emit('spectator_joined', {
                 'board': rooms[room_id].get('board'),
@@ -212,7 +213,7 @@ async def find_match(sid, data):
         if game_type == 'tictactoe':
             await start_tictactoe_match(p1, p2)
         elif game_type == 'arcade':
-            await start_arcade_match(p1, p2)
+            await start_arcade_match(p1, p2, 'misto')
 
 @sio.event
 async def cancel_matchmaking(sid):
@@ -313,21 +314,21 @@ async def make_move(sid, data):
 
 
 # =========================================================================
-# NOVA LÓGICA: ARCADE MULTIPLAYER (Chuva de Meteoros Sincronizada)
+# ARCADE MULTIPLAYER (Chuva de Meteoros Sincronizada)
 # =========================================================================
-async def start_arcade_match(p1_sid, p2_sid):
+async def start_arcade_match(p1_sid, p2_sid, modo_operacao):
     room_id = f"arc_{p1_sid[:5]}_{p2_sid[:5]}"
     
-    # O Player 1 será o "Host" (Quem vai gerar e enviar as contas para o P2)
     rooms[room_id] = {
         'type': 'arcade',
+        'modo_operacao': modo_operacao,
         'players': [p1_sid, p2_sid],
         'spectators': [],
         'names': {p1_sid: players_online[p1_sid]['name'], p2_sid: players_online[p2_sid]['name']},
         'vidas': {p1_sid: 5, p2_sid: 5},
         'pontos': {p1_sid: 0, p2_sid: 0},
         'host_sid': p1_sid,
-        'destroyed_ops': set() # Registra as contas já destruídas para não dar ponto pros dois
+        'destroyed_ops': set() 
     }
 
     await sio.enter_room(p1_sid, room_id)
@@ -337,35 +338,29 @@ async def start_arcade_match(p1_sid, p2_sid):
     players_online[p2_sid]['status'] = 'JOGANDO_ONLINE'
     await broadcast_online_users()
 
-    # Avisa os jogadores (O Host sabe que é o Host)
-    await sio.emit('match_found', {'room_id': room_id, 'game_type': 'arcade', 'is_host': True, 'opponentName': rooms[room_id]['names'][p2_sid]}, room=p1_sid)
-    await sio.emit('match_found', {'room_id': room_id, 'game_type': 'arcade', 'is_host': False, 'opponentName': rooms[room_id]['names'][p1_sid]}, room=p2_sid)
+    await sio.emit('match_found', {'room_id': room_id, 'game_type': 'arcade', 'modo_operacao': modo_operacao, 'is_host': True, 'opponentName': rooms[room_id]['names'][p2_sid]}, room=p1_sid)
+    await sio.emit('match_found', {'room_id': room_id, 'game_type': 'arcade', 'modo_operacao': modo_operacao, 'is_host': False, 'opponentName': rooms[room_id]['names'][p1_sid]}, room=p2_sid)
 
 @sio.event
 async def arcade_sync_batch(sid, data):
-    """O Host gera as contas matemáticas no celular dele e envia para o servidor distribuir"""
     room_id = data.get('room_id')
     ops = data.get('ops')
     if room_id in rooms and rooms[room_id]['type'] == 'arcade':
-        # Envia as contas para o outro jogador e para os espectadores
         await sio.emit('arcade_new_batch', {'ops': ops}, room=room_id, skip_sid=sid)
 
 @sio.event
 async def arcade_answer(sid, data):
-    """Um jogador acertou a conta!"""
     room_id = data.get('room_id')
     op_id = data.get('op_id')
     
     if room_id not in rooms or rooms[room_id]['type'] != 'arcade': return
     room = rooms[room_id]
     
-    # O SEGREDO DO EMPATE: Se os dois acertarem na mesma hora, quem chegou primeiro no servidor leva!
     if op_id in room['destroyed_ops']: return 
 
     room['destroyed_ops'].add(op_id)
     room['pontos'][sid] += 10
 
-    # Avisa todo mundo que a conta explodiu e quem atirou
     await sio.emit('arcade_op_destroyed', {
         'op_id': op_id,
         'winner_sid': sid,
@@ -374,12 +369,10 @@ async def arcade_answer(sid, data):
 
 @sio.event
 async def arcade_miss(sid, data):
-    """Uma conta bateu no chão do jogador"""
     room_id = data.get('room_id')
     if room_id not in rooms or rooms[room_id]['type'] != 'arcade': return
     room = rooms[room_id]
 
-    # Tira vida do jogador que deixou cair
     room['vidas'][sid] -= 1
     
     await sio.emit('arcade_state_update', {
@@ -387,7 +380,6 @@ async def arcade_miss(sid, data):
         'pontos': room['pontos']
     }, room=room_id)
 
-    # Checa se os dois jogadores morreram
     p1, p2 = room['players']
     if room['vidas'][p1] <= 0 and room['vidas'][p2] <= 0:
         if room['pontos'][p1] > room['pontos'][p2]: ganhador = p1
@@ -397,10 +389,6 @@ async def arcade_miss(sid, data):
         await sio.emit('game_over', {'ganhador': ganhador, 'pontos': room['pontos']}, room=room_id)
         del rooms[room_id]
 
-
-# =========================================================================
-# SAÍDA GERAL
-# =========================================================================
 @sio.event
 async def leave_match(sid, data):
     room_id = data.get('room_id')
