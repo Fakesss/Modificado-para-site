@@ -54,7 +54,6 @@ export default function ArcadeMultiplayer() {
   const [resposta, setResposta] = useState('');
   const [operacoes, setOperacoes] = useState<any[]>([]); 
   
-  // A COR VOLTOU! Fim do Erro da Tela Branca.
   const [corLaserPersonalizada, setCorLaserPersonalizada] = useState('#32CD32');
 
   const filaMultiplayerRef = useRef<any[]>([]); 
@@ -111,8 +110,12 @@ export default function ArcadeMultiplayer() {
             } else {
                 dispararLaserUnico(opInfo, true, isMe, false, 0);
             }
-            setOperacoes(prev => prev.filter(o => o.chaveOriginal !== op_id));
-            operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chaveOriginal !== op_id);
+            
+            // O SEGREDO DO LASER VISÍVEL: Dá 300ms para a animação do laser bater antes de eliminar a conta
+            setTimeout(() => {
+                setOperacoes(prev => prev.filter(o => o.chaveOriginal !== op_id));
+                operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chaveOriginal !== op_id);
+            }, 300);
         }
     };
 
@@ -347,8 +350,13 @@ export default function ArcadeMultiplayer() {
     };
 
     setOperacoes(prev => [...prev, novaOp]); 
+    
     setTimeout(() => {
-        if (jogoAtivoRef.current) Animated.timing(novaOp.y, { toValue: height + 100, duration: novaOp.speed, useNativeDriver: true }).start();
+        if (jogoAtivoRef.current) {
+            // O SEGREDO DA SINCRONIZAÇÃO: Normaliza a velocidade para garantir que Android e Windows demorem o mesmo tempo a atingir a linha.
+            const realDuration = novaOp.speed * ((height + 100) / DROP_LIMIT);
+            Animated.timing(novaOp.y, { toValue: height + 100, duration: realDuration, useNativeDriver: true }).start();
+        }
     }, 50); 
   };
 
@@ -392,6 +400,7 @@ export default function ArcadeMultiplayer() {
 
   const dispararLaserUnico = (alvo: any, acertou: boolean, isMe: boolean, isSpectator: boolean, playerIndex: number) => {
     let originX = width / 2;
+    // O SEGREDO DO LASER: A origem é SEMPRE na base do ecrã, para ambos os jogadores!
     let originY = DROP_LIMIT + 30;
 
     let targetX = width / 2;
@@ -407,6 +416,7 @@ export default function ArcadeMultiplayer() {
     const distance = Math.sqrt(dx * dx + dy * dy);
     const angle = Math.atan2(dy, dx) + Math.PI / 2; 
 
+    // O SEGREDO DA COR: O laser do teu inimigo brilhará a Vermelho, o teu a Verde.
     let cor = isMe ? corLaserPersonalizada : '#FF4444'; 
     if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : corLaserPersonalizada; 
 
@@ -464,77 +474,4 @@ export default function ArcadeMultiplayer() {
 
       <View style={{flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 10}}>
           <View>
-              <Text style={{color: modoRef.current==='espectador'?'#32CD32':'#32CD32', fontWeight: 'bold'}}>{modoRef.current === 'espectador' ? player1Name.toUpperCase() : 'VOCÊ'}</Text>
-              <Text style={{color: '#FFF', fontSize: 18, fontWeight: '900'}}>{pontos} pts</Text>
-              <View style={{flexDirection: 'row', marginTop: 2}}>{Array.from({length: Math.max(0, vidas)}).map((_,i) => <Ionicons key={`v1_${i}`} name="heart" size={12} color="#FF4444" style={{marginRight:2}}/>)}</View>
-          </View>
-          
-          <TouchableOpacity onPress={abandonarPartida} style={{justifyContent: 'center'}}><Ionicons name="exit" size={24} color="#E74C3C" /></TouchableOpacity>
-
-          <View style={{alignItems: 'flex-end'}}>
-              <Text style={{color: '#FF4444', fontWeight: 'bold'}}>{oponenteNome.toUpperCase()}</Text>
-              <Text style={{color: '#FFF', fontSize: 18, fontWeight: '900'}}>{pontosOponente} pts</Text>
-              <View style={{flexDirection: 'row', marginTop: 2}}>{Array.from({length: Math.max(0, vidasOponente)}).map((_,i) => <Ionicons key={`v2_${i}`} name="heart" size={12} color="#FF4444" style={{marginLeft:2}}/>)}</View>
-          </View>
-      </View>
-
-      <View style={styles.gameArea}>
-        <View style={styles.linhaEletricaContainer}><View style={styles.linhaEletricaCore} /><View style={styles.linhaEletricaGlow} /></View>
-        {operacoes.map((op) => ( 
-          <Animated.View key={op.id} style={[styles.operacaoCard, { transform: [{ translateY: op.y }, { scale: op.scale }], left: op.posX, opacity: op.opacity, width: CARD_WIDTH }]}> 
-            <Text style={styles.operacaoText}>{op.textoTela}</Text> 
-          </Animated.View> 
-        ))}
-        {explosoes.map(exp => (<View key={exp.id} style={[styles.explosaoContainer, { left: exp.x, top: exp.y }]}>{exp.texto.split('').map((char: string, i: number) => (<Particula key={i} char={char} />))}</View>))}
-        {lasersAtivos.map((laserInfo, index) => (<Animated.View key={`laser-${index}`} style={[styles.laser, { left: laserInfo.x - 2, top: laserInfo.y - laserInfo.h / 2, height: laserInfo.h, transform: [{ rotate: laserInfo.angle }], backgroundColor: laserInfo.cor, opacity: laserAnim }]} />))}
-      </View>
-      
-      {modoRef.current !== 'espectador' && meuStatus === 'vivo' ? (
-          <View style={styles.bottomPanel}>
-            <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
-            <View style={styles.tecladoContainer}>
-              {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => <View key={i} style={styles.tecladoRow}>{row.map(num => <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>{num}</Text></BotaoTeclado>)}</View>)}
-              <View style={styles.tecladoRow}>
-                <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}><Ionicons name="close" size={24} color="#fff" /></BotaoTeclado>
-                <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>0</Text></BotaoTeclado>
-                <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}><Ionicons name="checkmark" size={28} color="#fff" /></BotaoTeclado>
-              </View>
-            </View>
-          </View>
-      ) : (modoRef.current === 'multi' && meuStatus === 'morto') ? (
-          <View style={[styles.bottomPanel, {justifyContent: 'center', height: 250, backgroundColor: 'rgba(26, 26, 46, 0.85)', borderRadius: 20}]}><Ionicons name="skull" size={48} color="#FF4444" /><Text style={{color: '#FFF', fontSize: 20, fontWeight: 'bold', marginTop: 10}}>VOCÊ MORREU</Text><Text style={{color: '#888', marginTop: 5}}>Assistindo partida...</Text></View>
-      ) : null}
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
-  gameArea: { flex: 1, width: '100%', backgroundColor: '#0a0a0a', zIndex: 1 },
-  linhaEletricaContainer: { position: 'absolute', top: DROP_LIMIT, width: '100%', height: 10, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
-  linhaEletricaCore: { width: '100%', height: 2, backgroundColor: '#00FFFF', shadowColor: '#00FFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 8, elevation: 8 },
-  linhaEletricaGlow: { position: 'absolute', width: '100%', height: 8, backgroundColor: 'rgba(0, 255, 255, 0.3)' },
-  operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, alignItems: 'center', zIndex: 10 },
-  operacaoText: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  explosaoContainer: { position: 'absolute', width: CARD_WIDTH, height: 40, alignItems: 'center', justifyContent: 'center', zIndex: 15 },
-  particulaTexto: { position: 'absolute', color: '#00FFFF', fontSize: 22, fontWeight: '900', textShadowColor: '#00FFFF', textShadowRadius: 10 },
-  laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
-  
-  bottomPanel: { position: 'absolute', bottom: 0, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10 },
-  displayContainer: { backgroundColor: 'rgba(26, 26, 46, 0.7)', width: 280, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  tecladoContainer: { width: 280, gap: 5 },
-  tecladoRow: { flexDirection: 'row', gap: 5, justifyContent: 'space-between' },
-  tecla: { backgroundColor: 'rgba(26, 26, 46, 0.75)', flex: 1, height: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  teclaText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)' },
-  teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)' },
-  
-  resultadoContainer: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center' },
-  resultadoTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginBottom: 15 },
-  resultadoCard: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', marginBottom: 10, width: '100%' },
-  resultadoPontos: { fontSize: 64, fontWeight: '900', color: '#FFD700' },
-  resultadoLabel: { fontSize: 14, color: '#888', marginTop: 4 },
-  jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 16, borderRadius: 12, alignItems: 'center', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 10 },
-  jogarNovamenteText: { color: '#000', fontSize: 18, fontWeight: '900' }
-});
+              <Text style={{color: modoRef.current==='espectador'?'#32CD32':'#32CD32', fontWeight: 'bold
