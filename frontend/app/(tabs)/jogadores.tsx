@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Switch, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
 import { socket } from '../../src/services/socket';
 
@@ -18,10 +18,8 @@ export default function JogadoresOnline() {
   const [jogadorParaConvidar, setJogadorParaConvidar] = useState<any>(null);
   const [mostrarModosArcade, setMostrarModosArcade] = useState(false);
 
+  // Escutadores passivos (ficam sempre ouvindo)
   useEffect(() => {
-    socket.emit('update_status', { status: 'MENU' });
-    socket.emit('get_active_matches');
-
     const atualizaJogadores = (data: any[]) => {
       const eu = data.find(u => u.user_id === user?.id);
       if (eu) setAceitaConvites(eu.aceita_convites);
@@ -37,10 +35,31 @@ export default function JogadoresOnline() {
     };
   }, [user]);
 
+  // A SUA IDEIA AQUI: O Loop só funciona quando a aba "Online" está focada (aberta na tela)
+  useFocusEffect(
+    useCallback(() => {
+      // Quando o jogador ENTRA na aba:
+      socket.emit('update_status', { status: 'MENU' });
+      socket.emit('get_active_matches');
+      socket.emit('request_sync');
+
+      // Liga o motor de atualização a cada 3 segundos
+      const interval = setInterval(() => {
+        socket.emit('request_sync');
+        socket.emit('get_active_matches');
+      }, 3000);
+
+      // Quando o jogador SAI da aba (vai pro Menu, Jogo, etc):
+      return () => {
+        clearInterval(interval); // DESLIGA o loop instantaneamente pra não pesar o app!
+      };
+    }, [])
+  );
+
   const onRefresh = () => {
     setRefreshing(true);
     socket.emit('get_active_matches');
-    socket.emit('update_status', { status: 'MENU' }); 
+    socket.emit('request_sync'); 
     setTimeout(() => setRefreshing(false), 1000);
   };
 
@@ -61,7 +80,6 @@ export default function JogadoresOnline() {
     }
   };
 
-  // A ROTA DO ESPECTADOR CORRIGIDA PARA O NOVO ARQUIVO MULTIPLAYER
   const assistirPartida = (roomId: string, gameType: string) => {
     if (gameType === 'arcade') {
       router.push(`/arcade_multi?spectate=${roomId}`);
