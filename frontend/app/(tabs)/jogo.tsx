@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
@@ -103,17 +103,30 @@ const Particula = ({ char }: { char: string }) => {
 };
 
 // =========================================================================
-// TECLADO ESTÁVEL (Padrão, Seguro e Funcional)
+// O TECLADO PIANO BLINDADO (Com Pressable e Trava de Eco)
 // =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
+  const lastPress = useRef(0);
+
   return (
-    <TouchableOpacity 
-      activeOpacity={0.6}
-      style={[styles.tecla, styleExtra]} 
-      onPress={() => onPress(valor)}
+    <Pressable 
+      style={({ pressed }) => [
+        styles.tecla, 
+        styleExtra, 
+        pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }
+      ]}
+      onPressIn={() => {
+        const now = Date.now();
+        // Trava de 150ms IMPEDE que o MESMO botão dispare duplo erro ao segurar
+        // Mas permite que você aperte o 1 e o 6 em sequência imediata e perfeita!
+        if (now - lastPress.current > 150) {
+          lastPress.current = now;
+          onPress(valor);
+        }
+      }}
     >
       {children}
-    </TouchableOpacity>
+    </Pressable>
   );
 };
 
