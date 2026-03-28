@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Alert, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Alert, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -70,9 +70,6 @@ export default function ArcadeMultiplayer() {
 
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
 
-  // ==========================================
-  // O CÉREBRO DO ARCADE ONLINE & ESPECTADOR
-  // ==========================================
   useEffect(() => {
     socket.emit('update_status', { status: 'JOGANDO_ONLINE' });
 
@@ -213,16 +210,28 @@ export default function ArcadeMultiplayer() {
       setTela('jogo');
   };
 
+  // ==========================================
+  // O ABANDONO DE PARTIDA CORRIGIDO PARA WEB
+  // ==========================================
   const abandonarPartida = () => {
-      Alert.alert("Sair", modo === 'espectador' ? "Deseja parar de assistir?" : "Deseja abandonar a partida? Você perderá o jogo.", [
-          { text: "Não", style: "cancel" },
-          { text: "Sim", style: "destructive", onPress: () => {
-              if (modo === 'espectador') socket.emit('leave_spectator', { room_id: roomIdRef.current });
-              else if (modo === 'multi') socket.emit('leave_match', { room_id: roomIdRef.current });
-              setActiveMatchData(null);
-              router.back();
-          }}
-      ]);
+      const msg = modo === 'espectador' ? "Deseja parar de assistir?" : "Deseja abandonar a partida? Você perderá o jogo.";
+      
+      const executarSaida = () => {
+          if (modo === 'espectador') socket.emit('leave_spectator', { room_id: roomIdRef.current });
+          else if (modo === 'multi') socket.emit('leave_match', { room_id: roomIdRef.current });
+          setActiveMatchData(null);
+          socket.emit('update_status', { status: 'MENU' });
+          router.back();
+      };
+
+      if (Platform.OS === 'web') {
+          if (window.confirm(msg)) executarSaida();
+      } else {
+          Alert.alert("Sair", msg, [
+              { text: "Não", style: "cancel" },
+              { text: "Sim", style: "destructive", onPress: executarSaida }
+          ]);
+      }
   };
 
   const gerarEnviarBatchMultiplayer = (modoEscolhido: string) => {
@@ -285,7 +294,6 @@ export default function ArcadeMultiplayer() {
     if (filaMultiplayerRef.current.length === 0) return;
     const dados = filaMultiplayerRef.current.shift();
     
-    // Matemática da Tela
     let numLanes = 3;
     if (rodadaRef.current >= 4) numLanes = 4; if (rodadaRef.current >= 7) numLanes = 5; if (rodadaRef.current >= 10) numLanes = 6;
     const laneWidth = width / numLanes; const baseScale = 3 / numLanes; const minDropDistance = 0.20; 
@@ -293,11 +301,13 @@ export default function ArcadeMultiplayer() {
     const pistasDisponiveis = Array.from({length: numLanes}, (_, i) => i).filter(p => {
       const opsNaPista = operacoesAtuaisRef.current.filter(o => o.lane === p);
       if (opsNaPista.length === 0) return true;
-      return Math.min(...opsNaPista.map(o => o.y)) > (DROP_LIMIT * minDropDistance);
+      // O BUG DO NAVEGADOR RESOLVIDO AQUI: Lendo o _value com segurança
+      const menorY = Math.min(...opsNaPista.map(o => (o.y as any)._value || 0));
+      return menorY > (DROP_LIMIT * minDropDistance);
     });
     
     if (pistasDisponiveis.length === 0) {
-        filaMultiplayerRef.current.unshift(dados); // Devolve se não tiver espaço
+        filaMultiplayerRef.current.unshift(dados); 
         return;
     }
 
@@ -331,7 +341,7 @@ export default function ArcadeMultiplayer() {
   };
 
   const processarErro = useCallback((opId: string) => {
-    if (opId === 'nenhum') return; // Multiplayer não pune clique em vazio.
+    if (opId === 'nenhum') return; 
 
     const opInfo = operacoesListRef.current.find(o => o.chave === opId);
     if (!opInfo) return;
@@ -368,24 +378,21 @@ export default function ArcadeMultiplayer() {
     setResposta('');
   };
 
-  // MATEMÁTICA CORRIGIDA DOS LASERS
   const dispararLaserUnico = (alvo: any, acertou: boolean, isMe: boolean, isSpectator: boolean, playerIndex: number) => {
     let originX = width / 2;
-    let originY = DROP_LIMIT + 30; // Minha base (embaixo)
+    let originY = DROP_LIMIT + 30;
 
-    // Se for o oponente (ou P2 no espectador), o laser sai do teto
     if ((!isMe && !isSpectator) || (isSpectator && playerIndex === 1)) {
         originY = 0;
     }
 
     let targetX = width / 2;
-    let targetY = DROP_LIMIT * 0.2; // Alvo padrão de erro (atirando pro alto)
+    let targetY = DROP_LIMIT * 0.2; 
 
     if (acertou && alvo) {
         targetX = alvo.posX + CARD_WIDTH / 2;
         targetY = (alvo.y as any)._value + 20;
     } else if (!isMe || (isSpectator && playerIndex === 1)) {
-        // Se o inimigo errar, o laser dele vai pro chão
         targetY = DROP_LIMIT; 
     }
 
@@ -394,12 +401,11 @@ export default function ArcadeMultiplayer() {
     const distance = Math.sqrt(dx * dx + dy * dy);
     const angle = Math.atan2(dy, dx) + Math.PI / 2; 
 
-    // Cor do Laser
-    let cor = '#32CD32'; // Meu laser verde
-    if (!isMe && !isSpectator) cor = '#FF4444'; // Inimigo vermelho
-    if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : '#32CD32'; // Espectador vê verde e vermelho
+    let cor = '#32CD32'; 
+    if (!isMe && !isSpectator) cor = '#FF4444'; 
+    if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : '#32CD32'; 
 
-    if (!acertou) cor = '#FF4444'; // Erro fica vermelho
+    if (!acertou) cor = '#FF4444'; 
 
     const midX = originX + dx / 2;
     const midY = originY + dy / 2;
@@ -434,7 +440,14 @@ export default function ArcadeMultiplayer() {
         <View style={styles.resultadoContainer}>
           <Text style={styles.resultadoTitle}>{titulo}</Text>
           <View style={styles.resultadoCard}><Text style={styles.resultadoPontos}>{pontos}</Text><Text style={styles.resultadoLabel}>Seus Pontos Totais</Text></View>
-          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => { setActiveMatchData(null); router.back(); }}><Ionicons name="home" size={22} color="#000" /><Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => { 
+              setActiveMatchData(null); 
+              socket.emit('update_status', { status: 'MENU' });
+              router.back(); 
+          }}>
+            <Ionicons name="home" size={22} color="#000" />
+            <Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -471,7 +484,6 @@ export default function ArcadeMultiplayer() {
         {lasersAtivos.map((laserInfo, index) => (<Animated.View key={`laser-${index}`} style={[styles.laser, { left: laserInfo.x - 2, top: laserInfo.y - laserInfo.h / 2, height: laserInfo.h, transform: [{ rotate: laserInfo.angle }], backgroundColor: laserInfo.cor, opacity: laserAnim }]} />))}
       </View>
       
-      {/* O TECLADO TRANSPARENTE E INTOCADO DA VERSÃO ORIGINAL */}
       {modo !== 'espectador' && meuStatus === 'vivo' ? (
           <View style={styles.bottomPanel}>
             <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
@@ -491,7 +503,6 @@ export default function ArcadeMultiplayer() {
   );
 }
 
-// ESTILOS EXATAMENTE IGUAIS AOS DO SEU ARQUIVO ORIGINAL
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0c' },
   gameArea: { flex: 1, width: '100%', backgroundColor: '#0a0a0a', zIndex: 1 },
