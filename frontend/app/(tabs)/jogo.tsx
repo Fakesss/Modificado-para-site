@@ -103,35 +103,22 @@ const Particula = ({ char }: { char: string }) => {
 };
 
 // =========================================================================
-// TECLADO
+// TECLADO ESTÁVEL (Padrão, Seguro e Funcional)
 // =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
-  const [pressed, setPressed] = useState(false);
-  const timeoutRef = useRef<any>(null);
-
-  const handlePointerDown = (e: any) => {
-    e.stopPropagation();
-    onPress(valor);
-    
-    setPressed(true);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => {
-      setPressed(false);
-    }, 120); 
-  };
-
   return (
-    <View 
-      style={[styles.tecla, styleExtra, pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
-      onPointerDown={handlePointerDown} 
+    <TouchableOpacity 
+      activeOpacity={0.6}
+      style={[styles.tecla, styleExtra]} 
+      onPress={() => onPress(valor)}
     >
       {children}
-    </View>
+    </TouchableOpacity>
   );
 };
 
 export default function Jogo() {
-  const { user } = useAuth(); // Usado para checar se é ADMIN
+  const { user } = useAuth(); 
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [pontos, setPontos] = useState(0);
   const [vidas, setVidas] = useState(5); 
@@ -224,30 +211,32 @@ export default function Jogo() {
     } catch (e) {}
   };
 
-  // Função exclusiva do Admin para deletar missões travadas
   const confirmarDelecaoMissao = (id: string) => {
-    Alert.alert(
-      "Apagar Missão Personalizada",
-      "Tem certeza que deseja apagar esta missão do sistema para todos os jogadores?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        { 
-          text: "Apagar", 
-          style: "destructive", 
-          onPress: async () => {
-            try {
-              // Chama a API para deletar no banco (precisa existir no api.ts)
-              await api.deletarMissao(id);
-              Alert.alert("Sucesso", "A missão foi apagada.");
-              carregarMissoes(); // Recarrega a lista sem a missão apagada
-            } catch (error) {
-              console.error("Erro ao apagar missão", error);
-              Alert.alert("Erro", "Falha ao apagar. Verifique se a rota existe no backend.");
-            }
-          }
-        }
-      ]
-    );
+    const mensagem = "Tem certeza que deseja APAGAR este jogo personalizado do sistema?";
+    
+    if (Platform.OS === 'web') {
+      const confirmou = window.confirm(mensagem);
+      if (confirmou) executarDelecaoMissao(id);
+    } else {
+      Alert.alert(
+        "Apagar Jogo Personalizado",
+        mensagem,
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Apagar", style: "destructive", onPress: () => executarDelecaoMissao(id) }
+        ]
+      );
+    }
+  };
+
+  const executarDelecaoMissao = async (id: string) => {
+    try {
+      await api.deletarJogo(id); 
+      Alert.alert("Sucesso", "O jogo foi removido da tela de todos os alunos.");
+      carregarMissoes(); 
+    } catch (error) {
+      Alert.alert("Erro", "Falha ao apagar o jogo. Verifique sua conexão com o servidor.");
+    }
   };
 
   useEffect(() => {
@@ -269,7 +258,9 @@ export default function Jogo() {
     jogoAtivoRef.current = false;
     if(spawnTimer.current) clearTimeout(spawnTimer.current);
     
-    if(missaoAtualRef.current?.id) await api.concluirMissao(missaoAtualRef.current.id);
+    try {
+        if(missaoAtualRef.current?.id) await api.concluirMissao(missaoAtualRef.current.id);
+    } catch(e) {}
     setTimeout(() => setTela('resultado'), 500);
   };
 
@@ -733,13 +724,12 @@ export default function Jogo() {
                           <Ionicons name="play-circle" size={32} color={esgotado ? "#555" : "#FFF"} />
                         </TouchableOpacity>
 
-                        {/* BOTÃO EXCLUSIVO DO ADMIN PARA APAGAR MISSÃO TRAVADA */}
                         {user?.perfil === 'ADMIN' && (
                           <TouchableOpacity
                             style={{ backgroundColor: '#E74C3C', padding: 15, borderRadius: 12, marginLeft: 8, justifyContent: 'center', alignItems: 'center' }}
                             onPress={() => confirmarDelecaoMissao(missao.id)}
                           >
-                            <Ionicons name="trash" size={24} color="#FFF" />
+                            <Text style={{color: '#FFF', fontWeight: '900', fontSize: 18}}>X</Text>
                           </TouchableOpacity>
                         )}
                     </View>
