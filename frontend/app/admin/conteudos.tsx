@@ -15,7 +15,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
 import * as api from '../../src/services/api';
 
 type TipoConteudo = 'VIDEO' | 'LINK' | 'MATERIAL';
@@ -52,12 +51,13 @@ export default function AdminConteudos() {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: '*/*', 
-        copyToCacheDirectory: true,
+        copyToCacheDirectory: true, // Garante que o arquivo venha para a memória do app
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const file = result.assets[0];
 
+        // Trava de tamanho de 4MB
         if (file.size && file.size > 4 * 1024 * 1024) {
           Alert.alert("Erro", "O arquivo é muito grande. O limite máximo é 4MB.");
           return;
@@ -65,38 +65,31 @@ export default function AdminConteudos() {
 
         setNomeArquivo(file.name);
 
-        if (Platform.OS === 'web') {
-          if (file.file) {
-            const reader = new FileReader();
-            reader.onload = () => {
-              if (typeof reader.result === 'string') {
-                const base64String = reader.result.split(',')[1];
-                setArquivoBase64(base64String);
-              }
-            };
-            reader.readAsDataURL(file.file);
-          } else {
-            const response = await fetch(file.uri);
-            const blob = await response.blob();
-            const reader = new FileReader();
-            reader.onload = () => {
-              if (typeof reader.result === 'string') {
-                const base64String = reader.result.split(',')[1];
-                setArquivoBase64(base64String);
-              }
-            };
-            reader.readAsDataURL(blob);
-          }
+        // MOTOR UNIVERSAL PARA LER O ARQUIVO (Sem expo-file-system)
+        if (Platform.OS === 'web' && file.file) {
+          // Otimizado para Web
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result === 'string') {
+              setArquivoBase64(reader.result.split(',')[1]);
+            }
+          };
+          reader.readAsDataURL(file.file);
         } else {
-          // CORREÇÃO: Usando string literal 'base64' para evitar o erro de undefined no Expo Go
-          const base64 = await FileSystem.readAsStringAsync(file.uri, {
-            encoding: 'base64', 
-          });
-          setArquivoBase64(base64);
+          // Mobile (Android/iOS) e Fallback Web
+          const response = await fetch(file.uri);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result === 'string') {
+              setArquivoBase64(reader.result.split(',')[1]);
+            }
+          };
+          reader.readAsDataURL(blob);
         }
       }
     } catch (error) {
-      console.error(error);
+      console.log("Erro no picker: ", error);
       Alert.alert("Erro", "Não foi possível selecionar o arquivo.");
     }
   };
