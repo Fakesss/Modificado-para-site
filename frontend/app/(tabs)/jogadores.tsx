@@ -18,7 +18,6 @@ export default function JogadoresOnline() {
   const [jogadorParaConvidar, setJogadorParaConvidar] = useState<any>(null);
   const [mostrarModosArcade, setMostrarModosArcade] = useState(false);
 
-  // Escutadores passivos (ficam sempre ouvindo)
   useEffect(() => {
     const atualizaJogadores = (data: any[]) => {
       const eu = data.find(u => u.user_id === user?.id);
@@ -35,23 +34,20 @@ export default function JogadoresOnline() {
     };
   }, [user]);
 
-  // A SUA IDEIA AQUI: O Loop só funciona quando a aba "Online" está focada (aberta na tela)
   useFocusEffect(
     useCallback(() => {
-      // Quando o jogador ENTRA na aba:
       socket.emit('update_status', { status: 'MENU' });
       socket.emit('get_active_matches');
       socket.emit('request_sync');
 
-      // Liga o motor de atualização a cada 3 segundos
+      // LOOP INTELIGENTE (Só funciona na Aba Online)
       const interval = setInterval(() => {
         socket.emit('request_sync');
         socket.emit('get_active_matches');
       }, 3000);
 
-      // Quando o jogador SAI da aba (vai pro Menu, Jogo, etc):
       return () => {
-        clearInterval(interval); // DESLIGA o loop instantaneamente pra não pesar o app!
+        clearInterval(interval);
       };
     }, [])
   );
