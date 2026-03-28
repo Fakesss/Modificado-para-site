@@ -6,8 +6,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
+
+// CORREÇÃO: Importando da pasta 'legacy' conforme o Expo Go exigiu!
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+
 import * as api from '../../src/services/api';
 import { Conteudo } from '../../src/types';
 
@@ -53,7 +56,6 @@ export default function Conteudos() {
       return Alert.alert('Erro', 'Arquivo não disponível.');
     }
 
-    // Limpa o nome do arquivo para evitar erros no celular
     const nomeLimpo = conteudo.titulo.replace(/[^a-zA-Z0-9]/g, '_');
     const fileName = `${nomeLimpo}.pdf`;
 
@@ -68,11 +70,9 @@ export default function Conteudos() {
         Alert.alert("Erro", "Falha ao baixar no navegador.");
       }
     } else {
-      // MOTOR DE DOWNLOAD MOBILE (NATIVO)
       try {
         const fileUri = `${FileSystem.documentDirectory}${fileName}`;
         
-        // Usamos string pura 'base64' para evitar o erro do Expo Go
         await FileSystem.writeAsStringAsync(fileUri, conteudo.arquivo, {
           encoding: 'base64', 
         });
