@@ -963,3 +963,9 @@ async def get_online_users():
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# MÁGICA DO MULTIPLAYER: Conectando o socket_manager ao servidor principal
+import socketio
+from socket_manager import sio
+
+app = socketio.ASGIApp(sio, other_asgi_app=app)
