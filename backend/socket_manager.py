@@ -42,7 +42,6 @@ async def disconnect(sid):
         if sid in matchmaking_queues[q_name]:
             matchmaking_queues[q_name].remove(sid)
     
-    # LIMPEZA FANTASMA: Se o jogador cair, limpa a sala e libera o oponente!
     for room_id, room in list(rooms.items()):
         if sid in room['players']:
             other_players = [p for p in room['players'] if p != sid]
@@ -52,7 +51,6 @@ async def disconnect(sid):
             for spec_sid in room.get('spectators', []):
                 await sio.emit('match_ended', {}, room=spec_sid)
             
-            # Devolve o status do outro jogador para MENU
             for p in room['players']:
                 if p in players_online: players_online[p]['status'] = 'MENU'
             del rooms[room_id]
@@ -97,6 +95,18 @@ async def broadcast_online_users():
                 'aceita_convites': info['aceita_convites']
             })
     await sio.emit('online_users_list', safe_list)
+
+# SINCRONIZAÇÃO SILENCIOSA (Evita os nomes sumirem)
+@sio.event
+async def request_sync(sid):
+    safe_list = []
+    for s, info in players_online.items():
+        if info['user_id']:
+            safe_list.append({
+                'sid': s, 'name': info['name'], 'user_id': info['user_id'],
+                'status': info['status'], 'aceita_convites': info['aceita_convites']
+            })
+    await sio.emit('online_users_list', safe_list, room=sid)
 
 @sio.event
 async def send_invite(sid, data):
@@ -225,9 +235,6 @@ async def cancel_matchmaking(sid):
         if sid in matchmaking_queues[q_name]:
             matchmaking_queues[q_name].remove(sid)
 
-# =========================================================================
-# LÓGICA DO JOGO DA VELHA (TIC-TAC-TOE)
-# =========================================================================
 def gerar_operacao_simples():
     ops = ['+', '-', 'x']
     op = random.choice(ops)
@@ -316,9 +323,6 @@ async def make_move(sid, data):
 
     await sio.emit('board_update', {'board': room['board'], 'turn': room['turn'], 'vidas': room['vidas']}, room=room_id)
 
-# =========================================================================
-# ARCADE MULTIPLAYER (Chuva de Meteoros Sincronizada)
-# =========================================================================
 async def start_arcade_match(p1_sid, p2_sid, modo_operacao):
     room_id = f"arc_{p1_sid[:5]}_{p2_sid[:5]}"
     
@@ -385,8 +389,6 @@ async def arcade_miss(sid, data):
         else: ganhador = 'Empate'
         
         await sio.emit('game_over', {'ganhador': ganhador, 'pontos': room['pontos']}, room=room_id)
-        
-        # LIMPEZA FANTASMA
         for p in room['players']:
             if p in players_online: players_online[p]['status'] = 'MENU'
         del rooms[room_id]
@@ -404,7 +406,6 @@ async def leave_match(sid, data):
         for spec_sid in rooms[room_id].get('spectators', []):
             await sio.emit('match_ended', {}, room=spec_sid)
         
-        # LIMPEZA FANTASMA
         for p in rooms[room_id]['players']:
             if p in players_online: players_online[p]['status'] = 'MENU'
         del rooms[room_id]
