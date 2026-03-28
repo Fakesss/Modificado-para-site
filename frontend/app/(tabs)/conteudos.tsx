@@ -7,7 +7,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-// CORREÇÃO: Importando da pasta 'legacy' conforme o Expo Go exigiu!
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
@@ -51,17 +50,29 @@ export default function Conteudos() {
     }
   };
 
+  // FUNÇÃO MÁGICA: Descobre o tipo do arquivo lendo a assinatura do Base64
+  const detectarTipoArquivo = (base64Str: string) => {
+    const magic = base64Str.substring(0, 10);
+    if (magic.startsWith('JVBER')) return { ext: 'pdf', mime: 'application/pdf' };
+    if (magic.startsWith('iVBORw')) return { ext: 'png', mime: 'image/png' };
+    if (magic.startsWith('/9j/')) return { ext: 'jpg', mime: 'image/jpeg' };
+    if (magic.startsWith('R0lGOD')) return { ext: 'gif', mime: 'image/gif' };
+    if (magic.startsWith('UEsDBB')) return { ext: 'docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }; 
+    return { ext: 'bin', mime: 'application/octet-stream' }; // Formato genérico se não reconhecer
+  };
+
   const abrirMaterial = async (conteudo: Conteudo) => {
     if (!conteudo.arquivo) {
       return Alert.alert('Erro', 'Arquivo não disponível.');
     }
 
+    const { ext, mime } = detectarTipoArquivo(conteudo.arquivo);
     const nomeLimpo = conteudo.titulo.replace(/[^a-zA-Z0-9]/g, '_');
-    const fileName = `${nomeLimpo}.pdf`;
+    const fileName = `${nomeLimpo}.${ext}`;
 
     if (Platform.OS === 'web') {
       try {
-        const linkSource = `data:application/pdf;base64,${conteudo.arquivo}`;
+        const linkSource = `data:${mime};base64,${conteudo.arquivo}`;
         const downloadLink = document.createElement("a");
         downloadLink.href = linkSource;
         downloadLink.download = fileName;
@@ -69,23 +80,33 @@ export default function Conteudos() {
       } catch (e) {
         Alert.alert("Erro", "Falha ao baixar no navegador.");
       }
-    } else {
+    } else if (Platform.OS === 'android') {
+      // DOWNLOAD DIRETO NO ANDROID
       try {
-        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+        const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
         
-        await FileSystem.writeAsStringAsync(fileUri, conteudo.arquivo, {
-          encoding: 'base64', 
-        });
-
-        const isAvailable = await Sharing.isAvailableAsync();
-        if (isAvailable) {
-          await Sharing.shareAsync(fileUri);
-        } else {
-          Alert.alert('Aviso', 'O visualizador de arquivos não está disponível no seu dispositivo.');
+        if (permissions.granted) {
+          const uri = await FileSystem.StorageAccessFramework.createFileAsync(permissions.directoryUri, fileName, mime);
+          await FileSystem.writeAsStringAsync(uri, conteudo.arquivo, { encoding: 'base64' });
+          Alert.alert('Sucesso', 'Arquivo baixado com sucesso!');
         }
       } catch (e) {
         console.error(e);
-        Alert.alert("Erro", "Falha ao salvar ou abrir o arquivo no celular.");
+        Alert.alert("Erro", "Falha ao salvar o arquivo no Android.");
+      }
+    } else {
+      // IOS (Apple): A única forma de salvar arquivos nativamente é pela tela de compartilhar
+      try {
+        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+        await FileSystem.writeAsStringAsync(fileUri, conteudo.arquivo, { encoding: 'base64' });
+        
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
+          await Sharing.shareAsync(fileUri); // O usuário clica em "Salvar em Arquivos" aqui
+        }
+      } catch (e) {
+        console.error(e);
+        Alert.alert("Erro", "Falha ao abrir o arquivo no iOS.");
       }
     }
   };
@@ -157,7 +178,7 @@ export default function Conteudos() {
                 <View style={[styles.cardIcon, { backgroundColor: '#FFD700' + '20' }]}><Ionicons name="document" size={24} color="#FFD700" /></View>
                 <View style={styles.cardContent}>
                   <Text style={styles.cardTitle}>{material.titulo}</Text>
-                  <Text style={styles.cardDescription}>Toque para baixar/abrir</Text>
+                  <Text style={styles.cardDescription}>Toque para baixar o arquivo</Text>
                 </View>
                 <Ionicons name="download-outline" size={24} color="#FFD700" />
               </TouchableOpacity>
