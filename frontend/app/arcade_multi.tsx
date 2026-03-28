@@ -47,15 +47,16 @@ export default function ArcadeMultiplayer() {
   const [oponenteNome, setOponenteNome] = useState('Oponente');
   const [player1Name, setPlayer1Name] = useState('Player 1');
   const [meuStatus, setMeuStatus] = useState<'vivo' | 'morto'>('vivo');
-  const [isHost, setIsHost] = useState(false);
   const [ganhador, setGanhador] = useState<string | null>(null);
   
   const roomIdRef = useRef<string>('');
 
   const [resposta, setResposta] = useState('');
   const [operacoes, setOperacoes] = useState<any[]>([]); 
-  const [modoMatematica, setModoMatematica] = useState('misto');
   
+  // VARIÁVEL DA COR DO LASER RESTAURADA (Isso causava o Crash e o Congelamento)
+  const [corLaserPersonalizada, setCorLaserPersonalizada] = useState('#32CD32');
+
   const filaMultiplayerRef = useRef<any[]>([]); 
   const operacoesAtuaisRef = useRef<any[]>([]);
   const operacoesListRef = useRef<any[]>([]); 
@@ -192,14 +193,12 @@ export default function ArcadeMultiplayer() {
       setModo('multi'); 
       modoRef.current = 'multi';
       
-      setModoMatematica(data.modo_operacao || 'misto');
       modoMatematicaRef.current = data.modo_operacao || 'misto';
-
       roomIdRef.current = data.room_id;
       setOponenteNome(data.opponentName);
       
       setIsHost(data.is_host);
-      isHostRef.current = data.is_host; // BLINDAGEM DO LOOP
+      isHostRef.current = data.is_host; 
 
       setVidas(5); setVidasOponente(5);
       setPontos(0); setPontosOponente(0);
@@ -231,6 +230,9 @@ export default function ArcadeMultiplayer() {
       setTela('jogo');
   };
 
+  // ==========================================
+  // O ABANDONO DE PARTIDA CORRIGIDO PARA WEB
+  // ==========================================
   const abandonarPartida = () => {
       const msg = modoRef.current === 'espectador' ? "Deseja parar de assistir?" : "Deseja abandonar a partida? Você perderá o jogo.";
       
@@ -300,7 +302,8 @@ export default function ArcadeMultiplayer() {
           const maxOps = modoRef.current === 'espectador' ? 15 : Math.min(15, 3 + Math.floor(pontos / 150)); 
           if (operacoesListRef.current.length < maxOps) spawnarQuestao();
       }
-      // O LOOP DE CHUVA AGORA É BLINDADO PARA NUNCA PARAR
+      
+      // BLINDAGEM DA CHUVA (Não para nunca!)
       if (isHostRef.current && filaMultiplayerRef.current.length < 5) {
           gerarEnviarBatchMultiplayer(modoMatematicaRef.current);
       }
@@ -320,6 +323,7 @@ export default function ArcadeMultiplayer() {
     const pistasDisponiveis = Array.from({length: numLanes}, (_, i) => i).filter(p => {
       const opsNaPista = operacoesAtuaisRef.current.filter(o => o.lane === p);
       if (opsNaPista.length === 0) return true;
+      // O BUG DO NAVEGADOR RESOLVIDO AQUI
       const menorY = Math.min(...opsNaPista.map(o => (o.y as any)._value || 0));
       return menorY > (DROP_LIMIT * minDropDistance);
     });
@@ -340,7 +344,7 @@ export default function ArcadeMultiplayer() {
       const ref = operacoesAtuaisRef.current.find((o:any) => o.chave === id);
       if (ref) {
          ref.y = value;
-         // VERIFICA SE BATEU NO CHÃO
+         // VERIFICA SE BATEU NO CHÃO E TIRA A VIDA CORRETAMENTE
          if (value >= DROP_LIMIT && !ref.missed) {
             ref.missed = true;
             processarErro(id);
@@ -359,11 +363,10 @@ export default function ArcadeMultiplayer() {
     }, 50); 
   };
 
-  // REMOÇÃO DA VIDA CONSERTADA
   const processarErro = useCallback((opId: string) => {
     if (opId === 'nenhum') return; 
 
-    // Busca pela ID unica (chave) do objeto na tela, e nao mais pela original matematica
+    // ID DA TELA PARA TIRAR A VIDA CERTA (Resolve o Bug de não perder vida)
     const opInfo = operacoesListRef.current.find(o => o.id === opId);
     if (!opInfo) return;
     opInfo.y.stopAnimation();
@@ -399,7 +402,9 @@ export default function ArcadeMultiplayer() {
     setResposta('');
   };
 
+  // ==========================================
   // MATEMÁTICA CORRIGIDA DOS LASERS
+  // ==========================================
   const dispararLaserUnico = (alvo: any, acertou: boolean, isMe: boolean, isSpectator: boolean, playerIndex: number) => {
     let originX = width / 2;
     // O SEGREDO DO LASER: A origem é SEMPRE embaixo, não importa se é vc ou o inimigo!
@@ -420,7 +425,7 @@ export default function ArcadeMultiplayer() {
 
     // O SEGREDO DA COR: Seu laser = Verde. Laser do Inimigo = Vermelho
     let cor = isMe ? corLaserPersonalizada : '#FF4444'; 
-    if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : '#32CD32'; 
+    if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : corLaserPersonalizada; 
 
     if (!acertou) cor = '#FF4444'; 
 
