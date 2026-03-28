@@ -6,7 +6,6 @@ import { useAuth } from '../src/context/AuthContext';
 import * as api from '../src/services/api';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 
-// IMPORTA A CONEXÃO E A MEMÓRIA GLOBAL DO JOGO
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
 
 const { width, height } = Dimensions.get('window');
@@ -72,7 +71,6 @@ export default function Arcade() {
   const [pontos, setPontos] = useState(0);
   const [vidas, setVidas] = useState(5); 
   
-  // ESTADOS DO MULTIPLAYER
   const [pontosOponente, setPontosOponente] = useState(0);
   const [vidasOponente, setVidasOponente] = useState(5);
   const [oponenteNome, setOponenteNome] = useState('Oponente');
@@ -102,8 +100,8 @@ export default function Arcade() {
   const modoMatematicaRef = useRef('misto'); 
   const missaoAtualRef = useRef<any>(null);
   
-  const filaQuestoesRef = useRef<any[]>([]); // Usada na Missão
-  const filaMultiplayerRef = useRef<any[]>([]); // O "Pente de Balas" do Multiplayer
+  const filaQuestoesRef = useRef<any[]>([]); 
+  const filaMultiplayerRef = useRef<any[]>([]); 
 
   const questoesEmJogoRef = useRef(0);
   const operacoesAtuaisRef = useRef<any[]>([]);
@@ -128,9 +126,6 @@ export default function Arcade() {
 
   const processarErroRef = useRef<any>(null);
 
-  // ==========================================
-  // O CÉREBRO DO ARCADE ONLINE & ESPECTADOR
-  // ==========================================
   useEffect(() => {
     if (tela !== 'jogo' && tela !== 'procurando' && tela !== 'resultado') return;
 
@@ -145,7 +140,6 @@ export default function Arcade() {
     };
 
     const onArcadeNewBatch = (data: any) => {
-        // Se não sou o Host, ou sou Espectador, eu recebo a fila de contas do servidor
         filaMultiplayerRef.current.push(...data.ops);
         if (modoRef.current === 'espectador' && filaMultiplayerRef.current.length > 0 && !jogoAtivoRef.current) {
             jogoAtivoRef.current = true;
@@ -157,7 +151,6 @@ export default function Arcade() {
         const { op_id, winner_sid, pontos: novosPontos } = data;
         const opInfo = operacoesListRef.current.find(o => o.chaveOriginal === op_id);
         
-        // Atualiza os pontos de quem acertou
         if (modoRef.current === 'espectador') {
             const sids = Object.keys(novosPontos);
             setPontos(novosPontos[sids[0]]);
@@ -172,15 +165,12 @@ export default function Arcade() {
         if (opInfo) {
             opInfo.y.stopAnimation();
             const isMe = winner_sid === socket.id;
-            
-            // Dispara o laser de quem acertou
             if (modoRef.current === 'espectador') {
                 const playerIndex = Object.keys(novosPontos).indexOf(winner_sid);
                 dispararLaserUnico(opInfo, false, true, playerIndex);
             } else {
                 dispararLaserUnico(opInfo, isMe, false, 0);
             }
-            
             questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
             setOperacoes(prev => prev.filter(o => o.chaveOriginal !== op_id));
             operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== op_id);
@@ -196,7 +186,6 @@ export default function Arcade() {
             const mySid = socket.id;
             const newMyLives = data.vidas[mySid];
             setVidas(newMyLives);
-            
             const oppSid = Object.keys(data.vidas).find(sid => sid !== mySid);
             if(oppSid) setVidasOponente(data.vidas[oppSid]);
 
@@ -250,7 +239,6 @@ export default function Arcade() {
     };
   }, [tela, params.spectate]);
 
-  // Se o Layout mandou iniciar uma partida Multiplayer
   useEffect(() => {
       if (activeMatchData && activeMatchData.game_type === 'arcade') {
           setupMultiplayerMatch(activeMatchData);
@@ -261,6 +249,11 @@ export default function Arcade() {
 
   const setupMultiplayerMatch = (data: any) => {
       setModo('multi'); modoRef.current = 'multi';
+      
+      // O SEGREDO DO MULTIPLAYER: Usa o modo enviado pelo convite
+      setModoMatematica(data.modo_operacao || 'misto');
+      modoMatematicaRef.current = data.modo_operacao || 'misto';
+
       roomIdRef.current = data.room_id;
       setOponenteNome(data.opponentName);
       setIsHost(data.is_host);
@@ -276,7 +269,6 @@ export default function Arcade() {
       setTela('jogo');
       jogoAtivoRef.current = true;
 
-      // Se for o Host, gera a primeira leva de contas e manda pro servidor
       if (data.is_host) {
           gerarEnviarBatchMultiplayer();
       }
@@ -293,7 +285,6 @@ export default function Arcade() {
       
       socket.emit('spectate_match', { room_id: roomId });
       setTela('jogo');
-      // O Loop inicia sozinho quando chegar o primeiro 'arcade_new_batch'
   };
 
   const abandonarPartida = () => {
@@ -310,15 +301,37 @@ export default function Arcade() {
 
   const gerarEnviarBatchMultiplayer = () => {
       const novasOps = [];
+      const r = (max: number) => Math.floor(Math.random() * max);
+      let opsPermitidas = ['+'];
+      
+      if (modoMatematicaRef.current === 'misto') {
+        if (rodadaRef.current >= 2) opsPermitidas.push('-');
+        if (rodadaRef.current >= 4) opsPermitidas.push('×');
+        if (rodadaRef.current >= 6) opsPermitidas.push('÷');
+        if (rodadaRef.current >= 8) opsPermitidas.push('^');
+        if (rodadaRef.current >= 10) opsPermitidas.push('√');
+      } else {
+        const m = modoMatematicaRef.current;
+        opsPermitidas = [m==='soma'?'+': m==='subtracao'?'-': m==='multiplicacao'?'×': m==='divisao'?'÷': m==='potenciacao'?'^':'√'];
+      }
+
+      let numMax = 8 + (rodadaRef.current * 2);
+      let multMax = 5 + Math.floor(rodadaRef.current / 1.5); 
+
       for(let i=0; i<15; i++) {
-          const opsPermitidas = ['+', '-', '×', '÷'];
-          const op = opsPermitidas[Math.floor(Math.random() * opsPermitidas.length)];
-          let n1=0, n2=0, res=0, txt='';
-          if (op === '+') { n1 = Math.floor(Math.random() * 20)+1; n2 = Math.floor(Math.random() * 20)+1; res = n1+n2; txt=`${n1} + ${n2}`; }
-          if (op === '-') { n1 = Math.floor(Math.random() * 30)+10; n2 = Math.floor(Math.random() * n1)+1; res = n1-n2; txt=`${n1} - ${n2}`; }
-          if (op === '×') { n1 = Math.floor(Math.random() * 10)+2; n2 = Math.floor(Math.random() * 10)+2; res = n1*n2; txt=`${n1} × ${n2}`; }
-          if (op === '÷') { n2 = Math.floor(Math.random() * 10)+2; res = Math.floor(Math.random() * 10)+1; n1 = n2*res; txt=`${n1} ÷ ${n2}`; }
-          
+          const op = opsPermitidas[r(opsPermitidas.length)];
+          let n1=0, n2:any=0, res=0, txt='';
+          switch(op) {
+            case '+': n1=r(numMax)+1; n2=r(numMax)+1; res=n1+n2; txt=`${n1} + ${n2}`; break;
+            case '-': n1=r(numMax*1.5)+5; n2=r(n1)+1; res=n1-n2; txt=`${n1} - ${n2}`; break;
+            case '×': n1=r(multMax)+2; n2=r(multMax)+2; res=n1*n2; txt=`${n1} × ${n2}`; break;
+            case '÷': n2=r(multMax)+2; res=r(multMax + 4)+1; n1=n2*res; txt=`${n1} ÷ ${n2}`; break;
+            case '^': 
+              let maxBase = Math.min(5 + Math.floor(rodadaRef.current / 2), 20); n1 = r(maxBase - 1) + 2; let maxExp = 2;
+              if (n1 === 2) maxExp = Math.min(3 + Math.floor(rodadaRef.current / 3), 7); else if (n1 === 3) maxExp = Math.min(2 + Math.floor(rodadaRef.current / 4), 4); else if (n1 <= 5) maxExp = Math.min(2 + Math.floor(rodadaRef.current / 10), 3);
+              n2 = r(maxExp - 1) + 2; res = Math.pow(n1, n2); const s:any = {2:'²',3:'³',4:'⁴',5:'⁵',6:'⁶',7:'⁷'}; txt = `${n1}${s[n2] || '^'+n2}`; break;
+            case '√': res=r(multMax+4)+2; n1=res*res; n2=''; txt=`√${n1}`; break;
+          }
           const speed = Math.max(3500, 10000 - (rodadaRef.current * 200));
           novasOps.push({ id: Math.random().toString(), texto: txt, resposta: res, speed });
       }
@@ -327,13 +340,10 @@ export default function Arcade() {
       rodadaRef.current += 1;
   };
 
-  // ==========================================
-  // PROCESSAR ERRO (QUANDO A CONTA BATE NO CHÃO)
-  // ==========================================
   const processarErro = useCallback((opId: string) => {
-    if (opId === 'nenhum') { // Errou de propósito no botão
+    if (opId === 'nenhum') {
       if (modoRef.current === 'multi') {
-         // No multi, errar número não tira vida para não punir duplo click.
+         // Multiplayer não perde vida no erro intencional de botão pra não punir clique duplo
       } else {
          setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
       }
@@ -348,7 +358,6 @@ export default function Arcade() {
     setExplosoes(prev => [...prev, { id: expId, x: opInfo.posX, y: DROP_LIMIT, texto: opInfo.textoTela, corEspecial: opInfo.tipoEspecial !== 'nenhum' }]);
     setTimeout(() => { setExplosoes(prev => prev.filter(e => e.id !== expId)); }, 800);
 
-    // Se for Multiplayer e eu estiver vivo, eu perco vida!
     if (modoRef.current === 'multi') {
         if (meuStatus === 'vivo') {
             socket.emit('arcade_miss', { room_id: roomIdRef.current, op_id: opId });
@@ -577,9 +586,6 @@ export default function Arcade() {
     setOperacoes([]); setExplosoes([]); setTela('resultado'); 
   };
 
-  // ==========================================
-  // VERIFICAR RESPOSTA (ON E OFFLINE)
-  // ==========================================
   const verificarResposta = () => {
     if (jogoPausadoRef.current || !jogoAtivoRef.current || isNaN(parseInt(resposta)) || meuStatus === 'morto') return;
     const alvo = operacoes.find(op => op.resposta === parseInt(resposta));
@@ -662,7 +668,6 @@ export default function Arcade() {
     setPowerUpDisponivel(false);
   };
 
-  // TELAS AUXILIARES
   if (tela === 'menu') {
     const modosArcade = [ { id: 'misto', name: 'Jornada', color: '#FFD700', icon: 'infinite' }, { id: 'soma', name: 'Soma', color: '#32CD32', icon: 'add' }, { id: 'subtracao', name: 'Subtração', color: '#FF4444', icon: 'remove' }, { id: 'multiplicacao', name: 'Multiplicação', color: '#4169E1', icon: 'close' }, { id: 'divisao', name: 'Divisão', color: '#9B59B6', icon: 'code-slash' }, { id: 'potenciacao', name: 'Potências', color: '#FF8C00', icon: 'chevron-up' }, { id: 'radiciacao', name: 'Raízes', color: '#00CED1', icon: 'flash' } ];
     return (
@@ -748,10 +753,8 @@ export default function Arcade() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       
-      {/* MODO ESPECTADOR BANNER */}
       {modo === 'espectador' && (<View style={{backgroundColor: '#E74C3C', padding: 5, alignItems: 'center', borderRadius: 8, marginBottom: 5}}><Text style={{color: '#FFF', fontWeight: 'bold'}}>👁 ASSISTINDO AO VIVO</Text></View>)}
 
-      {/* PLACAR MULTIPLAYER / ESPECTADOR */}
       {(modo === 'multi' || modo === 'espectador') && (
          <View style={{flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 10}}>
              <View>
@@ -770,7 +773,6 @@ export default function Arcade() {
          </View>
       )}
 
-      {/* PLACAR SINGLE PLAYER */}
       {(modo === 'single' || modo === 'missao') && (
           <View style={styles.gameHeader}>
             <View style={styles.headerStatsGroup}><Ionicons name="star" size={18} color="#FFD700" /><Text style={styles.statTextScore}>{pontos}</Text></View>
