@@ -82,9 +82,9 @@ export default function TabsLayout() {
     const onMatchFound = (data: any) => {
       setActiveMatchData(data);
       setConvite(null);
-      // ROTA CORRIGIDA AQUI
+      // ROTA CORRIGIDA PARA O NOVO ARQUIVO MULTIPLAYER
       if (data.game_type === 'arcade') {
-          router.push('/arcade');
+          router.push('/arcade_multi');
       } else {
           router.push('/tictactoe'); 
       }
