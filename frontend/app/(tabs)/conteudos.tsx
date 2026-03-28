@@ -6,7 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-// REMOVIDOS IMPORTS NATIVOS QUE QUEBRAM O VERCEL
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import * as api from '../../src/services/api';
 import { Conteudo } from '../../src/types';
 
@@ -52,11 +53,14 @@ export default function Conteudos() {
       return Alert.alert('Erro', 'Arquivo não disponível.');
     }
 
+    // Limpa o nome do arquivo para evitar erros no celular
+    const nomeLimpo = conteudo.titulo.replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = `${nomeLimpo}.pdf`;
+
     if (Platform.OS === 'web') {
       try {
         const linkSource = `data:application/pdf;base64,${conteudo.arquivo}`;
         const downloadLink = document.createElement("a");
-        const fileName = `${conteudo.titulo}.pdf`;
         downloadLink.href = linkSource;
         downloadLink.download = fileName;
         downloadLink.click();
@@ -64,7 +68,25 @@ export default function Conteudos() {
         Alert.alert("Erro", "Falha ao baixar no navegador.");
       }
     } else {
-      Alert.alert("Aviso", "Visualização de arquivos disponível apenas na versão Web no momento.");
+      // MOTOR DE DOWNLOAD MOBILE (NATIVO)
+      try {
+        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+        
+        // Usamos string pura 'base64' para evitar o erro do Expo Go
+        await FileSystem.writeAsStringAsync(fileUri, conteudo.arquivo, {
+          encoding: 'base64', 
+        });
+
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
+          await Sharing.shareAsync(fileUri);
+        } else {
+          Alert.alert('Aviso', 'O visualizador de arquivos não está disponível no seu dispositivo.');
+        }
+      } catch (e) {
+        console.error(e);
+        Alert.alert("Erro", "Falha ao salvar ou abrir o arquivo no celular.");
+      }
     }
   };
 
@@ -86,7 +108,6 @@ export default function Conteudos() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />}
       >
-        {/* Vídeos */}
         {videos.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -106,7 +127,6 @@ export default function Conteudos() {
           </View>
         )}
 
-        {/* Links */}
         {links.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -126,7 +146,6 @@ export default function Conteudos() {
           </View>
         )}
 
-        {/* Materiais */}
         {materiais.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
