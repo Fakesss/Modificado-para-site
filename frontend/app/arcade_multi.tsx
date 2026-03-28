@@ -70,8 +70,9 @@ export default function ArcadeMultiplayer() {
   
   const roomIdRef = useRef<string>('');
   const [resposta, setResposta] = useState('');
+  const respostaRef = useRef(''); // Ref para o teclado físico não pegar estado antigo
+  
   const [operacoes, setOperacoes] = useState<any[]>([]); 
-  const [corLaserPersonalizada, setCorLaserPersonalizada] = useState('#32CD32');
 
   const filaMultiplayerRef = useRef<any[]>([]); 
   const operacoesAtuaisRef = useRef<any[]>([]);
@@ -91,6 +92,27 @@ export default function ArcadeMultiplayer() {
   const [explosoes, setExplosoes] = useState<any[]>([]); 
 
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
+  useEffect(() => { respostaRef.current = resposta; }, [resposta]);
+
+  // Lógica do teclado físico para Web
+  const handleKeyDown = useCallback((e: any) => {
+    if (Platform.OS !== 'web' || !jogoAtivoRef.current || meuStatusRef.current === 'morto' || modoRef.current === 'espectador') return;
+    
+    if (e.key >= '0' && e.key <= '9') {
+        setResposta(prev => prev.length < 5 ? prev + e.key : prev);
+    } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        setResposta(prev => prev.slice(0, -1));
+    } else if (e.key === 'Enter') {
+        verificarRespostaComValor(respostaRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [handleKeyDown]);
 
   useEffect(() => {
     socket.emit('update_status', { status: 'JOGANDO_ONLINE' });
@@ -128,7 +150,6 @@ export default function ArcadeMultiplayer() {
                 dispararLaserUnico(opInfo, true, isMe, false, 0);
             }
             
-            // Dá 300ms para a animação do laser bater antes de eliminar a conta
             setTimeout(() => {
                 setOperacoes(prev => prev.filter(o => o.chaveOriginal !== op_id));
                 operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chaveOriginal !== op_id);
@@ -208,11 +229,9 @@ export default function ArcadeMultiplayer() {
   const setupMultiplayerMatch = (data: any) => {
       setModo('multi'); 
       modoRef.current = 'multi';
-      
       modoMatematicaRef.current = data.modo_operacao || 'misto';
       roomIdRef.current = data.room_id;
       setOponenteNome(data.opponentName);
-      
       isHostRef.current = data.is_host; 
 
       setVidas(5); setVidasOponente(5);
@@ -234,7 +253,6 @@ export default function ArcadeMultiplayer() {
   const setupSpectatorMode = (roomId: string) => {
       setModo('espectador'); 
       modoRef.current = 'espectador';
-      
       roomIdRef.current = roomId;
       setVidas(5); setVidasOponente(5);
       setPontos(0); setPontosOponente(0);
@@ -247,7 +265,6 @@ export default function ArcadeMultiplayer() {
 
   const abandonarPartida = () => {
       const msg = modoRef.current === 'espectador' ? "Deseja parar de assistir?" : "Deseja abandonar a partida? Você perderá o jogo.";
-      
       const executarSaida = () => {
           if (modoRef.current === 'espectador') socket.emit('leave_spectator', { room_id: roomIdRef.current });
           else if (modoRef.current === 'multi') socket.emit('leave_match', { room_id: roomIdRef.current });
@@ -401,9 +418,9 @@ export default function ArcadeMultiplayer() {
     setOperacoes([]); setExplosoes([]); setTela('resultado'); 
   };
 
-  const verificarResposta = () => {
-    if (!jogoAtivoRef.current || isNaN(parseInt(resposta)) || meuStatusRef.current === 'morto') return;
-    const alvo = operacoes.find(op => op.resposta === parseInt(resposta));
+  const verificarRespostaComValor = (valorStr: string) => {
+    if (!jogoAtivoRef.current || isNaN(parseInt(valorStr)) || meuStatusRef.current === 'morto') return;
+    const alvo = operacoesListRef.current.find(op => op.resposta === parseInt(valorStr));
 
     if (alvo) {
       alvo.y.stopAnimation(); 
@@ -414,42 +431,53 @@ export default function ArcadeMultiplayer() {
     setResposta('');
   };
 
+  const verificarResposta = () => verificarRespostaComValor(resposta);
+
   const dispararLaserUnico = (alvo: any, acertou: boolean, isMe: boolean, isSpectator: boolean, playerIndex: number) => {
     let originX = width / 2;
     let originY = DROP_LIMIT + 30;
+    
     let targetX = width / 2;
     let targetY = 0; 
 
     if (acertou && alvo) {
         targetX = alvo.posX + CARD_WIDTH / 2;
         targetY = (alvo.y as any)._value + 20;
-    } 
+    } else {
+        // O tiro saiu pela culatra (errou). Atira torto para os lados.
+        targetX = Math.random() > 0.5 ? width * 1.5 : -width * 0.5;
+        targetY = -50;
+    }
 
     const dx = targetX - originX;
     const dy = targetY - originY;
     const distance = Math.sqrt(dx * dx + dy * dy);
     const angle = Math.atan2(dy, dx) + Math.PI / 2; 
 
-    let cor = isMe ? corLaserPersonalizada : '#FF4444'; 
-    if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : corLaserPersonalizada; 
-    if (!acertou) cor = '#FF4444'; 
+    // Identidade visual fixa: Jogador 1 (Cyan), Jogador 2 (Laranja)
+    let cor = isMe ? '#00FFFF' : '#FFA500'; 
+    if (isSpectator) cor = playerIndex === 0 ? '#00FFFF' : '#FFA500'; 
 
     const midX = originX + dx / 2;
     const midY = originY + dy / 2;
     
-    const laserInfo = { x: midX, y: midY, h: distance, angle: `${angle}rad`, cor };
+    const laserInfo = { x: midX, y: midY, h: distance, angle: `${angle}rad`, cor, acertou };
     setLasersAtivos([laserInfo]);
     
     laserAnim.setValue(1);
     Animated.parallel([
-      Animated.timing(laserAnim, { toValue: 0, duration: 300, useNativeDriver: true }), 
-      ...(alvo ? [ 
+      Animated.timing(laserAnim, { 
+        toValue: 0, 
+        duration: acertou ? 300 : 150, // Some mais rápido se errou
+        useNativeDriver: true 
+      }), 
+      ...(alvo && acertou ? [ 
         Animated.timing(alvo.scale, { toValue: alvo.baseScale * 1.4, duration: 150, useNativeDriver: true }), 
         Animated.timing(alvo.opacity, { toValue: 0, duration: 150, useNativeDriver: true }) 
       ] : [])
     ]).start(() => setLasersAtivos([]));
     
-    if (!alvo) {
+    if (!acertou) {
       Animated.sequence([
         Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }), 
         Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }), 
@@ -491,29 +519,43 @@ export default function ArcadeMultiplayer() {
         </View>
       )}
 
-      {/* Header do Jogo */}
-      <View style={styles.headerContainer}>
-        <View>
-          <Text style={[styles.nomeJogador, { color: modoRef.current === 'espectador' ? '#32CD32' : '#32CD32' }]}>
-            {modoRef.current === 'espectador' ? player1Name : 'Você'}
-          </Text>
-          <Text style={styles.textoPlacar}>Pontos: {pontos}</Text>
-          <Text style={styles.textoVidas}>Vidas: {'❤️'.repeat(Math.max(0, vidas))}</Text>
+      {/* Header do Jogo - Estilizado com cores fixas por jogador */}
+      <View style={styles.gameHeader}>
+        <View style={styles.playerInfoBox}>
+          <View style={[styles.playerTag, { borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.1)' }]}>
+            <Text style={[styles.nomeJogador, { color: '#00FFFF' }]}>
+              {modoRef.current === 'espectador' ? player1Name : 'Você'}
+            </Text>
+          </View>
+          <Text style={styles.textoPlacar}>Pts: {pontos}</Text>
+          <View style={styles.vidasContainer}>
+            {Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={14} color="#FF4444" style={{marginHorizontal:1}} />)}
+          </View>
         </View>
 
-        <TouchableOpacity onPress={abandonarPartida} style={styles.btnSair}>
+        <TouchableOpacity onPress={abandonarPartida} style={styles.btnSairPartida}>
           <Ionicons name="exit-outline" size={24} color="#FFF" />
         </TouchableOpacity>
 
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={[styles.nomeJogador, { color: '#FF4444' }]}>{oponenteNome}</Text>
-          <Text style={styles.textoPlacar}>Pontos: {pontosOponente}</Text>
-          <Text style={styles.textoVidas}>Vidas: {'❤️'.repeat(Math.max(0, vidasOponente))}</Text>
+        <View style={[styles.playerInfoBox, { alignItems: 'flex-end' }]}>
+          <View style={[styles.playerTag, { borderColor: '#FFA500', backgroundColor: 'rgba(255, 165, 0, 0.1)' }]}>
+            <Text style={[styles.nomeJogador, { color: '#FFA500' }]}>{oponenteNome}</Text>
+          </View>
+          <Text style={styles.textoPlacar}>Pts: {pontosOponente}</Text>
+          <View style={styles.vidasContainer}>
+            {Array.from({ length: Math.max(0, vidasOponente) }).map((_, i) => <Ionicons key={i} name="heart" size={14} color="#FF4444" style={{marginHorizontal:1}} />)}
+          </View>
         </View>
       </View>
 
       {/* Área Principal de Jogo */}
       <View style={styles.gameArea}>
+        {/* Linha Elétrica Visual do Offline */}
+        <View style={styles.linhaEletricaContainer}>
+           <View style={styles.linhaEletricaCore} />
+           <View style={styles.linhaEletricaGlow} />
+        </View>
+
         {operacoes.map((op) => (
           <Animated.View
             key={op.id}
@@ -523,6 +565,7 @@ export default function ArcadeMultiplayer() {
                 left: op.posX,
                 transform: [{ translateY: op.y }, { scale: op.scale }],
                 opacity: op.opacity,
+                width: CARD_WIDTH
               },
             ]}
           >
@@ -530,77 +573,61 @@ export default function ArcadeMultiplayer() {
           </Animated.View>
         ))}
 
-        {explosoes.map((exp) => (
-          <View key={exp.id} style={[styles.containerExplosao, { left: exp.x, top: exp.y - 20 }]}>
-            <Particula char="💥" />
+        {explosoes.map(exp => (
+          <View key={exp.id} style={[styles.explosaoContainer, { left: exp.x, top: exp.y - 20 }]}>
+             {exp.texto.split('').map((char: string, i: number) => (
+               <Particula key={i} char={char} />
+             ))}
           </View>
         ))}
 
         {lasersAtivos.map((laser, index) => (
           <Animated.View
             key={`laser-${index}`}
-            style={{
-              position: 'absolute',
-              left: laser.x,
-              top: laser.y,
-              width: 4,
+            style={[styles.laser, {
+              left: laser.x - 2,
+              top: laser.y - laser.h / 2,
               height: laser.h,
               backgroundColor: laser.cor,
               transform: [
-                { translateY: -laser.h / 2 },
-                { rotate: laser.angle },
+                { rotate: laser.angle }
               ],
-              opacity: laserAnim,
+              // Se errou, a opacidade do laser também cai para indicar falha visual
+              opacity: laser.acertou ? laserAnim : laserAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.4] }),
               shadowColor: laser.cor,
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.8,
-              shadowRadius: 10,
-              elevation: 5,
-            }}
+            }]}
           />
         ))}
-
-        <View style={[styles.linhaBase, { top: DROP_LIMIT }]} />
       </View>
 
-      {/* Teclado */}
+      {/* Teclado - Estilo offline + Limite de largura no Web */}
       {modoRef.current !== 'espectador' && meuStatus === 'vivo' && (
-        <View style={styles.containerTecladoTotal}>
-          <Animated.View style={[styles.visor, { transform: [{ translateX: shakeAnim }] }]}>
-            <Text style={styles.textoVisor}>{resposta || '?'}</Text>
+        <View style={styles.bottomPanel}>
+          <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}>
+            <Text style={styles.displayText}>{resposta || ' '}</Text>
           </Animated.View>
           
-          <View style={styles.linhaTeclado}>
-            {[1, 2, 3].map((num) => (
-              <BotaoTeclado key={num} valor={num} onPress={(v: number) => setResposta((p) => p.length < 5 ? p + v : p)}>
-                <Text style={styles.textoTecla}>{num}</Text>
-              </BotaoTeclado>
+          <View style={styles.tecladoContainer}>
+            {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
+              <View key={i} style={styles.tecladoRow}>
+                {row.map(num => (
+                  <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r.length < 5 ? r + v : r)}>
+                    <Text style={styles.teclaText}>{num}</Text>
+                  </BotaoTeclado>
+                ))}
+              </View>
             ))}
-          </View>
-          <View style={styles.linhaTeclado}>
-            {[4, 5, 6].map((num) => (
-              <BotaoTeclado key={num} valor={num} onPress={(v: number) => setResposta((p) => p.length < 5 ? p + v : p)}>
-                <Text style={styles.textoTecla}>{num}</Text>
+            <View style={styles.tecladoRow}>
+              <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}>
+                <Ionicons name="close" size={24} color="#fff" />
               </BotaoTeclado>
-            ))}
-          </View>
-          <View style={styles.linhaTeclado}>
-            {[7, 8, 9].map((num) => (
-              <BotaoTeclado key={num} valor={num} onPress={(v: number) => setResposta((p) => p.length < 5 ? p + v : p)}>
-                <Text style={styles.textoTecla}>{num}</Text>
+              <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r.length < 5 ? r + v : r)}>
+                <Text style={styles.teclaText}>0</Text>
               </BotaoTeclado>
-            ))}
-          </View>
-          <View style={styles.linhaTeclado}>
-            <BotaoTeclado valor="del" onPress={() => setResposta((p) => p.slice(0, -1))} styleExtra={styles.teclaApagar}>
-              <Ionicons name="backspace" size={28} color="#FFF" />
-            </BotaoTeclado>
-            <BotaoTeclado valor={0} onPress={(v: number) => setResposta((p) => p.length < 5 ? p + v : p)}>
-              <Text style={styles.textoTecla}>0</Text>
-            </BotaoTeclado>
-            <BotaoTeclado valor="enter" onPress={verificarResposta} styleExtra={styles.teclaEnviar}>
-              <Ionicons name="send" size={28} color="#FFF" />
-            </BotaoTeclado>
+              <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}>
+                <Ionicons name="checkmark" size={28} color="#fff" />
+              </BotaoTeclado>
+            </View>
           </View>
         </View>
       )}
@@ -616,42 +643,52 @@ export default function ArcadeMultiplayer() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1A1A2E' },
-  particulaTexto: { fontSize: 30, position: 'absolute' },
-  tecla: { flex: 1, backgroundColor: '#333', margin: 4, borderRadius: 10, justifyContent: 'center', alignItems: 'center', height: 60, elevation: 3, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 3, shadowOffset: { width: 0, height: 2 } },
+  container: { flex: 1, backgroundColor: '#0c0c0c' },
+  particulaTexto: { position: 'absolute', color: '#00FFFF', fontSize: 22, fontWeight: '900', textShadowColor: '#00FFFF', textShadowRadius: 10 },
   
   resultadoContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   resultadoTitle: { fontSize: 32, fontWeight: 'bold', color: '#FFF', marginBottom: 30 },
-  resultadoCard: { backgroundColor: '#2A2A4A', padding: 30, borderRadius: 20, alignItems: 'center', marginBottom: 40, width: '80%', elevation: 5 },
-  resultadoPontos: { fontSize: 60, fontWeight: 'bold', color: '#32CD32', marginBottom: 10 },
-  resultadoLabel: { fontSize: 18, color: '#A0A0B0' },
-  jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#32CD32', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 25, alignItems: 'center' },
-  jogarNovamenteText: { fontSize: 18, fontWeight: 'bold', color: '#000', marginLeft: 10 },
+  resultadoCard: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 20, alignItems: 'center', marginBottom: 40, width: '100%', maxWidth: 400, elevation: 5 },
+  resultadoPontos: { fontSize: 60, fontWeight: '900', color: '#FFD700', marginBottom: 10 },
+  resultadoLabel: { fontSize: 18, color: '#888' },
+  jogarNovamenteButton: { flexDirection: 'row', backgroundColor: '#FFD700', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 12, alignItems: 'center', width: '100%', maxWidth: 400, justifyContent: 'center' },
+  jogarNovamenteText: { fontSize: 18, fontWeight: '900', color: '#000', marginLeft: 10 },
   
   badgeEspectador: { backgroundColor: '#E74C3C', padding: 5, alignItems: 'center', borderRadius: 8, marginBottom: 5, marginHorizontal: 15 },
   textoBadgeEspectador: { color: '#FFF', fontWeight: 'bold' },
   
-  headerContainer: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 10, alignItems: 'center' },
-  nomeJogador: { fontWeight: 'bold', fontSize: 16, marginBottom: 4 },
-  textoPlacar: { color: '#FFF', fontSize: 14, marginBottom: 2 },
-  textoVidas: { color: '#FFF', fontSize: 12 },
-  btnSair: { padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
+  gameHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingVertical: 10, alignItems: 'center', backgroundColor: '#0c0c0c' },
+  playerInfoBox: { flex: 1 },
+  playerTag: { borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 4, alignSelf: 'flex-start' },
+  nomeJogador: { fontWeight: '900', fontSize: 14, textTransform: 'uppercase' },
+  textoPlacar: { color: '#FFF', fontSize: 14, fontWeight: 'bold', marginBottom: 2 },
+  vidasContainer: { flexDirection: 'row', alignItems: 'center', height: 16 },
+  btnSairPartida: { padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, marginHorizontal: 10 },
   
-  gameArea: { height: GAME_AREA_HEIGHT, backgroundColor: '#0F0F1A', overflow: 'hidden', position: 'relative' },
-  cardOperacao: { position: 'absolute', width: CARD_WIDTH, backgroundColor: '#2A2A4A', padding: 10, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#4A4A6A' },
-  textoOperacao: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
-  containerExplosao: { position: 'absolute', width: 60, height: 60, justifyContent: 'center', alignItems: 'center' },
-  linhaBase: { position: 'absolute', left: 0, right: 0, height: 2, backgroundColor: 'rgba(255, 68, 68, 0.3)' },
+  gameArea: { height: GAME_AREA_HEIGHT, backgroundColor: '#0a0a0a', overflow: 'hidden', position: 'relative', zIndex: 1 },
   
-  containerTecladoTotal: { flex: 1, padding: 10, justifyContent: 'flex-end', paddingBottom: 20 },
-  visor: { backgroundColor: '#2A2A4A', marginHorizontal: 4, marginBottom: 10, borderRadius: 10, height: 60, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#4A4A6A' },
-  textoVisor: { color: '#FFF', fontSize: 32, fontWeight: 'bold', letterSpacing: 2 },
-  linhaTeclado: { flexDirection: 'row', justifyContent: 'space-between' },
-  textoTecla: { color: '#FFF', fontSize: 28, fontWeight: 'bold' },
-  teclaApagar: { backgroundColor: '#FF4444' },
-  teclaEnviar: { backgroundColor: '#32CD32' },
+  linhaEletricaContainer: { position: 'absolute', top: DROP_LIMIT, width: '100%', height: 10, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
+  linhaEletricaCore: { width: '100%', height: 2, backgroundColor: '#00FFFF', shadowColor: '#00FFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 8, elevation: 8 },
+  linhaEletricaGlow: { position: 'absolute', width: '100%', height: 8, backgroundColor: 'rgba(0, 255, 255, 0.3)' },
+
+  cardOperacao: { position: 'absolute', backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, alignItems: 'center', zIndex: 10 },
+  textoOperacao: { color: '#FFF', fontSize: 16, fontWeight: '900' },
   
-  containerMorto: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.8)' },
-  textoMorto: { color: '#FF4444', fontSize: 30, fontWeight: 'bold', marginBottom: 10 },
-  subTextoMorto: { color: '#FFF', fontSize: 16 }
+  explosaoContainer: { position: 'absolute', width: CARD_WIDTH, height: 40, alignItems: 'center', justifyContent: 'center', zIndex: 15 },
+  
+  laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10, elevation: 5 },
+  
+  bottomPanel: { position: 'absolute', bottom: 0, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10 },
+  displayContainer: { backgroundColor: 'rgba(26, 26, 46, 0.7)', width: '100%', maxWidth: 370, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+  tecladoContainer: { width: '100%', maxWidth: 400, gap: 5, paddingHorizontal: 15 },
+  tecladoRow: { flexDirection: 'row', gap: 5, justifyContent: 'space-between' },
+  tecla: { backgroundColor: 'rgba(26, 26, 46, 0.75)', flex: 1, height: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  teclaText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)' },
+  teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)' },
+  
+  containerMorto: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.85)', position: 'absolute', bottom: 0, width: '100%', height: height - GAME_AREA_HEIGHT, zIndex: 20 },
+  textoMorto: { color: '#FF4444', fontSize: 24, fontWeight: '900', marginBottom: 5 },
+  subTextoMorto: { color: '#FFF', fontSize: 14 }
 });
