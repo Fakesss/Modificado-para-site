@@ -28,8 +28,8 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
       const h = Math.floor(totalSecs / 3600);
       const m = Math.floor((totalSecs % 3600) / 60);
       const s = totalSecs % 60;
-      if (r > 60 * 1000) setTempoRestanteStr(h > 0 ? `⏱ ${h}h ${m}m` : `⏱ ${m}m`);
-      else setTempoRestanteStr(`⏱ ${s}s`); 
+      if (r > 60 * 1000) setTempoRestanteStr(h > 0 ? `⏱ ${h}h ${m}m restantes` : `⏱ ${m}m restantes`);
+      else setTempoRestanteStr(`⏱ ${s}s restantes`); 
       timeoutId = setTimeout(atualizar, 1000);
     };
     atualizar();
@@ -296,12 +296,6 @@ export default function Arcade() {
       // O Loop inicia sozinho quando chegar o primeiro 'arcade_new_batch'
   };
 
-  const iniciarMultiplayerRandom = () => {
-      setModo('multi'); modoRef.current = 'multi';
-      setTela('procurando');
-      socket.emit('find_match', { game_type: 'arcade', name: user?.nome || 'Jogador', user_id: user?.id });
-  };
-
   const abandonarPartida = () => {
       Alert.alert("Sair", modo === 'espectador' ? "Deseja parar de assistir?" : "Deseja abandonar a partida? Você perderá o jogo.", [
           { text: "Não", style: "cancel" },
@@ -339,7 +333,7 @@ export default function Arcade() {
   const processarErro = useCallback((opId: string) => {
     if (opId === 'nenhum') { // Errou de propósito no botão
       if (modoRef.current === 'multi') {
-         // No multi, errar número não tira vida para não punir duplo click, mas pode punir se quiser.
+         // No multi, errar número não tira vida para não punir duplo click.
       } else {
          setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
       }
@@ -387,7 +381,6 @@ export default function Arcade() {
     try { await api.deletarJogo(id); Alert.alert("Sucesso", "O jogo foi removido."); carregarMissoes(); } catch (error) {}
   };
 
-  // ... (As funções avancarFase, pausarJogo, retomarJogo, sairDoJogo ficam idênticas para o modo Single)
   const pausarJogo = useCallback(() => {
     if (!jogoAtivoRef.current || jogoPausadoRef.current || modoRef.current === 'multi' || modoRef.current === 'espectador') return;
     jogoPausadoRef.current = true; setPausado(true);
@@ -495,7 +488,6 @@ export default function Arcade() {
   };
 
   const gerarDadosArcade = (): any => {
-      // (Lógica Matemática Intacta do Single Player)
       const r = (max: number) => Math.floor(Math.random() * max);
       let opsPermitidas = ['+'];
       if (modoMatematicaRef.current === 'misto') {
@@ -593,12 +585,10 @@ export default function Arcade() {
     const alvo = operacoes.find(op => op.resposta === parseInt(resposta));
 
     if (alvo) {
-      // Se for Multiplayer, não dá ponto direto. Avisa o servidor.
       if (modoRef.current === 'multi') {
-          alvo.y.stopAnimation(); // Pausa na tela pra dar a impressão visual que "pegou"
+          alvo.y.stopAnimation(); 
           socket.emit('arcade_answer', { room_id: roomIdRef.current, op_id: alvo.chaveOriginal });
       } else {
-          // Single Player Padrão
           alvo.y.stopAnimation();
           questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
           setPontos(p => { const novo = p + 10; if (modoRef.current !== 'missao' && Math.floor(novo/50) > Math.floor(p/50)) { if (!fasePendenteRef.current) { fasePendenteRef.current = true; proximaFaseNumRef.current = rodadaRef.current + 1; desempenhoOcultoRef.current += 1; } } return novo; });
@@ -616,13 +606,11 @@ export default function Arcade() {
   };
 
   const dispararLaserUnico = (alvo: any, isMe: boolean, isSpectator: boolean, playerIndex: number) => {
-    // Espectador: P1 atira da Esquerda, P2 da Direita
-    // Multiplayer: Eu atiro de Baixo, Oponente atira de Cima (teto)
     let originX = width / 2;
     let originY = DROP_LIMIT + 30;
 
     if (isSpectator) { originX = playerIndex === 1 ? width : 0; } 
-    else if (!isMe) { originY = 0; } // Laser do Inimigo sai do teto
+    else if (!isMe) { originY = 0; } 
 
     const targetX = alvo ? alvo.posX + CARD_WIDTH / 2 : width / 2;
     const targetY = alvo ? (alvo.y as any)._value + 20 : DROP_LIMIT * 0.2;
@@ -632,11 +620,10 @@ export default function Arcade() {
     const distance = Math.sqrt(dx * dx + dy * dy);
     const angle = Math.atan2(dy, dx) + Math.PI / 2; 
 
-    // Cor do Laser
-    let cor = isMe ? corLaserPersonalizada : '#FF4444'; // Inimigo é Vermelho
-    if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : '#4169E1'; // Espectador vê Azul e Vermelho
+    let cor = isMe ? corLaserPersonalizada : '#FF4444'; 
+    if (isSpectator) cor = playerIndex === 1 ? '#FF4444' : '#4169E1'; 
 
-    if (!alvo) cor = '#FF4444'; // Errou
+    if (!alvo) cor = '#FF4444'; 
 
     const midX = originX + dx / 2;
     const midY = originY + dy / 2;
@@ -688,18 +675,7 @@ export default function Arcade() {
             <View style={styles.menuHeader}>
               <Ionicons name="rocket" size={64} color="#4169E1" />
               <Text style={styles.menuTitle}>Arcade Turbo</Text>
-              <Text style={styles.menuSubtitle}>Chuva de Meteoros</Text>
-            </View>
-
-            <View style={{flexDirection: 'row', gap: 10, marginBottom: 30, width: '100%'}}>
-              <TouchableOpacity style={[styles.iniciarButton, {backgroundColor: '#4169E1', flex: 1}]} onPress={iniciarMultiplayerRandom}>
-                  <Ionicons name="globe" size={24} color="#FFF" />
-                  <Text style={[styles.iniciarButtonText, {color: '#FFF', fontSize: 14}]}>JOGAR ONLINE</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.iniciarButton, {flex: 1}]} onPress={() => iniciarJogo('single')}>
-                <Ionicons name="person" size={24} color="#000" />
-                <Text style={[styles.iniciarButtonText, {fontSize: 14}]}>TREINO OFFLINE</Text>
-              </TouchableOpacity>
+              <Text style={styles.menuSubtitle}>Treinamento Offline</Text>
             </View>
 
             {missoesDisponiveis.length > 0 && (
@@ -722,22 +698,30 @@ export default function Arcade() {
                 })}
               </View>
             )}
+
+            <Text style={styles.sectionLabel}>Escolha seu Modo Livre (Solo):</Text>
+            <View style={styles.modosGrid}>
+              {modosArcade.map(m => {
+                const isSelected = modoMatematica === m.id;
+                return (
+                  <TouchableOpacity key={m.id} style={[styles.modoCardItem, isSelected && { borderColor: m.color, backgroundColor: m.color + '15' }]} onPress={() => setModoMatematica(m.id)}>
+                    <Ionicons name={m.icon as any} size={28} color={isSelected ? m.color : '#555'} />
+                    <Text style={[styles.modoTextItem, isSelected && { color: m.color }]}>{m.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </ScrollView>
+
+          <View style={styles.btnIniciarWrapper}>
+            <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}>
+              <Ionicons name="play" size={24} color="#000" />
+              <Text style={styles.iniciarButtonText}>INICIAR MODO LIVRE</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
-  }
-
-  if (tela === 'procurando') {
-      return (
-          <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-              <ActivityIndicator size="large" color="#4169E1" style={{ marginBottom: 20, transform: [{scale: 1.5}] }} />
-              <Text style={{ color: '#FFF', fontSize: 24, fontWeight: 'bold' }}>Procurando adversário...</Text>
-              <TouchableOpacity style={[styles.iniciarButton, { backgroundColor: '#E74C3C', marginTop: 40, width: '80%' }]} onPress={() => { socket.emit('cancel_matchmaking'); setTela('menu'); }}>
-                 <Text style={[styles.iniciarButtonText, { color: '#FFF' }]}>CANCELAR</Text>
-              </TouchableOpacity>
-          </SafeAreaView>
-      )
   }
 
   if (tela === 'resultado') {
