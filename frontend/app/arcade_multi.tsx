@@ -95,7 +95,7 @@ export default function ArcadeMultiplayer() {
   const [explosoes, setExplosoes] = useState<any[]>([]); 
 
   // ==========================================
-  // FUNÇÕES DO JOGO (DECLARADAS PRIMEIRO)
+  // FUNÇÕES DO JOGO
   // ==========================================
   const gameOver = () => { 
     jogoAtivoRef.current = false;
@@ -354,13 +354,13 @@ export default function ArcadeMultiplayer() {
   };
 
   // ==========================================
-  // EFEITOS (DECLARADOS NO FINAL PARA EVITAR ERROS)
+  // EFEITOS (USEEFFECTS)
   // ==========================================
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
   useEffect(() => { respostaRef.current = resposta; }, [resposta]);
 
+  // EFEITO 1: Escuta do Teclado Físico na Web
   useEffect(() => {
-    // Escuta do teclado isolada com trava para Web SSR
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const handleKeyDownLocal = (e: any) => {
             if (!jogoAtivoRef.current || meuStatusRef.current === 'morto' || modoRef.current === 'espectador') return;
@@ -377,6 +377,28 @@ export default function ArcadeMultiplayer() {
     }
   }, []);
 
+  // EFEITO 2: Punição por mudança de aba na Web
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const handleVisibilityChange = () => {
+        // Se a aba foi ocultada e o jogador está ativo na partida
+        if (document.hidden && jogoAtivoRef.current && meuStatusRef.current === 'vivo' && modoRef.current !== 'espectador') {
+          const opsNaTela = [...operacoesAtuaisRef.current];
+          opsNaTela.forEach(op => {
+            if (!op.missed) {
+              op.missed = true; // Marca como perdida para não dar erro duplicado
+              processarErro(op.chave);
+            }
+          });
+        }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }
+  }, [processarErro]);
+
+  // EFEITO 3: Comunicação com o Servidor (Sockets)
   useEffect(() => {
     socket.emit('update_status', { status: 'JOGANDO_ONLINE' });
 
