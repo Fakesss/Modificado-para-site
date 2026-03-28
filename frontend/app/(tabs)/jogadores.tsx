@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Switch, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -15,12 +15,13 @@ export default function JogadoresOnline() {
   const [abaAtual, setAbaAtual] = useState<'jogadores' | 'partidas'>('jogadores');
   const [aceitaConvites, setAceitaConvites] = useState(true);
 
-  // Como o Socket é global (no _layout), nós só "espiamos" a lista que ele já está recebendo
+  // A MÁGICA DO NOVO MENU DE CONVITES
+  const [jogadorParaConvidar, setJogadorParaConvidar] = useState<any>(null);
+
   useEffect(() => {
     socket.emit('update_status', { status: 'MENU' });
 
     const atualizaJogadores = (data: any[]) => {
-      // Pega todos, menos o próprio usuário, e garante que as opções do "Não Perturbe" dele estejam certas
       const eu = data.find(u => u.user_id === user?.id);
       if (eu) setAceitaConvites(eu.aceita_convites);
       setOnlineUsers(data.filter((u: any) => u.user_id !== user?.id));
@@ -29,7 +30,6 @@ export default function JogadoresOnline() {
     socket.on('online_users_list', atualizaJogadores);
     socket.on('active_matches_list', setActiveMatches);
 
-    // Pede ativamente a lista de partidas a cada 5 segundos para a aba de espectadores
     const interval = setInterval(() => socket.emit('get_active_matches'), 5000);
 
     return () => {
@@ -41,7 +41,7 @@ export default function JogadoresOnline() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    socket.emit('get_active_matches'); // Força a atualização manual
+    socket.emit('get_active_matches');
     setTimeout(() => setRefreshing(false), 1000);
   };
 
@@ -50,15 +50,12 @@ export default function JogadoresOnline() {
     socket.emit('toggle_invites', { accepts: valor });
   };
 
-  const convidarJogador = (sid: string, nome: string) => {
-    Alert.alert(
-      "Desafiar Jogador",
-      `Deseja convidar ${nome} para qual jogo?`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        { text: "Jogo da Velha", onPress: () => socket.emit('send_invite', { target_sid: sid, game_type: 'tictactoe' }) }
-      ]
-    );
+  // Envia o convite do jogo específico para o servidor
+  const enviarConvite = (gameType: string) => {
+    if (jogadorParaConvidar) {
+      socket.emit('send_invite', { target_sid: jogadorParaConvidar.sid, game_type: gameType });
+      setJogadorParaConvidar(null);
+    }
   };
 
   const assistirPartida = (roomId: string) => {
@@ -66,9 +63,9 @@ export default function JogadoresOnline() {
   };
 
   const getStatusColor = (status: string) => {
-    if (status === 'JOGANDO_ONLINE' || status === 'JOGANDO_OFFLINE') return '#FF4444'; // Ocupado (Vermelho)
-    if (status === 'EXERCICIO') return '#FFD700'; // Estudando (Amarelo)
-    return '#32CD32'; // Livre no Menu (Verde)
+    if (status === 'JOGANDO_ONLINE' || status === 'JOGANDO_OFFLINE') return '#FF4444'; 
+    if (status === 'EXERCICIO') return '#FFD700'; 
+    return '#32CD32'; 
   };
 
   const getStatusText = (status: string) => {
@@ -123,7 +120,7 @@ export default function JogadoresOnline() {
             </View>
 
             {jogador.aceita_convites ? (
-              <TouchableOpacity style={styles.btnAcao} onPress={() => convidarJogador(jogador.sid, jogador.name)}>
+              <TouchableOpacity style={styles.btnAcao} onPress={() => setJogadorParaConvidar(jogador)}>
                 <Ionicons name="game-controller" size={20} color="#FFF" />
                 <Text style={styles.btnAcaoText}>Desafiar</Text>
               </TouchableOpacity>
@@ -157,6 +154,38 @@ export default function JogadoresOnline() {
           </View>
         )}
       </ScrollView>
+
+      {/* ========================================================= */}
+      {/* NOVO MENU MODAL: QUAL JOGO VOCÊ QUER DESAFIAR?            */}
+      {/* ========================================================= */}
+      <Modal visible={!!jogadorParaConvidar} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalGameContent}>
+            <Text style={styles.modalTitle}>DESAFIAR JOGADOR</Text>
+            <Text style={styles.modalText}>Qual jogo você quer jogar com {jogadorParaConvidar?.name}?</Text>
+            
+            <TouchableOpacity style={styles.gameOptionBtn} onPress={() => enviarConvite('tictactoe')}>
+                <View style={[styles.iconContainer, {backgroundColor: '#32CD3220'}]}><Ionicons name="grid" size={28} color="#32CD32" /></View>
+                <Text style={styles.gameOptionText}>Jogo da Velha</Text>
+                <Ionicons name="chevron-forward" size={20} color="#888" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={[styles.gameOptionBtn, {opacity: 0.5}]} disabled>
+                <View style={[styles.iconContainer, {backgroundColor: '#4169E120'}]}><Ionicons name="rocket" size={28} color="#4169E1" /></View>
+                <View style={{flex: 1}}>
+                   <Text style={styles.gameOptionText}>Arcade Turbo</Text>
+                   <Text style={{color: '#FF4444', fontSize: 10, fontWeight: 'bold'}}>Em Breve</Text>
+                </View>
+                <Ionicons name="lock-closed" size={20} color="#888" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setJogadorParaConvidar(null)}>
+                <Text style={styles.cancelBtnText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -185,5 +214,17 @@ const styles = StyleSheet.create({
   btnAcaoText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
   
   empty: { alignItems: 'center', marginTop: 50 },
-  emptyText: { color: '#666', marginTop: 10 }
+  emptyText: { color: '#666', marginTop: 10 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
+  modalGameContent: { backgroundColor: '#1a1a2e', padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
+  modalTitle: { color: '#FFF', fontSize: 20, fontWeight: '900', marginBottom: 5 },
+  modalText: { color: '#AAA', fontSize: 14, marginBottom: 20 },
+  
+  gameOptionBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0c0c0c', padding: 15, borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: '#333' },
+  iconContainer: { width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  gameOptionText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', flex: 1 },
+  
+  cancelBtn: { marginTop: 15, paddingVertical: 15, alignItems: 'center' },
+  cancelBtnText: { color: '#FF4444', fontWeight: 'bold', fontSize: 16 }
 });
