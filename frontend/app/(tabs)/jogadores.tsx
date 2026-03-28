@@ -14,12 +14,14 @@ export default function JogadoresOnline() {
   const [refreshing, setRefreshing] = useState(false);
   const [abaAtual, setAbaAtual] = useState<'jogadores' | 'partidas'>('jogadores');
   const [aceitaConvites, setAceitaConvites] = useState(true);
-
-  // A MÁGICA DO NOVO MENU DE CONVITES
   const [jogadorParaConvidar, setJogadorParaConvidar] = useState<any>(null);
 
   useEffect(() => {
+    // Avisa que estamos na tela de Menu
     socket.emit('update_status', { status: 'MENU' });
+    
+    // Puxa a lista de partidas ao abrir a tela
+    socket.emit('get_active_matches');
 
     const atualizaJogadores = (data: any[]) => {
       const eu = data.find(u => u.user_id === user?.id);
@@ -27,21 +29,20 @@ export default function JogadoresOnline() {
       setOnlineUsers(data.filter((u: any) => u.user_id !== user?.id));
     };
 
+    // O Socket escuta passivamente. O servidor avisa sozinho quando a lista muda!
     socket.on('online_users_list', atualizaJogadores);
     socket.on('active_matches_list', setActiveMatches);
-
-    const interval = setInterval(() => socket.emit('get_active_matches'), 5000);
 
     return () => {
       socket.off('online_users_list', atualizaJogadores);
       socket.off('active_matches_list');
-      clearInterval(interval);
     };
-  }, []);
+  }, [user]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    socket.emit('get_active_matches');
+    socket.emit('get_active_matches'); // Atualiza as partidas ao vivo quando arrastar pra baixo
+    socket.emit('update_status', { status: 'MENU' }); // Garante que o status está atualizado
     setTimeout(() => setRefreshing(false), 1000);
   };
 
@@ -50,7 +51,6 @@ export default function JogadoresOnline() {
     socket.emit('toggle_invites', { accepts: valor });
   };
 
-  // Envia o convite do jogo específico para o servidor
   const enviarConvite = (gameType: string) => {
     if (jogadorParaConvidar) {
       socket.emit('send_invite', { target_sid: jogadorParaConvidar.sid, game_type: gameType });
@@ -82,7 +82,6 @@ export default function JogadoresOnline() {
         <Text style={styles.title}>Lobby Global</Text>
       </View>
 
-      {/* MODO NÃO PERTURBE */}
       <View style={styles.dndContainer}>
         <View>
           <Text style={{color: '#FFF', fontWeight: 'bold'}}>Receber Convites</Text>
@@ -96,7 +95,6 @@ export default function JogadoresOnline() {
         />
       </View>
 
-      {/* NAVEGAÇÃO ENTRE ABAS */}
       <View style={styles.tabSelector}>
         <TouchableOpacity style={[styles.tabBtn, abaAtual === 'jogadores' && styles.tabActive]} onPress={() => setAbaAtual('jogadores')}>
           <Text style={[styles.tabText, abaAtual === 'jogadores' && styles.tabTextActive]}>Jogadores ({onlineUsers.length})</Text>
@@ -107,8 +105,6 @@ export default function JogadoresOnline() {
       </View>
 
       <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#32CD32" />}>
-        
-        {/* ABA: JOGADORES */}
         {abaAtual === 'jogadores' && onlineUsers.map(jogador => (
           <View key={jogador.sid} style={styles.card}>
             <View style={styles.info}>
@@ -132,11 +128,10 @@ export default function JogadoresOnline() {
           </View>
         ))}
 
-        {/* ABA: PARTIDAS PARA ASSISTIR */}
         {abaAtual === 'partidas' && activeMatches.map(match => (
           <View key={match.room_id} style={styles.card}>
             <View style={styles.info}>
-              <Text style={{color: '#FFD700', fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>JOGO DA VELHA</Text>
+              <Text style={{color: '#FFD700', fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>{match.game_type === 'arcade' ? 'ARCADE TURBO' : 'JOGO DA VELHA'}</Text>
               <Text style={styles.name}>{match.player1} <Text style={{color: '#FF4444'}}>vs</Text> {match.player2}</Text>
               <Text style={styles.statusText}>👁 {match.spectators_count} assistindo</Text>
             </View>
@@ -155,9 +150,6 @@ export default function JogadoresOnline() {
         )}
       </ScrollView>
 
-      {/* ========================================================= */}
-      {/* NOVO MENU MODAL: QUAL JOGO VOCÊ QUER DESAFIAR?            */}
-      {/* ========================================================= */}
       <Modal visible={!!jogadorParaConvidar} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalGameContent}>
@@ -170,6 +162,14 @@ export default function JogadoresOnline() {
                 <Ionicons name="chevron-forward" size={20} color="#888" />
             </TouchableOpacity>
             
+            <TouchableOpacity style={styles.gameOptionBtn} onPress={() => enviarConvite('arcade')}>
+                <View style={[styles.iconContainer, {backgroundColor: '#4169E120'}]}><Ionicons name="rocket" size={28} color="#4169E1" /></View>
+                <View style={{flex: 1}}>
+                   <Text style={styles.gameOptionText}>Arcade Turbo</Text>
+                   <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Chuva de Meteoros</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#888" />
+            </TouchableOpacity>
 
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setJogadorParaConvidar(null)}>
                 <Text style={styles.cancelBtnText}>Cancelar</Text>
@@ -177,7 +177,6 @@ export default function JogadoresOnline() {
           </View>
         </View>
       </Modal>
-
     </SafeAreaView>
   );
 }
@@ -186,37 +185,29 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0c' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 20, gap: 10, paddingBottom: 15 },
   title: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
-  
   dndContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1a1a2e', marginHorizontal: 20, padding: 15, borderRadius: 12, marginBottom: 15 },
-
   tabSelector: { flexDirection: 'row', marginHorizontal: 20, backgroundColor: '#1a1a2e', borderRadius: 12, padding: 4, marginBottom: 10 },
   tabBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 10 },
   tabActive: { backgroundColor: '#333' },
   tabText: { color: '#888', fontWeight: 'bold' },
   tabTextActive: { color: '#FFF' },
-
   list: { padding: 16, gap: 12, paddingBottom: 40 },
   card: { backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   info: { flex: 1 },
   onlineDot: { width: 10, height: 10, borderRadius: 5 },
   name: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   statusText: { color: '#888', fontSize: 12, marginTop: 4 },
-  
   btnAcao: { backgroundColor: '#32CD32', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 5 },
   btnAcaoText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
-  
   empty: { alignItems: 'center', marginTop: 50 },
   emptyText: { color: '#666', marginTop: 10 },
-
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
   modalGameContent: { backgroundColor: '#1a1a2e', padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
   modalTitle: { color: '#FFF', fontSize: 20, fontWeight: '900', marginBottom: 5 },
   modalText: { color: '#AAA', fontSize: 14, marginBottom: 20 },
-  
   gameOptionBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0c0c0c', padding: 15, borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: '#333' },
   iconContainer: { width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   gameOptionText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', flex: 1 },
-  
   cancelBtn: { marginTop: 15, paddingVertical: 15, alignItems: 'center' },
   cancelBtnText: { color: '#FF4444', fontWeight: 'bold', fontSize: 16 }
 });
