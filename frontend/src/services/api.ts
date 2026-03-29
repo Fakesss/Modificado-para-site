@@ -24,7 +24,6 @@ api.interceptors.response.use(
     const originalRequest = error.config;
     if (!originalRequest) return Promise.reject(error);
 
-    // Se o erro for de servidor (500) ou queda de rede (Network Error)
     const isNetworkOrServerError = !error.response || error.response?.status >= 500;
 
     if (isNetworkOrServerError && !originalRequest._retry) {
@@ -32,11 +31,9 @@ api.interceptors.response.use(
 
       console.log('📡 Detectada queda. Aguardando estabilização...');
 
-      // SE FOR WEB (Vercel): Aguarda 3 segundos. SE FOR APP: Aguarda apenas 100ms para não crashar o Android.
       const tempoEspera = Platform.OS === 'web' ? 3000 : 100;
       await new Promise((resolve) => setTimeout(resolve, tempoEspera));
 
-      // Tenta de novo silenciosamente
       return api(originalRequest);
     }
 
@@ -74,9 +71,7 @@ export const deleteTurma = async (id: string) => (await api.delete(`/turmas/${id
 export const getEquipes = async () => { try { return (await api.get('/equipes')).data; } catch { return []; } };
 export const createEquipe = async (nome: string, cor: string) => (await api.post('/equipes', { nome, cor })).data;
 
-// A ROTA RECUPERADA! AGORA VOCÊ PODE ALTERAR A COR E O NOME DAS EQUIPES NOVAMENTE.
 export const updateEquipe = async (id: string, d: any) => (await api.put(`/equipes/${id}`, d)).data;
-
 export const deleteEquipe = async (id: string) => (await api.delete(`/equipes/${id}`)).data;
 
 // CONTEÚDOS
@@ -84,8 +79,6 @@ export const getConteudos = async (cat?: string) => { const r = await api.get('/
 export const createConteudo = async (d: any) => (await api.post('/conteudos', d)).data;
 export const updateConteudo = async (id: string, d: any) => (await api.put(`/conteudos/${id}`, d)).data;
 export const deleteConteudo = async (id: string) => (await api.delete(`/conteudos/${id}`)).data;
-
-// A NOVA ROTA OFICIAL PARA GANHAR PONTOS NO VÍDEO:
 export const concluirConteudo = async (id: string) => (await api.post(`/conteudos/${id}/concluir`)).data;
 
 // EXERCÍCIOS
@@ -121,7 +114,18 @@ export const deletePermanente = async (id: string, tipo: string) => (await api.d
 export const getRankingGeral = async () => { try { return (await api.get('/ranking/geral')).data; } catch { return []; } };
 export const getRankingPorTurma = async (turmaId: string) => { try { return (await api.get(`/ranking/turma/${turmaId}`)).data; } catch { return []; } };
 export const getMeuProgresso = async () => { try { return (await api.get('/usuarios/progresso')).data; } catch { return null; } };
-
 export const zerarTodosPontos = async () => (await api.post('/usuarios/zerar-pontos')).data;
+
+// ======== NOVA ROTA DE RELATÓRIO DA BNCC ========
+export const getBNCCRelatorio = async (tipo: string, turmaId?: string, equipeId?: string) => {
+  try {
+    const params: any = { filtro_tipo: tipo };
+    if (turmaId) params.turma_id = turmaId;
+    if (equipeId) params.equipe_id = equipeId;
+    return (await api.get('/relatorios/bncc', { params })).data;
+  } catch {
+    return [];
+  }
+};
 
 export default api;
