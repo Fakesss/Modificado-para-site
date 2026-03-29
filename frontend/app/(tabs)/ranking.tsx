@@ -107,7 +107,7 @@ export default function Ranking() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />}
       >
         {/* ==================================================== */}
-        {/* PÓDIO NOVO - DELICADO E ARREDONDADO */}
+        {/* PÓDIO DELICADO E ARREDONDADO (CORRIGIDO) */}
         {/* ==================================================== */}
         <View style={styles.podiumContainer}>
           {/* 2º LUGAR */}
@@ -245,8 +245,25 @@ const styles = StyleSheet.create({
   podiumContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginBottom: 32, paddingHorizontal: 4 },
   podiumItem: { flex: 1, alignItems: 'center', marginHorizontal: 6 },
   
-  teamNamePill: { width: '100%', paddingVertical: 6, borderRadius: 20, alignItems: 'center', marginBottom: 8, zIndex: 10 },
-  teamNamePillText: { color: '#000', fontWeight: 'bold', fontSize: 13 },
+  /* 🎯 ESTILOS DA PÍLULA CORRIGIDOS */
+  teamNamePill: {
+    /* width: '100%',  <- RETIRADO para não esticar */
+    alignSelf: 'center', /* Centraliza */
+    paddingVertical: 6,
+    paddingHorizontal: 12, /* Mais padding horizontal para o formato de pílula real */
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    zIndex: 10,
+    minHeight: 36,
+  },
+  teamNamePillText: {
+    color: '#000',
+    fontWeight: 'bold',
+    fontSize: 13, /* 🎯 AUMENTADO ligeiramente de 12 para 13 */
+    textAlign: 'center',
+  },
   
   podiumBox: { width: '100%', borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 6 },
   podiumBox1: { height: 140 },
