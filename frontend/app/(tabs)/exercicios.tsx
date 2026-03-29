@@ -13,9 +13,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
 import { Exercicio } from '../../src/types';
+import { useAuth } from '../../src/context/AuthContext'; // 🚨 IMPORTADO
 
 export default function Exercicios() {
   const router = useRouter();
+  const { user } = useAuth(); // 🚨 PUXANDO O ALUNO LOGADO
   const [exercicios, setExercicios] = useState<Exercicio[]>([]);
   const [submissoes, setSubmissoes] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
@@ -24,10 +26,18 @@ export default function Exercicios() {
   const loadData = useCallback(async () => {
     try {
       const exerciciosData = await api.getExercicios();
-      setExercicios(exerciciosData);
+      
+      // 🚨 PORTA DE SEGURANÇA: Filtra quem pode ver o quê
+      const filteredExercicios = exerciciosData.filter((ex: Exercicio) => {
+        if (ex.equipeId) return ex.equipeId === user?.equipeId;
+        if (ex.turmaId) return ex.turmaId === user?.turmaId;
+        return true; // Se não tem equipe nem turma, é Geral
+      });
+      
+      setExercicios(filteredExercicios);
       
       const submissoesData: Record<string, any> = {};
-      for (const ex of exerciciosData) {
+      for (const ex of filteredExercicios) {
         try {
           const sub = await api.getSubmissao(ex.id);
           if (sub) submissoesData[ex.id] = sub;
@@ -41,7 +51,7 @@ export default function Exercicios() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     loadData();
@@ -55,7 +65,6 @@ export default function Exercicios() {
 
   const getExerciseStatus = (exercicioId: string) => {
     const sub = submissoes[exercicioId];
-    // CORREÇÃO: Mudei a cor de 'Novo' para um Azul Ciano vibrante
     if (!sub) return { status: 'new', label: 'Novo', color: '#00BFFF' };
     
     if (sub.nota >= 7) return { status: 'great', label: `Nota: ${sub.nota}`, color: '#32CD32' };
@@ -147,7 +156,7 @@ export default function Exercicios() {
         {exercicios.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="document-text-outline" size={48} color="#666" />
-            <Text style={styles.emptyText}>Nenhuma atividade disponível</Text>
+            <Text style={styles.emptyText}>Nenhuma atividade no momento.</Text>
           </View>
         )}
       </ScrollView>
