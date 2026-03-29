@@ -4,6 +4,7 @@ from datetime import datetime
 import time
 import socketio
 import random
+import uuid # 🚨 IMPORTANTE: Para gerar IDs únicos para as salas
 
 sio = socketio.AsyncServer(
     async_mode='asgi',
@@ -14,6 +15,9 @@ sio = socketio.AsyncServer(
 
 players_online: Dict[str, dict] = {}
 rooms: Dict[str, dict] = {}
+
+# 🚨 NOVO: Dicionário para gerenciar as Salas de Espera (Lobbies)
+lobbies: Dict[str, dict] = {}
 
 matchmaking_queues = {
     'tictactoe': [],
@@ -41,8 +45,23 @@ async def disconnect(sid):
     for q_name in matchmaking_queues:
         if sid in matchmaking_queues[q_name]:
             matchmaking_queues[q_name].remove(sid)
+
+    # 🚨 LIMPEZA DOS LOBBIES (Salas de Espera)
+    for lobby_id, lobby in list(lobbies.items()):
+        if sid in lobby['players']:
+            lobby['players'].remove(sid)
+            await sio.leave_room(sid, lobby_id)
+            if len(lobby['players']) == 0:
+                del lobbies[lobby_id] # Destrói a sala se ficar vazia
+            else:
+                if lobby['host'] == sid:
+                    lobby['host'] = lobby['players'][0] # Passa a coroa pro próximo
+                # Avisa a sala que ele saiu
+                await sio.emit('lobby_update', lobbies[lobby_id], room=lobby_id)
+            await broadcast_lobbies()
+            break
     
-    # LIMPEZA FANTASMA
+    # LIMPEZA FANTASMA DAS PARTIDAS
     for room_id, room in list(rooms.items()):
         if sid in room['players']:
             other_players = [p for p in room['players'] if p != sid]
@@ -59,6 +78,150 @@ async def disconnect(sid):
 
     await broadcast_online_users()
 
+# ====================================================
+# 🚀 SISTEMA DE SALAS (LOBBY E CHAT) - FASE 1
+# ====================================================
+
+async def broadcast_lobbies():
+    """Envia a lista de salas disponíveis para todos"""
+    safe_lobbies = []
+    for l_id, l_data in lobbies.items():
+        if l_data['status'] == 'ESPERA':
+            # Cria a lista de nomes dos jogadores atuais na sala
+            players_names = [players_online[p_sid]['name'] for p_sid in l_data['players'] if p_sid in players_online]
+            
+            safe_lobbies.append({
+                'id': l_id,
+                'nome': l_data['nome'],
+                'tipo': l_data['tipo'], 
+                'host_name': players_online[l_data['host']]['name'] if l_data['host'] in players_online else 'Desconhecido',
+                'jogadores_count': len(l_data['players']),
+                'max_jogadores': l_data['max_jogadores'],
+                'players_names': players_names
+            })
+    await sio.emit('lobbies_list', safe_lobbies)
+
+@sio.event
+async def get_lobbies(sid):
+    """Jogador pede a lista de salas quando entra na tela"""
+    await broadcast_lobbies()
+
+@sio.event
+async def create_lobby(sid, data):
+    if sid not in players_online: return
+    
+    lobby_id = f"lobby_{str(uuid.uuid4())[:8]}"
+    nome_sala = data.get('nome', f"Sala de {players_online[sid]['name']}")
+    tipo_sala = data.get('tipo', 'Bate-papo')
+    max_jogadores = data.get('max_jogadores', 6) # Chat aceita mais gente
+    
+    lobbies[lobby_id] = {
+        'id': lobby_id,
+        'nome': nome_sala,
+        'tipo': tipo_sala,
+        'host': sid,
+        'players': [sid],
+        'max_jogadores': max_jogadores,
+        'status': 'ESPERA' 
+    }
+    
+    await sio.enter_room(sid, lobby_id)
+    players_online[sid]['status'] = 'LOBBY'
+    
+    # Prepara os dados para enviar de volta
+    players_names = [players_online[sid]['name']]
+    lobby_info = {**lobbies[lobby_id], 'players_names': players_names}
+    
+    # Avisa o criador que deu certo
+    await sio.emit('lobby_joined', lobby_info, room=sid)
+    # Avisa todo mundo no menu que tem sala nova
+    await broadcast_lobbies()
+    await broadcast_online_users()
+
+@sio.event
+async def join_lobby(sid, data):
+    lobby_id = data.get('lobby_id')
+    
+    if lobby_id not in lobbies:
+        return await sio.emit('lobby_error', {'msg': 'Esta sala não existe mais.'}, room=sid)
+        
+    lobby = lobbies[lobby_id]
+    
+    if len(lobby['players']) >= lobby['max_jogadores']:
+        return await sio.emit('lobby_error', {'msg': 'A sala está cheia.'}, room=sid)
+        
+    if lobby['status'] != 'ESPERA':
+        return await sio.emit('lobby_error', {'msg': 'Esta sala já iniciou uma atividade.'}, room=sid)
+        
+    lobby['players'].append(sid)
+    await sio.enter_room(sid, lobby_id)
+    players_online[sid]['status'] = 'LOBBY'
+    
+    players_names = [players_online[p]['name'] for p in lobby['players'] if p in players_online]
+    lobby_info = {**lobby, 'players_names': players_names}
+    
+    # Avisa quem entrou
+    await sio.emit('lobby_joined', lobby_info, room=sid)
+    
+    # Avisa a sala que alguém entrou (Mensagem de Sistema)
+    nome_entrou = players_online[sid]['name']
+    await sio.emit('lobby_message', {'sender': 'SISTEMA', 'text': f"{nome_entrou} entrou na sala."}, room=lobby_id)
+    await sio.emit('lobby_update', lobby_info, room=lobby_id)
+    
+    # Atualiza a lista lá fora
+    await broadcast_lobbies()
+    await broadcast_online_users()
+
+@sio.event
+async def leave_lobby(sid, data):
+    lobby_id = data.get('lobby_id')
+    if lobby_id in lobbies and sid in lobbies[lobby_id]['players']:
+        lobby = lobbies[lobby_id]
+        lobby['players'].remove(sid)
+        await sio.leave_room(sid, lobby_id)
+        players_online[sid]['status'] = 'MENU'
+        
+        nome_saiu = players_online[sid].get('name', 'Alguém')
+        
+        if len(lobby['players']) == 0:
+            del lobbies[lobby_id]
+        else:
+            if lobby['host'] == sid:
+                lobby['host'] = lobby['players'][0]
+                novo_host_nome = players_online[lobby['host']]['name']
+                await sio.emit('lobby_message', {'sender': 'SISTEMA', 'text': f"{novo_host_nome} agora é o líder da sala."}, room=lobby_id)
+            
+            players_names = [players_online[p]['name'] for p in lobby['players'] if p in players_online]
+            lobby_info = {**lobby, 'players_names': players_names}
+            
+            await sio.emit('lobby_message', {'sender': 'SISTEMA', 'text': f"{nome_saiu} saiu da sala."}, room=lobby_id)
+            await sio.emit('lobby_update', lobby_info, room=lobby_id)
+            
+        await sio.emit('lobby_left', {}, room=sid)
+        await broadcast_lobbies()
+        await broadcast_online_users()
+
+@sio.event
+async def send_lobby_message(sid, data):
+    lobby_id = data.get('lobby_id')
+    text = data.get('text')
+    
+    if lobby_id in lobbies and sid in lobbies[lobby_id]['players']:
+        sender_name = players_online[sid]['name']
+        
+        mensagem = {
+            'sender': sender_name,
+            'sender_id': players_online[sid].get('user_id'),
+            'text': text,
+            'time': datetime.utcnow().strftime('%H:%M')
+        }
+        
+        await sio.emit('lobby_message', mensagem, room=lobby_id)
+
+# ====================================================
+# ROTINAS ANTIGAS (JOGO DA VELHA, ARCADE, SYNC)
+# ====================================================
+
 @sio.event
 async def register_player(sid, data):
     if sid in players_online:
@@ -66,7 +229,6 @@ async def register_player(sid, data):
         players_online[sid]['user_id'] = data.get('user_id')
         await broadcast_online_users()
 
-# SINCRONIZAÇÃO SILENCIOSA
 @sio.event
 async def request_sync(sid):
     safe_list = []
