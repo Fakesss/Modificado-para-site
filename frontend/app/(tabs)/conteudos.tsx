@@ -12,14 +12,14 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as api from '../../src/services/api';
 import { Conteudo } from '../../src/types';
-import { useAuth } from '../../src/context/AuthContext'; // 🚨 IMPORTADO
+import { useAuth } from '../../src/context/AuthContext';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 export default function Conteudos() {
-  const { user } = useAuth(); // 🚨 PUXANDO O ALUNO LOGADO
+  const { user } = useAuth();
   const [conteudos, setConteudos] = useState<Conteudo[]>([]);
   const [viewedIds, setViewedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,11 +30,18 @@ export default function Conteudos() {
     try {
       const data = await api.getConteudos();
       
-      // 🚨 PORTA DE SEGURANÇA: Filtra os materiais e links
-      const filteredConteudos = data.filter((c: Conteudo) => {
+      // 🚨 SUPER TRAVA DE SEGURANÇA
+      const filteredConteudos = data.filter((c: any) => {
         if (!c.ativo || c.is_deleted || (c.tipo !== 'MATERIAL' && c.tipo !== 'LINK')) return false;
-        if (c.equipeId) return c.equipeId === user?.equipeId;
-        if (c.turmaId) return c.turmaId === user?.turmaId;
+        
+        const alvoUsuario = c.usuarioId && String(c.usuarioId).trim() !== '';
+        const alvoEquipe = c.equipeId && String(c.equipeId).trim() !== '';
+        const alvoTurma = c.turmaId && String(c.turmaId).trim() !== '';
+
+        if (alvoUsuario) return c.usuarioId === user?.id;
+        if (alvoEquipe) return c.equipeId === user?.equipeId;
+        if (alvoTurma) return c.turmaId === user?.turmaId;
+        
         return true;
       });
       
