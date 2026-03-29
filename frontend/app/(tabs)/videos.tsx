@@ -27,19 +27,24 @@ export default function Videos() {
     try {
       const data = await api.getConteudos('videos');
       
-      // 🚨 SUPER TRAVA DE SEGURANÇA
       const filteredVideos = data.filter((v: any) => {
         if (!v.ativo || v.is_deleted || v.tipo !== 'VIDEO') return false;
         
-        const alvoUsuario = v.usuarioId && String(v.usuarioId).trim() !== '';
+        const idDestino = v.usuarioId || v.alunoId;
+        const alvoUsuario = idDestino && String(idDestino).trim() !== '';
         const alvoEquipe = v.equipeId && String(v.equipeId).trim() !== '';
         const alvoTurma = v.turmaId && String(v.turmaId).trim() !== '';
 
-        if (alvoUsuario) return v.usuarioId === user?.id;
-        if (alvoEquipe) return v.equipeId === user?.equipeId;
-        if (alvoTurma) return v.turmaId === user?.turmaId;
+        const isPublic = !alvoUsuario && !alvoEquipe && !alvoTurma;
+        if (isPublic) return true;
+
+        const idAlunoLogado = user?.id || user?._id;
+
+        if (alvoUsuario && String(idDestino) === String(idAlunoLogado)) return true;
+        if (alvoEquipe && String(v.equipeId) === String(user?.equipeId)) return true;
+        if (alvoTurma && String(v.turmaId) === String(user?.turmaId)) return true;
         
-        return true;
+        return false;
       });
       
       setVideos(filteredVideos);
