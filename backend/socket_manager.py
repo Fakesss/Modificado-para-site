@@ -99,7 +99,8 @@ async def get_lobbies(sid, data=None):
 async def create_lobby(sid, data):
     if sid not in players_online: return
     lobby_id = f"lobby_{str(uuid.uuid4())[:8]}"
-    lobbies[lobby_id] = {'id': lobby_id, 'nome': data.get('nome', 'Sala'), 'tipo': data.get('tipo', 'Bate-papo'), 'host': sid, 'players': [sid], 'max_jogadores': data.get('max_jogadores', 10), 'status': 'ESPERA', 'messages': []}
+    # 🚨 Adicionado dicionário de 'desafios' na sala
+    lobbies[lobby_id] = {'id': lobby_id, 'nome': data.get('nome', 'Sala'), 'tipo': data.get('tipo', 'Bate-papo'), 'host': sid, 'players': [sid], 'max_jogadores': data.get('max_jogadores', 10), 'status': 'ESPERA', 'messages': [], 'desafios': {}}
     await sio.enter_room(sid, lobby_id)
     players_online[sid]['status'] = 'LOBBY'
     await sio.emit('lobby_joined', {**lobbies[lobby_id], 'players_names': [players_online[sid]['name']]}, room=sid)
@@ -170,19 +171,18 @@ async def send_lobby_message(sid, data):
     lobby_id = data.get('lobby_id')
     if lobby_id in lobbies and sid in lobbies[lobby_id]['players']:
         mensagem = {
-            'id': str(uuid.uuid4()), # 🚨 RG ÚNICO DA MENSAGEM
+            'id': str(uuid.uuid4()),
             'sender': players_online[sid]['name'],
             'sender_id': players_online[sid].get('user_id'),
             'text': data.get('text'),
             'time': datetime.utcnow().strftime('%H:%M'),
-            'apagada': False # 🚨 MARCADOR DE EXCLUSÃO
+            'apagada': False
         }
         lobbies[lobby_id]['messages'].append(mensagem)
         await sio.emit('lobby_message', mensagem, room=lobby_id)
 
 @sio.event
 async def delete_lobby_message(sid, data):
-    """Apaga uma mensagem (Soft Delete)"""
     lobby_id = data.get('lobby_id')
     msg_id = data.get('message_id')
     is_admin = data.get('is_admin', False)
@@ -195,6 +195,91 @@ async def delete_lobby_message(sid, data):
                     msg['apagada'] = True
                     await sio.emit('lobby_message_updated', msg, room=lobby_id)
                 break
+
+# ====================================================
+# ⚔️ SISTEMA DE DESAFIOS DA SALA (ARENA)
+# ====================================================
+@sio.event
+async def create_lobby_challenge(sid, data):
+    lobby_id = data.get('lobby_id')
+    game_type = data.get('game_type', 'tictactoe')
+    modo_operacao = data.get('modo_operacao', 'misto')
+
+    if lobby_id in lobbies and sid in lobbies[lobby_id]['players']:
+        if players_online[sid]['status'] == 'JOGANDO_ONLINE':
+            return await sio.emit('lobby_error', {'msg': 'Você já está em uma partida!'}, room=sid)
+
+        challenge_id = str(uuid.uuid4())
+        desafio = {
+            'id': challenge_id,
+            'challenger_sid': sid,
+            'challenger_name': players_online[sid]['name'],
+            'game_type': game_type,
+            'modo_operacao': modo_operacao,
+            'status': 'ABERTO'
+        }
+        lobbies[lobby_id]['desafios'][challenge_id] = desafio
+        
+        # Avisa a sala toda que tem um desafio rolando!
+        await sio.emit('lobby_challenge_created', desafio, room=lobby_id)
+
+@sio.event
+async def accept_lobby_challenge(sid, data):
+    lobby_id = data.get('lobby_id')
+    challenge_id = data.get('challenge_id')
+
+    if lobby_id in lobbies and challenge_id in lobbies[lobby_id].get('desafios', {}):
+        desafio = lobbies[lobby_id]['desafios'][challenge_id]
+
+        # Proteção contra cliques múltiplos (Gatilho mais rápido leva)
+        if desafio['status'] != 'ABERTO':
+            return await sio.emit('lobby_error', {'msg': 'Muito lento! Alguém já aceitou este desafio.'}, room=sid)
+        
+        # O cara não pode aceitar o próprio desafio
+        if desafio['challenger_sid'] == sid:
+            return await sio.emit('lobby_error', {'msg': 'Você não pode jogar contra si mesmo!'}, room=sid)
+
+        p1_sid = desafio['challenger_sid']
+        
+        # Se o desafiante sumiu ou já foi jogar outra coisa
+        if p1_sid not in players_online or players_online[p1_sid]['status'] == 'JOGANDO_ONLINE':
+            desafio['status'] = 'CANCELADO'
+            await sio.emit('lobby_challenge_cancelled', {'challenge_id': challenge_id}, room=lobby_id)
+            return await sio.emit('lobby_error', {'msg': 'O desafiante fugiu ou já está jogando.'}, room=sid)
+
+        # 🚨 TRAVOU O DESAFIO! O primeiro a passar daqui levou.
+        desafio['status'] = 'ACEITO'
+        desafio['acceptor_sid'] = sid
+        desafio['acceptor_name'] = players_online[sid]['name']
+
+        # Cria a partida oficial
+        room_id = None
+        if desafio['game_type'] == 'tictactoe':
+            room_id = await start_tictactoe_match(p1_sid, sid)
+        elif desafio['game_type'] == 'arcade':
+            room_id = await start_arcade_match(p1_sid, sid, desafio['modo_operacao'])
+
+        if room_id:
+            desafio['room_id'] = room_id
+            # Avisa a sala que a partida começou (para liberar o botão de Spectate pros outros)
+            await sio.emit('lobby_challenge_started', {
+                'challenge_id': challenge_id,
+                'room_id': room_id,
+                'game_type': desafio['game_type'],
+                'p1_name': desafio['challenger_name'],
+                'p2_name': desafio['acceptor_name']
+            }, room=lobby_id)
+
+@sio.event
+async def cancel_lobby_challenge(sid, data):
+    lobby_id = data.get('lobby_id')
+    challenge_id = data.get('challenge_id')
+    
+    if lobby_id in lobbies and challenge_id in lobbies[lobby_id].get('desafios', {}):
+        desafio = lobbies[lobby_id]['desafios'][challenge_id]
+        if desafio['challenger_sid'] == sid and desafio['status'] == 'ABERTO':
+            desafio['status'] = 'CANCELADO'
+            await sio.emit('lobby_challenge_cancelled', {'challenge_id': challenge_id}, room=lobby_id)
 
 # ====================================================
 # RESTANTE DO CÓDIGO INTACTO (JOGOS)
@@ -322,6 +407,8 @@ async def start_tictactoe_match(p1_sid, p2_sid):
     await broadcast_online_users()
     await sio.emit('match_found', {'room_id': room_id, 'game_type': 'tictactoe', 'opponentName': rooms[room_id]['names'][p2_sid], 'mySymbol': rooms[room_id]['symbols'][p1_sid], 'board': board, 'turn': 'X'}, room=p1_sid)
     await sio.emit('match_found', {'room_id': room_id, 'game_type': 'tictactoe', 'opponentName': rooms[room_id]['names'][p1_sid], 'mySymbol': rooms[room_id]['symbols'][p2_sid], 'board': board, 'turn': 'X'}, room=p2_sid)
+    
+    return room_id # 🚨 Retorna o ID da sala para avisar os espectadores do Lobby
 
 @sio.event
 async def make_move(sid, data):
@@ -360,6 +447,8 @@ async def start_arcade_match(p1_sid, p2_sid, modo_operacao):
     await broadcast_online_users()
     await sio.emit('match_found', {'room_id': room_id, 'game_type': 'arcade', 'modo_operacao': modo_operacao, 'is_host': True, 'opponentName': rooms[room_id]['names'][p2_sid]}, room=p1_sid)
     await sio.emit('match_found', {'room_id': room_id, 'game_type': 'arcade', 'modo_operacao': modo_operacao, 'is_host': False, 'opponentName': rooms[room_id]['names'][p1_sid]}, room=p2_sid)
+    
+    return room_id # 🚨 Retorna o ID da sala para avisar os espectadores do Lobby
 
 @sio.event
 async def arcade_sync_batch(sid, data):
