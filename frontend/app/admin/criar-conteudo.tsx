@@ -20,7 +20,12 @@ export default function AdminCriarConteudo() {
   const [descricao, setDescricao] = useState('');
   const [tipo, setTipo] = useState<TipoConteudo>('VIDEO');
   const [url, setUrl] = useState(''); 
-  const [pontos, setPontos] = useState('0'); // NOVO: Estado para os pontos
+  const [pontos, setPontos] = useState('0');
+  
+  // NOVOS ESTADOS: PASTA E THUMBNAIL
+  const [pasta, setPasta] = useState('');
+  const [pastasExistentes, setPastasExistentes] = useState<string[]>([]);
+  const [thumbnail, setThumbnail] = useState('');
   
   const [nomeArquivo, setNomeArquivo] = useState('');
   const [arquivoBase64, setArquivoBase64] = useState<string | null>(null);
@@ -38,6 +43,9 @@ export default function AdminCriarConteudo() {
       const ts = await api.getTurmas();
       setTurmas(ts || []);
 
+      const ps = await api.getPastas();
+      setPastasExistentes(ps || []);
+
       if (isEditing) {
         const todosConteudos = await api.getConteudos();
         const conteudoEdit = todosConteudos.find((c: any) => c.id === id);
@@ -48,7 +56,10 @@ export default function AdminCriarConteudo() {
           setTipo(conteudoEdit.tipo as TipoConteudo);
           setUrl(conteudoEdit.urlVideo || '');
           setTurmaId(conteudoEdit.turmaId || '');
-          setPontos(conteudoEdit.pontos ? String(conteudoEdit.pontos) : '0'); // NOVO: Carrega os pontos
+          setPontos(conteudoEdit.pontos ? String(conteudoEdit.pontos) : '0');
+          setPasta(conteudoEdit.pasta || '');
+          setThumbnail(conteudoEdit.thumbnail || '');
+          
           if (conteudoEdit.tipo === 'MATERIAL') {
              setNomeArquivo("Arquivo já salvo (Envie outro para substituir)");
           }
@@ -100,6 +111,16 @@ export default function AdminCriarConteudo() {
 
     setLoading(true);
     try {
+      // INTELIGÊNCIA: Puxar a capa do YouTube automaticamente se o usuário não digitar nada!
+      let finalThumbnail = thumbnail.trim();
+      if (tipo === 'VIDEO' && !finalThumbnail && url) {
+        const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ \s]{11})/;
+        const match = url.match(regex);
+        if (match && match[1]) {
+          finalThumbnail = `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
+        }
+      }
+
       const payload: any = {
         titulo,
         descricao,
@@ -107,7 +128,9 @@ export default function AdminCriarConteudo() {
         turmaId: turmaId || null,
         urlVideo: (tipo === 'VIDEO' || tipo === 'LINK') ? url : null,
         abaCategoria: tipo === 'VIDEO' ? 'videos' : 'materiais',
-        pontos: parseInt(pontos) || 0 // NOVO: Envia os pontos pro banco
+        pontos: parseInt(pontos) || 0,
+        pasta: pasta.trim() || null,
+        thumbnail: finalThumbnail || null,
       };
 
       if (arquivoBase64) payload.arquivo = arquivoBase64;
@@ -162,20 +185,36 @@ export default function AdminCriarConteudo() {
           <Text style={styles.label}>Descrição</Text>
           <TextInput style={[styles.input, {height:60}]} multiline value={descricao} onChangeText={setDescricao} placeholderTextColor="#666" />
 
+          {/* SESSÃO DE PASTA */}
+          <Text style={styles.label}>Pasta / Organização (Opcional)</Text>
+          <TextInput 
+            style={styles.input} 
+            value={pasta} 
+            onChangeText={setPasta} 
+            placeholder="Ex: Módulo 1, Apostilas..." 
+            placeholderTextColor="#666" 
+          />
+          {pastasExistentes.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginTop: 8}}>
+              {pastasExistentes.map(p => (
+                <TouchableOpacity key={p} style={styles.chipPasta} onPress={() => setPasta(p)}>
+                  <Ionicons name="folder" size={14} color="#888" style={{marginRight: 4}}/>
+                  <Text style={{color: '#888', fontSize: 12}}>{p}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+
           {tipo === 'VIDEO' && (
             <>
               <Text style={styles.label}>Link do YouTube</Text>
               <TextInput style={styles.input} value={url} onChangeText={setUrl} placeholderTextColor="#666" />
               
+              <Text style={styles.label}>Capa do Vídeo / Thumbnail (Opcional)</Text>
+              <TextInput style={styles.input} value={thumbnail} onChangeText={setThumbnail} placeholder="Deixe em branco para capa automática" placeholderTextColor="#666" />
+
               <Text style={styles.label}>Pontos de Recompensa (Opcional)</Text>
-              <TextInput 
-                style={styles.input} 
-                value={pontos} 
-                onChangeText={setPontos} 
-                keyboardType="numeric" 
-                placeholder="Ex: 50" 
-                placeholderTextColor="#666" 
-              />
+              <TextInput style={styles.input} value={pontos} onChangeText={setPontos} keyboardType="numeric" placeholder="Ex: 50" placeholderTextColor="#666" />
             </>
           )}
 
@@ -183,6 +222,8 @@ export default function AdminCriarConteudo() {
             <>
               <Text style={styles.label}>URL do Link</Text>
               <TextInput style={styles.input} value={url} onChangeText={setUrl} placeholderTextColor="#666" />
+              <Text style={styles.label}>Imagem de Capa (Opcional)</Text>
+              <TextInput style={styles.input} value={thumbnail} onChangeText={setThumbnail} placeholder="URL de uma imagem na web" placeholderTextColor="#666" />
             </>
           )}
 
@@ -226,5 +267,6 @@ const styles = StyleSheet.create({
   uploadText: { color:'#000', fontWeight:'bold', fontSize:16, flexShrink: 1 },
   chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#333', marginRight: 8 },
   chipActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
+  chipPasta: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: '#252540', marginRight: 8 },
   loadingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' },
 });
