@@ -17,13 +17,14 @@ import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 import RankingHeader from '../../src/components/RankingHeader';
 import StreakBadge from '../../src/components/StreakBadge';
-import { RankingItem, Equipe } from '../../src/types';
+import { RankingItem, Equipe, Turma } from '../../src/types'; // 🚨 Turma importada
 
 export default function Home() {
   const { user, logout, refreshUser } = useAuth();
   const router = useRouter();
   const [ranking, setRanking] = useState<RankingItem[]>([]);
   const [equipe, setEquipe] = useState<Equipe | null>(null);
+  const [turma, setTurma] = useState<Turma | null>(null); // 🚨 Novo Estado para a Turma
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -48,22 +49,30 @@ export default function Home() {
 
   const loadData = useCallback(async () => {
     try {
-      const [rankingData, equipesData] = await Promise.all([
+      const [rankingData, equipesData, turmasData] = await Promise.all([
         api.getRankingGeral(),
         api.getEquipes(),
+        api.getTurmas(), // 🚨 Puxa as turmas do banco de dados
       ]);
       setRanking(rankingData);
       
+      // 🚨 IDs convertidos para String por segurança
       if (user?.equipeId) {
-        const userEquipe = equipesData.find((e: Equipe) => e.id === user.equipeId);
+        const userEquipe = equipesData.find((e: Equipe) => String(e.id) === String(user.equipeId));
         setEquipe(userEquipe || null);
+      }
+      
+      // 🚨 Encontra a Turma do Aluno
+      if (user?.turmaId) {
+        const userTurma = turmasData.find((t: Turma) => String(t.id) === String(user.turmaId));
+        setTurma(userTurma || null);
       }
     } catch (error) {
       console.error('Error loading home data:', error);
     } finally {
       setLoading(false);
     }
-  }, [user?.equipeId]);
+  }, [user?.equipeId, user?.turmaId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -109,6 +118,15 @@ export default function Home() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Olá, {user?.nome?.split(' ')[0]}!</Text>
+            
+            {/* 🎯 NOVA ETIQUETA DISCRETA DA TURMA */}
+            {turma && (
+              <View style={styles.turmaBadge}>
+                <Ionicons name="school" size={14} color="#888" />
+                <Text style={styles.turmaText}>{turma.nome}</Text>
+              </View>
+            )}
+
             <StreakBadge streakDias={user?.streakDias || 0} />
           </View>
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
@@ -194,7 +212,12 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  greeting: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
+  greeting: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 6 },
+  
+  /* 🎯 ESTILO DA ETIQUETA DA TURMA */
+  turmaBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start', marginBottom: 10, borderWidth: 1, borderColor: '#333', gap: 6 },
+  turmaText: { color: '#888', fontSize: 13, fontWeight: '600' },
+
   logoutButton: { padding: 8 },
   statsCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#333' },
   statsTitle: { fontSize: 16, color: '#888', marginBottom: 16 },
@@ -204,7 +227,6 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 12, color: '#666', marginTop: 4 },
   teamDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#333' },
   
-  /* ESTILOS DA NOVA CENTRAL DE COMANDO (Delicados e Uniformes) */
   actionGrid: { gap: 12, paddingBottom: 20 },
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   actionRowCenter: { flexDirection: 'row', justifyContent: 'center' },
