@@ -139,26 +139,29 @@ export default function Home() {
         </View>
 
         {/* ==================================================== */}
-        {/* NOVA CENTRAL DE COMANDO: 5 BOTÕES IGUAIS E DELICADOS */}
+        {/* NOVA CENTRAL DE COMANDO: BOTÕES VIBRANTES */}
         {/* ==================================================== */}
         <View style={styles.actionGrid}>
           
           {/* Fila 1 */}
           <View style={styles.actionRow}>
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#4169E1' + '15' }]} onPress={() => router.push('/(tabs)/videos')}>
+            {/* 🎨 COR VIBRANTE (Aumentada a opacidade de '15' para '50') */}
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#4169E1' + '50' }]} onPress={() => router.push('/(tabs)/videos')}>
               <Ionicons name="play" size={24} color="#4169E1" />
               <Text style={styles.actionText}>Vídeo-aulas</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#32CD32' + '15' }]} onPress={() => router.push('/(tabs)/exercicios')}>
+            {/* 🎨 COR VIBRANTE (Aumentada a opacidade de '15' para '50') */}
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#32CD32' + '50' }]} onPress={() => router.push('/(tabs)/exercicios')}>
               <Ionicons name="document-text" size={24} color="#32CD32" />
               <Text style={styles.actionText}>Atividades</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Fila 2 (Ranking Sozinho no Meio - Delicado e igual) */}
+          {/* Fila 2 (Ranking Sozinho no Meio) */}
           <View style={styles.actionRowCenter}>
-            <TouchableOpacity style={[styles.actionCardCenter, { backgroundColor: '#FFD700' + '20' }]} onPress={() => router.push('/(tabs)/ranking')}>
+            {/* 🎨 COR VIBRANTE (Aumentada a opacidade de '20' para '50') */}
+            <TouchableOpacity style={[styles.actionCardCenter, { backgroundColor: '#FFD700' + '50' }]} onPress={() => router.push('/(tabs)/ranking')}>
               <Ionicons name="trophy" size={28} color="#FFD700" />
               <Text style={[styles.actionText, { fontSize: 13, marginTop: 10 }]}>Ranking Geral</Text>
             </TouchableOpacity>
@@ -166,12 +169,14 @@ export default function Home() {
 
           {/* Fila 3 */}
           <View style={styles.actionRow}>
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FF8C00' + '15' }]} onPress={() => router.push('/(tabs)/conteudos')}>
+            {/* 🎨 COR VIBRANTE (Aumentada a opacidade de '15' para '50') */}
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FF8C00' + '50' }]} onPress={() => router.push('/(tabs)/conteudos')}>
               <Ionicons name="book-outline" size={24} color="#FF8C00" />
               <Text style={styles.actionText}>Conteúdos</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#E066FF' + '15' }]} onPress={() => router.push('/(tabs)/progresso')}>
+            {/* 🎨 COR VIBRANTE (Aumentada a opacidade de '15' para '50') */}
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#E066FF' + '50' }]} onPress={() => router.push('/(tabs)/progresso')}>
               <Ionicons name="stats-chart" size={24} color="#E066FF" />
               <Text style={styles.actionText}>Progresso</Text>
             </TouchableOpacity>
