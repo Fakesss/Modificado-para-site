@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Modal, RefreshControl
+  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Modal, RefreshControl, DeviceEventEmitter
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,7 +27,6 @@ export default function Salas() {
   const [messageText, setMessageText] = useState('');
 
   const [showChallengeModal, setShowChallengeModal] = useState(false);
-  // 🚨 Novo estado para selecionar a operação do Arcade
   const [arcadeModeSelect, setArcadeModeSelect] = useState(false);
   const [hiddenChallenges, setHiddenChallenges] = useState<Set<string>>(new Set());
 
@@ -101,8 +100,6 @@ export default function Salas() {
         return { ...prev, desafios: updatedDesafios };
       });
     });
-
-    // 🚨 REMOVIDO: O socket.on('match_found') fantasma que quebrava o jogo foi deletado!
 
     return () => {
       socket.off('lobbies_list'); socket.off('lobby_joined'); socket.off('lobby_update');
@@ -234,7 +231,6 @@ export default function Salas() {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
-  // 🚨 Adicionado o sistema de escolha de Modos!
   const handleLancarDesafio = (gameType: string, modoOperacao: string = 'misto') => {
     socket.emit('create_lobby_challenge', { lobby_id: currentLobby.id, game_type: gameType, modo_operacao: modoOperacao });
     setShowChallengeModal(false);
@@ -360,6 +356,14 @@ export default function Salas() {
           </View>
           
           <View style={{ flexDirection: 'row', gap: 10 }}>
+            {/* 🚨 BOTÃO DE LIGAR VOZ (Envia a ordem para o _layout.tsx) */}
+            <TouchableOpacity 
+              style={[styles.voiceButton, { backgroundColor: '#32CD3230' }]} 
+              onPress={() => DeviceEventEmitter.emit('open_voice_call', { roomId: currentLobby.id })}
+            >
+               <Ionicons name="call" size={20} color="#32CD32" />
+            </TouchableOpacity>
+
             <TouchableOpacity style={[styles.voiceButton, { backgroundColor: '#FFD70030' }]} onPress={() => setShowChallengeModal(true)}>
                <Ionicons name="flash" size={20} color="#FFD700" />
             </TouchableOpacity>
