@@ -27,19 +27,28 @@ export default function Exercicios() {
     try {
       const exerciciosData = await api.getExercicios();
       
-      // 🚨 SUPER TRAVA DE SEGURANÇA
+      // 🚨 SUPER TRAVA 2.0 (Inquebrável)
       const filteredExercicios = exerciciosData.filter((ex: any) => {
-        // Verifica se existem marcações e ignora textos vazios do banco
-        const alvoUsuario = ex.usuarioId && String(ex.usuarioId).trim() !== '';
+        // Pega o ID de destino (lida com o padrão do seu Painel que é alunoId)
+        const idDestino = ex.usuarioId || ex.alunoId;
+        
+        const alvoUsuario = idDestino && String(idDestino).trim() !== '';
         const alvoEquipe = ex.equipeId && String(ex.equipeId).trim() !== '';
         const alvoTurma = ex.turmaId && String(ex.turmaId).trim() !== '';
 
-        // Hierarquia de bloqueio
-        if (alvoUsuario) return ex.usuarioId === user?.id;
-        if (alvoEquipe) return ex.equipeId === user?.equipeId;
-        if (alvoTurma) return ex.turmaId === user?.turmaId;
+        // Se não tem nenhum alvo, é público para todos
+        const isPublic = !alvoUsuario && !alvoEquipe && !alvoTurma;
+        if (isPublic) return true;
+
+        const idAlunoLogado = user?.id || user?._id;
+
+        // Se tiver alvo, o aluno logado precisa bater com pelo menos UM dos alvos
+        if (alvoUsuario && String(idDestino) === String(idAlunoLogado)) return true;
+        if (alvoEquipe && String(ex.equipeId) === String(user?.equipeId)) return true;
+        if (alvoTurma && String(ex.turmaId) === String(user?.turmaId)) return true;
         
-        return true; // Se não tem dono, é Público para todos
+        // Se chegou aqui, tem trava mas o aluno não atende os requisitos
+        return false; 
       });
       
       setExercicios(filteredExercicios);
