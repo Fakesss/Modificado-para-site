@@ -1,86 +1,126 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
-import { Turma, Equipe } from '../../src/types';
 
-export default function AdminRelatorios() {
+export default function Relatorios() {
   const router = useRouter();
-  const [turmas, setTurmas] = useState<Turma[]>([]);
-  const [equipes, setEquipes] = useState<Equipe[]>([]);
-  const [ranking, setRanking] = useState<any[]>([]);
-  const [bnccErros, setBnccErros] = useState<any[]>([]);
-  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  const [turmas, setTurmas] = useState<any[]>([]);
+  const [equipes, setEquipes] = useState<any[]>([]);
+  
+  // Nossos super filtros: GERAL, TURMA, EQUIPE, EQUIPE_TURMA
+  const [filtroTipo, setFiltroTipo] = useState('GERAL'); 
   const [selectedTurma, setSelectedTurma] = useState('');
   const [selectedEquipe, setSelectedEquipe] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  
+  const [bnccData, setBnccData] = useState<any[]>([]);
 
   useEffect(() => {
-    loadData();
+    loadBaseData();
   }, []);
 
+  // Assim que os filtros mudam, ele atualiza a tabela
   useEffect(() => {
-    loadBNCC();
-  }, [selectedTurma, selectedEquipe]);
+    loadRelatorio();
+  }, [filtroTipo, selectedTurma, selectedEquipe]);
 
-  const loadData = async () => {
+  // Garante que algo esteja selecionado ao clicar na aba
+  useEffect(() => {
+    if (filtroTipo === 'TURMA' && turmas.length > 0 && !selectedTurma) setSelectedTurma(turmas[0].id);
+    if (filtroTipo === 'EQUIPE' && equipes.length > 0 && !selectedEquipe) setSelectedEquipe(equipes[0].id);
+    if (filtroTipo === 'EQUIPE_TURMA') {
+        if (turmas.length > 0 && !selectedTurma) setSelectedTurma(turmas[0].id);
+        if (equipes.length > 0 && !selectedEquipe) setSelectedEquipe(equipes[0].id);
+    }
+  }, [filtroTipo, turmas, equipes]);
+
+  const loadBaseData = async () => {
     try {
-      const [turmasData, equipesData, rankingData, usuariosData] = await Promise.all([
-        api.getTurmas(),
-        api.getEquipes(),
-        api.getRankingGeral(),
-        api.getRelatorioUsuarios(),
-      ]);
-      setTurmas(turmasData);
-      setEquipes(equipesData);
-      setRanking(rankingData);
-      setUsuarios(usuariosData);
-      await loadBNCC();
+      const [t, e] = await Promise.all([api.getTurmas(), api.getEquipes()]);
+      setTurmas(t);
+      setEquipes(e);
+      if (t.length > 0) setSelectedTurma(t[0].id);
+      if (e.length > 0) setSelectedEquipe(e[0].id);
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error(error);
+    }
+  };
+
+  const loadRelatorio = async () => {
+    setLoading(true);
+    try {
+      const data = await api.getBNCCRelatorio(filtroTipo, selectedTurma, selectedEquipe);
+      setBnccData(data);
+    } catch (error) {
+      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadBNCC = async () => {
-    try {
-      const data = await api.getBNCCErros(
-        selectedTurma || undefined,
-        selectedEquipe || undefined
-      );
-      setBnccErros(data);
-    } catch (error) {
-      console.error('Error loading BNCC:', error);
-    }
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
-
-  if (loading) {
+  const renderFiltros = () => {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
-        </View>
-      </SafeAreaView>
+      <View style={styles.filtrosContainer}>
+        <Text style={styles.label}>Visualizar por:</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+          {['GERAL', 'TURMA', 'EQUIPE', 'EQUIPE_TURMA'].map((f) => (
+            <TouchableOpacity 
+              key={f} 
+              style={[styles.chip, filtroTipo === f && styles.chipActive]}
+              onPress={() => setFiltroTipo(f)}
+            >
+              <Text style={[styles.chipText, filtroTipo === f && styles.chipTextActive]}>
+                {f === 'EQUIPE_TURMA' ? 'Equipe por Turma' : f.charAt(0) + f.slice(1).toLowerCase()}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {(filtroTipo === 'TURMA' || filtroTipo === 'EQUIPE_TURMA') && (
+          <>
+            <Text style={styles.label}>Qual Turma?</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              {turmas.map((t) => (
+                <TouchableOpacity 
+                  key={t.id} 
+                  style={[styles.chip, selectedTurma === t.id && styles.chipActive]}
+                  onPress={() => setSelectedTurma(t.id)}
+                >
+                  <Text style={[styles.chipText, selectedTurma === t.id && styles.chipTextActive]}>{t.nome}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        {(filtroTipo === 'EQUIPE' || filtroTipo === 'EQUIPE_TURMA') && (
+          <>
+            <Text style={styles.label}>Qual Equipe?</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+              {equipes.map((e) => (
+                <TouchableOpacity 
+                  key={e.id} 
+                  style={[styles.chip, selectedEquipe === e.id && styles.chipActive]}
+                  onPress={() => setSelectedEquipe(e.id)}
+                >
+                  <View style={[styles.colorDot, { backgroundColor: e.cor }]} />
+                  <Text style={[styles.chipText, selectedEquipe === e.id && styles.chipTextActive]}>{e.nome}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )}
+      </View>
     );
-  }
+  };
+
+  // Separa as Top 10 Erros e Top 10 Acertos (com base nos totais)
+  const maisErradas = [...bnccData].sort((a, b) => b.erros - a.erros).filter(item => item.erros > 0).slice(0, 10);
+  const maisAcertadas = [...bnccData].sort((a, b) => b.acertos - a.acertos).filter(item => item.acertos > 0).slice(0, 10);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -88,360 +128,85 @@ export default function AdminRelatorios() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Relatórios</Text>
+        <Text style={styles.headerTitle}>Relatório da BNCC</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
-        }
-      >
-        {/* Ranking Section */}
-        <Text style={styles.sectionTitle}>Ranking das Equipes</Text>
-        <View style={styles.rankingContainer}>
-          {ranking.map((item) => (
-            <View key={item.id} style={[styles.rankingItem, { borderLeftColor: item.cor }]}>
-              <View style={[styles.positionBadge, { backgroundColor: item.cor }]}>
-                <Text style={styles.positionText}>{item.posicao}º</Text>
-              </View>
-              <Text style={styles.rankingName}>Equipe {item.nome}</Text>
-              <Text style={[styles.rankingPoints, { color: item.cor }]}>
-                {item.pontosTotais} pts
-              </Text>
-            </View>
-          ))}
-        </View>
+      {renderFiltros()}
 
-        {/* BNCC Errors Section */}
-        <Text style={styles.sectionTitle}>Habilidades BNCC Mais Erradas</Text>
-        
-        {/* Filters */}
-        <View style={styles.filtersContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <TouchableOpacity
-              style={[
-                styles.filterButton,
-                !selectedTurma && !selectedEquipe && styles.filterButtonActive,
-              ]}
-              onPress={() => {
-                setSelectedTurma('');
-                setSelectedEquipe('');
-              }}
-            >
-              <Text
-                style={[
-                  styles.filterText,
-                  !selectedTurma && !selectedEquipe && styles.filterTextActive,
-                ]}
-              >
-                Geral
-              </Text>
-            </TouchableOpacity>
-            {turmas.map((turma) => (
-              <TouchableOpacity
-                key={turma.id}
-                style={[
-                  styles.filterButton,
-                  selectedTurma === turma.id && styles.filterButtonActive,
-                ]}
-                onPress={() => {
-                  setSelectedTurma(selectedTurma === turma.id ? '' : turma.id);
-                  setSelectedEquipe('');
-                }}
-              >
-                <Text
-                  style={[
-                    styles.filterText,
-                    selectedTurma === turma.id && styles.filterTextActive,
-                  ]}
-                >
-                  {turma.nome}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            {equipes.map((equipe) => (
-              <TouchableOpacity
-                key={equipe.id}
-                style={[
-                  styles.filterButton,
-                  { borderColor: equipe.cor },
-                  selectedEquipe === equipe.id && { backgroundColor: equipe.cor },
-                ]}
-                onPress={() => {
-                  setSelectedEquipe(selectedEquipe === equipe.id ? '' : equipe.id);
-                  setSelectedTurma('');
-                }}
-              >
-                <Text
-                  style={[
-                    styles.filterText,
-                    { color: selectedEquipe === equipe.id ? '#000' : equipe.cor },
-                  ]}
-                >
-                  {equipe.nome}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#FFD700" />
         </View>
-
-        {/* BNCC List */}
-        {bnccErros.length > 0 ? (
-          bnccErros.map((item, index) => (
-            <View key={index} style={styles.bnccItem}>
-              <View style={styles.bnccRank}>
-                <Text style={styles.bnccRankText}>{index + 1}</Text>
+      ) : (
+        <ScrollView style={styles.content}>
+          <Text style={styles.sectionTitle}>⚠️ Mais Erradas</Text>
+          {maisErradas.length > 0 ? maisErradas.map((item, index) => (
+            <View key={`err-${item.habilidade}`} style={styles.card}>
+              <View style={styles.rankBadge}>
+                <Text style={styles.rankText}>{index + 1}º</Text>
               </View>
-              <Text style={styles.bnccHabilidade}>{item.habilidade}</Text>
-              <View style={styles.bnccErrosContainer}>
-                <Ionicons name="close-circle" size={16} color="#E74C3C" />
-                <Text style={styles.bnccErrosText}>{item.totalErros} erros</Text>
+              <View style={styles.cardInfo}>
+                <Text style={styles.bnccTitle}>{item.habilidade}</Text>
+                <Text style={styles.bnccStats}>Erros: {item.erros} | Acertos: {item.acertos} | Total: {item.total}</Text>
+              </View>
+              <View style={styles.errorBar}>
+                <View style={[styles.errorFill, { width: `${(item.erros / item.total) * 100}%` }]} />
               </View>
             </View>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons name="analytics-outline" size={40} color="#666" />
-            <Text style={styles.emptyText}>Nenhum dado disponível</Text>
-          </View>
-        )}
+          )) : (
+            <Text style={styles.emptyText}>Nenhum erro registrado neste filtro.</Text>
+          )}
 
-        {/* Top Students */}
-        <Text style={styles.sectionTitle}>Melhores Alunos</Text>
-        {usuarios
-          .filter((u) => u.perfil !== 'ADMIN')
-          .sort((a, b) => b.pontosTotais - a.pontosTotais)
-          .slice(0, 10)
-          .map((usuario, index) => {
-            const equipe = equipes.find((e) => e.id === usuario.equipeId);
-            return (
-              <View key={usuario.id} style={styles.userItem}>
-                <View style={styles.userRank}>
-                  <Text style={styles.userRankText}>{index + 1}</Text>
-                </View>
-                <View style={styles.userInfo}>
-                  <Text style={styles.userName}>{usuario.nome}</Text>
-                  <View style={styles.userMeta}>
-                    {equipe && (
-                      <View style={[styles.teamBadge, { backgroundColor: equipe.cor + '30' }]}>
-                        <Text style={[styles.teamText, { color: equipe.cor }]}>{equipe.nome}</Text>
-                      </View>
-                    )}
-                    <Text style={styles.userStats}>
-                      {usuario.videosConcluidos} vídeos | {usuario.exerciciosRealizados} exercícios
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.userPoints}>
-                  <Ionicons name="star" size={16} color="#FFD700" />
-                  <Text style={styles.userPointsText}>{usuario.pontosTotais}</Text>
-                </View>
+          <Text style={[styles.sectionTitle, { marginTop: 24, color: '#32CD32' }]}>🏆 Mais Acertadas</Text>
+          {maisAcertadas.length > 0 ? maisAcertadas.map((item, index) => (
+            <View key={`ac-${item.habilidade}`} style={styles.card}>
+              <View style={[styles.rankBadge, { backgroundColor: '#32CD3220' }]}>
+                <Text style={[styles.rankText, { color: '#32CD32' }]}>{index + 1}º</Text>
               </View>
-            );
-          })}
-      </ScrollView>
+              <View style={styles.cardInfo}>
+                <Text style={styles.bnccTitle}>{item.habilidade}</Text>
+                <Text style={styles.bnccStats}>Acertos: {item.acertos} | Erros: {item.erros} | Total: {item.total}</Text>
+              </View>
+              <View style={[styles.errorBar, { backgroundColor: '#222' }]}>
+                <View style={[styles.errorFill, { backgroundColor: '#32CD32', width: `${(item.acertos / item.total) * 100}%` }]} />
+              </View>
+            </View>
+          )) : (
+            <Text style={styles.emptyText}>Nenhum acerto registrado neste filtro.</Text>
+          )}
+          
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0c0c0c',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  sectionTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 20,
-    marginBottom: 16,
-  },
-  rankingContainer: {
-    gap: 10,
-  },
-  rankingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
-    padding: 12,
-    borderLeftWidth: 4,
-  },
-  positionBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  positionText: {
-    color: '#000',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  rankingName: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  rankingPoints: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  filtersContainer: {
-    marginBottom: 16,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#333',
-    marginRight: 8,
-  },
-  filterButtonActive: {
-    backgroundColor: '#FFD700',
-    borderColor: '#FFD700',
-  },
-  filterText: {
-    color: '#888',
-    fontWeight: '600',
-  },
-  filterTextActive: {
-    color: '#000',
-  },
-  bnccItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-  },
-  bnccRank: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#E74C3C30',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  bnccRankText: {
-    color: '#E74C3C',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  bnccHabilidade: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 14,
-  },
-  bnccErrosContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  bnccErrosText: {
-    color: '#E74C3C',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  emptyState: {
-    alignItems: 'center',
-    padding: 30,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
-  },
-  emptyText: {
-    color: '#666',
-    fontSize: 14,
-    marginTop: 8,
-  },
-  userItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-  },
-  userRank: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FFD70030',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  userRankText: {
-    color: '#FFD700',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  userMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
-  },
-  teamBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  teamText: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  userStats: {
-    color: '#666',
-    fontSize: 11,
-  },
-  userPoints: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  userPointsText: {
-    color: '#FFD700',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
+  container: { flex: 1, backgroundColor: '#0c0c0c' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#151520' },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  
+  filtrosContainer: { padding: 16, backgroundColor: '#151520', borderBottomWidth: 1, borderBottomColor: '#222' },
+  label: { color: '#888', fontSize: 12, textTransform: 'uppercase', marginBottom: 8, marginTop: 8 },
+  chipsScroll: { marginBottom: 8 },
+  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: '#333' },
+  chipActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
+  chipText: { color: '#aaa', fontWeight: 'bold' },
+  chipTextActive: { color: '#000' },
+  colorDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
+  
+  content: { padding: 16 },
+  sectionTitle: { color: '#FF4500', fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
+  card: { backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, marginBottom: 12, flexDirection: 'row', alignItems: 'center' },
+  rankBadge: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FF450020', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  rankText: { color: '#FF4500', fontWeight: 'bold', fontSize: 16 },
+  cardInfo: { flex: 1 },
+  bnccTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
+  bnccStats: { color: '#888', fontSize: 12 },
+  errorBar: { width: 60, height: 6, backgroundColor: '#333', borderRadius: 3, marginLeft: 12, overflow: 'hidden' },
+  errorFill: { height: '100%', backgroundColor: '#FF4500' },
+  emptyText: { color: '#666', fontStyle: 'italic', marginBottom: 20 }
 });
