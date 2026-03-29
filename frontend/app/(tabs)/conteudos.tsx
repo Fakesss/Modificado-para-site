@@ -30,19 +30,24 @@ export default function Conteudos() {
     try {
       const data = await api.getConteudos();
       
-      // 🚨 SUPER TRAVA DE SEGURANÇA
       const filteredConteudos = data.filter((c: any) => {
         if (!c.ativo || c.is_deleted || (c.tipo !== 'MATERIAL' && c.tipo !== 'LINK')) return false;
         
-        const alvoUsuario = c.usuarioId && String(c.usuarioId).trim() !== '';
+        const idDestino = c.usuarioId || c.alunoId;
+        const alvoUsuario = idDestino && String(idDestino).trim() !== '';
         const alvoEquipe = c.equipeId && String(c.equipeId).trim() !== '';
         const alvoTurma = c.turmaId && String(c.turmaId).trim() !== '';
 
-        if (alvoUsuario) return c.usuarioId === user?.id;
-        if (alvoEquipe) return c.equipeId === user?.equipeId;
-        if (alvoTurma) return c.turmaId === user?.turmaId;
+        const isPublic = !alvoUsuario && !alvoEquipe && !alvoTurma;
+        if (isPublic) return true;
+
+        const idAlunoLogado = user?.id || user?._id;
+
+        if (alvoUsuario && String(idDestino) === String(idAlunoLogado)) return true;
+        if (alvoEquipe && String(c.equipeId) === String(user?.equipeId)) return true;
+        if (alvoTurma && String(c.turmaId) === String(user?.turmaId)) return true;
         
-        return true;
+        return false;
       });
       
       setConteudos(filteredConteudos);
