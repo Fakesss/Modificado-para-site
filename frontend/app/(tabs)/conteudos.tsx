@@ -12,13 +12,14 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as api from '../../src/services/api';
 import { Conteudo } from '../../src/types';
+import { useAuth } from '../../src/context/AuthContext'; // 🚨 IMPORTADO
 
-// Ativa as animações fluidas no Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 export default function Conteudos() {
+  const { user } = useAuth(); // 🚨 PUXANDO O ALUNO LOGADO
   const [conteudos, setConteudos] = useState<Conteudo[]>([]);
   const [viewedIds, setViewedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,14 +29,23 @@ export default function Conteudos() {
   const loadData = useCallback(async () => {
     try {
       const data = await api.getConteudos();
-      setConteudos(data.filter((c: Conteudo) => c.ativo && !c.is_deleted && (c.tipo === 'MATERIAL' || c.tipo === 'LINK')));
+      
+      // 🚨 PORTA DE SEGURANÇA: Filtra os materiais e links
+      const filteredConteudos = data.filter((c: Conteudo) => {
+        if (!c.ativo || c.is_deleted || (c.tipo !== 'MATERIAL' && c.tipo !== 'LINK')) return false;
+        if (c.equipeId) return c.equipeId === user?.equipeId;
+        if (c.turmaId) return c.turmaId === user?.turmaId;
+        return true;
+      });
+      
+      setConteudos(filteredConteudos);
       await checkProgress();
     } catch (error) {
       console.error('Error loading conteudos:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const checkProgress = async () => {
     try {
@@ -46,8 +56,6 @@ export default function Conteudos() {
   };
 
   useEffect(() => { loadData(); }, [loadData]);
-
-  // Atualiza as pastas quando o usuário volta para a tela
   useFocusEffect(useCallback(() => { checkProgress(); }, []));
 
   const showToast = (pastaName: string) => {
@@ -57,16 +65,11 @@ export default function Conteudos() {
 
   const handleMarkAsViewed = async (conteudo: Conteudo) => {
     if (!viewedIds.includes(conteudo.id)) {
-      // Chama a animação mágica antes de mudar a tela
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      
       const newViewed = [...viewedIds, conteudo.id];
       setViewedIds(newViewed);
       await AsyncStorage.setItem(`@viewed_${conteudo.id}`, 'true');
-      
-      // Avisa o servidor para dar os pontos
       api.concluirConteudo(conteudo.id).catch(() => {});
-      
       showToast(conteudo.pasta || 'Geral');
     }
   };
@@ -126,7 +129,6 @@ export default function Conteudos() {
     }
   };
 
-  // LÓGICA DE SEPARAÇÃO: Fora da Pasta (Novos) vs Dentro da Pasta (Concluídos)
   const novos = conteudos.filter(c => !viewedIds.includes(c.id));
   const concluidos = conteudos.filter(c => viewedIds.includes(c.id)).sort((a, b) => a.titulo.localeCompare(b.titulo));
   
@@ -148,7 +150,6 @@ export default function Conteudos() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }} tintColor="#FFD700" />}>
         
-        {/* SEÇÃO 1: CONTEÚDOS NOVOS (Fora das Pastas) */}
         {novos.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -173,7 +174,6 @@ export default function Conteudos() {
           </View>
         )}
 
-        {/* SEÇÃO 2: PASTAS (Conteúdos já vistos) */}
         {Object.keys(pastasAgrupadas).length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -210,7 +210,6 @@ export default function Conteudos() {
         )}
       </ScrollView>
 
-      {/* TOAST ANIMADO */}
       {toast.visible && (
         <View style={styles.toastContainer}>
           <Ionicons name="checkmark-circle" size={28} color="#32CD32" />
