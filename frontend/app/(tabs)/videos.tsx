@@ -9,14 +9,15 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as api from '../../src/services/api';
 import { Conteudo } from '../../src/types';
+import { useAuth } from '../../src/context/AuthContext'; // 🚨 IMPORTADO
 
-// Ativa as animações fluidas no Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 export default function Videos() {
   const router = useRouter();
+  const { user } = useAuth(); // 🚨 PUXANDO O ALUNO LOGADO
   const [videos, setVideos] = useState<Conteudo[]>([]);
   const [viewedIds, setViewedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,33 +26,36 @@ export default function Videos() {
   const loadData = useCallback(async () => {
     try {
       const data = await api.getConteudos('videos');
-      setVideos(data.filter((v: Conteudo) => v.tipo === 'VIDEO' && v.ativo && !v.is_deleted));
+      
+      // 🚨 PORTA DE SEGURANÇA: Filtra os vídeos
+      const filteredVideos = data.filter((v: Conteudo) => {
+        if (!v.ativo || v.is_deleted || v.tipo !== 'VIDEO') return false;
+        if (v.equipeId) return v.equipeId === user?.equipeId;
+        if (v.turmaId) return v.turmaId === user?.turmaId;
+        return true;
+      });
+      
+      setVideos(filteredVideos);
       await checkProgress();
     } catch (error) {
       console.error('Error loading videos:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const checkProgress = async () => {
     try {
-      // Puxa as views do AsyncStorage (mesmo local que o video [id] salva)
       const keys = await AsyncStorage.getAllKeys();
       const viewed = keys.filter(k => k.startsWith('@video_done_')).map(k => k.replace('@video_done_', ''));
-      
-      // Animação caso a lista mude quando o usuário voltar da tela de vídeo
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setViewedIds(viewed);
     } catch (error) { console.error(error); }
   };
 
   useEffect(() => { loadData(); }, [loadData]);
-
-  // Atualiza inteligentemente quando volta da tela do player
   useFocusEffect(useCallback(() => { checkProgress(); }, []));
 
-  // LÓGICA DE SEPARAÇÃO
   const novos = videos.filter(v => !viewedIds.includes(v.id));
   const concluidos = videos.filter(v => viewedIds.includes(v.id)).sort((a, b) => a.titulo.localeCompare(b.titulo));
   
@@ -73,7 +77,6 @@ export default function Videos() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }} tintColor="#FFD700" />}>
         
-        {/* SEÇÃO 1: VÍDEOS NOVOS */}
         {novos.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -116,7 +119,6 @@ export default function Videos() {
           </View>
         )}
 
-        {/* SEÇÃO 2: PASTAS DE VÍDEOS VISTOS */}
         {Object.keys(pastasAgrupadas).length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
