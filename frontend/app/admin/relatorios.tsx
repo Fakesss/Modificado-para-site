@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+
+// O import do FileSystem padrão e seguro:
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as api from '../../src/services/api';
@@ -15,13 +17,11 @@ export default function Relatorios() {
   const [equipes, setEquipes] = useState<any[]>([]);
   const [usuarios, setUsuarios] = useState<any[]>([]);
   
-  // Filtros
   const [filtroTipo, setFiltroTipo] = useState('GERAL'); 
   const [selectedTurma, setSelectedTurma] = useState('');
   const [selectedEquipe, setSelectedEquipe] = useState('');
   const [bnccData, setBnccData] = useState<any[]>([]);
 
-  // Modal de Limpar Dados
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearTipo, setClearTipo] = useState('TUDO');
   const [clearTargetId, setClearTargetId] = useState('');
@@ -57,7 +57,6 @@ export default function Relatorios() {
     finally { setLoading(false); }
   };
 
-  // ======= GERADOR DE RELATÓRIO TXT ========
   const baixarRelatorioTXT = async () => {
     if (bnccData.length === 0) return Alert.alert("Aviso", "Não há dados para exportar.");
 
@@ -89,14 +88,23 @@ export default function Relatorios() {
         a.href = url; a.download = fileName; a.click();
     } else {
         try {
+            // Escreve e compartilha nativamente (funciona liso no Android e iOS)
             const fileUri = `${FileSystem.documentDirectory}${fileName}`;
             await FileSystem.writeAsStringAsync(fileUri, txt, { encoding: FileSystem.EncodingType.UTF8 });
-            if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(fileUri);
-        } catch (e) { Alert.alert("Erro", "Não foi possível baixar o arquivo."); }
+            
+            const canShare = await Sharing.isAvailableAsync();
+            if (canShare) {
+                await Sharing.shareAsync(fileUri, { mimeType: 'text/plain', dialogTitle: 'Salvar Relatório' });
+            } else {
+                Alert.alert("Erro", "O compartilhamento não está disponível neste dispositivo.");
+            }
+        } catch (e) {
+            console.log(e);
+            Alert.alert("Erro", "Não foi possível baixar o arquivo. Verifique as permissões de armazenamento.");
+        }
     }
   };
 
-  // ======= APAGAR DADOS DO RELATÓRIO ========
   const handleLimparDados = async () => {
     if (clearTipo !== 'TUDO' && !clearTargetId) return Alert.alert("Aviso", "Selecione a turma ou o usuário.");
     setIsClearing(true);
@@ -104,7 +112,7 @@ export default function Relatorios() {
         await api.limparRelatorioBNCC(clearTipo, clearTargetId);
         Alert.alert("Sucesso", "O histórico foi arquivado e o relatório zerado para os critérios selecionados.");
         setShowClearModal(false);
-        loadRelatorio(); // Recarrega o gráfico na hora!
+        loadRelatorio(); 
     } catch (e) { Alert.alert("Erro", "Falha ao limpar relatório."); }
     finally { setIsClearing(false); }
   };
@@ -143,7 +151,6 @@ export default function Relatorios() {
         </ScrollView>
       )}
       
-      {/* BOTÕES DE AÇÕES RÁPIDAS */}
       <View style={styles.acoesRow}>
           <TouchableOpacity style={styles.acaoBtn} onPress={baixarRelatorioTXT}>
               <Ionicons name="document-text" size={18} color="#fff" />
@@ -160,7 +167,6 @@ export default function Relatorios() {
   const maisErradas = [...bnccData].sort((a, b) => b.erros - a.erros).filter(i => i.erros > 0).slice(0, 10);
   const maisAcertadas = [...bnccData].sort((a, b) => b.acertos - a.acertos).filter(i => i.acertos > 0).slice(0, 10);
 
-  // FUNÇÃO MÁGICA: Constrói o Gráfico de Barras Horizontal (Acertos vs Erros)
   const renderGraficoBarra = (item: any) => {
       const pctAcerto = (item.acertos / item.total) * 100;
       const pctErro = (item.erros / item.total) * 100;
@@ -219,7 +225,6 @@ export default function Relatorios() {
         </ScrollView>
       )}
 
-      {/* JANELA DE APAGAR DADOS (ARQUIVAMENTO) */}
       <Modal visible={showClearModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
