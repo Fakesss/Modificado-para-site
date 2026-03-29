@@ -3,9 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-
-// O import do FileSystem padrão e seguro:
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as api from '../../src/services/api';
 
@@ -88,8 +86,8 @@ export default function Relatorios() {
         a.href = url; a.download = fileName; a.click();
     } else {
         try {
-            // Escreve e compartilha nativamente (funciona liso no Android e iOS)
-            const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+            // A MÁGICA DE PERMISSÃO: Substituímos documentDirectory por cacheDirectory
+            const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
             await FileSystem.writeAsStringAsync(fileUri, txt, { encoding: FileSystem.EncodingType.UTF8 });
             
             const canShare = await Sharing.isAvailableAsync();
@@ -100,7 +98,7 @@ export default function Relatorios() {
             }
         } catch (e) {
             console.log(e);
-            Alert.alert("Erro", "Não foi possível baixar o arquivo. Verifique as permissões de armazenamento.");
+            Alert.alert("Erro", "Não foi possível compartilhar o arquivo TXT.");
         }
     }
   };
