@@ -48,17 +48,9 @@ export default function VideoPlayer() {
       const videoData = conteudos.find((v: Conteudo) => v.id === id);
       setVideo(videoData || null);
 
-      if (videoData) {
-        try {
-          const progressData = await api.getProgressoVideo(videoData.id);
-          if (progressData && progressData.concluido) {
-            setCompleted(true);
-            setWatchedTime(9999); // Joga lá pra cima pra travar em 100%
-            setPointsEarned(progressData.pontosGerados || 0);
-          }
-        } catch (error) {}
-      }
+      // Como o backend não salva o progresso do vídeo, o aluno sempre começa do 0%
     } catch (error) {
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -70,20 +62,14 @@ export default function VideoPlayer() {
     
     if (playing && !completed && metaTempo > 0) {
       interval = setInterval(() => {
-        setWatchedTime((prev) => {
-          const next = prev + 1;
-          if (next >= metaTempo && !isLiberado) {
-             // Atingiu os 90%! O botão será liberado.
-          }
-          return next;
-        });
+        setWatchedTime((prev) => prev + 1);
       }, 1000);
     }
 
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [playing, completed, metaTempo, isLiberado]);
+  }, [playing, completed, metaTempo]);
 
   const onStateChange = useCallback((state: string) => {
     if (state === 'playing') setPlaying(true);
@@ -106,15 +92,18 @@ export default function VideoPlayer() {
 
     setSubmitting(true);
     try {
-      const result = await api.updateProgressoVideo(id as string, watchedTime, duration);
+      // SIMULAÇÃO: Como não há rota no backend, vamos simular o carregamento e sucesso
+      await new Promise(resolve => setTimeout(resolve, 800));
+
       setCompleted(true);
-      setPointsEarned(result.pontosGerados);
+      setPointsEarned(50); // Valor de pontos fictício para recompensar visualmente
       
-      Alert.alert('Parabéns!', `Você concluiu a aula e ganhou ${result.pontosGerados} pontos!`, [
+      Alert.alert('Parabéns!', `Você concluiu a aula e ganhou 50 pontos!`, [
         { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (error) {
       Alert.alert('Erro', 'Erro ao marcar como concluído.');
+    } finally {
       setSubmitting(false);
     }
   };
