@@ -11,7 +11,7 @@ interface Props {
 const EMPTY_ITEM = { id: 'empty', nome: '-', cor: '#333', pontosTotais: 0, posicao: 0 };
 
 export default function RankingHeader({ ranking, loading }: Props) {
-  // Mantendo a lógica perfeita de ordenação
+  // Ordena os itens pela pontuação real
   const sortedByPoints = [...ranking].sort((a, b) => b.pontosTotais - a.pontosTotais);
 
   const first = sortedByPoints[0] ? { ...sortedByPoints[0], posicao: 1 } : { ...EMPTY_ITEM, posicao: 1 };
@@ -19,6 +19,9 @@ export default function RankingHeader({ ranking, loading }: Props) {
   const third = sortedByPoints[2] ? { ...sortedByPoints[2], posicao: 3 } : { ...EMPTY_ITEM, posicao: 3 };
   
   const displayOrder = [second, first, third];
+
+  // 🚨 A MÁGICA MATEMÁTICA DA ALTURA AQUI: Pega a pontuação do 1º lugar para ser o Teto (100%)
+  const maxPoints = first.pontosTotais;
 
   if (loading) {
     return (
@@ -37,9 +40,17 @@ export default function RankingHeader({ ranking, loading }: Props) {
           const isFirst = item.posicao === 1;
           const isEmpty = item.id === 'empty';
           
-          const podiumHeight = isFirst ? 140 : item.posicao === 2 ? 120 : 100;
+          // 🚨 CÁLCULO DINÂMICO DE ALTURA
+          let podiumHeight = 100;
+          if (maxPoints === 0) {
+             // Se ninguém tem ponto ainda, faz uma escadinha padrão
+             podiumHeight = isFirst ? 140 : item.posicao === 2 ? 120 : 100;
+          } else {
+             // Altura proporcional: Pontos da equipe divido pelos pontos do 1º lugar * Altura Máxima (140)
+             // Math.max(85, ...) garante que a caixa nunca fique menor que 85px para não quebrar o design
+             podiumHeight = Math.max(85, (item.pontosTotais / maxPoints) * 140);
+          }
           
-          // Quebra inteligente de nome mantida
           const partesNome = item.nome.split(' ');
           const nomeFormatado = partesNome.length > 1 
             ? `${partesNome[0]}\n${partesNome.slice(1).join(' ')}` 
@@ -48,37 +59,30 @@ export default function RankingHeader({ ranking, loading }: Props) {
           return (
             <View key={`${item.id}-${index}`} style={[styles.podiumItem, isFirst && { zIndex: 2 }]}>
               
-              {/* 🎯 NOME DA EQUIPE (CORRIGIDO: Tamanho Uniforme e Centralização Vertical) */}
+              {/* NOME DA EQUIPE */}
               <View style={[styles.teamNamePill, { backgroundColor: isEmpty ? '#333' : item.cor }]}>
                 <Text style={styles.teamNamePillText} numberOfLines={2} adjustsFontSizeToFit>
                   {isEmpty ? '-' : nomeFormatado}
                 </Text>
               </View>
               
-              {/* CAIXA DO PÓDIO */}
+              {/* CAIXA DO PÓDIO COM ALTURA DINÂMICA */}
               <View style={[styles.podiumBox, { height: podiumHeight, backgroundColor: isEmpty ? '#33333330' : item.cor + '25' }]}>
                 
-                <View style={[
-                  styles.insidePositionCircle, 
-                  { 
-                    backgroundColor: isEmpty ? '#333' : item.cor,
-                    width: isFirst ? 44 : 36,
-                    height: isFirst ? 44 : 36,
-                    borderRadius: isFirst ? 22 : 18
-                  }
-                ]}>
-                  <Text style={[styles.insidePositionText, { fontSize: isFirst ? 18 : 14, color: isEmpty ? '#888' : '#000' }]}>
+                {/* 🎯 BOLINHAS COM TAMANHO UNIFORME E PERFEITO PARA TODOS */}
+                <View style={[styles.insidePositionCircle, { backgroundColor: isEmpty ? '#333' : item.cor }]}>
+                  <Text style={[styles.insidePositionText, { color: isEmpty ? '#888' : '#000' }]}>
                     {item.posicao}º
                   </Text>
                 </View>
                 
                 <Ionicons 
                   name={isEmpty ? (isFirst ? 'trophy-outline' : 'medal-outline') : (isFirst ? 'trophy' : 'medal')} 
-                  size={isFirst ? 36 : 28} 
+                  size={isFirst ? 32 : 28} 
                   color={isEmpty ? '#555' : item.cor} 
                 />
                 
-                <Text style={[styles.podiumPoints, { color: isEmpty ? '#555' : item.cor, fontSize: isFirst ? 16 : 14 }]}>
+                <Text style={[styles.podiumPoints, { color: isEmpty ? '#555' : item.cor }]}>
                   {isEmpty ? '- pts' : `${item.pontosTotais} pts`}
                 </Text>
 
@@ -97,32 +101,26 @@ const styles = StyleSheet.create({
   podiumContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', paddingHorizontal: 4 },
   podiumItem: { flex: 1, alignItems: 'center', marginHorizontal: 4 },
   
-  /* 🎯 ESTILOS DA PÍLULA CORRIGIDOS (Uniformidade e Alinhamento) */
   teamNamePill: {
-    width: '92%', /* 🎯 Tamanho uniforme (pouco menor que a box) */
-    alignSelf: 'center', /* Centraliza */
+    width: '92%', 
+    alignSelf: 'center', 
     paddingVertical: 6,
     paddingHorizontal: 4, 
     borderRadius: 20,
     alignItems: 'center',
-    justifyContent: 'center', /* 🎯 Centraliza o Ômega verticalmente no meio */
+    justifyContent: 'center',
     marginBottom: 8,
     zIndex: 10,
-    minHeight: 38, /* Aumentado ligeiramente para nomes com acento ficarem confortáveis */
+    minHeight: 38, 
     borderWidth: 1,
     borderColor: '#1a1a2e',
   },
-  teamNamePillText: {
-    color: '#000',
-    fontWeight: '900',
-    fontSize: 13, 
-    textAlign: 'center',
-    /* 🎯 Garante que não haja alinhamento estranho de linha */
-    includeFontPadding: false, 
-    textAlignVertical: 'center',
-  },
+  teamNamePillText: { color: '#000', fontWeight: '900', fontSize: 13, textAlign: 'center', includeFontPadding: false, textAlignVertical: 'center' },
   podiumBox: { width: '100%', borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 6 },
-  insidePositionCircle: { alignItems: 'center', justifyContent: 'center' },
-  insidePositionText: { fontWeight: 'bold' },
-  podiumPoints: { fontWeight: 'bold', marginTop: 4 },
+  
+  /* 🎯 ESTILO UNIFORME PARA TODAS AS BOLINHAS */
+  insidePositionCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  insidePositionText: { fontWeight: 'bold', fontSize: 14 },
+  
+  podiumPoints: { fontWeight: 'bold', fontSize: 14, marginTop: 4 },
 });
