@@ -48,7 +48,7 @@ export default function RankingHeader({ ranking, loading }: Props) {
           return (
             <View key={`${item.id}-${index}`} style={[styles.podiumItem, isFirst && { zIndex: 2 }]}>
               
-              {/* 🎯 NOME DA EQUIPE (CORRIGIDO: Menor horizontalmente, Fonte maior) */}
+              {/* 🎯 NOME DA EQUIPE (CORRIGIDO: Tamanho Uniforme e Centralização Vertical) */}
               <View style={[styles.teamNamePill, { backgroundColor: isEmpty ? '#333' : item.cor }]}>
                 <Text style={styles.teamNamePillText} numberOfLines={2} adjustsFontSizeToFit>
                   {isEmpty ? '-' : nomeFormatado}
@@ -97,26 +97,29 @@ const styles = StyleSheet.create({
   podiumContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', paddingHorizontal: 4 },
   podiumItem: { flex: 1, alignItems: 'center', marginHorizontal: 4 },
   
-  /* 🎯 ESTILOS DA PÍLULA CORRIGIDOS */
+  /* 🎯 ESTILOS DA PÍLULA CORRIGIDOS (Uniformidade e Alinhamento) */
   teamNamePill: {
-    /* width: '100%',  <- RETIRADO para não esticar */
+    width: '92%', /* 🎯 Tamanho uniforme (pouco menor que a box) */
     alignSelf: 'center', /* Centraliza */
     paddingVertical: 6,
-    paddingHorizontal: 12, /* Mais padding horizontal para o formato de pílula real */
+    paddingHorizontal: 4, 
     borderRadius: 20,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'center', /* 🎯 Centraliza o Ômega verticalmente no meio */
     marginBottom: 8,
     zIndex: 10,
-    minHeight: 36,
+    minHeight: 38, /* Aumentado ligeiramente para nomes com acento ficarem confortáveis */
     borderWidth: 1,
     borderColor: '#1a1a2e',
   },
   teamNamePillText: {
     color: '#000',
     fontWeight: '900',
-    fontSize: 13, /* 🎯 AUMENTADO ligeiramente de 12 para 13 */
+    fontSize: 13, 
     textAlign: 'center',
+    /* 🎯 Garante que não haja alinhamento estranho de linha */
+    includeFontPadding: false, 
+    textAlignVertical: 'center',
   },
   podiumBox: { width: '100%', borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 6 },
   insidePositionCircle: { alignItems: 'center', justifyContent: 'center' },
