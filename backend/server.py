@@ -91,6 +91,7 @@ class AdminUsuarioUpdate(BaseModel):
     ativo: Optional[bool] = None
     pontosTotais: Optional[int] = None
 
+# ---- ATUALIZAÇÃO PASSO 1: THUMBNAIL E PASTA ----
 class Conteudo(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tipo: str
@@ -98,6 +99,8 @@ class Conteudo(BaseModel):
     descricao: Optional[str] = None
     urlVideo: Optional[str] = None
     arquivo: Optional[str] = None
+    thumbnail: Optional[str] = None  # NOVO CAMPO: Capa do vídeo
+    pasta: Optional[str] = None      # NOVO CAMPO: Pasta de organização
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
@@ -113,6 +116,8 @@ class ConteudoCreate(BaseModel):
     descricao: Optional[str] = None
     urlVideo: Optional[str] = None
     arquivo: Optional[str] = None  
+    thumbnail: Optional[str] = None  # NOVO
+    pasta: Optional[str] = None      # NOVO
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
@@ -392,6 +397,7 @@ async def zerar_todos_pontos(current_user: dict = Depends(require_admin)):
     await db.equipes.update_many({}, {"$set": {"pontosTotais": 0}})
     return {"message": "Todos os pontos foram zerados com sucesso."}
 
+
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     query = {"ativo": True, "is_deleted": {"$ne": True}}
@@ -512,6 +518,9 @@ async def retry_submissao(exercicio_id: str, current_user: dict = Depends(get_cu
         await db.submissoes.delete_one({"_id": sub["_id"]})
     return {"message": "Pronto para tentar novamente"}
 
+# =====================================================================
+# ATUALIZAÇÃO PASSO 1: ROTAS DE CONTEÚDO E PASTAS
+# =====================================================================
 @api_router.get("/conteudos")
 async def get_conteudos(categoria: Optional[str] = None, turmaId: Optional[str] = None):
     query = {"ativo": True, "is_deleted": {"$ne": True}}
@@ -519,6 +528,19 @@ async def get_conteudos(categoria: Optional[str] = None, turmaId: Optional[str] 
     if turmaId: query["$or"] = [{"turmaId": turmaId}, {"turmaId": None}]
     conteudos = await db.conteudos.find(query).sort("ordem", 1).to_list(1000)
     return [{k: v for k, v in c.items() if k != '_id'} for c in conteudos]
+
+@api_router.get("/pastas")
+async def get_pastas(turmaId: Optional[str] = None):
+    # Rota inteligente para descobrir quais pastas já existem no banco
+    query = {"ativo": True, "is_deleted": {"$ne": True}}
+    if turmaId: query["$or"] = [{"turmaId": turmaId}, {"turmaId": None}]
+    conteudos = await db.conteudos.find(query).to_list(1000)
+    pastas = set()
+    for c in conteudos:
+        p = c.get("pasta")
+        if p and str(p).strip():
+            pastas.add(str(p).strip())
+    return sorted(list(pastas))
 
 @api_router.post("/conteudos")
 async def create_conteudo(conteudo_data: ConteudoCreate, current_user: dict = Depends(require_admin)):
@@ -555,10 +577,6 @@ async def concluir_conteudo(conteudo_id: str, current_user: dict = Depends(get_c
             
     return {"message": "Conteúdo concluído com sucesso", "pontos": pontos}
 
-
-# =====================================================================
-# ROTA DE RELATÓRIO GERAL (Submissões totais = Exs + Videos + Docs)
-# =====================================================================
 @api_router.get("/relatorios/geral")
 async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_u = await db.usuarios.count_documents({"ativo": True})
@@ -567,16 +585,12 @@ async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_e = len(exercicios_ativos)
     ids_ativos = [e["id"] for e in exercicios_ativos]
     
-    # Pega as submissões de exercícios
     submissoes_exercicios = await db.submissoes.find({
         "exercicioId": {"$in": ids_ativos},
         "ignorarNoRelatorioBNCC": {"$ne": True}
     }).to_list(10000)
     
-    # Pega as submissões de vídeos e documentos concluídos
     videos_e_docs_concluidos = await db.conteudos_concluidos.count_documents({})
-    
-    # A Soma Total Mágica (Exercícios + Tudo mais)
     total_s = len(submissoes_exercicios) + videos_e_docs_concluidos
     
     notas_por_aluno = {}
