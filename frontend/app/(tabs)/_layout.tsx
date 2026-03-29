@@ -155,9 +155,11 @@ export default function TabsLayout() {
     setConvite(null);
   };
 
-  const jitsiUrl = `https://meet.jit.si/${jitsiRoom}#config.prejoinPageEnabled=false&config.startAudioOnly=true&config.disableVideo=true`;
+  // 🚨 URL BLINDADA: Tira o vídeo, bloqueia a tela de baixar app e já joga o nome do aluno!
+  const userNameEncoded = user?.nome ? encodeURIComponent(user.nome) : 'Aluno';
+  const jitsiUrl = `https://meet.jit.si/${jitsiRoom}#config.prejoinPageEnabled=false&config.disableDeepLinking=true&config.startAudioOnly=true&config.disableVideo=true&userInfo.displayName=${userNameEncoded}`;
 
-  // 🚨 Cálculo Dinâmico do Tamanho da Tela da Chamada
+  // Cálculo Dinâmico do Tamanho da Tela da Chamada
   const BOX_WIDTH = isCallMinimized ? 200 : (width > 500 ? 400 : width * 0.9);
   const BOX_HEIGHT = isCallMinimized ? 45 : 450;
 
