@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as api from '../../src/services/api';
 import { Conteudo } from '../../src/types';
-import { useAuth } from '../../src/context/AuthContext'; // 🚨 IMPORTADO
+import { useAuth } from '../../src/context/AuthContext';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -17,7 +17,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function Videos() {
   const router = useRouter();
-  const { user } = useAuth(); // 🚨 PUXANDO O ALUNO LOGADO
+  const { user } = useAuth();
   const [videos, setVideos] = useState<Conteudo[]>([]);
   const [viewedIds, setViewedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,11 +27,18 @@ export default function Videos() {
     try {
       const data = await api.getConteudos('videos');
       
-      // 🚨 PORTA DE SEGURANÇA: Filtra os vídeos
-      const filteredVideos = data.filter((v: Conteudo) => {
+      // 🚨 SUPER TRAVA DE SEGURANÇA
+      const filteredVideos = data.filter((v: any) => {
         if (!v.ativo || v.is_deleted || v.tipo !== 'VIDEO') return false;
-        if (v.equipeId) return v.equipeId === user?.equipeId;
-        if (v.turmaId) return v.turmaId === user?.turmaId;
+        
+        const alvoUsuario = v.usuarioId && String(v.usuarioId).trim() !== '';
+        const alvoEquipe = v.equipeId && String(v.equipeId).trim() !== '';
+        const alvoTurma = v.turmaId && String(v.turmaId).trim() !== '';
+
+        if (alvoUsuario) return v.usuarioId === user?.id;
+        if (alvoEquipe) return v.equipeId === user?.equipeId;
+        if (alvoTurma) return v.turmaId === user?.turmaId;
+        
         return true;
       });
       
