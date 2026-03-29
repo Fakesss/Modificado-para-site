@@ -1,105 +1,97 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView
+  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
-import { socket } from '../../src/services/socket'; // O seu arquivo perfeito!
+import { socket } from '../../src/services/socket';
 
 export default function Salas() {
   const { user } = useAuth();
+  
+  // Identifica se é o Admin (Baseado no seu seed.py)
+  const isAdmin = user?.role === 'ADMIN' || user?.email === 'danielprofessormatematica@gmail.com';
   
   // Estados da Lista de Salas
   const [lobbies, setLobbies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Estados do Modal de Criação
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [newRoomLimit, setNewRoomLimit] = useState('10');
+
   // Estados de Dentro da Sala
   const [currentLobby, setCurrentLobby] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [messageText, setMessageText] = useState('');
 
-  // Configuração Inicial e Comunicação com o Servidor (Render)
   useEffect(() => {
-    if (!socket.connected) {
-      socket.connect();
-    }
+    if (!socket.connected) socket.connect();
 
     if (user) {
       socket.emit('register_player', { name: user.nome, user_id: user.id });
       socket.emit('get_lobbies', {});
     }
 
-    // Ouvintes do Servidor
-    socket.on('lobbies_list', (data) => {
-      setLobbies(data);
-      setLoading(false);
-    });
-
-    socket.on('lobby_joined', (data) => {
-      setCurrentLobby(data);
-      setMessages([]); 
-    });
-
-    socket.on('lobby_update', (data) => {
-      setCurrentLobby(data);
-    });
-
-    socket.on('lobby_left', () => {
-      setCurrentLobby(null);
-      setMessages([]);
-      socket.emit('get_lobbies', {}); 
-    });
-
-    socket.on('lobby_message', (msg) => {
-      setMessages((prev) => [...prev, msg]);
-    });
-
-    socket.on('lobby_error', (err) => {
-      Alert.alert('Aviso', err.msg);
-    });
+    socket.on('lobbies_list', (data) => { setLobbies(data); setLoading(false); });
+    socket.on('lobby_joined', (data) => { setCurrentLobby(data); setMessages([]); setShowCreateModal(false); });
+    socket.on('lobby_update', (data) => { setCurrentLobby(data); });
+    socket.on('lobby_left', () => { setCurrentLobby(null); setMessages([]); socket.emit('get_lobbies', {}); });
+    socket.on('lobby_message', (msg) => { setMessages((prev) => [...prev, msg]); });
+    socket.on('lobby_error', (err) => { Alert.alert('Aviso', err.msg); });
 
     return () => {
-      socket.off('lobbies_list');
-      socket.off('lobby_joined');
-      socket.off('lobby_update');
-      socket.off('lobby_left');
-      socket.off('lobby_message');
-      socket.off('lobby_error');
+      socket.off('lobbies_list'); socket.off('lobby_joined'); socket.off('lobby_update');
+      socket.off('lobby_left'); socket.off('lobby_message'); socket.off('lobby_error');
     };
   }, [user]);
 
-  // Ações do Usuário
-  const handleCreateLobby = () => {
+  // ==========================================
+  // AÇÕES
+  // ==========================================
+  const handleOpenCreateModal = () => {
+    setNewRoomName(`Sala de ${user?.nome?.split(' ')[0]}`);
+    setNewRoomLimit('10');
+    setShowCreateModal(true);
+  };
+
+  const handleConfirmCreateLobby = () => {
+    if (newRoomName.trim() === '') return Alert.alert('Erro', 'Dê um nome para a sala!');
+    const limit = parseInt(newRoomLimit);
+    if (isNaN(limit) || limit < 2 || limit > 50) return Alert.alert('Erro', 'O limite deve ser entre 2 e 50 pessoas.');
+
     socket.emit('create_lobby', {
-      nome: `Sala de ${user?.nome?.split(' ')[0]}`,
+      nome: newRoomName.trim(),
       tipo: 'Bate-papo',
-      max_jogadores: 10
+      max_jogadores: limit
     });
   };
 
-  const handleJoinLobby = (lobbyId: string) => {
-    socket.emit('join_lobby', { lobby_id: lobbyId });
+  const handleJoinLobby = (lobbyId: string, isGhost: boolean = false) => {
+    socket.emit('join_lobby', { lobby_id: lobbyId, is_ghost: isGhost });
   };
 
   const handleLeaveLobby = () => {
-    if (currentLobby) {
-      socket.emit('leave_lobby', { lobby_id: currentLobby.id });
-    }
+    if (currentLobby) socket.emit('leave_lobby', { lobby_id: currentLobby.id });
+  };
+
+  const handleAdminDeleteLobby = () => {
+    Alert.alert('Atenção', 'Deseja realmente encerrar esta sala para todos?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Encerrar', style: 'destructive', onPress: () => socket.emit('admin_delete_lobby', { lobby_id: currentLobby.id }) }
+    ]);
   };
 
   const handleSendMessage = () => {
     if (messageText.trim() === '' || !currentLobby) return;
-    
-    socket.emit('send_lobby_message', {
-      lobby_id: currentLobby.id,
-      text: messageText.trim()
-    });
+    socket.emit('send_lobby_message', { lobby_id: currentLobby.id, text: messageText.trim() });
     setMessageText('');
   };
 
   // ==========================================
-  // TELA 1: LISTA DE SALAS (VISÃO DE FORA)
+  // TELA 1: LISTA DE SALAS
   // ==========================================
   if (!currentLobby) {
     return (
@@ -109,7 +101,7 @@ export default function Salas() {
           <Text style={styles.title}>Salas</Text>
         </View>
 
-        <TouchableOpacity style={styles.createButton} onPress={handleCreateLobby}>
+        <TouchableOpacity style={styles.createButton} onPress={handleOpenCreateModal}>
           <Ionicons name="add-circle" size={24} color="#0c0c0c" />
           <Text style={styles.createButtonText}>Criar Nova Sala</Text>
         </TouchableOpacity>
@@ -125,47 +117,99 @@ export default function Salas() {
               <View style={styles.emptyState}>
                 <Ionicons name="cafe-outline" size={48} color="#666" />
                 <Text style={styles.emptyText}>Nenhuma sala aberta.</Text>
-                <Text style={styles.emptySubText}>Seja o primeiro a criar uma!</Text>
               </View>
             }
-            renderItem={({ item }) => (
-              <View style={styles.lobbyCard}>
-                <View style={styles.lobbyInfo}>
-                  <Text style={styles.lobbyName}>{item.nome}</Text>
-                  <Text style={styles.lobbyHost}>Líder: {item.host_name}</Text>
-                  <View style={styles.lobbyTags}>
-                    <View style={styles.tag}><Text style={styles.tagText}>{item.tipo}</Text></View>
-                    <View style={[styles.tag, { backgroundColor: '#333' }]}>
-                      <Ionicons name="people" size={12} color="#aaa" />
-                      <Text style={styles.tagText}>{item.jogadores_count}/{item.max_jogadores}</Text>
+            renderItem={({ item }) => {
+              const isFull = item.jogadores_count >= item.max_jogadores;
+              return (
+                <View style={styles.lobbyCard}>
+                  <View style={styles.lobbyInfo}>
+                    <Text style={styles.lobbyName}>{item.nome}</Text>
+                    <Text style={styles.lobbyHost}>Líder: {item.host_name}</Text>
+                    <View style={styles.lobbyTags}>
+                      <View style={styles.tag}><Text style={styles.tagText}>{item.tipo}</Text></View>
+                      <View style={[styles.tag, { backgroundColor: isFull ? '#FF450030' : '#333' }]}>
+                        <Ionicons name="people" size={12} color={isFull ? '#FF4500' : '#aaa'} />
+                        <Text style={[styles.tagText, isFull && { color: '#FF4500' }]}>{item.jogadores_count}/{item.max_jogadores}</Text>
+                      </View>
                     </View>
                   </View>
+                  
+                  <View style={{ gap: 8 }}>
+                    <TouchableOpacity 
+                      style={[styles.joinButton, isFull && !isAdmin && { backgroundColor: '#555' }]} 
+                      disabled={isFull && !isAdmin}
+                      onPress={() => handleJoinLobby(item.id, false)}
+                    >
+                      <Text style={styles.joinButtonText}>
+                        {isFull && !isAdmin ? 'Cheia' : 'Entrar'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* BOTÃO EXCLUSIVO DO ADMIN */}
+                    {isAdmin && (
+                      <TouchableOpacity 
+                        style={[styles.joinButton, { backgroundColor: '#8A2BE2' }]} 
+                        onPress={() => handleJoinLobby(item.id, true)}
+                      >
+                        <Ionicons name="eye-off" size={14} color="#fff" style={{marginRight: 4}} />
+                        <Text style={[styles.joinButtonText, { color: '#fff', fontSize: 11 }]}>Espiar</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-                <TouchableOpacity 
-                  style={[styles.joinButton, item.jogadores_count >= item.max_jogadores && { backgroundColor: '#555' }]} 
-                  disabled={item.jogadores_count >= item.max_jogadores}
-                  onPress={() => handleJoinLobby(item.id)}
-                >
-                  <Text style={styles.joinButtonText}>
-                    {item.jogadores_count >= item.max_jogadores ? 'Cheia' : 'Entrar'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+              );
+            }}
           />
         )}
+
+        {/* MODAL DE CONFIGURAÇÃO DE SALA */}
+        <Modal visible={showCreateModal} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Configurar Sala</Text>
+                <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                  <Ionicons name="close" size={24} color="#888" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.inputLabel}>Nome da Sala</Text>
+              <TextInput 
+                style={styles.modalInput} 
+                value={newRoomName} 
+                onChangeText={setNewRoomName} 
+                placeholder="Ex: Resenha do 9º Ano"
+                placeholderTextColor="#666"
+              />
+
+              <Text style={styles.inputLabel}>Máximo de Pessoas</Text>
+              <TextInput 
+                style={styles.modalInput} 
+                value={newRoomLimit} 
+                onChangeText={setNewRoomLimit} 
+                keyboardType="numeric"
+                maxLength={2}
+              />
+
+              <TouchableOpacity style={styles.confirmCreateButton} onPress={handleConfirmCreateLobby}>
+                <Text style={styles.confirmCreateText}>Abrir Sala</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
       </SafeAreaView>
     );
   }
 
   // ==========================================
-  // TELA 2: DENTRO DA SALA (CHAT DE TEXTO)
+  // TELA 2: DENTRO DA SALA
   // ==========================================
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         
-        {/* Cabeçalho de Dentro da Sala */}
         <View style={styles.roomHeader}>
           <TouchableOpacity onPress={handleLeaveLobby} style={styles.leaveButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -174,13 +218,19 @@ export default function Salas() {
             <Text style={styles.roomTitle}>{currentLobby.nome}</Text>
             <Text style={styles.roomSubtitle}>{currentLobby.players_names?.length || 1} participante(s)</Text>
           </View>
-          {/* Botão de Voz preparado para a Fase 2 */}
-          <TouchableOpacity style={styles.voiceButton}>
-             <Ionicons name="mic-off" size={20} color="#666" />
-          </TouchableOpacity>
+          
+          {/* BOTÃO EXCLUSIVO DE DELETAR (ADMIN) */}
+          {isAdmin ? (
+            <TouchableOpacity style={styles.adminDeleteButton} onPress={handleAdminDeleteLobby}>
+              <Ionicons name="trash" size={20} color="#fff" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.voiceButton}>
+               <Ionicons name="mic-off" size={20} color="#666" />
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Participantes na Sala */}
         <View style={styles.participantsBar}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {currentLobby.players_names?.map((pName: string, index: number) => (
@@ -192,7 +242,6 @@ export default function Salas() {
           </ScrollView>
         </View>
 
-        {/* Mensagens do Chat */}
         <FlatList
           data={messages}
           keyExtractor={(_, index) => index.toString()}
@@ -219,7 +268,6 @@ export default function Salas() {
           }}
         />
 
-        {/* Digitar Mensagem */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.textInput}
@@ -247,10 +295,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0c' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
   title: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
-  
   createButton: { backgroundColor: '#00BFFF', marginHorizontal: 16, marginBottom: 16, padding: 14, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   createButtonText: { color: '#0c0c0c', fontSize: 16, fontWeight: 'bold' },
-  
   listContent: { paddingHorizontal: 16, paddingBottom: 20 },
   lobbyCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, marginBottom: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
   lobbyInfo: { flex: 1 },
@@ -259,13 +305,20 @@ const styles = StyleSheet.create({
   lobbyTags: { flexDirection: 'row', marginTop: 8, gap: 8 },
   tag: { backgroundColor: '#00BFFF20', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 },
   tagText: { color: '#bbb', fontSize: 11, fontWeight: '600' },
-  
-  joinButton: { backgroundColor: '#32CD32', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
+  joinButton: { backgroundColor: '#32CD32', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   joinButtonText: { color: '#000', fontWeight: 'bold' },
-  
   emptyState: { alignItems: 'center', marginTop: 60 },
   emptyText: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 16 },
-  emptySubText: { color: '#888', fontSize: 14, marginTop: 8 },
+
+  // Estilos do Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#333' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+  inputLabel: { color: '#888', marginBottom: 8, fontSize: 14 },
+  modalInput: { backgroundColor: '#0c0c0c', color: '#fff', padding: 14, borderRadius: 10, marginBottom: 20, borderWidth: 1, borderColor: '#333' },
+  confirmCreateButton: { backgroundColor: '#00BFFF', padding: 14, borderRadius: 10, alignItems: 'center' },
+  confirmCreateText: { color: '#0c0c0c', fontSize: 16, fontWeight: 'bold' },
 
   roomHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#1a1a2e', borderBottomWidth: 1, borderBottomColor: '#333' },
   leaveButton: { padding: 8, marginRight: 8 },
@@ -273,6 +326,7 @@ const styles = StyleSheet.create({
   roomTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   roomSubtitle: { color: '#00BFFF', fontSize: 12 },
   voiceButton: { backgroundColor: '#333', padding: 10, borderRadius: 20 },
+  adminDeleteButton: { backgroundColor: '#FF4500', padding: 10, borderRadius: 20 },
 
   participantsBar: { backgroundColor: '#151520', paddingVertical: 10, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#222' },
   participantChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#222', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, marginRight: 8, gap: 6 },
@@ -281,7 +335,6 @@ const styles = StyleSheet.create({
   chatContent: { padding: 16, gap: 12 },
   systemMessage: { alignSelf: 'center', backgroundColor: '#333', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginVertical: 4 },
   systemMessageText: { color: '#aaa', fontSize: 11, fontStyle: 'italic' },
-  
   messageBubble: { maxWidth: '80%', padding: 12, borderRadius: 16 },
   messageMe: { alignSelf: 'flex-end', backgroundColor: '#00BFFF', borderBottomRightRadius: 4 },
   messageOther: { alignSelf: 'flex-start', backgroundColor: '#2a2a3e', borderBottomLeftRadius: 4 },
