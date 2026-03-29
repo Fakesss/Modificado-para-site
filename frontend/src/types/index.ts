@@ -1,38 +1,4 @@
-export interface Usuario {
-  id: string;
-  nome: string;
-  email: string;
-  perfil: 'ADMIN' | 'ALUNO_LIDER' | 'ALUNO';
-  turmaId?: string;
-  equipeId?: string;
-  ativo: boolean;
-  streakDias: number;
-  streakUltimoLoginData?: string;
-  pontosTotais: number;
-}
-
-export interface Turma {
-  id: string;
-  nome: string;
-  anoLetivo: number;
-  ativa: boolean;
-}
-
-export interface Equipe {
-  id: string;
-  nome: string;
-  cor: string;
-  turmaId?: string;
-  pontosTotais: number;
-}
-
-export interface RankingItem {
-  id: string;
-  nome: string;
-  cor: string;
-  pontosTotais: number;
-  posicao: number;
-}
+// ... mantenha o restante do arquivo igual e atualize estas interfaces:
 
 export interface Conteudo {
   id: string;
@@ -44,26 +10,9 @@ export interface Conteudo {
   ordem: number;
   abaCategoria: string;
   turmaId?: string;
+  equipeId?: string;   // 🚨 ADICIONADO
+  usuarioId?: string;  // 🚨 ADICIONADO
   ativo: boolean;
-}
-
-export interface Alternativa {
-  letra: string;
-  texto: string;
-  cor: string;
-}
-
-export interface Questao {
-  id: string;
-  exercicioId: string;
-  numero: number;
-  tipoResposta: 'MULTIPLA_ESCOLHA' | 'TEXTO';
-  enunciado: string;
-  imagemBase64?: string;
-  alternativas: Alternativa[];
-  correta: string;
-  pontuacaoMax: number;
-  habilidadesBNCC: string[];
 }
 
 export interface Exercicio {
@@ -76,38 +25,7 @@ export interface Exercicio {
   ativo: boolean;
   turmaId?: string;
   equipeId?: string;
+  usuarioId?: string; // 🚨 ADICIONADO
   pontosPorQuestao: number;
   questoes?: Questao[];
-}
-
-export interface ProgressoVideo {
-  id: string;
-  conteudoId: string;
-  usuarioId: string;
-  tempoAssistidoSeg: number;
-  duracaoSeg: number;
-  concluido: boolean;
-  dataConclusao?: string;
-  pontosGerados: number;
-}
-
-export interface Submissao {
-  id: string;
-  exercicioId: string;
-  usuarioId: string;
-  data: string;
-  acertos: number;
-  erros: number;
-  nota: number;
-  pontosGerados: number;
-  detalhesQuestoes: DetalheQuestao[];
-}
-
-export interface DetalheQuestao {
-  questaoId: string;
-  numero: number;
-  resposta: string;
-  correta: string;
-  acertou: boolean;
-  habilidadesBNCC: string[];
 }
