@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Platform, Modal, Alert } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, TouchableOpacity, Text, StyleSheet, Platform, Modal, Alert, AppState, Animated, PanResponder, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,8 @@ import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 import { Equipe } from '../../src/types';
 import OnlineHeartbeat from '../../src/components/OnlineHeartbeat';
+import { WebView } from 'react-native-webview';
+import { DeviceEventEmitter } from 'react-native';
 
 import { socket, setActiveMatchData } from '../../src/services/socket';
 
@@ -17,6 +19,11 @@ const TEAM_COLORS: Record<string, string> = {
   'equipe-omega': '#32CD32',
 };
 
+const { width, height } = Dimensions.get('window');
+
+// Truque para Iframe na Web e WebView no Celular
+const WebIframe = Platform.OS === 'web' ? (props: any) => React.createElement('iframe', props) : View;
+
 function AdminBanner() {
   const { user, isAdminViewingAsStudent, setAdminViewingAsStudent } = useAuth();
   const router = useRouter();
@@ -25,7 +32,7 @@ function AdminBanner() {
   return (
     <TouchableOpacity style={styles.adminBanner} onPress={handleBackToAdmin}>
       <Ionicons name="arrow-back" size={18} color="#FFD700" />
-      <Text style={styles.adminBannerText}>Voltar ao Painel do Administrador</Text>
+      <Text style={styles.adminBannerText}>Voltar ao Painel</Text>
     </TouchableOpacity>
   );
 }
@@ -42,6 +49,41 @@ export default function TabsLayout() {
 
   const [convite, setConvite] = useState<any>(null);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+
+  // Estados da Chamada de Voz
+  const [jitsiRoom, setJitsiRoom] = useState<string | null>(null);
+  const pan = useRef(new Animated.ValueXY()).current;
+  
+  // 🚨 SISTEMA MAGNÉTICO: Não deixa o botão sair da tela!
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+      onPanResponderRelease: () => {
+        pan.flattenOffset();
+        let newX = pan.x._value;
+        let newY = pan.y._value;
+
+        // Limites da tela (A pílula tem 220 de largura e 50 de altura)
+        const minX = -(width * 0.05);
+        const maxX = width - (width * 0.05) - 220;
+        const minY = -(height * 0.15);
+        const maxY = height - (height * 0.15) - 50;
+
+        if (newX < minX) newX = minX;
+        if (newX > maxX) newX = maxX;
+        if (newY < minY) newY = minY;
+        if (newY > maxY) newY = maxY;
+
+        Animated.spring(pan, {
+          toValue: { x: newX, y: newY },
+          useNativeDriver: false
+        }).start(() => {
+          pan.extractOffset();
+        });
+      },
+    })
+  ).current;
 
   useEffect(() => { loadTeamColor(); }, [user?.equipeId, isAdminViewingAsStudent]);
 
@@ -62,44 +104,27 @@ export default function TabsLayout() {
   useEffect(() => {
     if (!user) return;
 
-    const registrarJogador = () => {
-        socket.emit('register_player', { name: user.nome, user_id: user.id });
-    };
+    const registrarJogador = () => socket.emit('register_player', { name: user.nome, user_id: user.id });
+    if (socket.connected) { registrarJogador(); socket.emit('update_status', { status: 'MENU' }); } 
+    else { socket.connect(); }
 
-    if (socket.connected) {
-        registrarJogador();
-        socket.emit('update_status', { status: 'MENU' });
-    } else {
-        socket.connect();
-    }
-
-    const onConnect = () => {
-        registrarJogador();
-        socket.emit('update_status', { status: 'MENU' });
-    };
-
+    const onConnect = () => { registrarJogador(); socket.emit('update_status', { status: 'MENU' }); };
     socket.on('connect', onConnect);
 
     const identityInterval = setInterval(() => {
-        if (socket.connected) {
-            registrarJogador();
-            socket.emit('update_status', { status: 'MENU' });
-        }
+        if (socket.connected) { registrarJogador(); socket.emit('update_status', { status: 'MENU' }); }
     }, 10000);
 
     const onReceiveInvite = (data: any) => setConvite(data);
-    const onInviteFeedback = (data: any) => Alert.alert('Central de Jogos', data.msg);
+    const onInviteFeedback = (data: any) => Alert.alert('Central', data.msg);
     const onInviteError = (data: any) => Alert.alert('Aviso', data.msg);
     const onOnlineUsersList = (data: any[]) => setOnlineUsers(data);
     
     const onMatchFound = (data: any) => {
       setActiveMatchData(data);
       setConvite(null);
-      if (data.game_type === 'arcade') {
-          router.push('/arcade_multi');
-      } else {
-          router.push('/tictactoe'); 
-      }
+      if (data.game_type === 'arcade') router.push('/arcade_multi');
+      else router.push('/tictactoe'); 
     };
 
     socket.on('receive_invite', onReceiveInvite);
@@ -107,6 +132,18 @@ export default function TabsLayout() {
     socket.on('invite_error', onInviteError);
     socket.on('online_users_list', onOnlineUsersList);
     socket.on('match_found', onMatchFound);
+
+    const openVoiceListener = DeviceEventEmitter.addListener('open_voice_call', (data) => {
+      setJitsiRoom(`MatematicaTurbo_Sala_${data.roomId}`);
+      pan.setOffset({ x: 0, y: 0 });
+      pan.setValue({ x: 0, y: 0 }); 
+    });
+
+    const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState.match(/inactive|background/)) {
+        setJitsiRoom(null);
+      }
+    });
 
     return () => {
       clearInterval(identityInterval);
@@ -116,23 +153,16 @@ export default function TabsLayout() {
       socket.off('invite_error', onInviteError);
       socket.off('online_users_list', onOnlineUsersList);
       socket.off('match_found', onMatchFound);
+      openVoiceListener.remove();
+      appStateSubscription.remove();
     };
   }, [user]);
 
   const aceitarConvite = () => {
-    socket.emit('accept_invite', { 
-        from_sid: convite.from_sid, 
-        game_type: convite.game_type,
-        modo_operacao: convite.modo_operacao
-    });
+    socket.emit('accept_invite', { from_sid: convite.from_sid, game_type: convite.game_type, modo_operacao: convite.modo_operacao });
     setConvite(null);
   };
-
-  const recusarConvite = () => {
-    socket.emit('decline_invite', { from_sid: convite.from_sid });
-    setConvite(null);
-  };
-
+  const recusarConvite = () => { socket.emit('decline_invite', { from_sid: convite.from_sid }); setConvite(null); };
   const bloquearJogador = () => {
     const target = onlineUsers.find(u => u.sid === convite.from_sid);
     if (target) {
@@ -142,11 +172,52 @@ export default function TabsLayout() {
     setConvite(null);
   };
 
+  // URL bloqueando todo o vídeo para garantir 100% de performance na voz
+  const jitsiUrl = `https://meet.jit.si/${jitsiRoom}#config.prejoinPageEnabled=false&config.startAudioOnly=true&config.disableVideo=true&config.startWithVideoMuted=true`;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <OnlineHeartbeat />
       <AdminBanner />
       <NeonLineSimple color={teamColor} />
+
+      {/* 🚨 NOVA PÍLULA FLUTUANTE (Compacta e Segura) */}
+      {jitsiRoom && (
+        <Animated.View style={[styles.floatingCallPill, { transform: pan.getTranslateTransform() }]}>
+          
+          {/* Lado Verde: Área de Arrastar */}
+          <View style={styles.dragHandle} {...panResponder.panHandlers}>
+            <Ionicons name="mic" size={20} color="#000" />
+            <Text style={styles.dragHandleText}>Voz Ativa</Text>
+          </View>
+
+          {/* Lado Vermelho: Botão de Desligar */}
+          <TouchableOpacity style={styles.hangupButton} onPress={() => setJitsiRoom(null)}>
+            <Ionicons name="call" size={20} color="#fff" style={{transform: [{rotate: '135deg'}]}} />
+          </TouchableOpacity>
+          
+          {/* Caixa Mágica: O Jitsi está rodando invisível aqui dentro! */}
+          <View style={{ position: 'absolute', width: 1, height: 1, opacity: 0.01, overflow: 'hidden' }}>
+            {Platform.OS === 'web' ? (
+              <WebIframe 
+                src={jitsiUrl}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+                allow="camera; microphone; display-capture"
+              />
+            ) : (
+              <WebView 
+                source={{ uri: jitsiUrl }}
+                style={{ flex: 1 }}
+                allowsInlineMediaPlayback={true}
+                mediaPlaybackRequiresUserAction={false}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+              />
+            )}
+          </View>
+
+        </Animated.View>
+      )}
 
       <Modal visible={!!convite} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -158,18 +229,15 @@ export default function TabsLayout() {
             <Text style={styles.modalText}>
               <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : 'Matemática Turbo'}!
             </Text>
-
             <View style={{ width: '100%', gap: 10, marginTop: 20 }}>
               <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#32CD32' }]} onPress={aceitarConvite}>
                 <Ionicons name="checkmark-circle" size={20} color="#000" />
                 <Text style={[styles.btnText, { color: '#000' }]}>ACEITAR E JOGAR</Text>
               </TouchableOpacity>
-              
               <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#E74C3C' }]} onPress={recusarConvite}>
                 <Ionicons name="close-circle" size={20} color="#FFF" />
                 <Text style={styles.btnText}>RECUSAR</Text>
               </TouchableOpacity>
-
               <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#333' }]} onPress={bloquearJogador}>
                 <Ionicons name="shield" size={20} color="#888" />
                 <Text style={[styles.btnText, { color: '#888' }]}>BLOQUEAR POR 5 MINUTOS</Text>
@@ -195,16 +263,12 @@ export default function TabsLayout() {
           tabBarLabelStyle: { fontSize: 12, fontWeight: '600', marginBottom: Platform.OS === 'android' ? 4 : 0 },
         }}
       >
-        {/* ABAS VISÍVEIS (Com a nova aba de Salas) */}
         <Tabs.Screen name="index" options={{ title: 'Início', tabBarIcon: ({ color, size }) => (<Ionicons name="home" size={size} color={color} />) }} />
         <Tabs.Screen name="jogadores" options={{ title: 'Online', tabBarIcon: ({ color, size }) => (<Ionicons name="radio" size={size} color={color} /> ) }} />
         <Tabs.Screen name="salas" options={{ title: 'Salas', tabBarIcon: ({ color, size }) => (<Ionicons name="chatbubbles" size={size} color={color} /> ) }} />
         <Tabs.Screen name="jogo" options={{ title: 'Jogos', tabBarIcon: ({ color, size }) => (<Ionicons name="game-controller" size={size} color={color} />), tabBarBadge: '🧪', tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 } }} />
-        
-        {/* Aba Equipe: Só aparece para líder! */}
         <Tabs.Screen name="equipe" options={{ title: 'Equipe', href: isLeader ? undefined : null, tabBarIcon: ({ color, size }) => (<Ionicons name="people" size={size} color={color} />) }} />
-
-        {/* ABAS OCULTADAS (Para não poluir o menu inferior) */}
+        
         <Tabs.Screen name="ranking" options={{ href: null }} />
         <Tabs.Screen name="conteudos" options={{ href: null }} />
         <Tabs.Screen name="exercicios" options={{ href: null }} />
@@ -227,5 +291,45 @@ const styles = StyleSheet.create({
   modalTitle: { color: '#FFF', fontSize: 22, fontWeight: '900', marginBottom: 5 },
   modalText: { color: '#AAA', fontSize: 16, textAlign: 'center', marginBottom: 10 },
   btnAction: { flexDirection: 'row', width: '100%', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  btnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' }
+  btnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+
+  // 🚨 Estilos da Nova Pílula Flutuante
+  floatingCallPill: {
+    position: 'absolute',
+    top: height * 0.15,
+    left: width * 0.05,
+    width: 220,
+    height: 50,
+    backgroundColor: '#32CD32', // Fundo Verde
+    borderRadius: 25,
+    zIndex: 9999,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dragHandle: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 20,
+    height: '100%',
+  },
+  dragHandleText: {
+    color: '#000',
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
+  hangupButton: {
+    backgroundColor: '#E74C3C',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  }
 });

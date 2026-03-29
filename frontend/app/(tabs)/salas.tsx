@@ -1,17 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Modal, RefreshControl
+  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Modal, RefreshControl, DeviceEventEmitter
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import { socket } from '../../src/services/socket';
-import { useFocusEffect } from 'expo-router';
-import * as FileSystem from 'expo-file-system/legacy';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 export default function Salas() {
   const { user } = useAuth();
+  const router = useRouter();
   const isAdmin = user?.role === 'ADMIN' || user?.email === 'danielprofessormatematica@gmail.com';
   
   const [lobbies, setLobbies] = useState<any[]>([]);
@@ -25,6 +26,15 @@ export default function Salas() {
   const [messages, setMessages] = useState<any[]>([]);
   const [messageText, setMessageText] = useState('');
 
+  const [showChallengeModal, setShowChallengeModal] = useState(false);
+  const [arcadeModeSelect, setArcadeModeSelect] = useState(false);
+  const [hiddenChallenges, setHiddenChallenges] = useState<Set<string>>(new Set());
+
+  const flatListRef = useRef<FlatList>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
   useEffect(() => {
     if (!socket.connected) socket.connect();
 
@@ -34,12 +44,24 @@ export default function Salas() {
     }
 
     socket.on('lobbies_list', (data) => { setLobbies(data); setLoading(false); setRefreshing(false); });
-    socket.on('lobby_joined', (data) => { setCurrentLobby(data); setMessages(data.messages || []); setShowCreateModal(false); });
+    
+    socket.on('lobby_joined', (data) => { 
+      setCurrentLobby(data); 
+      setMessages(data.messages || []); 
+      setShowCreateModal(false); 
+      setHiddenChallenges(new Set()); 
+      setUnreadCount(0);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
+    });
+    
     socket.on('lobby_update', (data) => { setCurrentLobby(data); });
     socket.on('lobby_left', () => { setCurrentLobby(null); setMessages([]); socket.emit('get_lobbies', {}); });
-    socket.on('lobby_message', (msg) => { setMessages((prev) => [...prev, msg]); });
     
-    // 🚨 Escuta a mensagem apagada para atualizar a tela na hora
+    socket.on('lobby_message', (msg) => { 
+      setMessages((prev) => [...prev, msg]);
+      if (!isAtBottom) setUnreadCount((prev) => prev + 1);
+    });
+
     socket.on('lobby_message_updated', (updatedMsg) => {
       setMessages((prev) => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
     });
@@ -49,11 +71,43 @@ export default function Salas() {
       else Alert.alert('Aviso', err.msg); 
     });
 
+    socket.on('lobby_challenge_created', (desafio) => {
+      setCurrentLobby((prev: any) => {
+        if (!prev) return prev;
+        return { ...prev, desafios: { ...(prev.desafios || {}), [desafio.id]: desafio } };
+      });
+    });
+
+    socket.on('lobby_challenge_started', (data) => {
+      setCurrentLobby((prev: any) => {
+        if (!prev || !prev.desafios || !prev.desafios[data.challenge_id]) return prev;
+        const updatedDesafios = { ...prev.desafios };
+        updatedDesafios[data.challenge_id] = {
+          ...updatedDesafios[data.challenge_id],
+          status: 'ACEITO',
+          room_id: data.room_id,
+          acceptor_name: data.p2_name
+        };
+        return { ...prev, desafios: updatedDesafios };
+      });
+    });
+
+    socket.on('lobby_challenge_cancelled', (data) => {
+      setCurrentLobby((prev: any) => {
+        if (!prev || !prev.desafios) return prev;
+        const updatedDesafios = { ...prev.desafios };
+        delete updatedDesafios[data.challenge_id];
+        return { ...prev, desafios: updatedDesafios };
+      });
+    });
+
     return () => {
       socket.off('lobbies_list'); socket.off('lobby_joined'); socket.off('lobby_update');
-      socket.off('lobby_left'); socket.off('lobby_message'); socket.off('lobby_error'); socket.off('lobby_message_updated');
+      socket.off('lobby_left'); socket.off('lobby_message'); socket.off('lobby_error'); 
+      socket.off('lobby_message_updated'); socket.off('lobby_challenge_created');
+      socket.off('lobby_challenge_started'); socket.off('lobby_challenge_cancelled');
     };
-  }, [user]);
+  }, [user, isAtBottom]);
 
   useFocusEffect(
     useCallback(() => {
@@ -68,19 +122,29 @@ export default function Salas() {
     setTimeout(() => setRefreshing(false), 3000); 
   }, []);
 
-  // ==========================================
-  // EXPORTAR TXT (Ativado para Web e Mobile)
-  // ==========================================
+  const handleScroll = (event: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const paddingToBottom = 50;
+    const isBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+    
+    setIsAtBottom(isBottom);
+    setShowScrollButton(!isBottom);
+    if (isBottom) setUnreadCount(0);
+  };
+
+  const scrollToBottom = () => {
+    flatListRef.current?.scrollToEnd({ animated: true });
+    setUnreadCount(0);
+  };
+
   const handleExportTXT = async () => {
     if (!currentLobby || messages.length === 0) {
       if (Platform.OS === 'web') return window.alert('O chat está vazio.');
       return Alert.alert('Aviso', 'O chat está vazio.');
     }
-
     try {
       const chatText = messages.map(m => `[${m.time}] ${m.sender}: ${m.apagada ? '(Mensagem Apagada) ' + m.text : m.text}`).join('\n');
       const fileName = `Chat_${currentLobby.nome.replace(/\s+/g, '_')}.txt`;
-      
       if (Platform.OS === 'web') {
         const blob = new Blob([chatText], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
@@ -90,9 +154,9 @@ export default function Salas() {
         a.click();
         URL.revokeObjectURL(url);
       } else {
-        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-        await FileSystem.writeAsStringAsync(fileUri, chatText);
-        await Sharing.shareAsync(fileUri);
+        const meuArquivo = new File(Paths.cache, fileName);
+        meuArquivo.write(chatText);
+        await Sharing.shareAsync(meuArquivo.uri);
       }
     } catch (error) {
       console.error('Erro ao exportar TXT:', error);
@@ -129,7 +193,6 @@ export default function Salas() {
     if (currentLobby) socket.emit('leave_lobby', { lobby_id: currentLobby.id });
   };
 
-  // 🚨 Tratamento de Caixas de Confirmação para a Web
   const handleAdminDeleteLobby = () => {
     const confirmAction = () => socket.emit('admin_delete_lobby', { lobby_id: currentLobby.id });
     if (Platform.OS === 'web') {
@@ -142,12 +205,10 @@ export default function Salas() {
     }
   };
 
-  // 🚨 Função de Apagar Mensagem (Soft Delete)
   const handleLongPressMessage = (msg: any) => {
     if (msg.sender === 'SISTEMA' || msg.apagada) return;
-
     const isMe = msg.sender_id === user?.id;
-    if (!isMe && !isAdmin) return; // Só apaga se for dono da msg ou for Admin
+    if (!isMe && !isAdmin) return;
 
     const confirmDelete = () => {
       socket.emit('delete_lobby_message', { lobby_id: currentLobby.id, message_id: msg.id, is_admin: isAdmin && !isMe });
@@ -167,6 +228,30 @@ export default function Salas() {
     if (messageText.trim() === '' || !currentLobby) return;
     socket.emit('send_lobby_message', { lobby_id: currentLobby.id, text: messageText.trim() });
     setMessageText('');
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+  };
+
+  const handleLancarDesafio = (gameType: string, modoOperacao: string = 'misto') => {
+    socket.emit('create_lobby_challenge', { lobby_id: currentLobby.id, game_type: gameType, modo_operacao: modoOperacao });
+    setShowChallengeModal(false);
+    setArcadeModeSelect(false);
+  };
+
+  const handleAceitarDesafio = (challengeId: string) => {
+    socket.emit('accept_lobby_challenge', { lobby_id: currentLobby.id, challenge_id: challengeId });
+  };
+
+  const handleAssistirPartida = (roomId: string, gameType: string) => {
+    if (gameType === 'tictactoe') router.push(`/tictactoe?spectate=${roomId}`);
+    else if (gameType === 'arcade') router.push(`/arcade_multi?spectate=${roomId}`);
+  };
+
+  const handleCancelarDesafio = (challengeId: string) => {
+    socket.emit('cancel_lobby_challenge', { lobby_id: currentLobby.id, challenge_id: challengeId });
+  };
+
+  const handleHideChallengeLocal = (challengeId: string) => {
+    setHiddenChallenges((prev) => new Set(prev).add(challengeId));
   };
 
   if (!currentLobby) {
@@ -252,10 +337,15 @@ export default function Salas() {
     );
   }
 
+  const desafiosAtivos = Object.values(currentLobby.desafios || {}).filter(
+    (d: any) => !hiddenChallenges.has(d.id) && (d.status === 'ABERTO' || d.status === 'ACEITO')
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         
+        {/* ================= HEADER ================= */}
         <View style={styles.roomHeader}>
           <TouchableOpacity onPress={handleLeaveLobby} style={styles.leaveButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -265,47 +355,134 @@ export default function Salas() {
             <Text style={styles.roomSubtitle}>{currentLobby.players_names?.length || 1} participante(s)</Text>
           </View>
           
-          {isAdmin ? (
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TouchableOpacity style={[styles.voiceButton, { backgroundColor: '#333' }]} onPress={handleExportTXT}>
-                 <Ionicons name="download" size={20} color="#00BFFF" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.adminDeleteButton} onPress={handleAdminDeleteLobby}>
-                <Ionicons name="trash" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity style={styles.voiceButton}>
-               <Ionicons name="mic-off" size={20} color="#666" />
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {/* 🚨 BOTÃO DE LIGAR VOZ (Envia a ordem para o _layout.tsx) */}
+            <TouchableOpacity 
+              style={[styles.voiceButton, { backgroundColor: '#32CD3230' }]} 
+              onPress={() => DeviceEventEmitter.emit('open_voice_call', { roomId: currentLobby.id })}
+            >
+               <Ionicons name="call" size={20} color="#32CD32" />
             </TouchableOpacity>
-          )}
+
+            <TouchableOpacity style={[styles.voiceButton, { backgroundColor: '#FFD70030' }]} onPress={() => setShowChallengeModal(true)}>
+               <Ionicons name="flash" size={20} color="#FFD700" />
+            </TouchableOpacity>
+            
+            {isAdmin && (
+              <>
+                <TouchableOpacity style={styles.voiceButton} onPress={handleExportTXT}>
+                  <Ionicons name="download" size={20} color="#00BFFF" />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.adminDeleteButton} onPress={handleAdminDeleteLobby}>
+                  <Ionicons name="trash" size={20} color="#fff" />
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
 
+        {/* ================= BARRA DE PARTICIPANTES (FILTRO ANTI-CLONE) ================= */}
         <View style={styles.participantsBar}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {currentLobby.players_names?.map((pName: string, index: number) => (
+            {Array.from(new Set(currentLobby.players_names || [])).map((pName: unknown, index: number) => (
               <View key={index} style={styles.participantChip}>
                 <Ionicons name="person-circle" size={16} color="#00BFFF" />
-                <Text style={styles.participantName}>{pName}</Text>
+                <Text style={styles.participantName}>{pName as string}</Text>
               </View>
             ))}
           </ScrollView>
         </View>
 
+        {/* ================= ÁREA DE DESAFIOS (NO TOPO) ================= */}
+        {desafiosAtivos.length > 0 && (
+          <View style={styles.topChallengeArea}>
+            {desafiosAtivos.map((desafio: any) => {
+              const isMeChallenger = desafio.challenger_sid === socket.id;
+              const isMeAcceptor = desafio.acceptor_name && desafio.acceptor_name === user?.nome;
+              const nomeJogo = desafio.game_type === 'tictactoe' ? 'Jogo da Velha' : 'Arcade Mode';
+
+              if (desafio.status === 'ABERTO') {
+                return (
+                  <View key={desafio.id} style={styles.floatingChallengeCard}>
+                    <TouchableOpacity style={styles.closeChallengeButton} onPress={() => handleHideChallengeLocal(desafio.id)}>
+                      <Ionicons name="close" size={20} color="#888" />
+                    </TouchableOpacity>
+
+                    <Text style={styles.challengeTitle}>⚔️ Desafio Lançado!</Text>
+                    <Text style={styles.challengeText}>
+                      <Text style={{fontWeight: 'bold', color: '#00BFFF'}}>{desafio.challenger_name}</Text> quer jogar {nomeJogo}.
+                    </Text>
+                    
+                    <View style={styles.challengeButtonsRow}>
+                      {isMeChallenger ? (
+                        <>
+                          <Text style={{color: '#888', fontStyle: 'italic', alignSelf: 'center', marginRight: 10}}>Aguardando...</Text>
+                          <TouchableOpacity style={[styles.challengeButton, { backgroundColor: '#FF4500' }]} onPress={() => handleCancelarDesafio(desafio.id)}>
+                            <Text style={styles.challengeButtonText}>Cancelar</Text>
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <TouchableOpacity style={[styles.challengeButton, { flex: 1 }]} onPress={() => handleAceitarDesafio(desafio.id)}>
+                          <Text style={styles.challengeButtonText}>Aceitar Batalha</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                );
+              }
+
+              if (desafio.status === 'ACEITO') {
+                return (
+                  <View key={desafio.id} style={[styles.floatingChallengeCard, { borderColor: '#32CD32' }]}>
+                    <TouchableOpacity style={styles.closeChallengeButton} onPress={() => handleHideChallengeLocal(desafio.id)}>
+                      <Ionicons name="close" size={20} color="#888" />
+                    </TouchableOpacity>
+
+                    <Text style={[styles.challengeTitle, { color: '#32CD32' }]}>🔥 Partida em Andamento</Text>
+                    <Text style={styles.challengeText}>
+                      <Text style={{color: '#00BFFF'}}>{desafio.challenger_name}</Text> ⚔️ <Text style={{color: '#FF4500'}}>{desafio.acceptor_name}</Text>
+                    </Text>
+
+                    <TouchableOpacity 
+                      style={[styles.challengeButton, { backgroundColor: '#8A2BE2', marginTop: 8 }]} 
+                      onPress={() => handleAssistirPartida(desafio.room_id, desafio.game_type)}
+                      disabled={isMeChallenger || isMeAcceptor}
+                    >
+                      <Ionicons name={isMeChallenger || isMeAcceptor ? "game-controller" : "eye"} size={16} color="#fff" style={{marginRight: 6}} />
+                      <Text style={styles.challengeButtonText}>
+                        {isMeChallenger || isMeAcceptor ? 'Você está jogando' : 'Assistir Partida'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
+              return null;
+            })}
+          </View>
+        )}
+
+        {/* ================= CHAT FLATLIST ================= */}
         <FlatList
+          ref={flatListRef}
           data={messages}
-          keyExtractor={(_, index) => index.toString()}
+          keyExtractor={(item, index) => index.toString()}
           contentContainerStyle={styles.chatContent}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          onContentSizeChange={() => {
+            if (isAtBottom) {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }
+          }}
           renderItem={({ item }) => {
             const isSystem = item.sender === 'SISTEMA';
             const isMe = item.sender_id === user?.id && !isSystem;
 
             if (isSystem) return <View style={styles.systemMessage}><Text style={styles.systemMessageText}>{item.text}</Text></View>;
 
-            // 🚨 RENDERIZAÇÃO DA MENSAGEM APAGADA
             if (item.apagada) {
               if (isAdmin) {
-                // Admin vê borrado/transparente
                 return (
                   <View style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther, { opacity: 0.6 }]}>
                     {!isMe && <Text style={styles.messageSender}>{item.sender}</Text>}
@@ -314,7 +491,6 @@ export default function Salas() {
                   </View>
                 );
               } else {
-                // Alunos veem a restrição
                 return (
                   <View style={[styles.messageBubble, { alignSelf: isMe ? 'flex-end' : 'flex-start', backgroundColor: '#333' }]}>
                     <Text style={{ color: '#aaa', fontStyle: 'italic', fontSize: 13 }}>🚫 Esta mensagem foi apagada</Text>
@@ -323,13 +499,8 @@ export default function Salas() {
               }
             }
 
-            // Mensagem Normal (Com suporte a Long Press para apagar)
             return (
-              <TouchableOpacity 
-                activeOpacity={0.8}
-                onLongPress={() => handleLongPressMessage(item)}
-                style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther]}
-              >
+              <TouchableOpacity activeOpacity={0.8} onLongPress={() => handleLongPressMessage(item)} style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther]}>
                 {!isMe && <Text style={styles.messageSender}>{item.sender}</Text>}
                 <Text style={styles.messageText}>{item.text}</Text>
                 <Text style={styles.messageTime}>{item.time}</Text>
@@ -337,6 +508,18 @@ export default function Salas() {
             );
           }}
         />
+
+        {/* ================= BOTÃO FLUTUANTE DE DESCER TELA ================= */}
+        {showScrollButton && (
+          <TouchableOpacity style={styles.scrollToBottomButton} onPress={scrollToBottom}>
+            <Ionicons name="chevron-down" size={24} color="#fff" />
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>{unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
 
         <View style={styles.inputContainer}>
           <TextInput
@@ -347,6 +530,53 @@ export default function Salas() {
             <Ionicons name="send" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
+
+        {/* ================= MODAL DE LANÇAR DESAFIO (COM ESCOLHA DE MODO) ================= */}
+        <Modal visible={showChallengeModal} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Lançar Desafio</Text>
+                <TouchableOpacity onPress={() => { setShowChallengeModal(false); setArcadeModeSelect(false); }}>
+                  <Ionicons name="close" size={24} color="#888" />
+                </TouchableOpacity>
+              </View>
+              
+              {!arcadeModeSelect ? (
+                <>
+                  <Text style={styles.inputLabel}>Escolha o modo de jogo para batalhar contra a sala:</Text>
+                  <View style={{ gap: 12, marginTop: 10 }}>
+                    <TouchableOpacity style={styles.gameOptionButton} onPress={() => handleLancarDesafio('tictactoe')}>
+                      <Ionicons name="grid-outline" size={24} color="#00BFFF" />
+                      <Text style={styles.gameOptionText}>Jogo da Velha (Matemático)</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={[styles.gameOptionButton, { borderColor: '#FF4500' }]} onPress={() => setArcadeModeSelect(true)}>
+                      <Ionicons name="rocket-outline" size={24} color="#FF4500" />
+                      <Text style={[styles.gameOptionText, { color: '#FF4500' }]}>Arcade Mode</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.inputLabel}>Escolha o tipo de operação para o Arcade:</Text>
+                  <View style={{ gap: 8, marginTop: 10 }}>
+                    {['soma', 'subtracao', 'multiplicacao', 'divisao', 'potenciacao', 'misto'].map((modo) => (
+                      <TouchableOpacity key={modo} style={[styles.gameOptionButton, { padding: 12, borderColor: '#FF4500', justifyContent: 'center' }]} onPress={() => handleLancarDesafio('arcade', modo)}>
+                        <Text style={{ color: '#FF4500', fontWeight: 'bold', textTransform: 'uppercase', fontSize: 14 }}>
+                          {modo === 'potenciacao' ? 'Potência e Raiz' : modo}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                    <TouchableOpacity style={{ marginTop: 15, padding: 10, alignItems: 'center' }} onPress={() => setArcadeModeSelect(false)}>
+                      <Text style={{ color: '#888', fontWeight: 'bold' }}>Voltar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
 
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -393,7 +623,7 @@ const styles = StyleSheet.create({
   participantChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#222', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, marginRight: 8, gap: 6 },
   participantName: { color: '#ccc', fontSize: 12 },
 
-  chatContent: { padding: 16, gap: 12 },
+  chatContent: { padding: 16, gap: 12, paddingBottom: 20 },
   systemMessage: { alignSelf: 'center', backgroundColor: '#333', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginVertical: 4 },
   systemMessageText: { color: '#aaa', fontSize: 11, fontStyle: 'italic' },
   messageBubble: { maxWidth: '80%', padding: 12, borderRadius: 16 },
@@ -406,4 +636,20 @@ const styles = StyleSheet.create({
   inputContainer: { flexDirection: 'row', padding: 16, backgroundColor: '#1a1a2e', alignItems: 'center', gap: 12 },
   textInput: { flex: 1, backgroundColor: '#2a2a3e', color: '#fff', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15 },
   sendButton: { backgroundColor: '#00BFFF', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+
+  topChallengeArea: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: '#0c0c0c', borderBottomWidth: 1, borderBottomColor: '#222' },
+  floatingChallengeCard: { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#FFD700', borderRadius: 12, padding: 12, marginBottom: 10, position: 'relative' },
+  closeChallengeButton: { position: 'absolute', top: 8, right: 8, zIndex: 10, padding: 4 },
+  challengeTitle: { color: '#FFD700', fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
+  challengeText: { color: '#ccc', fontSize: 13, marginBottom: 8, paddingRight: 20 },
+  challengeButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
+  challengeButton: { backgroundColor: '#32CD32', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  challengeButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  
+  scrollToBottomButton: { position: 'absolute', right: 20, bottom: 90, backgroundColor: '#333', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3 },
+  unreadBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: '#00BFFF', width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  unreadText: { color: '#000', fontSize: 10, fontWeight: 'bold' },
+
+  gameOptionButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0c0c0c', borderWidth: 1, borderColor: '#00BFFF', padding: 16, borderRadius: 12, gap: 12 },
+  gameOptionText: { color: '#00BFFF', fontSize: 16, fontWeight: 'bold' }
 });
