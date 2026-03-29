@@ -392,7 +392,6 @@ async def zerar_todos_pontos(current_user: dict = Depends(require_admin)):
     await db.equipes.update_many({}, {"$set": {"pontosTotais": 0}})
     return {"message": "Todos os pontos foram zerados com sucesso."}
 
-
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     query = {"ativo": True, "is_deleted": {"$ne": True}}
@@ -558,27 +557,30 @@ async def concluir_conteudo(conteudo_id: str, current_user: dict = Depends(get_c
 
 
 # =====================================================================
-# ROTA DE RELATÓRIO GERAL (Corrigida a Média Geral e exclusão de lixo)
+# ROTA DE RELATÓRIO GERAL (Submissões totais = Exs + Videos + Docs)
 # =====================================================================
 @api_router.get("/relatorios/geral")
 async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_u = await db.usuarios.count_documents({"ativo": True})
     
-    # 1. Pega apenas exercícios que NÃO foram apagados
     exercicios_ativos = await db.exercicios.find({"is_deleted": {"$ne": True}}).to_list(10000)
     total_e = len(exercicios_ativos)
     ids_ativos = [e["id"] for e in exercicios_ativos]
     
-    # 2. Pega as submissões apenas dos exercícios válidos e que não foram ocultadas no botão de limpar
-    submissoes = await db.submissoes.find({
+    # Pega as submissões de exercícios
+    submissoes_exercicios = await db.submissoes.find({
         "exercicioId": {"$in": ids_ativos},
         "ignorarNoRelatorioBNCC": {"$ne": True}
     }).to_list(10000)
-    total_s = len(submissoes)
     
-    # 3. Faz o cálculo preciso da Média das Médias
+    # Pega as submissões de vídeos e documentos concluídos
+    videos_e_docs_concluidos = await db.conteudos_concluidos.count_documents({})
+    
+    # A Soma Total Mágica (Exercícios + Tudo mais)
+    total_s = len(submissoes_exercicios) + videos_e_docs_concluidos
+    
     notas_por_aluno = {}
-    for sub in submissoes:
+    for sub in submissoes_exercicios:
         uid = sub.get("usuarioId")
         nota = float(sub.get("nota", 0.0))
         if uid not in notas_por_aluno:
