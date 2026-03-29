@@ -49,13 +49,27 @@ export default function Ranking() {
     );
   }
 
-  // 🚨 LÓGICA DE CÁLCULO DE ALTURA DINÂMICA
-  const maxPoints = ranking.length > 0 ? ranking[0].pontosTotais : 0;
-  
-  const getDynamicHeight = (points: number, position: number) => {
-    if (maxPoints === 0) return position === 1 ? 140 : position === 2 ? 120 : 100; // Escadinha padrão se não houver pontos
-    return Math.max(85, (points / maxPoints) * 140);
+  // 🚨 MATEMÁTICA RELATIVA TAMBÉM APLICADA AQUI
+  const p1 = ranking.length > 0 ? ranking[0].pontosTotais : 0;
+  const p2 = ranking.length > 1 ? ranking[1].pontosTotais : 0;
+  const p3 = ranking.length > 2 ? ranking[2].pontosTotais : 0;
+
+  const getDynamicHeights = () => {
+    if (p1 === 0) return { 1: 140, 2: 115, 3: 90 };
+    if ((p1 - p3) <= p1 * 0.10) return { 1: 140, 2: 115, 3: 90 };
+
+    const h1 = 140;
+    const ratio2 = p2 / p1;
+    const h2 = 95 + (ratio2 * 35); 
+    
+    const ratio3 = p2 > 0 ? (p3 / p2) : 0;
+    const maxH3 = h2 - 10;
+    const h3 = 75 + (ratio3 * (maxH3 - 75)); 
+
+    return { 1: h1, 2: h2, 3: h3 };
   };
+
+  const heights = getDynamicHeights();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -83,7 +97,7 @@ export default function Ranking() {
             {ranking.length >= 2 ? (
               <>
                 <View style={[styles.teamNamePill, { backgroundColor: ranking[1].cor }]}><Text style={styles.teamNamePillText} numberOfLines={1}>{ranking[1].nome}</Text></View>
-                <View style={[styles.podiumBox, { height: getDynamicHeight(ranking[1].pontosTotais, 2), backgroundColor: ranking[1].cor + '25' }]}>
+                <View style={[styles.podiumBox, { height: heights[2], backgroundColor: ranking[1].cor + '25' }]}>
                   <View style={[styles.insidePositionCircle, { backgroundColor: ranking[1].cor }]}><Text style={styles.insidePositionText}>2º</Text></View>
                   <Ionicons name="medal" size={28} color={ranking[1].cor} />
                   <Text style={[styles.podiumPoints, { color: ranking[1].cor }]}>{ranking[1].pontosTotais} pts</Text>
@@ -92,7 +106,7 @@ export default function Ranking() {
             ) : (
               <>
                 <View style={[styles.teamNamePill, { backgroundColor: '#333' }]}><Text style={styles.teamNamePillText}>-</Text></View>
-                <View style={[styles.podiumBox, { height: 120, backgroundColor: '#33333330' }]}>
+                <View style={[styles.podiumBox, { height: 115, backgroundColor: '#33333330' }]}>
                   <View style={[styles.insidePositionCircle, { backgroundColor: '#333' }]}><Text style={[styles.insidePositionText, {color: '#888'}]}>2º</Text></View>
                   <Ionicons name="medal-outline" size={28} color="#555" />
                   <Text style={[styles.podiumPoints, { color: '#555' }]}>- pts</Text>
@@ -106,8 +120,7 @@ export default function Ranking() {
             {ranking.length >= 1 ? (
               <>
                 <View style={[styles.teamNamePill, { backgroundColor: ranking[0].cor }]}><Text style={styles.teamNamePillText} numberOfLines={1}>{ranking[0].nome}</Text></View>
-                <View style={[styles.podiumBox, { height: getDynamicHeight(ranking[0].pontosTotais, 1), backgroundColor: ranking[0].cor + '25' }]}>
-                  {/* 🎯 BOLINHA CORRIGIDA PARA TAMANHO NORMAL AQUI TAMBÉM */}
+                <View style={[styles.podiumBox, { height: heights[1], backgroundColor: ranking[0].cor + '25' }]}>
                   <View style={[styles.insidePositionCircle, { backgroundColor: ranking[0].cor }]}><Text style={styles.insidePositionText}>1º</Text></View>
                   <Ionicons name="trophy" size={32} color={ranking[0].cor} />
                   <Text style={[styles.podiumPoints, { color: ranking[0].cor }]}>{ranking[0].pontosTotais} pts</Text>
@@ -130,7 +143,7 @@ export default function Ranking() {
             {ranking.length >= 3 ? (
               <>
                 <View style={[styles.teamNamePill, { backgroundColor: ranking[2].cor }]}><Text style={styles.teamNamePillText} numberOfLines={1}>{ranking[2].nome}</Text></View>
-                <View style={[styles.podiumBox, { height: getDynamicHeight(ranking[2].pontosTotais, 3), backgroundColor: ranking[2].cor + '25' }]}>
+                <View style={[styles.podiumBox, { height: heights[3], backgroundColor: ranking[2].cor + '25' }]}>
                   <View style={[styles.insidePositionCircle, { backgroundColor: ranking[2].cor }]}><Text style={styles.insidePositionText}>3º</Text></View>
                   <Ionicons name="medal" size={28} color={ranking[2].cor} />
                   <Text style={[styles.podiumPoints, { color: ranking[2].cor }]}>{ranking[2].pontosTotais} pts</Text>
@@ -139,7 +152,7 @@ export default function Ranking() {
             ) : (
               <>
                 <View style={[styles.teamNamePill, { backgroundColor: '#333' }]}><Text style={styles.teamNamePillText}>-</Text></View>
-                <View style={[styles.podiumBox, { height: 100, backgroundColor: '#33333330' }]}>
+                <View style={[styles.podiumBox, { height: 90, backgroundColor: '#33333330' }]}>
                   <View style={[styles.insidePositionCircle, { backgroundColor: '#333' }]}><Text style={[styles.insidePositionText, {color: '#888'}]}>3º</Text></View>
                   <Ionicons name="medal-outline" size={28} color="#555" />
                   <Text style={[styles.podiumPoints, { color: '#555' }]}>- pts</Text>
@@ -149,7 +162,6 @@ export default function Ranking() {
           </View>
         </View>
 
-        {/* LISTA COMPLETA */}
         <Text style={styles.sectionTitle}>Classificação Completa</Text>
         {ranking.map((item, index) => {
           const posicaoReal = index + 1;
@@ -189,17 +201,13 @@ const styles = StyleSheet.create({
   filterTextActive: { color: '#000' },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
-  
   podiumContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginBottom: 32, paddingHorizontal: 4 },
   podiumItem: { flex: 1, alignItems: 'center', marginHorizontal: 6 },
   teamNamePill: { width: '92%', alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 4, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 8, zIndex: 10, minHeight: 38, borderWidth: 1, borderColor: '#1a1a2e' },
   teamNamePillText: { color: '#000', fontWeight: 'bold', fontSize: 13, textAlign: 'center', includeFontPadding: false, textAlignVertical: 'center' },
   podiumBox: { width: '100%', borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 6 },
-  
-  /* 🎯 BOLINHAS UNIFORMES AQUI TAMBÉM */
   insidePositionCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   insidePositionText: { color: '#000', fontWeight: 'bold', fontSize: 14 },
-  
   podiumPoints: { fontWeight: 'bold', fontSize: 14 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 16 },
   rankingItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 12, padding: 16, marginBottom: 12 },
