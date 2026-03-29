@@ -15,9 +15,6 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// =========================================================================
-// 🛡️ O ESCUDO GLOBAL ANTI-ERRO 500 (AGORA UNIVERSAL: WEB E APP)
-// =========================================================================
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -28,15 +25,11 @@ api.interceptors.response.use(
 
     if (isNetworkOrServerError && !originalRequest._retry) {
       originalRequest._retry = true; 
-
       console.log('📡 Detectada queda. Aguardando estabilização...');
-
       const tempoEspera = Platform.OS === 'web' ? 3000 : 100;
       await new Promise((resolve) => setTimeout(resolve, tempoEspera));
-
       return api(originalRequest);
     }
-
     return Promise.reject(error);
   }
 );
@@ -73,8 +66,9 @@ export const createEquipe = async (nome: string, cor: string) => (await api.post
 export const updateEquipe = async (id: string, d: any) => (await api.put(`/equipes/${id}`, d)).data;
 export const deleteEquipe = async (id: string) => (await api.delete(`/equipes/${id}`)).data;
 
-// CONTEÚDOS
+// CONTEÚDOS E PASTAS
 export const getConteudos = async (cat?: string) => { const r = await api.get('/conteudos', { params: { categoria: cat } }); return r.data; };
+export const getPastas = async (turmaId?: string) => { try { return (await api.get('/pastas', { params: { turmaId } })).data; } catch { return []; } };
 export const createConteudo = async (d: any) => (await api.post('/conteudos', d)).data;
 export const updateConteudo = async (id: string, d: any) => (await api.put(`/conteudos/${id}`, d)).data;
 export const deleteConteudo = async (id: string) => (await api.delete(`/conteudos/${id}`)).data;
