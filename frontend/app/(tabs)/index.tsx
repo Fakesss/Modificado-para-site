@@ -27,7 +27,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // 🚨 Função que pergunta antes de sair (Corrigida para a versão nova do RN)
+  // Função que pergunta antes de sair
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
@@ -67,11 +67,10 @@ export default function Home() {
     }
   }, [user?.equipeId]);
 
-  // 🚨 A MÁGICA ACONTECE AQUI: Atualiza os dados TODA VEZ que a tela aparece
   useFocusEffect(
     useCallback(() => {
       loadData();
-      refreshUser(); // Atualiza os pontos individuais do aluno também
+      refreshUser(); 
     }, [loadData])
   );
 
@@ -138,40 +137,43 @@ export default function Home() {
           </View>
         </View>
 
-        {/* Quick Actions */}
-        <Text style={styles.sectionTitle}>Acesso Rápido</Text>
-        <View style={styles.quickActions}>
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: '#4169E1' + '30' }]}
-            onPress={() => router.push('/(tabs)/videos')}
-          >
-            <Ionicons name="play-circle" size={32} color="#4169E1" />
-            <Text style={styles.actionText}>Vídeo-aulas</Text>
-          </TouchableOpacity>
+        {/* ==================================================== */}
+        {/* NOVO VISUAL DA CENTRAL DE COMANDO COM 5 BOTÕES */}
+        {/* ==================================================== */}
+        <View style={styles.actionGrid}>
           
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: '#32CD32' + '30' }]}
-            onPress={() => router.push('/(tabs)/exercicios')}
-          >
-            <Ionicons name="document-text" size={32} color="#32CD32" />
-            <Text style={styles.actionText}>Atividades</Text>
+          {/* Linha Superior */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#4169E1' + '30' }]} onPress={() => router.push('/(tabs)/videos')}>
+              <Ionicons name="play-circle" size={32} color="#4169E1" />
+              <Text style={styles.actionText}>Vídeo-aulas</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#32CD32' + '30' }]} onPress={() => router.push('/(tabs)/exercicios')}>
+              <Ionicons name="document-text" size={32} color="#32CD32" />
+              <Text style={styles.actionText}>Atividades</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* O RANKING NO MEIO (Destaque Central) */}
+          <TouchableOpacity style={[styles.actionCardCenter, { backgroundColor: '#FFD700' + '30' }]} onPress={() => router.push('/(tabs)/ranking')}>
+            <Ionicons name="trophy" size={36} color="#FFD700" />
+            <Text style={[styles.actionText, { fontSize: 16, marginTop: 8 }]}>Ranking Geral</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: '#FFD700' + '30' }]}
-            onPress={() => router.push('/(tabs)/ranking')}
-          >
-            <Ionicons name="trophy" size={32} color="#FFD700" />
-            <Text style={styles.actionText}>Ranking</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: '#9B59B6' + '30' }]}
-            onPress={() => router.push('/(tabs)/progresso')}
-          >
-            <Ionicons name="stats-chart" size={32} color="#9B59B6" />
-            <Text style={styles.actionText}>Progresso</Text>
-          </TouchableOpacity>
+
+          {/* Linha Inferior */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FF8C00' + '30' }]} onPress={() => router.push('/(tabs)/conteudos')}>
+              <Ionicons name="folder-open" size={32} color="#FF8C00" />
+              <Text style={styles.actionText}>Conteúdos</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#9B59B6' + '30' }]} onPress={() => router.push('/(tabs)/progresso')}>
+              <Ionicons name="stats-chart" size={32} color="#9B59B6" />
+              <Text style={styles.actionText}>Progresso</Text>
+            </TouchableOpacity>
+          </View>
+
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -186,15 +188,18 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   greeting: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
   logoutButton: { padding: 8 },
-  statsCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, marginBottom: 20 },
+  statsCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, marginBottom: 24 },
   statsTitle: { fontSize: 16, color: '#888', marginBottom: 16 },
   statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
   statItem: { alignItems: 'center' },
   statValue: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginTop: 8 },
   statLabel: { fontSize: 12, color: '#666', marginTop: 4 },
   teamDot: { width: 28, height: 28, borderRadius: 14 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 16 },
-  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  actionCard: { width: '47%', borderRadius: 16, padding: 20, alignItems: 'center' },
+  
+  /* ESTILOS DA NOVA CENTRAL DE COMANDO */
+  actionGrid: { gap: 12, paddingBottom: 20 },
+  actionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  actionCard: { flex: 1, borderRadius: 16, padding: 20, alignItems: 'center', justifyContent: 'center' },
+  actionCardCenter: { width: '100%', borderRadius: 16, padding: 24, alignItems: 'center', justifyContent: 'center' },
   actionText: { color: '#fff', fontSize: 14, fontWeight: '600', marginTop: 12 },
 });
