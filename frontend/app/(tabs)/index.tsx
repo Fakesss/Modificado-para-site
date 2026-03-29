@@ -27,7 +27,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Função que pergunta antes de sair
+  // Pergunta antes de sair do app
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
@@ -41,9 +41,7 @@ export default function Home() {
         );
         return true;
       };
-
       const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-      
       return () => subscription.remove();
     }, [])
   );
@@ -95,6 +93,9 @@ export default function Home() {
     );
   }
 
+  // Puxa a cor exatamente como está no banco de dados (se não tiver, fica um cinza escuro de aviso)
+  const finalTeamColor = equipe?.cor || '#333333';
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -118,7 +119,7 @@ export default function Home() {
         {/* Ranking Header (O Pódio) */}
         <RankingHeader ranking={ranking} />
 
-        {/* User Stats Card */}
+        {/* User Stats Card (Cor 100% dinâmica do banco) */}
         <View style={styles.statsCard}>
           <Text style={styles.statsTitle}>Seus Pontos</Text>
           <View style={styles.statsRow}>
@@ -129,8 +130,8 @@ export default function Home() {
             </View>
             {equipe && (
               <View style={styles.statItem}>
-                <View style={[styles.teamDot, { backgroundColor: equipe.cor }]} />
-                <Text style={[styles.statValue, { color: equipe.cor }]}>{equipe.nome}</Text>
+                <View style={[styles.teamDot, { backgroundColor: finalTeamColor }]} />
+                <Text style={[styles.statValue, { color: finalTeamColor }]}>{equipe.nome}</Text>
                 <Text style={styles.statLabel}>sua equipe</Text>
               </View>
             )}
@@ -138,38 +139,40 @@ export default function Home() {
         </View>
 
         {/* ==================================================== */}
-        {/* NOVO VISUAL DA CENTRAL DE COMANDO COM 5 BOTÕES */}
+        {/* NOVA CENTRAL DE COMANDO: 5 BOTÕES IGUAIS E DELICADOS */}
         {/* ==================================================== */}
         <View style={styles.actionGrid}>
           
-          {/* Linha Superior */}
+          {/* Fila 1 */}
           <View style={styles.actionRow}>
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#4169E1' + '30' }]} onPress={() => router.push('/(tabs)/videos')}>
-              <Ionicons name="play-circle" size={32} color="#4169E1" />
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#4169E1' + '15' }]} onPress={() => router.push('/(tabs)/videos')}>
+              <Ionicons name="play" size={24} color="#4169E1" />
               <Text style={styles.actionText}>Vídeo-aulas</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#32CD32' + '30' }]} onPress={() => router.push('/(tabs)/exercicios')}>
-              <Ionicons name="document-text" size={32} color="#32CD32" />
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#32CD32' + '15' }]} onPress={() => router.push('/(tabs)/exercicios')}>
+              <Ionicons name="document-text" size={24} color="#32CD32" />
               <Text style={styles.actionText}>Atividades</Text>
             </TouchableOpacity>
           </View>
 
-          {/* O RANKING NO MEIO (Destaque Central) */}
-          <TouchableOpacity style={[styles.actionCardCenter, { backgroundColor: '#FFD700' + '30' }]} onPress={() => router.push('/(tabs)/ranking')}>
-            <Ionicons name="trophy" size={36} color="#FFD700" />
-            <Text style={[styles.actionText, { fontSize: 16, marginTop: 8 }]}>Ranking Geral</Text>
-          </TouchableOpacity>
+          {/* Fila 2 (Ranking Sozinho no Meio - Delicado e igual) */}
+          <View style={styles.actionRowCenter}>
+            <TouchableOpacity style={[styles.actionCardCenter, { backgroundColor: '#FFD700' + '20' }]} onPress={() => router.push('/(tabs)/ranking')}>
+              <Ionicons name="trophy" size={28} color="#FFD700" />
+              <Text style={[styles.actionText, { fontSize: 13, marginTop: 10 }]}>Ranking Geral</Text>
+            </TouchableOpacity>
+          </View>
 
-          {/* Linha Inferior */}
+          {/* Fila 3 */}
           <View style={styles.actionRow}>
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FF8C00' + '30' }]} onPress={() => router.push('/(tabs)/conteudos')}>
-              <Ionicons name="folder-open" size={32} color="#FF8C00" />
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FF8C00' + '15' }]} onPress={() => router.push('/(tabs)/conteudos')}>
+              <Ionicons name="book-outline" size={24} color="#FF8C00" />
               <Text style={styles.actionText}>Conteúdos</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#9B59B6' + '30' }]} onPress={() => router.push('/(tabs)/progresso')}>
-              <Ionicons name="stats-chart" size={32} color="#9B59B6" />
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#E066FF' + '15' }]} onPress={() => router.push('/(tabs)/progresso')}>
+              <Ionicons name="stats-chart" size={24} color="#E066FF" />
               <Text style={styles.actionText}>Progresso</Text>
             </TouchableOpacity>
           </View>
@@ -188,18 +191,19 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   greeting: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
   logoutButton: { padding: 8 },
-  statsCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, marginBottom: 24 },
+  statsCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#333' },
   statsTitle: { fontSize: 16, color: '#888', marginBottom: 16 },
   statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
   statItem: { alignItems: 'center' },
   statValue: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginTop: 8 },
   statLabel: { fontSize: 12, color: '#666', marginTop: 4 },
-  teamDot: { width: 28, height: 28, borderRadius: 14 },
+  teamDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#333' },
   
-  /* ESTILOS DA NOVA CENTRAL DE COMANDO */
+  /* ESTILOS DA NOVA CENTRAL DE COMANDO (Delicados e Uniformes) */
   actionGrid: { gap: 12, paddingBottom: 20 },
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  actionCard: { flex: 1, borderRadius: 16, padding: 20, alignItems: 'center', justifyContent: 'center' },
-  actionCardCenter: { width: '100%', borderRadius: 16, padding: 24, alignItems: 'center', justifyContent: 'center' },
-  actionText: { color: '#fff', fontSize: 14, fontWeight: '600', marginTop: 12 },
+  actionRowCenter: { flexDirection: 'row', justifyContent: 'center' },
+  actionCard: { flex: 1, borderRadius: 16, padding: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1a1a2e' },
+  actionCardCenter: { width: '60%', borderRadius: 16, padding: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#222' },
+  actionText: { color: '#fff', fontSize: 12, fontWeight: '600', marginTop: 10 },
 });
