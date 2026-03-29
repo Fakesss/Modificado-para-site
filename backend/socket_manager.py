@@ -26,18 +26,15 @@ matchmaking_queues = {
 # 🛡️ MOTOR DE HISTÓRICO NO MONGODB (AUTO-DELETE 20 DIAS)
 # ====================================================
 async def save_chat_log(lobby_data):
-    """Salva o histórico no MongoDB e agenda a autodestruição para 20 dias"""
     if not lobby_data.get('messages'): return
     try:
-        from server import db  # Puxa a conexão do banco já existente
-        
-        # Cria a regra de autodestruição (Time To Live - 1728000 segundos = 20 dias)
+        from server import db  
         await db.chat_logs.create_index("criadoEm", expireAfterSeconds=1728000)
         
         log_doc = {
             "lobby_id": lobby_data["id"],
             "nome_sala": lobby_data["nome"],
-            "criadoEm": datetime.utcnow(),  # Data exata para o MongoDB começar a contar os 20 dias
+            "criadoEm": datetime.utcnow(),
             "mensagens": lobby_data["messages"]
         }
         await db.chat_logs.insert_one(log_doc)
@@ -50,16 +47,12 @@ async def save_chat_log(lobby_data):
 # ====================================================
 @sio.event
 async def connect(sid, environ):
-    players_online[sid] = {
-        'sid': sid, 'name': 'Visitante', 'user_id': None, 'status': 'MENU',
-        'aceita_convites': True, 'bloqueados_temp': {}, 'convites_pendentes': []
-    }
+    players_online[sid] = {'sid': sid, 'name': 'Visitante', 'user_id': None, 'status': 'MENU', 'aceita_convites': True, 'bloqueados_temp': {}, 'convites_pendentes': []}
     await sio.emit('connected', {'sid': sid}, room=sid)
 
 @sio.event
 async def disconnect(sid):
     if sid in players_online: del players_online[sid]
-        
     for q_name in matchmaking_queues:
         if sid in matchmaking_queues[q_name]: matchmaking_queues[q_name].remove(sid)
 
@@ -68,7 +61,7 @@ async def disconnect(sid):
             lobby['players'].remove(sid)
             await sio.leave_room(sid, lobby_id)
             if len(lobby['players']) == 0:
-                asyncio.create_task(save_chat_log(lobby)) # Salva antes de apagar
+                asyncio.create_task(save_chat_log(lobby))
                 del lobbies[lobby_id]
             else:
                 if lobby['host'] == sid: lobby['host'] = lobby['players'][0]
@@ -85,7 +78,6 @@ async def disconnect(sid):
                 if p in players_online: players_online[p]['status'] = 'MENU'
             del rooms[room_id]
             break
-
     await broadcast_online_users()
 
 # ====================================================
@@ -96,12 +88,7 @@ async def broadcast_lobbies():
     for l_id, l_data in lobbies.items():
         if l_data['status'] == 'ESPERA':
             players_names = [players_online[p_sid]['name'] for p_sid in l_data['players'] if p_sid in players_online]
-            safe_lobbies.append({
-                'id': l_id, 'nome': l_data['nome'], 'tipo': l_data['tipo'], 
-                'host_name': players_online[l_data['host']]['name'] if l_data['host'] in players_online else 'Desconhecido',
-                'jogadores_count': len(l_data['players']), 'max_jogadores': l_data['max_jogadores'],
-                'players_names': players_names
-            })
+            safe_lobbies.append({'id': l_id, 'nome': l_data['nome'], 'tipo': l_data['tipo'], 'host_name': players_online[l_data['host']]['name'] if l_data['host'] in players_online else 'Desconhecido', 'jogadores_count': len(l_data['players']), 'max_jogadores': l_data['max_jogadores'], 'players_names': players_names})
     await sio.emit('lobbies_list', safe_lobbies)
 
 @sio.event
@@ -111,44 +98,29 @@ async def get_lobbies(sid, data=None):
 @sio.event
 async def create_lobby(sid, data):
     if sid not in players_online: return
-    
     lobby_id = f"lobby_{str(uuid.uuid4())[:8]}"
-    
-    lobbies[lobby_id] = {
-        'id': lobby_id, 'nome': data.get('nome', 'Sala'), 'tipo': data.get('tipo', 'Bate-papo'),
-        'host': sid, 'players': [sid], 'max_jogadores': data.get('max_jogadores', 10),
-        'status': 'ESPERA', 'messages': [] # 🚨 Preparado para guardar as mensagens
-    }
-    
+    lobbies[lobby_id] = {'id': lobby_id, 'nome': data.get('nome', 'Sala'), 'tipo': data.get('tipo', 'Bate-papo'), 'host': sid, 'players': [sid], 'max_jogadores': data.get('max_jogadores', 10), 'status': 'ESPERA', 'messages': []}
     await sio.enter_room(sid, lobby_id)
     players_online[sid]['status'] = 'LOBBY'
-    
-    lobby_info = {**lobbies[lobby_id], 'players_names': [players_online[sid]['name']]}
-    await sio.emit('lobby_joined', lobby_info, room=sid)
+    await sio.emit('lobby_joined', {**lobbies[lobby_id], 'players_names': [players_online[sid]['name']]}, room=sid)
     await broadcast_lobbies()
     await broadcast_online_users()
 
 @sio.event
 async def join_lobby(sid, data):
-    lobby_id = data.get('lobby_id')
-    is_ghost = data.get('is_ghost', False) # O Admin entrou invisível?
-    
+    lobby_id, is_ghost = data.get('lobby_id'), data.get('is_ghost', False)
     if lobby_id not in lobbies: return await sio.emit('lobby_error', {'msg': 'Sala não encontrada.'}, room=sid)
     lobby = lobbies[lobby_id]
-    
-    # Se não for o Admin Fantasma, verifica o limite de pessoas
-    if not is_ghost and len(lobby['players']) >= lobby['max_jogadores']:
-        return await sio.emit('lobby_error', {'msg': 'A sala está cheia.'}, room=sid)
+    if not is_ghost and len(lobby['players']) >= lobby['max_jogadores']: return await sio.emit('lobby_error', {'msg': 'A sala está cheia.'}, room=sid)
         
     lobby['players'].append(sid)
     await sio.enter_room(sid, lobby_id)
     players_online[sid]['status'] = 'LOBBY'
-    
     lobby_info = {**lobby, 'players_names': [players_online[p]['name'] for p in lobby['players'] if p in players_online]}
     await sio.emit('lobby_joined', lobby_info, room=sid)
     
     if not is_ghost:
-        await sio.emit('lobby_message', {'sender': 'SISTEMA', 'text': f"{players_online[sid]['name']} entrou na sala."}, room=lobby_id)
+        await sio.emit('lobby_message', {'id': str(uuid.uuid4()), 'sender': 'SISTEMA', 'text': f"{players_online[sid]['name']} entrou na sala.", 'apagada': False}, room=lobby_id)
         await sio.emit('lobby_update', lobby_info, room=lobby_id)
         await broadcast_lobbies()
         await broadcast_online_users()
@@ -163,15 +135,15 @@ async def leave_lobby(sid, data):
         players_online[sid]['status'] = 'MENU'
         
         if len(lobby['players']) == 0:
-            asyncio.create_task(save_chat_log(lobby)) # Salva no banco antes de apagar
+            asyncio.create_task(save_chat_log(lobby))
             del lobbies[lobby_id]
         else:
             if lobby['host'] == sid:
                 lobby['host'] = lobby['players'][0]
-                await sio.emit('lobby_message', {'sender': 'SISTEMA', 'text': f"{players_online[lobby['host']]['name']} é o novo líder."}, room=lobby_id)
+                await sio.emit('lobby_message', {'id': str(uuid.uuid4()), 'sender': 'SISTEMA', 'text': f"{players_online[lobby['host']]['name']} é o novo líder.", 'apagada': False}, room=lobby_id)
             
             lobby_info = {**lobby, 'players_names': [players_online[p]['name'] for p in lobby['players'] if p in players_online]}
-            await sio.emit('lobby_message', {'sender': 'SISTEMA', 'text': f"{players_online[sid].get('name')} saiu da sala."}, room=lobby_id)
+            await sio.emit('lobby_message', {'id': str(uuid.uuid4()), 'sender': 'SISTEMA', 'text': f"{players_online[sid].get('name')} saiu da sala.", 'apagada': False}, room=lobby_id)
             await sio.emit('lobby_update', lobby_info, room=lobby_id)
             
         await sio.emit('lobby_left', {}, room=sid)
@@ -180,20 +152,15 @@ async def leave_lobby(sid, data):
 
 @sio.event
 async def admin_delete_lobby(sid, data):
-    """Poder exclusivo do administrador de destruir uma sala"""
     lobby_id = data.get('lobby_id')
     if lobby_id in lobbies:
         lobby = lobbies[lobby_id]
         await sio.emit('lobby_error', {'msg': 'A sala foi encerrada pela moderação.'}, room=lobby_id)
-        
-        # Salva o histórico para o Admin ler depois
         asyncio.create_task(save_chat_log(lobby))
-        
         for p in list(lobby['players']):
             if p in players_online: players_online[p]['status'] = 'MENU'
             await sio.leave_room(p, lobby_id)
             await sio.emit('lobby_left', {}, room=p)
-            
         del lobbies[lobby_id]
         await broadcast_lobbies()
         await broadcast_online_users()
@@ -203,13 +170,31 @@ async def send_lobby_message(sid, data):
     lobby_id = data.get('lobby_id')
     if lobby_id in lobbies and sid in lobbies[lobby_id]['players']:
         mensagem = {
+            'id': str(uuid.uuid4()), # 🚨 RG ÚNICO DA MENSAGEM
             'sender': players_online[sid]['name'],
             'sender_id': players_online[sid].get('user_id'),
             'text': data.get('text'),
-            'time': datetime.utcnow().strftime('%H:%M')
+            'time': datetime.utcnow().strftime('%H:%M'),
+            'apagada': False # 🚨 MARCADOR DE EXCLUSÃO
         }
-        lobbies[lobby_id]['messages'].append(mensagem) # Guarda na RAM
-        await sio.emit('lobby_message', mensagem, room=lobby_id) # Envia para a galera
+        lobbies[lobby_id]['messages'].append(mensagem)
+        await sio.emit('lobby_message', mensagem, room=lobby_id)
+
+@sio.event
+async def delete_lobby_message(sid, data):
+    """Apaga uma mensagem (Soft Delete)"""
+    lobby_id = data.get('lobby_id')
+    msg_id = data.get('message_id')
+    is_admin = data.get('is_admin', False)
+    
+    if lobby_id in lobbies:
+        lobby = lobbies[lobby_id]
+        for msg in lobby['messages']:
+            if msg.get('id') == msg_id:
+                if msg.get('sender_id') == players_online[sid].get('user_id') or is_admin:
+                    msg['apagada'] = True
+                    await sio.emit('lobby_message_updated', msg, room=lobby_id)
+                break
 
 # ====================================================
 # RESTANTE DO CÓDIGO INTACTO (JOGOS)
