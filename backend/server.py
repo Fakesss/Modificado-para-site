@@ -5,6 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import re  # NOVO: Para lermos os anos da BNCC
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict, Any
@@ -268,6 +269,21 @@ def calculate_streak(last_login: Optional[str], current_streak: int) -> tuple:
     except Exception:
         return 1, today.isoformat()
 
+# ============== LEITORES DE BNCC =================
+def parse_turma_grade(nome: str) -> int:
+    match = re.search(r'(\d+)º', nome)
+    if match: return int(match.group(1))
+    return 99
+
+def get_bncc_grade(codigo: str) -> int:
+    match = re.search(r'EF(\d{2})', codigo.upper())
+    if match:
+        val = match.group(1)
+        if val == '67': return 7 # Mistos consideram o ano mais alto
+        if val == '89': return 9
+        return int(val)
+    return 0
+
 # ============== ROUTES ==============
 
 @api_router.post("/auth/register", response_model=Token)
@@ -414,6 +430,7 @@ async def zerar_todos_pontos(current_user: dict = Depends(require_admin)):
     await db.usuarios.update_many({}, {"$set": {"pontosTotais": 0}})
     await db.equipes.update_many({}, {"$set": {"pontosTotais": 0}})
     return {"message": "Todos os pontos foram zerados com sucesso."}
+
 
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
@@ -634,6 +651,67 @@ async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_e = await db.exercicios.count_documents({"ativo": True})
     total_s = await db.submissoes.count_documents({})
     return {"totalUsuarios": total_u, "totalExercicios": total_e, "totalSubmissoes": total_s}
+
+# =====================================================================
+# NOVA ROTA: O CÉREBRO DOS RELATÓRIOS DA BNCC
+# =====================================================================
+@api_router.get("/relatorios/bncc")
+async def get_relatorio_bncc(
+    filtro_tipo: str = "GERAL",
+    turma_id: Optional[str] = None,
+    equipe_id: Optional[str] = None,
+    current_user: dict = Depends(require_admin)
+):
+    submissoes = await db.submissoes.find({}).to_list(10000)
+    usuarios = await db.usuarios.find({}).to_list(5000)
+    usuarios_dict = {u["id"]: u for u in usuarios}
+    
+    turmas = await db.turmas.find({}).to_list(100)
+    turmas_dict = {str(t.get("id", t.get("_id"))): t for t in turmas}
+    
+    max_grade = 99
+    # Só define limite se a turma for exigida pelo filtro
+    if filtro_tipo in ["TURMA", "EQUIPE_TURMA"] and turma_id:
+        turma = turmas_dict.get(turma_id)
+        if turma:
+            max_grade = parse_turma_grade(turma.get("nome", ""))
+            
+    bncc_stats = {} 
+    
+    for sub in submissoes:
+        uid = sub.get("usuarioId")
+        user = usuarios_dict.get(uid)
+        if not user: continue
+        
+        u_turma = str(user.get("turmaId", ""))
+        u_equipe = str(user.get("equipeId", ""))
+        
+        if filtro_tipo == "TURMA" and u_turma != turma_id: continue
+        if filtro_tipo == "EQUIPE" and u_equipe != equipe_id: continue
+        if filtro_tipo == "EQUIPE_TURMA" and (u_turma != turma_id or u_equipe != equipe_id): continue
+        
+        for det in sub.get("detalhesQuestoes", []):
+            habilidades = det.get("habilidadesBNCC", [])
+            acertou = det.get("acertou", False)
+            for hab in habilidades:
+                if not hab: continue
+                
+                # A Regra de Ouro (Corta o spoiler)
+                if filtro_tipo in ["TURMA", "EQUIPE_TURMA"]:
+                    if get_bncc_grade(hab) > max_grade:
+                        continue
+                
+                if hab not in bncc_stats:
+                    bncc_stats[hab] = {"habilidade": hab, "acertos": 0, "erros": 0, "total": 0}
+                    
+                if acertou:
+                    bncc_stats[hab]["acertos"] += 1
+                else:
+                    bncc_stats[hab]["erros"] += 1
+                bncc_stats[hab]["total"] += 1
+                
+    return list(bncc_stats.values())
+
 
 @api_router.get("/relatorios/bncc-erros")
 async def get_bncc_erros(current_user: dict = Depends(require_admin)):
@@ -945,18 +1023,13 @@ async def reenviar_missao(missao_id: str, dados: ReenviarData, current_user: dic
     await db.missoes.insert_one(new_missao.dict())
     return new_missao.dict()
 
-# =====================================================================
-# SISTEMA DE PRESENÇA ONLINE (INTEGRADO AO SOCKET MULTIPLAYER)
-# =====================================================================
 @api_router.post("/online/ping")
 async def ping_online():
-    # Mantido vazio apenas para não quebrar o aplicativo caso algum celular antigo chame
     return {"status": "ok"}
 
 @api_router.get("/online/users")
 async def get_online_users():
     try:
-        # A Mágica acontece aqui: Lemos a memória super-rápida do Socket Multiplayer
         from socket_manager import players_online
         
         active_user_ids = []
@@ -968,7 +1041,6 @@ async def get_online_users():
         if not active_user_ids:
             return []
             
-        # Puxamos os dados completos da pessoa (pra ter o id da equipe e as cores)
         ativos = await db.usuarios.find({"id": {"$in": list(set(active_user_ids))}}).to_list(1000)
         
         return [{"id": u["id"], "nome": u.get("nome"), "turmaId": u.get("turmaId"), "equipeId": u.get("equipeId")} for u in ativos]
@@ -979,7 +1051,6 @@ async def get_online_users():
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# MÁGICA DO MULTIPLAYER: Conectando o socket_manager ao servidor principal
 import socketio
 from socket_manager import sio
 
