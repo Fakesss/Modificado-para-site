@@ -106,7 +106,7 @@ class Conteudo(BaseModel):
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
-    pontos: int = 0  # NOVO: Os pontos do conteúdo
+    pontos: int = 0  # Os pontos do conteúdo
     ativo: bool = True
     criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     is_deleted: bool = False
@@ -121,7 +121,7 @@ class ConteudoCreate(BaseModel):
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
-    pontos: int = 0  # NOVO: Os pontos do conteúdo
+    pontos: int = 0
 
 class Alternativa(BaseModel):
     letra: str
@@ -806,15 +806,23 @@ async def get_ranking_turma(turma_id: str):
 async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
     submissoes = await db.submissoes.find({"usuarioId": current_user["id"]}).sort("data", -1).to_list(100)
     
-    # NOVO: Conta quantos vídeos o aluno assistiu lendo do escudo anti-trapaça!
-    videos_concluidos = await db.conteudos_concluidos.count_documents({"usuarioId": current_user["id"]})
+    # Busca todos os vídeos/conteúdos concluídos pelo aluno
+    concluidos = await db.conteudos_concluidos.find({"usuarioId": current_user["id"]}).to_list(1000)
+    videos_concluidos = len(concluidos)
     
+    # Soma os pontos reais lendo direto do banco de dados!
+    pontos_videos = 0
+    if videos_concluidos > 0:
+        conteudo_ids = [c["conteudoId"] for c in concluidos]
+        conteudos_db = await db.conteudos.find({"id": {"$in": conteudo_ids}}).to_list(1000)
+        pontos_videos = sum(c.get("pontos", 0) for c in conteudos_db)
+        
     return {
         "pontosTotais": current_user.get("pontosTotais", 0),
         "totalExercicios": len(submissoes),
         "pontosExercicios": sum(s.get("pontosGerados", 0) for s in submissoes),
         "totalVideos": videos_concluidos,
-        "pontosVideos": 0,
+        "pontosVideos": pontos_videos,
         "submissoes": [{k: v for k, v in s.items() if k != '_id'} for s in submissoes]
     }
 
