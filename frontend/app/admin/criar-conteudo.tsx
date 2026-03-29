@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
 import * as api from '../../src/services/api';
 
 type TipoConteudo = 'VIDEO' | 'LINK' | 'MATERIAL';
@@ -21,6 +20,7 @@ export default function AdminCriarConteudo() {
   const [descricao, setDescricao] = useState('');
   const [tipo, setTipo] = useState<TipoConteudo>('VIDEO');
   const [url, setUrl] = useState(''); 
+  const [pontos, setPontos] = useState('0'); // NOVO: Estado para os pontos
   
   const [nomeArquivo, setNomeArquivo] = useState('');
   const [arquivoBase64, setArquivoBase64] = useState<string | null>(null);
@@ -48,6 +48,7 @@ export default function AdminCriarConteudo() {
           setTipo(conteudoEdit.tipo as TipoConteudo);
           setUrl(conteudoEdit.urlVideo || '');
           setTurmaId(conteudoEdit.turmaId || '');
+          setPontos(conteudoEdit.pontos ? String(conteudoEdit.pontos) : '0'); // NOVO: Carrega os pontos
           if (conteudoEdit.tipo === 'MATERIAL') {
              setNomeArquivo("Arquivo já salvo (Envie outro para substituir)");
           }
@@ -106,6 +107,7 @@ export default function AdminCriarConteudo() {
         turmaId: turmaId || null,
         urlVideo: (tipo === 'VIDEO' || tipo === 'LINK') ? url : null,
         abaCategoria: tipo === 'VIDEO' ? 'videos' : 'materiais',
+        pontos: parseInt(pontos) || 0 // NOVO: Envia os pontos pro banco
       };
 
       if (arquivoBase64) payload.arquivo = arquivoBase64;
@@ -160,12 +162,31 @@ export default function AdminCriarConteudo() {
           <Text style={styles.label}>Descrição</Text>
           <TextInput style={[styles.input, {height:60}]} multiline value={descricao} onChangeText={setDescricao} placeholderTextColor="#666" />
 
-          {tipo !== 'MATERIAL' ? (
+          {tipo === 'VIDEO' && (
             <>
-              <Text style={styles.label}>{tipo === 'VIDEO' ? 'Link do YouTube' : 'URL do Link'}</Text>
+              <Text style={styles.label}>Link do YouTube</Text>
+              <TextInput style={styles.input} value={url} onChangeText={setUrl} placeholderTextColor="#666" />
+              
+              <Text style={styles.label}>Pontos de Recompensa (Opcional)</Text>
+              <TextInput 
+                style={styles.input} 
+                value={pontos} 
+                onChangeText={setPontos} 
+                keyboardType="numeric" 
+                placeholder="Ex: 50" 
+                placeholderTextColor="#666" 
+              />
+            </>
+          )}
+
+          {tipo === 'LINK' && (
+            <>
+              <Text style={styles.label}>URL do Link</Text>
               <TextInput style={styles.input} value={url} onChangeText={setUrl} placeholderTextColor="#666" />
             </>
-          ) : (
+          )}
+
+          {tipo === 'MATERIAL' && (
             <View style={{marginBottom: 20}}>
               <Text style={styles.label}>Arquivo (PDF, Doc, Imagem)</Text>
               <TouchableOpacity style={styles.uploadButton} onPress={handlePickDocument}>
