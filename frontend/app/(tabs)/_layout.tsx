@@ -8,8 +8,8 @@ import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 import { Equipe } from '../../src/types';
 import OnlineHeartbeat from '../../src/components/OnlineHeartbeat';
-import { WebView } from 'react-native-webview'; // 🚨 Nossa ponte para a voz
-import { DeviceEventEmitter } from 'react-native'; // 🚨 Mensageiro interno do app
+import { WebView } from 'react-native-webview';
+import { DeviceEventEmitter } from 'react-native';
 
 import { socket, setActiveMatchData } from '../../src/services/socket';
 
@@ -20,6 +20,9 @@ const TEAM_COLORS: Record<string, string> = {
 };
 
 const { width, height } = Dimensions.get('window');
+
+// Truque para Iframe na Web e WebView no Celular
+const WebIframe = Platform.OS === 'web' ? (props: any) => React.createElement('iframe', props) : View;
 
 function AdminBanner() {
   const { user, isAdminViewingAsStudent, setAdminViewingAsStudent } = useAuth();
@@ -47,16 +50,38 @@ export default function TabsLayout() {
   const [convite, setConvite] = useState<any>(null);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
 
-  // 🚨 Estados da Chamada de Voz
+  // Estados da Chamada de Voz
   const [jitsiRoom, setJitsiRoom] = useState<string | null>(null);
   const pan = useRef(new Animated.ValueXY()).current;
   
-  // Controle de arrastar a janelinha
+  // 🚨 SISTEMA MAGNÉTICO: Não deixa o botão sair da tela!
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
-      onPanResponderRelease: () => { pan.extractOffset(); },
+      onPanResponderRelease: () => {
+        pan.flattenOffset();
+        let newX = pan.x._value;
+        let newY = pan.y._value;
+
+        // Limites da tela (A pílula tem 220 de largura e 50 de altura)
+        const minX = -(width * 0.05);
+        const maxX = width - (width * 0.05) - 220;
+        const minY = -(height * 0.15);
+        const maxY = height - (height * 0.15) - 50;
+
+        if (newX < minX) newX = minX;
+        if (newX > maxX) newX = maxX;
+        if (newY < minY) newY = minY;
+        if (newY > maxY) newY = maxY;
+
+        Animated.spring(pan, {
+          toValue: { x: newX, y: newY },
+          useNativeDriver: false
+        }).start(() => {
+          pan.extractOffset();
+        });
+      },
     })
   ).current;
 
@@ -108,13 +133,12 @@ export default function TabsLayout() {
     socket.on('online_users_list', onOnlineUsersList);
     socket.on('match_found', onMatchFound);
 
-    // 🚨 Escuta o pedido da Sala para abrir a voz
     const openVoiceListener = DeviceEventEmitter.addListener('open_voice_call', (data) => {
       setJitsiRoom(`MatematicaTurbo_Sala_${data.roomId}`);
-      pan.setValue({ x: 0, y: 0 }); // Reseta a posição no meio da tela
+      pan.setOffset({ x: 0, y: 0 });
+      pan.setValue({ x: 0, y: 0 }); 
     });
 
-    // 🚨 Segurança: Se o aluno fechar/minimizar o app, desliga a chamada!
     const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState.match(/inactive|background/)) {
         setJitsiRoom(null);
@@ -148,41 +172,54 @@ export default function TabsLayout() {
     setConvite(null);
   };
 
+  // URL bloqueando todo o vídeo para garantir 100% de performance na voz
+  const jitsiUrl = `https://meet.jit.si/${jitsiRoom}#config.prejoinPageEnabled=false&config.startAudioOnly=true&config.disableVideo=true&config.startWithVideoMuted=true`;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <OnlineHeartbeat />
       <AdminBanner />
       <NeonLineSimple color={teamColor} />
 
-      {/* 🚨 WIDGET FLUTUANTE DA CHAMADA DE VOZ */}
+      {/* 🚨 NOVA PÍLULA FLUTUANTE (Compacta e Segura) */}
       {jitsiRoom && (
-        <Animated.View style={[styles.floatingCallContainer, { transform: pan.getTranslateTransform() }]}>
-          {/* Barra superior de Arrastar e Fechar */}
-          <View style={styles.floatingCallHeader} {...panResponder.panHandlers}>
-            <Ionicons name="move" size={16} color="#aaa" style={{ marginLeft: 10 }} />
-            <Text style={styles.floatingCallTitle}>Voz Ativa</Text>
-            <TouchableOpacity style={styles.floatingCallClose} onPress={() => setJitsiRoom(null)}>
-              <Ionicons name="close" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
+        <Animated.View style={[styles.floatingCallPill, { transform: pan.getTranslateTransform() }]}>
           
-          <WebView 
-            source={{ uri: `https://meet.jit.si/${jitsiRoom}#config.prejoinPageEnabled=false&config.startAudioOnly=true&config.disableDeepLinking=true` }}
-            style={{ flex: 1, backgroundColor: '#1a1a2e' }}
-            allowsInlineMediaPlayback={true}
-            mediaPlaybackRequiresUserAction={false}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            // Segurança: Se ele apertar no botão vermelho do Jitsi, a tela some.
-            onNavigationStateChange={(navState) => {
-              if (!navState.url.includes('meet.jit.si/MatematicaTurbo_')) setJitsiRoom(null);
-            }}
-          />
+          {/* Lado Verde: Área de Arrastar */}
+          <View style={styles.dragHandle} {...panResponder.panHandlers}>
+            <Ionicons name="mic" size={20} color="#000" />
+            <Text style={styles.dragHandleText}>Voz Ativa</Text>
+          </View>
+
+          {/* Lado Vermelho: Botão de Desligar */}
+          <TouchableOpacity style={styles.hangupButton} onPress={() => setJitsiRoom(null)}>
+            <Ionicons name="call" size={20} color="#fff" style={{transform: [{rotate: '135deg'}]}} />
+          </TouchableOpacity>
+          
+          {/* Caixa Mágica: O Jitsi está rodando invisível aqui dentro! */}
+          <View style={{ position: 'absolute', width: 1, height: 1, opacity: 0.01, overflow: 'hidden' }}>
+            {Platform.OS === 'web' ? (
+              <WebIframe 
+                src={jitsiUrl}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+                allow="camera; microphone; display-capture"
+              />
+            ) : (
+              <WebView 
+                source={{ uri: jitsiUrl }}
+                style={{ flex: 1 }}
+                allowsInlineMediaPlayback={true}
+                mediaPlaybackRequiresUserAction={false}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+              />
+            )}
+          </View>
+
         </Animated.View>
       )}
 
       <Modal visible={!!convite} transparent animationType="fade">
-        {/* ... Modal de convite intacto ... */}
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.iconCircle}>
@@ -256,32 +293,43 @@ const styles = StyleSheet.create({
   btnAction: { flexDirection: 'row', width: '100%', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8 },
   btnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
 
-  // 🚨 Estilos do Jitsi Flutuante
-  floatingCallContainer: {
+  // 🚨 Estilos da Nova Pílula Flutuante
+  floatingCallPill: {
     position: 'absolute',
     top: height * 0.15,
     left: width * 0.05,
-    width: width * 0.9,
-    height: 300,
-    backgroundColor: '#1a1a2e',
-    borderRadius: 16,
-    overflow: 'hidden',
-    zIndex: 9999, // Fica na frente de tudo!
-    borderWidth: 2,
-    borderColor: '#32CD32',
+    width: 220,
+    height: 50,
+    backgroundColor: '#32CD32', // Fundo Verde
+    borderRadius: 25,
+    zIndex: 9999,
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.5,
     shadowRadius: 10,
-  },
-  floatingCallHeader: {
-    backgroundColor: '#32CD32',
-    height: 40,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  floatingCallTitle: { color: '#000', fontWeight: 'bold', fontSize: 14 },
-  floatingCallClose: { paddingHorizontal: 15, height: '100%', justifyContent: 'center' }
+  dragHandle: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 20,
+    height: '100%',
+  },
+  dragHandleText: {
+    color: '#000',
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
+  hangupButton: {
+    backgroundColor: '#E74C3C',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  }
 });
