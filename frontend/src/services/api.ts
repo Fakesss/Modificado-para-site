@@ -40,7 +40,6 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-// =========================================================================
 
 // AUTENTICAÇÃO E USUÁRIOS
 export const login = async (email: string, senha: string) => {
@@ -116,7 +115,7 @@ export const getRankingPorTurma = async (turmaId: string) => { try { return (awa
 export const getMeuProgresso = async () => { try { return (await api.get('/usuarios/progresso')).data; } catch { return null; } };
 export const zerarTodosPontos = async () => (await api.post('/usuarios/zerar-pontos')).data;
 
-// ======== NOVA ROTA DE RELATÓRIO DA BNCC ========
+// ======== ROTAS DE RELATÓRIO DA BNCC ========
 export const getBNCCRelatorio = async (tipo: string, turmaId?: string, equipeId?: string) => {
   try {
     const params: any = { filtro_tipo: tipo };
@@ -126,6 +125,10 @@ export const getBNCCRelatorio = async (tipo: string, turmaId?: string, equipeId?
   } catch {
     return [];
   }
+};
+
+export const limparRelatorioBNCC = async (tipo: string, alvoId?: string) => {
+  return (await api.post('/relatorios/bncc/limpar', { tipo, alvoId })).data;
 };
 
 export default api;
