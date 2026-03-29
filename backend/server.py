@@ -352,6 +352,7 @@ async def update_equipe(equipe_id: str, update_data: EquipeUpdate, current_user:
     update_dict = update_data.dict(exclude_unset=True)
     if update_dict: await db.equipes.update_one({"id": equipe_id}, {"$set": update_dict})
     equipe = await db.equipes.find_one({"id": equipe_id})
+    if not equipe: raise HTTPException(status_code=404, detail="Equipe não encontrada")
     return {k: v for k, v in equipe.items() if k != '_id'}
 
 @api_router.delete("/equipes/{equipe_id}")
@@ -455,7 +456,6 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     questoes = await db.questoes.find({"exercicioId": submissao_data.exercicioId}).to_list(100)
     
     questoes_map = {q["id"]: q for q in questoes}
-    
     acertos, erros = 0, 0
     detalhes = []
     
@@ -466,18 +466,13 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
         if correto: acertos += 1
         else: erros += 1
         
-        # SOLUÇÃO PARA O BUG DA BNCC: Se a questão não tiver habilidade, copia a do exercício!
         habs = questao.get("habilidadesBNCC", [])
-        if not habs:
-            habs = exercicio.get("habilidadesBNCC", [])
+        if not habs: habs = exercicio.get("habilidadesBNCC", [])
 
         detalhes.append({
-            "questaoId": resp.questaoId,
-            "numero": questao.get("numero"),
-            "resposta": resp.resposta,
-            "correta": questao.get("correta"),
-            "acertou": correto,
-            "habilidadesBNCC": habs # Agora fica salvo para a eternidade na resposta do aluno!
+            "questaoId": resp.questaoId, "numero": questao.get("numero"),
+            "resposta": resp.resposta, "correta": questao.get("correta"),
+            "acertou": correto, "habilidadesBNCC": habs
         })
     
     total = len(questoes)
@@ -496,8 +491,7 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
     
     eq_raw = current_user.get("equipeId")
     if eq_raw:
-        eq_clean = str(eq_raw).strip()
-        await db.equipes.update_one({"id": eq_clean}, {"$inc": {"pontosTotais": pontos}})
+        await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": pontos}})
     
     return {"submissao": {k: v for k, v in submissao.dict().items() if k != '_id'}, "acertos": acertos, "erros": erros, "totalQuestoes": total, "nota": round(nota, 1), "pontosGerados": pontos}
 
@@ -515,8 +509,7 @@ async def retry_submissao(exercicio_id: str, current_user: dict = Depends(get_cu
             await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": -pontos}})
             eq_raw = current_user.get("equipeId")
             if eq_raw:
-                eq_clean = str(eq_raw).strip()
-                await db.equipes.update_one({"id": eq_clean}, {"$inc": {"pontosTotais": -pontos}})
+                await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": -pontos}})
         await db.submissoes.delete_one({"_id": sub["_id"]})
     return {"message": "Pronto para tentar novamente"}
 
@@ -559,22 +552,55 @@ async def concluir_conteudo(conteudo_id: str, current_user: dict = Depends(get_c
     if pontos > 0:
         await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
         eq_raw = current_user.get("equipeId")
-        if eq_raw:
-            await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": pontos}})
+        if eq_raw: await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": pontos}})
             
     return {"message": "Conteúdo concluído com sucesso", "pontos": pontos}
 
+
+# =====================================================================
+# ROTA DE RELATÓRIO GERAL (Corrigida a Média Geral e exclusão de lixo)
+# =====================================================================
 @api_router.get("/relatorios/geral")
 async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_u = await db.usuarios.count_documents({"ativo": True})
-    total_e = await db.exercicios.count_documents({"ativo": True})
-    total_s = await db.submissoes.count_documents({})
-    return {"totalUsuarios": total_u, "totalExercicios": total_e, "totalSubmissoes": total_s}
+    
+    # 1. Pega apenas exercícios que NÃO foram apagados
+    exercicios_ativos = await db.exercicios.find({"is_deleted": {"$ne": True}}).to_list(10000)
+    total_e = len(exercicios_ativos)
+    ids_ativos = [e["id"] for e in exercicios_ativos]
+    
+    # 2. Pega as submissões apenas dos exercícios válidos e que não foram ocultadas no botão de limpar
+    submissoes = await db.submissoes.find({
+        "exercicioId": {"$in": ids_ativos},
+        "ignorarNoRelatorioBNCC": {"$ne": True}
+    }).to_list(10000)
+    total_s = len(submissoes)
+    
+    # 3. Faz o cálculo preciso da Média das Médias
+    notas_por_aluno = {}
+    for sub in submissoes:
+        uid = sub.get("usuarioId")
+        nota = float(sub.get("nota", 0.0))
+        if uid not in notas_por_aluno:
+            notas_por_aluno[uid] = []
+        notas_por_aluno[uid].append(nota)
+        
+    medias_alunos = []
+    for uid, notas in notas_por_aluno.items():
+        if len(notas) > 0:
+            medias_alunos.append(sum(notas) / len(notas))
+            
+    media_geral = 0.0
+    if len(medias_alunos) > 0:
+        media_geral = sum(medias_alunos) / len(medias_alunos)
+        
+    return {
+        "totalUsuarios": total_u, 
+        "totalExercicios": total_e, 
+        "totalSubmissoes": total_s,
+        "mediaGeral": round(media_geral, 1)
+    }
 
-
-# =====================================================================
-# ROTA DE RELATÓRIOS DA BNCC (COM RESGATE DE HISTÓRICO)
-# =====================================================================
 @api_router.get("/relatorios/bncc")
 async def get_relatorio_bncc(
     filtro_tipo: str = "GERAL",
@@ -585,8 +611,6 @@ async def get_relatorio_bncc(
     submissoes = await db.submissoes.find({"ignorarNoRelatorioBNCC": {"$ne": True}}).to_list(10000)
     usuarios = {u["id"]: u for u in await db.usuarios.find({}).to_list(5000)}
     turmas = {str(t.get("id", t.get("_id"))): t for t in await db.turmas.find({}).to_list(100)}
-    
-    # Resgate Histórico: Pega todos os exercícios (mesmo os na lixeira) para achar habilidades antigas perdidas
     exercicios_dict = {str(e.get("id", e.get("_id"))): e for e in await db.exercicios.find({}).to_list(10000)}
     
     max_grade = 99
@@ -609,8 +633,6 @@ async def get_relatorio_bncc(
         
         for det in sub.get("detalhesQuestoes", []):
             habilidades = det.get("habilidadesBNCC", [])
-            
-            # Se a resposta do aluno no passado não salvou a habilidade, resgata do exercício original!
             if not habilidades:
                 ex = exercicios_dict.get(sub.get("exercicioId"))
                 if ex: habilidades = ex.get("habilidadesBNCC", [])
@@ -627,11 +649,8 @@ async def get_relatorio_bncc(
                 
     return list(bncc_stats.values())
 
-# =====================================================================
-# NOVA ROTA: ARQUIVAMENTO/LIMPEZA DO RELATÓRIO
-# =====================================================================
 class LimparRelatorioRequest(BaseModel):
-    tipo: str  # "TUDO", "TURMA", "USUARIO"
+    tipo: str  
     alvoId: Optional[str] = None
 
 @api_router.post("/relatorios/bncc/limpar")
@@ -647,10 +666,8 @@ async def limpar_relatorio_bncc(req: LimparRelatorioRequest, current_user: dict 
     else:
         raise HTTPException(status_code=400, detail="Filtro inválido")
 
-    # Em vez de apagar e destruir os pontos, nós apenas ocultamos as submissões deste relatório!
     result = await db.submissoes.update_many(query, {"$set": {"ignorarNoRelatorioBNCC": True}})
     return {"message": f"Dados ocultados. {result.modified_count} registros arquivados com sucesso."}
-
 
 @api_router.get("/admin/lixeira")
 async def get_lixeira(current_user: dict = Depends(require_admin)):
@@ -676,8 +693,7 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
 async def get_ranking_geral():
     equipes = await db.equipes.find({}).to_list(100)
     pontos_por_equipe = {}
-    for e in equipes:
-        pontos_por_equipe[str(e.get("id", e.get("_id", ""))).strip().lower()] = 0
+    for e in equipes: pontos_por_equipe[str(e.get("id", e.get("_id", ""))).strip().lower()] = 0
         
     for aluno in await db.usuarios.find({}).to_list(5000):
         perfil = str(aluno.get("perfil") or "ALUNO").strip().upper()
