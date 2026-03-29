@@ -85,6 +85,9 @@ export const createConteudo = async (d: any) => (await api.post('/conteudos', d)
 export const updateConteudo = async (id: string, d: any) => (await api.put(`/conteudos/${id}`, d)).data;
 export const deleteConteudo = async (id: string) => (await api.delete(`/conteudos/${id}`)).data;
 
+// A NOVA ROTA OFICIAL PARA GANHAR PONTOS NO VÍDEO:
+export const concluirConteudo = async (id: string) => (await api.post(`/conteudos/${id}/concluir`)).data;
+
 // EXERCÍCIOS
 export const getExercicios = async () => { const r = await api.get('/exercicios'); return r.data; };
 export const getExercicio = async (id: string) => {
