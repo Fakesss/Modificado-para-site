@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Modal, RefreshControl
 } from 'react-native';
@@ -29,6 +29,12 @@ export default function Salas() {
   const [showChallengeModal, setShowChallengeModal] = useState(false);
   const [hiddenChallenges, setHiddenChallenges] = useState<Set<string>>(new Set());
 
+  // 🚨 Estados para o controle de Rolagem (Estilo WhatsApp)
+  const flatListRef = useRef<FlatList>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
   useEffect(() => {
     if (!socket.connected) socket.connect();
 
@@ -44,11 +50,21 @@ export default function Salas() {
       setMessages(data.messages || []); 
       setShowCreateModal(false); 
       setHiddenChallenges(new Set()); 
+      setUnreadCount(0);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 500);
     });
     
     socket.on('lobby_update', (data) => { setCurrentLobby(data); });
     socket.on('lobby_left', () => { setCurrentLobby(null); setMessages([]); socket.emit('get_lobbies', {}); });
-    socket.on('lobby_message', (msg) => { setMessages((prev) => [...prev, msg]); });
+    
+    // Quando chega mensagem nova:
+    socket.on('lobby_message', (msg) => { 
+      setMessages((prev) => [...prev, msg]);
+      if (!isAtBottom) {
+        setUnreadCount((prev) => prev + 1);
+      }
+    });
+
     socket.on('lobby_message_updated', (updatedMsg) => {
       setMessages((prev) => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
     });
@@ -88,10 +104,10 @@ export default function Salas() {
       });
     });
 
+    // 🚨 CORREÇÃO DA ROTA: Indo para os arquivos corretos na raiz da pasta app/
     socket.on('match_found', (data) => {
-      // 🚨 CORREÇÃO DO ERRO UNMATCHED ROUTE: A pasta é /jogo e não /jogos
-      if (data.game_type === 'tictactoe') router.push(`/jogo/TicTacToeMultiplayer?roomId=${data.room_id}`);
-      else if (data.game_type === 'arcade') router.push(`/jogo/ArcadeMultiplayer?roomId=${data.room_id}`);
+      if (data.game_type === 'tictactoe') router.push('/tictactoe');
+      else if (data.game_type === 'arcade') router.push('/arcade_multi');
     });
 
     return () => {
@@ -101,7 +117,7 @@ export default function Salas() {
       socket.off('lobby_challenge_started'); socket.off('lobby_challenge_cancelled');
       socket.off('match_found');
     };
-  }, [user]);
+  }, [user, isAtBottom]);
 
   useFocusEffect(
     useCallback(() => {
@@ -115,6 +131,21 @@ export default function Salas() {
     socket.emit('get_lobbies', {});
     setTimeout(() => setRefreshing(false), 3000); 
   }, []);
+
+  const handleScroll = (event: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const paddingToBottom = 50;
+    const isBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+    
+    setIsAtBottom(isBottom);
+    setShowScrollButton(!isBottom);
+    if (isBottom) setUnreadCount(0);
+  };
+
+  const scrollToBottom = () => {
+    flatListRef.current?.scrollToEnd({ animated: true });
+    setUnreadCount(0);
+  };
 
   const handleExportTXT = async () => {
     if (!currentLobby || messages.length === 0) {
@@ -188,7 +219,6 @@ export default function Salas() {
 
   const handleLongPressMessage = (msg: any) => {
     if (msg.sender === 'SISTEMA' || msg.apagada) return;
-
     const isMe = msg.sender_id === user?.id;
     if (!isMe && !isAdmin) return;
 
@@ -210,6 +240,7 @@ export default function Salas() {
     if (messageText.trim() === '' || !currentLobby) return;
     socket.emit('send_lobby_message', { lobby_id: currentLobby.id, text: messageText.trim() });
     setMessageText('');
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
   const handleLancarDesafio = (gameType: string) => {
@@ -221,10 +252,10 @@ export default function Salas() {
     socket.emit('accept_lobby_challenge', { lobby_id: currentLobby.id, challenge_id: challengeId });
   };
 
+  // 🚨 CORREÇÃO DA ROTA DO ESPECTADOR
   const handleAssistirPartida = (roomId: string, gameType: string) => {
-    socket.emit('spectate_match', { room_id: roomId });
-    if (gameType === 'tictactoe') router.push(`/jogo/TicTacToeMultiplayer?roomId=${roomId}&spectator=true`);
-    else if (gameType === 'arcade') router.push(`/jogo/ArcadeMultiplayer?roomId=${roomId}&spectator=true`);
+    if (gameType === 'tictactoe') router.push(`/tictactoe?spectate=${roomId}`);
+    else if (gameType === 'arcade') router.push(`/arcade_multi?spectate=${roomId}`);
   };
 
   const handleCancelarDesafio = (challengeId: string) => {
@@ -326,6 +357,7 @@ export default function Salas() {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         
+        {/* ================= HEADER ================= */}
         <View style={styles.roomHeader}>
           <TouchableOpacity onPress={handleLeaveLobby} style={styles.leaveButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -340,7 +372,6 @@ export default function Salas() {
                <Ionicons name="flash" size={20} color="#FFD700" />
             </TouchableOpacity>
             
-            {/* 🚨 BOTÃO DE DOWNLOAD RESTRITO AOS ADMINS */}
             {isAdmin && (
               <>
                 <TouchableOpacity style={styles.voiceButton} onPress={handleExportTXT}>
@@ -355,60 +386,21 @@ export default function Salas() {
           </View>
         </View>
 
+        {/* ================= BARRA DE PARTICIPANTES (FILTRO ANTI-CLONE) ================= */}
         <View style={styles.participantsBar}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {currentLobby.players_names?.map((pName: string, index: number) => (
+            {Array.from(new Set(currentLobby.players_names || [])).map((pName: unknown, index: number) => (
               <View key={index} style={styles.participantChip}>
                 <Ionicons name="person-circle" size={16} color="#00BFFF" />
-                <Text style={styles.participantName}>{pName}</Text>
+                <Text style={styles.participantName}>{pName as string}</Text>
               </View>
             ))}
           </ScrollView>
         </View>
 
-        {/* ==========================================
-            CHAT SCROLL VIEW (Apenas Mensagens)
-        ========================================== */}
-        <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatContent}>
-          {messages.map((item, index) => {
-            const isSystem = item.sender === 'SISTEMA';
-            const isMe = item.sender_id === user?.id && !isSystem;
-
-            if (isSystem) return <View key={index} style={styles.systemMessage}><Text style={styles.systemMessageText}>{item.text}</Text></View>;
-
-            if (item.apagada) {
-              if (isAdmin) {
-                return (
-                  <View key={index} style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther, { opacity: 0.6 }]}>
-                    {!isMe && <Text style={styles.messageSender}>{item.sender}</Text>}
-                    <Text style={styles.messageText}>{item.text}</Text>
-                    <Text style={[styles.messageTime, { color: '#FF4500', fontWeight: 'bold' }]}>Apagada ({item.time})</Text>
-                  </View>
-                );
-              } else {
-                return (
-                  <View key={index} style={[styles.messageBubble, { alignSelf: isMe ? 'flex-end' : 'flex-start', backgroundColor: '#333' }]}>
-                    <Text style={{ color: '#aaa', fontStyle: 'italic', fontSize: 13 }}>🚫 Esta mensagem foi apagada</Text>
-                  </View>
-                );
-              }
-            }
-
-            return (
-              <TouchableOpacity key={index} activeOpacity={0.8} onLongPress={() => handleLongPressMessage(item)} style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther]}>
-                {!isMe && <Text style={styles.messageSender}>{item.sender}</Text>}
-                <Text style={styles.messageText}>{item.text}</Text>
-                <Text style={styles.messageTime}>{item.time}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {/* ==========================================
-            ÁREA DE DESAFIOS FLUTUANTE (Presa embaixo)
-        ========================================== */}
+        {/* ================= ÁREA DE DESAFIOS (NO TOPO) ================= */}
         {desafiosAtivos.length > 0 && (
-          <View style={styles.floatingChallengeArea}>
+          <View style={styles.topChallengeArea}>
             {desafiosAtivos.map((desafio: any) => {
               const isMeChallenger = desafio.challenger_sid === socket.id;
               const isMeAcceptor = desafio.acceptor_name && desafio.acceptor_name === user?.nome;
@@ -417,9 +409,8 @@ export default function Salas() {
               if (desafio.status === 'ABERTO') {
                 return (
                   <View key={desafio.id} style={styles.floatingChallengeCard}>
-                    {/* Botão X para fechar localmente */}
                     <TouchableOpacity style={styles.closeChallengeButton} onPress={() => handleHideChallengeLocal(desafio.id)}>
-                      <Ionicons name="close-circle" size={24} color="#666" />
+                      <Ionicons name="close" size={20} color="#888" />
                     </TouchableOpacity>
 
                     <Text style={styles.challengeTitle}>⚔️ Desafio Lançado!</Text>
@@ -449,7 +440,7 @@ export default function Salas() {
                 return (
                   <View key={desafio.id} style={[styles.floatingChallengeCard, { borderColor: '#32CD32' }]}>
                     <TouchableOpacity style={styles.closeChallengeButton} onPress={() => handleHideChallengeLocal(desafio.id)}>
-                      <Ionicons name="close-circle" size={24} color="#666" />
+                      <Ionicons name="close" size={20} color="#888" />
                     </TouchableOpacity>
 
                     <Text style={[styles.challengeTitle, { color: '#32CD32' }]}>🔥 Partida em Andamento</Text>
@@ -460,7 +451,7 @@ export default function Salas() {
                     <TouchableOpacity 
                       style={[styles.challengeButton, { backgroundColor: '#8A2BE2', marginTop: 8 }]} 
                       onPress={() => handleAssistirPartida(desafio.room_id, desafio.game_type)}
-                      disabled={isMeChallenger || isMeAcceptor} // Se eu estou jogando, o botão fica inativo
+                      disabled={isMeChallenger || isMeAcceptor}
                     >
                       <Ionicons name={isMeChallenger || isMeAcceptor ? "game-controller" : "eye"} size={16} color="#fff" style={{marginRight: 6}} />
                       <Text style={styles.challengeButtonText}>
@@ -473,6 +464,65 @@ export default function Salas() {
               return null;
             })}
           </View>
+        )}
+
+        {/* ================= CHAT FLATLIST ================= */}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item, index) => index.toString()}
+          contentContainerStyle={styles.chatContent}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          onContentSizeChange={() => {
+            if (isAtBottom) {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }
+          }}
+          renderItem={({ item }) => {
+            const isSystem = item.sender === 'SISTEMA';
+            const isMe = item.sender_id === user?.id && !isSystem;
+
+            if (isSystem) return <View style={styles.systemMessage}><Text style={styles.systemMessageText}>{item.text}</Text></View>;
+
+            if (item.apagada) {
+              if (isAdmin) {
+                return (
+                  <View style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther, { opacity: 0.6 }]}>
+                    {!isMe && <Text style={styles.messageSender}>{item.sender}</Text>}
+                    <Text style={styles.messageText}>{item.text}</Text>
+                    <Text style={[styles.messageTime, { color: '#FF4500', fontWeight: 'bold' }]}>Apagada ({item.time})</Text>
+                  </View>
+                );
+              } else {
+                return (
+                  <View style={[styles.messageBubble, { alignSelf: isMe ? 'flex-end' : 'flex-start', backgroundColor: '#333' }]}>
+                    <Text style={{ color: '#aaa', fontStyle: 'italic', fontSize: 13 }}>🚫 Esta mensagem foi apagada</Text>
+                  </View>
+                );
+              }
+            }
+
+            return (
+              <TouchableOpacity activeOpacity={0.8} onLongPress={() => handleLongPressMessage(item)} style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther]}>
+                {!isMe && <Text style={styles.messageSender}>{item.sender}</Text>}
+                <Text style={styles.messageText}>{item.text}</Text>
+                <Text style={styles.messageTime}>{item.time}</Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
+
+        {/* ================= BOTÃO FLUTUANTE DE DESCER TELA ================= */}
+        {showScrollButton && (
+          <TouchableOpacity style={styles.scrollToBottomButton} onPress={scrollToBottom}>
+            <Ionicons name="chevron-down" size={24} color="#fff" />
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>{unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         )}
 
         <View style={styles.inputContainer}>
@@ -554,7 +604,6 @@ const styles = StyleSheet.create({
   participantChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#222', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, marginRight: 8, gap: 6 },
   participantName: { color: '#ccc', fontSize: 12 },
 
-  chatScroll: { flex: 1 },
   chatContent: { padding: 16, gap: 12, paddingBottom: 20 },
   systemMessage: { alignSelf: 'center', backgroundColor: '#333', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginVertical: 4 },
   systemMessageText: { color: '#aaa', fontSize: 11, fontStyle: 'italic' },
@@ -569,16 +618,19 @@ const styles = StyleSheet.create({
   textInput: { flex: 1, backgroundColor: '#2a2a3e', color: '#fff', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15 },
   sendButton: { backgroundColor: '#00BFFF', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
 
-  // Estilos do Desafio Flutuante
-  floatingChallengeArea: { paddingHorizontal: 16, paddingBottom: 10, backgroundColor: '#0c0c0c' },
-  floatingChallengeCard: { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#FFD700', borderRadius: 12, padding: 12, position: 'relative' },
-  closeChallengeButton: { position: 'absolute', top: 8, right: 8, zIndex: 10 },
+  topChallengeArea: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: '#0c0c0c', borderBottomWidth: 1, borderBottomColor: '#222' },
+  floatingChallengeCard: { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#FFD700', borderRadius: 12, padding: 12, marginBottom: 10, position: 'relative' },
+  closeChallengeButton: { position: 'absolute', top: 8, right: 8, zIndex: 10, padding: 4 },
   challengeTitle: { color: '#FFD700', fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
-  challengeText: { color: '#ccc', fontSize: 13, marginBottom: 8 },
+  challengeText: { color: '#ccc', fontSize: 13, marginBottom: 8, paddingRight: 20 },
   challengeButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
   challengeButton: { backgroundColor: '#32CD32', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   challengeButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
   
+  scrollToBottomButton: { position: 'absolute', right: 20, bottom: 90, backgroundColor: '#333', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3 },
+  unreadBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: '#00BFFF', width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  unreadText: { color: '#000', fontSize: 10, fontWeight: 'bold' },
+
   gameOptionButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0c0c0c', borderWidth: 1, borderColor: '#00BFFF', padding: 16, borderRadius: 12, gap: 12 },
   gameOptionText: { color: '#00BFFF', fontSize: 16, fontWeight: 'bold' }
 });
