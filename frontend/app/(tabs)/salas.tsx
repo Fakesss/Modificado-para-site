@@ -27,9 +27,10 @@ export default function Salas() {
   const [messageText, setMessageText] = useState('');
 
   const [showChallengeModal, setShowChallengeModal] = useState(false);
+  // 🚨 Novo estado para selecionar a operação do Arcade
+  const [arcadeModeSelect, setArcadeModeSelect] = useState(false);
   const [hiddenChallenges, setHiddenChallenges] = useState<Set<string>>(new Set());
 
-  // 🚨 Estados para o controle de Rolagem (Estilo WhatsApp)
   const flatListRef = useRef<FlatList>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -57,12 +58,9 @@ export default function Salas() {
     socket.on('lobby_update', (data) => { setCurrentLobby(data); });
     socket.on('lobby_left', () => { setCurrentLobby(null); setMessages([]); socket.emit('get_lobbies', {}); });
     
-    // Quando chega mensagem nova:
     socket.on('lobby_message', (msg) => { 
       setMessages((prev) => [...prev, msg]);
-      if (!isAtBottom) {
-        setUnreadCount((prev) => prev + 1);
-      }
+      if (!isAtBottom) setUnreadCount((prev) => prev + 1);
     });
 
     socket.on('lobby_message_updated', (updatedMsg) => {
@@ -104,18 +102,13 @@ export default function Salas() {
       });
     });
 
-    // 🚨 CORREÇÃO DA ROTA: Indo para os arquivos corretos na raiz da pasta app/
-    socket.on('match_found', (data) => {
-      if (data.game_type === 'tictactoe') router.push('/tictactoe');
-      else if (data.game_type === 'arcade') router.push('/arcade_multi');
-    });
+    // 🚨 REMOVIDO: O socket.on('match_found') fantasma que quebrava o jogo foi deletado!
 
     return () => {
       socket.off('lobbies_list'); socket.off('lobby_joined'); socket.off('lobby_update');
       socket.off('lobby_left'); socket.off('lobby_message'); socket.off('lobby_error'); 
       socket.off('lobby_message_updated'); socket.off('lobby_challenge_created');
       socket.off('lobby_challenge_started'); socket.off('lobby_challenge_cancelled');
-      socket.off('match_found');
     };
   }, [user, isAtBottom]);
 
@@ -152,11 +145,9 @@ export default function Salas() {
       if (Platform.OS === 'web') return window.alert('O chat está vazio.');
       return Alert.alert('Aviso', 'O chat está vazio.');
     }
-
     try {
       const chatText = messages.map(m => `[${m.time}] ${m.sender}: ${m.apagada ? '(Mensagem Apagada) ' + m.text : m.text}`).join('\n');
       const fileName = `Chat_${currentLobby.nome.replace(/\s+/g, '_')}.txt`;
-      
       if (Platform.OS === 'web') {
         const blob = new Blob([chatText], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
@@ -243,16 +234,17 @@ export default function Salas() {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
-  const handleLancarDesafio = (gameType: string) => {
-    socket.emit('create_lobby_challenge', { lobby_id: currentLobby.id, game_type: gameType, modo_operacao: 'misto' });
+  // 🚨 Adicionado o sistema de escolha de Modos!
+  const handleLancarDesafio = (gameType: string, modoOperacao: string = 'misto') => {
+    socket.emit('create_lobby_challenge', { lobby_id: currentLobby.id, game_type: gameType, modo_operacao: modoOperacao });
     setShowChallengeModal(false);
+    setArcadeModeSelect(false);
   };
 
   const handleAceitarDesafio = (challengeId: string) => {
     socket.emit('accept_lobby_challenge', { lobby_id: currentLobby.id, challenge_id: challengeId });
   };
 
-  // 🚨 CORREÇÃO DA ROTA DO ESPECTADOR
   const handleAssistirPartida = (roomId: string, gameType: string) => {
     if (gameType === 'tictactoe') router.push(`/tictactoe?spectate=${roomId}`);
     else if (gameType === 'arcade') router.push(`/arcade_multi?spectate=${roomId}`);
@@ -535,26 +527,49 @@ export default function Salas() {
           </TouchableOpacity>
         </View>
 
+        {/* ================= MODAL DE LANÇAR DESAFIO (COM ESCOLHA DE MODO) ================= */}
         <Modal visible={showChallengeModal} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Lançar Desafio</Text>
-                <TouchableOpacity onPress={() => setShowChallengeModal(false)}><Ionicons name="close" size={24} color="#888" /></TouchableOpacity>
+                <TouchableOpacity onPress={() => { setShowChallengeModal(false); setArcadeModeSelect(false); }}>
+                  <Ionicons name="close" size={24} color="#888" />
+                </TouchableOpacity>
               </View>
-              <Text style={styles.inputLabel}>Escolha o modo de jogo para batalhar contra a sala:</Text>
               
-              <View style={{ gap: 12, marginTop: 10 }}>
-                <TouchableOpacity style={styles.gameOptionButton} onPress={() => handleLancarDesafio('tictactoe')}>
-                  <Ionicons name="grid-outline" size={24} color="#00BFFF" />
-                  <Text style={styles.gameOptionText}>Jogo da Velha (Matemático)</Text>
-                </TouchableOpacity>
+              {!arcadeModeSelect ? (
+                <>
+                  <Text style={styles.inputLabel}>Escolha o modo de jogo para batalhar contra a sala:</Text>
+                  <View style={{ gap: 12, marginTop: 10 }}>
+                    <TouchableOpacity style={styles.gameOptionButton} onPress={() => handleLancarDesafio('tictactoe')}>
+                      <Ionicons name="grid-outline" size={24} color="#00BFFF" />
+                      <Text style={styles.gameOptionText}>Jogo da Velha (Matemático)</Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity style={[styles.gameOptionButton, { borderColor: '#FF4500' }]} onPress={() => handleLancarDesafio('arcade')}>
-                  <Ionicons name="rocket-outline" size={24} color="#FF4500" />
-                  <Text style={[styles.gameOptionText, { color: '#FF4500' }]}>Arcade Mode</Text>
-                </TouchableOpacity>
-              </View>
+                    <TouchableOpacity style={[styles.gameOptionButton, { borderColor: '#FF4500' }]} onPress={() => setArcadeModeSelect(true)}>
+                      <Ionicons name="rocket-outline" size={24} color="#FF4500" />
+                      <Text style={[styles.gameOptionText, { color: '#FF4500' }]}>Arcade Mode</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.inputLabel}>Escolha o tipo de operação para o Arcade:</Text>
+                  <View style={{ gap: 8, marginTop: 10 }}>
+                    {['soma', 'subtracao', 'multiplicacao', 'divisao', 'potenciacao', 'misto'].map((modo) => (
+                      <TouchableOpacity key={modo} style={[styles.gameOptionButton, { padding: 12, borderColor: '#FF4500', justifyContent: 'center' }]} onPress={() => handleLancarDesafio('arcade', modo)}>
+                        <Text style={{ color: '#FF4500', fontWeight: 'bold', textTransform: 'uppercase', fontSize: 14 }}>
+                          {modo === 'potenciacao' ? 'Potência e Raiz' : modo}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                    <TouchableOpacity style={{ marginTop: 15, padding: 10, alignItems: 'center' }} onPress={() => setArcadeModeSelect(false)}>
+                      <Text style={{ color: '#888', fontWeight: 'bold' }}>Voltar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </View>
           </View>
         </Modal>
