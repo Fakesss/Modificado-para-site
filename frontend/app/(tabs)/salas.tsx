@@ -7,22 +7,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import { socket } from '../../src/services/socket';
 
+// Importações prontas para o Gerador de TXT (Desativado visualmente)
+// import * as FileSystem from 'expo-file-system';
+// import * as Sharing from 'expo-sharing';
+
 export default function Salas() {
   const { user } = useAuth();
-  
-  // Identifica se é o Admin (Baseado no seu seed.py)
   const isAdmin = user?.role === 'ADMIN' || user?.email === 'danielprofessormatematica@gmail.com';
   
-  // Estados da Lista de Salas
   const [lobbies, setLobbies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Estados do Modal de Criação
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomLimit, setNewRoomLimit] = useState('10');
 
-  // Estados de Dentro da Sala
   const [currentLobby, setCurrentLobby] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [messageText, setMessageText] = useState('');
@@ -49,8 +47,35 @@ export default function Salas() {
   }, [user]);
 
   // ==========================================
-  // AÇÕES
+  // CÓDIGO DO EXPORTAR TXT (DESATIVADO)
   // ==========================================
+  const handleExportTXT = async () => {
+    Alert.alert("Aviso", "A função de baixar o TXT direto no celular está pronta no código, mas foi temporariamente desativada pelo sistema. O histórico será salvo automaticamente na nuvem.");
+    
+    /* CÓDIGO PRONTO PARA SER ATIVADO NO FUTURO:
+    if (!currentLobby || messages.length === 0) return Alert.alert('Aviso', 'O chat está vazio.');
+    try {
+      const chatText = messages.map(m => `[${m.time}] ${m.sender}: ${m.text}`).join('\n');
+      const fileName = `Chat_${currentLobby.nome.replace(/\s+/g, '_')}.txt`;
+      
+      if (Platform.OS === 'web') {
+        const blob = new Blob([chatText], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+      } else {
+        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+        await FileSystem.writeAsStringAsync(fileUri, chatText);
+        await Sharing.shareAsync(fileUri);
+      }
+    } catch (error) {
+      console.error('Erro ao exportar TXT:', error);
+    }
+    */
+  };
+
   const handleOpenCreateModal = () => {
     setNewRoomName(`Sala de ${user?.nome?.split(' ')[0]}`);
     setNewRoomLimit('10');
@@ -62,11 +87,7 @@ export default function Salas() {
     const limit = parseInt(newRoomLimit);
     if (isNaN(limit) || limit < 2 || limit > 50) return Alert.alert('Erro', 'O limite deve ser entre 2 e 50 pessoas.');
 
-    socket.emit('create_lobby', {
-      nome: newRoomName.trim(),
-      tipo: 'Bate-papo',
-      max_jogadores: limit
-    });
+    socket.emit('create_lobby', { nome: newRoomName.trim(), tipo: 'Bate-papo', max_jogadores: limit });
   };
 
   const handleJoinLobby = (lobbyId: string, isGhost: boolean = false) => {
@@ -78,7 +99,7 @@ export default function Salas() {
   };
 
   const handleAdminDeleteLobby = () => {
-    Alert.alert('Atenção', 'Deseja realmente encerrar esta sala para todos?', [
+    Alert.alert('Encerrar Sala', 'Isso irá expulsar todos e salvar o log no banco de dados. Confirmar?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Encerrar', style: 'destructive', onPress: () => socket.emit('admin_delete_lobby', { lobby_id: currentLobby.id }) }
     ]);
@@ -90,9 +111,6 @@ export default function Salas() {
     setMessageText('');
   };
 
-  // ==========================================
-  // TELA 1: LISTA DE SALAS
-  // ==========================================
   if (!currentLobby) {
     return (
       <SafeAreaView style={styles.container}>
@@ -141,17 +159,11 @@ export default function Salas() {
                       disabled={isFull && !isAdmin}
                       onPress={() => handleJoinLobby(item.id, false)}
                     >
-                      <Text style={styles.joinButtonText}>
-                        {isFull && !isAdmin ? 'Cheia' : 'Entrar'}
-                      </Text>
+                      <Text style={styles.joinButtonText}>{isFull && !isAdmin ? 'Cheia' : 'Entrar'}</Text>
                     </TouchableOpacity>
 
-                    {/* BOTÃO EXCLUSIVO DO ADMIN */}
                     {isAdmin && (
-                      <TouchableOpacity 
-                        style={[styles.joinButton, { backgroundColor: '#8A2BE2' }]} 
-                        onPress={() => handleJoinLobby(item.id, true)}
-                      >
+                      <TouchableOpacity style={[styles.joinButton, { backgroundColor: '#8A2BE2' }]} onPress={() => handleJoinLobby(item.id, true)}>
                         <Ionicons name="eye-off" size={14} color="#fff" style={{marginRight: 4}} />
                         <Text style={[styles.joinButtonText, { color: '#fff', fontSize: 11 }]}>Espiar</Text>
                       </TouchableOpacity>
@@ -163,35 +175,18 @@ export default function Salas() {
           />
         )}
 
-        {/* MODAL DE CONFIGURAÇÃO DE SALA */}
+        {/* Modal de Configuração */}
         <Modal visible={showCreateModal} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Configurar Sala</Text>
-                <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                  <Ionicons name="close" size={24} color="#888" />
-                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowCreateModal(false)}><Ionicons name="close" size={24} color="#888" /></TouchableOpacity>
               </View>
-
               <Text style={styles.inputLabel}>Nome da Sala</Text>
-              <TextInput 
-                style={styles.modalInput} 
-                value={newRoomName} 
-                onChangeText={setNewRoomName} 
-                placeholder="Ex: Resenha do 9º Ano"
-                placeholderTextColor="#666"
-              />
-
+              <TextInput style={styles.modalInput} value={newRoomName} onChangeText={setNewRoomName} placeholderTextColor="#666" />
               <Text style={styles.inputLabel}>Máximo de Pessoas</Text>
-              <TextInput 
-                style={styles.modalInput} 
-                value={newRoomLimit} 
-                onChangeText={setNewRoomLimit} 
-                keyboardType="numeric"
-                maxLength={2}
-              />
-
+              <TextInput style={styles.modalInput} value={newRoomLimit} onChangeText={setNewRoomLimit} keyboardType="numeric" maxLength={2} />
               <TouchableOpacity style={styles.confirmCreateButton} onPress={handleConfirmCreateLobby}>
                 <Text style={styles.confirmCreateText}>Abrir Sala</Text>
               </TouchableOpacity>
@@ -203,9 +198,6 @@ export default function Salas() {
     );
   }
 
-  // ==========================================
-  // TELA 2: DENTRO DA SALA
-  // ==========================================
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -219,11 +211,16 @@ export default function Salas() {
             <Text style={styles.roomSubtitle}>{currentLobby.players_names?.length || 1} participante(s)</Text>
           </View>
           
-          {/* BOTÃO EXCLUSIVO DE DELETAR (ADMIN) */}
+          {/* Botões do Administrador */}
           {isAdmin ? (
-            <TouchableOpacity style={styles.adminDeleteButton} onPress={handleAdminDeleteLobby}>
-              <Ionicons name="trash" size={20} color="#fff" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity style={[styles.voiceButton, { backgroundColor: '#333' }]} onPress={handleExportTXT}>
+                 <Ionicons name="download" size={20} color="#00BFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.adminDeleteButton} onPress={handleAdminDeleteLobby}>
+                <Ionicons name="trash" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
           ) : (
             <TouchableOpacity style={styles.voiceButton}>
                <Ionicons name="mic-off" size={20} color="#666" />
@@ -250,13 +247,7 @@ export default function Salas() {
             const isSystem = item.sender === 'SISTEMA';
             const isMe = item.sender_id === user?.id && !isSystem;
 
-            if (isSystem) {
-              return (
-                <View style={styles.systemMessage}>
-                  <Text style={styles.systemMessageText}>{item.text}</Text>
-                </View>
-              );
-            }
+            if (isSystem) return <View style={styles.systemMessage}><Text style={styles.systemMessageText}>{item.text}</Text></View>;
 
             return (
               <View style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther]}>
@@ -270,18 +261,10 @@ export default function Salas() {
 
         <View style={styles.inputContainer}>
           <TextInput
-            style={styles.textInput}
-            placeholder="Digite uma mensagem..."
-            placeholderTextColor="#666"
-            value={messageText}
-            onChangeText={setMessageText}
-            onSubmitEditing={handleSendMessage}
+            style={styles.textInput} placeholder="Digite uma mensagem..." placeholderTextColor="#666"
+            value={messageText} onChangeText={setMessageText} onSubmitEditing={handleSendMessage}
           />
-          <TouchableOpacity 
-            style={[styles.sendButton, messageText.trim() === '' && { opacity: 0.5 }]} 
-            onPress={handleSendMessage}
-            disabled={messageText.trim() === ''}
-          >
+          <TouchableOpacity style={[styles.sendButton, messageText.trim() === '' && { opacity: 0.5 }]} onPress={handleSendMessage} disabled={messageText.trim() === ''}>
             <Ionicons name="send" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -310,7 +293,6 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', marginTop: 60 },
   emptyText: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 16 },
 
-  // Estilos do Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#333' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
