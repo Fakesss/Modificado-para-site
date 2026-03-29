@@ -7,7 +7,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import { socket } from '../../src/services/socket';
 import { useFocusEffect, useRouter } from 'expo-router';
-// 🚨 Importação ATUALIZADA para o Expo 54
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
@@ -27,8 +26,8 @@ export default function Salas() {
   const [messages, setMessages] = useState<any[]>([]);
   const [messageText, setMessageText] = useState('');
 
-  // Estados do Modal de Desafio
   const [showChallengeModal, setShowChallengeModal] = useState(false);
+  const [hiddenChallenges, setHiddenChallenges] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!socket.connected) socket.connect();
@@ -40,11 +39,11 @@ export default function Salas() {
 
     socket.on('lobbies_list', (data) => { setLobbies(data); setLoading(false); setRefreshing(false); });
     
-    // Quando entra na sala, carrega as mensagens e os desafios que já estão rolando
     socket.on('lobby_joined', (data) => { 
       setCurrentLobby(data); 
       setMessages(data.messages || []); 
       setShowCreateModal(false); 
+      setHiddenChallenges(new Set()); 
     });
     
     socket.on('lobby_update', (data) => { setCurrentLobby(data); });
@@ -59,11 +58,7 @@ export default function Salas() {
       else Alert.alert('Aviso', err.msg); 
     });
 
-    // ==========================================
-    // ⚔️ SISTEMA DE DESAFIOS DA SALA (ARENA)
-    // ==========================================
     socket.on('lobby_challenge_created', (desafio) => {
-      // Adiciona o desafio no estado da sala atual para renderizar os botões
       setCurrentLobby((prev: any) => {
         if (!prev) return prev;
         return { ...prev, desafios: { ...(prev.desafios || {}), [desafio.id]: desafio } };
@@ -71,7 +66,6 @@ export default function Salas() {
     });
 
     socket.on('lobby_challenge_started', (data) => {
-      // Atualiza o status do desafio para 'ACEITO' e salva o room_id da partida
       setCurrentLobby((prev: any) => {
         if (!prev || !prev.desafios || !prev.desafios[data.challenge_id]) return prev;
         const updatedDesafios = { ...prev.desafios };
@@ -86,7 +80,6 @@ export default function Salas() {
     });
 
     socket.on('lobby_challenge_cancelled', (data) => {
-      // Remove o desafio da tela
       setCurrentLobby((prev: any) => {
         if (!prev || !prev.desafios) return prev;
         const updatedDesafios = { ...prev.desafios };
@@ -95,10 +88,10 @@ export default function Salas() {
       });
     });
 
-    // Se EU for o Desafiante ou o Aceitante, o servidor manda o match_found pra mim
     socket.on('match_found', (data) => {
-      if (data.game_type === 'tictactoe') router.push(`/jogos/TicTacToeMultiplayer?roomId=${data.room_id}`);
-      else if (data.game_type === 'arcade') router.push(`/jogos/ArcadeMultiplayer?roomId=${data.room_id}`);
+      // 🚨 CORREÇÃO DO ERRO UNMATCHED ROUTE: A pasta é /jogo e não /jogos
+      if (data.game_type === 'tictactoe') router.push(`/jogo/TicTacToeMultiplayer?roomId=${data.room_id}`);
+      else if (data.game_type === 'arcade') router.push(`/jogo/ArcadeMultiplayer?roomId=${data.room_id}`);
     });
 
     return () => {
@@ -123,9 +116,6 @@ export default function Salas() {
     setTimeout(() => setRefreshing(false), 3000); 
   }, []);
 
-  // ==========================================
-  // EXPORTAR TXT (Usando a nova API do Expo 54)
-  // ==========================================
   const handleExportTXT = async () => {
     if (!currentLobby || messages.length === 0) {
       if (Platform.OS === 'web') return window.alert('O chat está vazio.');
@@ -222,29 +212,27 @@ export default function Salas() {
     setMessageText('');
   };
 
-  // ==========================================
-  // AÇÕES DE DESAFIO
-  // ==========================================
   const handleLancarDesafio = (gameType: string) => {
-    socket.emit('create_lobby_challenge', { 
-      lobby_id: currentLobby.id, 
-      game_type: gameType, 
-      modo_operacao: 'misto' 
-    });
+    socket.emit('create_lobby_challenge', { lobby_id: currentLobby.id, game_type: gameType, modo_operacao: 'misto' });
     setShowChallengeModal(false);
   };
 
   const handleAceitarDesafio = (challengeId: string) => {
-    socket.emit('accept_lobby_challenge', {
-      lobby_id: currentLobby.id,
-      challenge_id: challengeId
-    });
+    socket.emit('accept_lobby_challenge', { lobby_id: currentLobby.id, challenge_id: challengeId });
   };
 
   const handleAssistirPartida = (roomId: string, gameType: string) => {
     socket.emit('spectate_match', { room_id: roomId });
-    if (gameType === 'tictactoe') router.push(`/jogos/TicTacToeMultiplayer?roomId=${roomId}&spectator=true`);
-    else if (gameType === 'arcade') router.push(`/jogos/ArcadeMultiplayer?roomId=${roomId}&spectator=true`);
+    if (gameType === 'tictactoe') router.push(`/jogo/TicTacToeMultiplayer?roomId=${roomId}&spectator=true`);
+    else if (gameType === 'arcade') router.push(`/jogo/ArcadeMultiplayer?roomId=${roomId}&spectator=true`);
+  };
+
+  const handleCancelarDesafio = (challengeId: string) => {
+    socket.emit('cancel_lobby_challenge', { lobby_id: currentLobby.id, challenge_id: challengeId });
+  };
+
+  const handleHideChallengeLocal = (challengeId: string) => {
+    setHiddenChallenges((prev) => new Set(prev).add(challengeId));
   };
 
   if (!currentLobby) {
@@ -330,8 +318,9 @@ export default function Salas() {
     );
   }
 
-  // Pegando a lista de desafios da sala para renderizar no chat
-  const desafiosAtivos = Object.values(currentLobby.desafios || {});
+  const desafiosAtivos = Object.values(currentLobby.desafios || {}).filter(
+    (d: any) => !hiddenChallenges.has(d.id) && (d.status === 'ABERTO' || d.status === 'ACEITO')
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -347,19 +336,21 @@ export default function Salas() {
           </View>
           
           <View style={{ flexDirection: 'row', gap: 10 }}>
-            {/* BOTÃO DE LANÇAR DESAFIO (Arena) */}
             <TouchableOpacity style={[styles.voiceButton, { backgroundColor: '#FFD70030' }]} onPress={() => setShowChallengeModal(true)}>
                <Ionicons name="flash" size={20} color="#FFD700" />
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.voiceButton} onPress={handleExportTXT}>
-               <Ionicons name="download" size={20} color="#00BFFF" />
-            </TouchableOpacity>
-
+            {/* 🚨 BOTÃO DE DOWNLOAD RESTRITO AOS ADMINS */}
             {isAdmin && (
-              <TouchableOpacity style={styles.adminDeleteButton} onPress={handleAdminDeleteLobby}>
-                <Ionicons name="trash" size={20} color="#fff" />
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity style={styles.voiceButton} onPress={handleExportTXT}>
+                  <Ionicons name="download" size={20} color="#00BFFF" />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.adminDeleteButton} onPress={handleAdminDeleteLobby}>
+                  <Ionicons name="trash" size={20} color="#fff" />
+                </TouchableOpacity>
+              </>
             )}
           </View>
         </View>
@@ -375,8 +366,10 @@ export default function Salas() {
           </ScrollView>
         </View>
 
+        {/* ==========================================
+            CHAT SCROLL VIEW (Apenas Mensagens)
+        ========================================== */}
         <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatContent}>
-          {/* Renderiza as Mensagens Antigas */}
           {messages.map((item, index) => {
             const isSystem = item.sender === 'SISTEMA';
             const isMe = item.sender_id === user?.id && !isSystem;
@@ -402,62 +395,85 @@ export default function Salas() {
             }
 
             return (
-              <TouchableOpacity 
-                key={index}
-                activeOpacity={0.8}
-                onLongPress={() => handleLongPressMessage(item)}
-                style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther]}
-              >
+              <TouchableOpacity key={index} activeOpacity={0.8} onLongPress={() => handleLongPressMessage(item)} style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther]}>
                 {!isMe && <Text style={styles.messageSender}>{item.sender}</Text>}
                 <Text style={styles.messageText}>{item.text}</Text>
                 <Text style={styles.messageTime}>{item.time}</Text>
               </TouchableOpacity>
             );
           })}
-
-          {/* Renderiza os Desafios Ativos no Meio do Chat */}
-          {desafiosAtivos.map((desafio: any) => {
-            const isMeChallenger = desafio.challenger_sid === socket.id;
-            const nomeJogo = desafio.game_type === 'tictactoe' ? 'Jogo da Velha' : 'Arcade Mode';
-
-            if (desafio.status === 'ABERTO') {
-              return (
-                <View key={desafio.id} style={styles.challengeCard}>
-                  <Text style={styles.challengeTitle}>⚔️ Desafio Lançado!</Text>
-                  <Text style={styles.challengeText}>
-                    <Text style={{fontWeight: 'bold', color: '#00BFFF'}}>{desafio.challenger_name}</Text> quer jogar <Text style={{fontWeight: 'bold', color: '#fff'}}>{nomeJogo}</Text>. Quem aceita?
-                  </Text>
-                  <TouchableOpacity 
-                    style={[styles.challengeButton, isMeChallenger && { backgroundColor: '#555' }]} 
-                    disabled={isMeChallenger}
-                    onPress={() => handleAceitarDesafio(desafio.id)}
-                  >
-                    <Text style={styles.challengeButtonText}>{isMeChallenger ? 'Aguardando Oponente...' : 'Aceitar Batalha'}</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-            }
-
-            if (desafio.status === 'ACEITO') {
-              return (
-                <View key={desafio.id} style={[styles.challengeCard, { borderColor: '#32CD32' }]}>
-                  <Text style={[styles.challengeTitle, { color: '#32CD32' }]}>🔥 Partida em Andamento!</Text>
-                  <Text style={styles.challengeText}>
-                    <Text style={{color: '#00BFFF'}}>{desafio.challenger_name}</Text> ⚔️ <Text style={{color: '#FF4500'}}>{desafio.acceptor_name}</Text>
-                  </Text>
-                  <TouchableOpacity 
-                    style={[styles.challengeButton, { backgroundColor: '#8A2BE2' }]} 
-                    onPress={() => handleAssistirPartida(desafio.room_id, desafio.game_type)}
-                  >
-                    <Ionicons name="eye" size={16} color="#fff" style={{marginRight: 6}} />
-                    <Text style={styles.challengeButtonText}>Assistir Partida</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-            }
-            return null;
-          })}
         </ScrollView>
+
+        {/* ==========================================
+            ÁREA DE DESAFIOS FLUTUANTE (Presa embaixo)
+        ========================================== */}
+        {desafiosAtivos.length > 0 && (
+          <View style={styles.floatingChallengeArea}>
+            {desafiosAtivos.map((desafio: any) => {
+              const isMeChallenger = desafio.challenger_sid === socket.id;
+              const isMeAcceptor = desafio.acceptor_name && desafio.acceptor_name === user?.nome;
+              const nomeJogo = desafio.game_type === 'tictactoe' ? 'Jogo da Velha' : 'Arcade Mode';
+
+              if (desafio.status === 'ABERTO') {
+                return (
+                  <View key={desafio.id} style={styles.floatingChallengeCard}>
+                    {/* Botão X para fechar localmente */}
+                    <TouchableOpacity style={styles.closeChallengeButton} onPress={() => handleHideChallengeLocal(desafio.id)}>
+                      <Ionicons name="close-circle" size={24} color="#666" />
+                    </TouchableOpacity>
+
+                    <Text style={styles.challengeTitle}>⚔️ Desafio Lançado!</Text>
+                    <Text style={styles.challengeText}>
+                      <Text style={{fontWeight: 'bold', color: '#00BFFF'}}>{desafio.challenger_name}</Text> quer jogar {nomeJogo}.
+                    </Text>
+                    
+                    <View style={styles.challengeButtonsRow}>
+                      {isMeChallenger ? (
+                        <>
+                          <Text style={{color: '#888', fontStyle: 'italic', alignSelf: 'center', marginRight: 10}}>Aguardando...</Text>
+                          <TouchableOpacity style={[styles.challengeButton, { backgroundColor: '#FF4500' }]} onPress={() => handleCancelarDesafio(desafio.id)}>
+                            <Text style={styles.challengeButtonText}>Cancelar</Text>
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <TouchableOpacity style={[styles.challengeButton, { flex: 1 }]} onPress={() => handleAceitarDesafio(desafio.id)}>
+                          <Text style={styles.challengeButtonText}>Aceitar Batalha</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                );
+              }
+
+              if (desafio.status === 'ACEITO') {
+                return (
+                  <View key={desafio.id} style={[styles.floatingChallengeCard, { borderColor: '#32CD32' }]}>
+                    <TouchableOpacity style={styles.closeChallengeButton} onPress={() => handleHideChallengeLocal(desafio.id)}>
+                      <Ionicons name="close-circle" size={24} color="#666" />
+                    </TouchableOpacity>
+
+                    <Text style={[styles.challengeTitle, { color: '#32CD32' }]}>🔥 Partida em Andamento</Text>
+                    <Text style={styles.challengeText}>
+                      <Text style={{color: '#00BFFF'}}>{desafio.challenger_name}</Text> ⚔️ <Text style={{color: '#FF4500'}}>{desafio.acceptor_name}</Text>
+                    </Text>
+
+                    <TouchableOpacity 
+                      style={[styles.challengeButton, { backgroundColor: '#8A2BE2', marginTop: 8 }]} 
+                      onPress={() => handleAssistirPartida(desafio.room_id, desafio.game_type)}
+                      disabled={isMeChallenger || isMeAcceptor} // Se eu estou jogando, o botão fica inativo
+                    >
+                      <Ionicons name={isMeChallenger || isMeAcceptor ? "game-controller" : "eye"} size={16} color="#fff" style={{marginRight: 6}} />
+                      <Text style={styles.challengeButtonText}>
+                        {isMeChallenger || isMeAcceptor ? 'Você está jogando' : 'Assistir Partida'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
+              return null;
+            })}
+          </View>
+        )}
 
         <View style={styles.inputContainer}>
           <TextInput
@@ -469,7 +485,6 @@ export default function Salas() {
           </TouchableOpacity>
         </View>
 
-        {/* Modal de Escolher o Jogo do Desafio */}
         <Modal visible={showChallengeModal} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
@@ -554,12 +569,15 @@ const styles = StyleSheet.create({
   textInput: { flex: 1, backgroundColor: '#2a2a3e', color: '#fff', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15 },
   sendButton: { backgroundColor: '#00BFFF', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
 
-  // Estilos da Arena / Desafios
-  challengeCard: { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#FFD700', borderRadius: 16, padding: 16, marginVertical: 8, alignItems: 'center' },
-  challengeTitle: { color: '#FFD700', fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
-  challengeText: { color: '#ccc', fontSize: 14, textAlign: 'center', marginBottom: 12 },
-  challengeButton: { backgroundColor: '#32CD32', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center' },
-  challengeButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  // Estilos do Desafio Flutuante
+  floatingChallengeArea: { paddingHorizontal: 16, paddingBottom: 10, backgroundColor: '#0c0c0c' },
+  floatingChallengeCard: { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#FFD700', borderRadius: 12, padding: 12, position: 'relative' },
+  closeChallengeButton: { position: 'absolute', top: 8, right: 8, zIndex: 10 },
+  challengeTitle: { color: '#FFD700', fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
+  challengeText: { color: '#ccc', fontSize: 13, marginBottom: 8 },
+  challengeButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
+  challengeButton: { backgroundColor: '#32CD32', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  challengeButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
   
   gameOptionButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0c0c0c', borderWidth: 1, borderColor: '#00BFFF', padding: 16, borderRadius: 12, gap: 12 },
   gameOptionText: { color: '#00BFFF', fontSize: 16, fontWeight: 'bold' }
