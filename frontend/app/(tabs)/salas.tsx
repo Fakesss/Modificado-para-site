@@ -1,15 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Modal
+  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Modal, RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import { socket } from '../../src/services/socket';
-
-// Importações prontas para o Gerador de TXT (Desativado visualmente)
-// import * as FileSystem from 'expo-file-system';
-// import * as Sharing from 'expo-sharing';
+import { useFocusEffect } from 'expo-router';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 export default function Salas() {
   const { user } = useAuth();
@@ -17,6 +16,7 @@ export default function Salas() {
   
   const [lobbies, setLobbies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomLimit, setNewRoomLimit] = useState('10');
@@ -33,29 +33,52 @@ export default function Salas() {
       socket.emit('get_lobbies', {});
     }
 
-    socket.on('lobbies_list', (data) => { setLobbies(data); setLoading(false); });
-    socket.on('lobby_joined', (data) => { setCurrentLobby(data); setMessages([]); setShowCreateModal(false); });
+    socket.on('lobbies_list', (data) => { setLobbies(data); setLoading(false); setRefreshing(false); });
+    socket.on('lobby_joined', (data) => { setCurrentLobby(data); setMessages(data.messages || []); setShowCreateModal(false); });
     socket.on('lobby_update', (data) => { setCurrentLobby(data); });
     socket.on('lobby_left', () => { setCurrentLobby(null); setMessages([]); socket.emit('get_lobbies', {}); });
     socket.on('lobby_message', (msg) => { setMessages((prev) => [...prev, msg]); });
-    socket.on('lobby_error', (err) => { Alert.alert('Aviso', err.msg); });
+    
+    // 🚨 Escuta a mensagem apagada para atualizar a tela na hora
+    socket.on('lobby_message_updated', (updatedMsg) => {
+      setMessages((prev) => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
+    });
+
+    socket.on('lobby_error', (err) => { 
+      if (Platform.OS === 'web') window.alert(err.msg);
+      else Alert.alert('Aviso', err.msg); 
+    });
 
     return () => {
       socket.off('lobbies_list'); socket.off('lobby_joined'); socket.off('lobby_update');
-      socket.off('lobby_left'); socket.off('lobby_message'); socket.off('lobby_error');
+      socket.off('lobby_left'); socket.off('lobby_message'); socket.off('lobby_error'); socket.off('lobby_message_updated');
     };
   }, [user]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (socket.connected && !currentLobby) socket.emit('get_lobbies', {});
+    }, [currentLobby])
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    if (!socket.connected) socket.connect();
+    socket.emit('get_lobbies', {});
+    setTimeout(() => setRefreshing(false), 3000); 
+  }, []);
+
   // ==========================================
-  // CÓDIGO DO EXPORTAR TXT (DESATIVADO)
+  // EXPORTAR TXT (Ativado para Web e Mobile)
   // ==========================================
   const handleExportTXT = async () => {
-    Alert.alert("Aviso", "A função de baixar o TXT direto no celular está pronta no código, mas foi temporariamente desativada pelo sistema. O histórico será salvo automaticamente na nuvem.");
-    
-    /* CÓDIGO PRONTO PARA SER ATIVADO NO FUTURO:
-    if (!currentLobby || messages.length === 0) return Alert.alert('Aviso', 'O chat está vazio.');
+    if (!currentLobby || messages.length === 0) {
+      if (Platform.OS === 'web') return window.alert('O chat está vazio.');
+      return Alert.alert('Aviso', 'O chat está vazio.');
+    }
+
     try {
-      const chatText = messages.map(m => `[${m.time}] ${m.sender}: ${m.text}`).join('\n');
+      const chatText = messages.map(m => `[${m.time}] ${m.sender}: ${m.apagada ? '(Mensagem Apagada) ' + m.text : m.text}`).join('\n');
       const fileName = `Chat_${currentLobby.nome.replace(/\s+/g, '_')}.txt`;
       
       if (Platform.OS === 'web') {
@@ -65,6 +88,7 @@ export default function Salas() {
         a.href = url;
         a.download = fileName;
         a.click();
+        URL.revokeObjectURL(url);
       } else {
         const fileUri = `${FileSystem.documentDirectory}${fileName}`;
         await FileSystem.writeAsStringAsync(fileUri, chatText);
@@ -72,8 +96,9 @@ export default function Salas() {
       }
     } catch (error) {
       console.error('Erro ao exportar TXT:', error);
+      if (Platform.OS === 'web') window.alert('Erro ao exportar arquivo.');
+      else Alert.alert('Erro', 'Não foi possível salvar o arquivo.');
     }
-    */
   };
 
   const handleOpenCreateModal = () => {
@@ -83,10 +108,16 @@ export default function Salas() {
   };
 
   const handleConfirmCreateLobby = () => {
-    if (newRoomName.trim() === '') return Alert.alert('Erro', 'Dê um nome para a sala!');
+    if (newRoomName.trim() === '') {
+      if (Platform.OS === 'web') return window.alert('Dê um nome para a sala!');
+      return Alert.alert('Erro', 'Dê um nome para a sala!');
+    }
     const limit = parseInt(newRoomLimit);
-    if (isNaN(limit) || limit < 2 || limit > 50) return Alert.alert('Erro', 'O limite deve ser entre 2 e 50 pessoas.');
-
+    if (isNaN(limit) || limit < 2 || limit > 50) {
+      if (Platform.OS === 'web') return window.alert('O limite deve ser entre 2 e 50 pessoas.');
+      return Alert.alert('Erro', 'O limite deve ser entre 2 e 50 pessoas.');
+    }
+    setLoading(true);
     socket.emit('create_lobby', { nome: newRoomName.trim(), tipo: 'Bate-papo', max_jogadores: limit });
   };
 
@@ -98,11 +129,38 @@ export default function Salas() {
     if (currentLobby) socket.emit('leave_lobby', { lobby_id: currentLobby.id });
   };
 
+  // 🚨 Tratamento de Caixas de Confirmação para a Web
   const handleAdminDeleteLobby = () => {
-    Alert.alert('Encerrar Sala', 'Isso irá expulsar todos e salvar o log no banco de dados. Confirmar?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Encerrar', style: 'destructive', onPress: () => socket.emit('admin_delete_lobby', { lobby_id: currentLobby.id }) }
-    ]);
+    const confirmAction = () => socket.emit('admin_delete_lobby', { lobby_id: currentLobby.id });
+    if (Platform.OS === 'web') {
+      if (window.confirm('Encerrar Sala: Isso irá expulsar todos e salvar o log no banco de dados. Confirmar?')) confirmAction();
+    } else {
+      Alert.alert('Encerrar Sala', 'Isso irá expulsar todos e salvar o log no banco de dados. Confirmar?', [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Encerrar', style: 'destructive', onPress: confirmAction }
+      ]);
+    }
+  };
+
+  // 🚨 Função de Apagar Mensagem (Soft Delete)
+  const handleLongPressMessage = (msg: any) => {
+    if (msg.sender === 'SISTEMA' || msg.apagada) return;
+
+    const isMe = msg.sender_id === user?.id;
+    if (!isMe && !isAdmin) return; // Só apaga se for dono da msg ou for Admin
+
+    const confirmDelete = () => {
+      socket.emit('delete_lobby_message', { lobby_id: currentLobby.id, message_id: msg.id, is_admin: isAdmin && !isMe });
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Deseja apagar esta mensagem?')) confirmDelete();
+    } else {
+      Alert.alert('Apagar Mensagem', 'Deseja ocultar esta mensagem do chat?', [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Apagar', style: 'destructive', onPress: confirmDelete }
+      ]);
+    }
   };
 
   const handleSendMessage = () => {
@@ -124,17 +182,19 @@ export default function Salas() {
           <Text style={styles.createButtonText}>Criar Nova Sala</Text>
         </TouchableOpacity>
 
-        {loading ? (
+        {loading && !refreshing ? (
           <ActivityIndicator size="large" color="#00BFFF" style={{ marginTop: 50 }} />
         ) : (
           <FlatList
             data={lobbies}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00BFFF" />}
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Ionicons name="cafe-outline" size={48} color="#666" />
                 <Text style={styles.emptyText}>Nenhuma sala aberta.</Text>
+                <Text style={{color: '#888', marginTop: 8}}>Arraste para baixo para atualizar</Text>
               </View>
             }
             renderItem={({ item }) => {
@@ -154,11 +214,7 @@ export default function Salas() {
                   </View>
                   
                   <View style={{ gap: 8 }}>
-                    <TouchableOpacity 
-                      style={[styles.joinButton, isFull && !isAdmin && { backgroundColor: '#555' }]} 
-                      disabled={isFull && !isAdmin}
-                      onPress={() => handleJoinLobby(item.id, false)}
-                    >
+                    <TouchableOpacity style={[styles.joinButton, isFull && !isAdmin && { backgroundColor: '#555' }]} disabled={isFull && !isAdmin} onPress={() => handleJoinLobby(item.id, false)}>
                       <Text style={styles.joinButtonText}>{isFull && !isAdmin ? 'Cheia' : 'Entrar'}</Text>
                     </TouchableOpacity>
 
@@ -175,7 +231,6 @@ export default function Salas() {
           />
         )}
 
-        {/* Modal de Configuração */}
         <Modal visible={showCreateModal} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
@@ -193,7 +248,6 @@ export default function Salas() {
             </View>
           </View>
         </Modal>
-
       </SafeAreaView>
     );
   }
@@ -211,7 +265,6 @@ export default function Salas() {
             <Text style={styles.roomSubtitle}>{currentLobby.players_names?.length || 1} participante(s)</Text>
           </View>
           
-          {/* Botões do Administrador */}
           {isAdmin ? (
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity style={[styles.voiceButton, { backgroundColor: '#333' }]} onPress={handleExportTXT}>
@@ -249,12 +302,38 @@ export default function Salas() {
 
             if (isSystem) return <View style={styles.systemMessage}><Text style={styles.systemMessageText}>{item.text}</Text></View>;
 
+            // 🚨 RENDERIZAÇÃO DA MENSAGEM APAGADA
+            if (item.apagada) {
+              if (isAdmin) {
+                // Admin vê borrado/transparente
+                return (
+                  <View style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther, { opacity: 0.6 }]}>
+                    {!isMe && <Text style={styles.messageSender}>{item.sender}</Text>}
+                    <Text style={styles.messageText}>{item.text}</Text>
+                    <Text style={[styles.messageTime, { color: '#FF4500', fontWeight: 'bold' }]}>Apagada ({item.time})</Text>
+                  </View>
+                );
+              } else {
+                // Alunos veem a restrição
+                return (
+                  <View style={[styles.messageBubble, { alignSelf: isMe ? 'flex-end' : 'flex-start', backgroundColor: '#333' }]}>
+                    <Text style={{ color: '#aaa', fontStyle: 'italic', fontSize: 13 }}>🚫 Esta mensagem foi apagada</Text>
+                  </View>
+                );
+              }
+            }
+
+            // Mensagem Normal (Com suporte a Long Press para apagar)
             return (
-              <View style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther]}>
+              <TouchableOpacity 
+                activeOpacity={0.8}
+                onLongPress={() => handleLongPressMessage(item)}
+                style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther]}
+              >
                 {!isMe && <Text style={styles.messageSender}>{item.sender}</Text>}
                 <Text style={styles.messageText}>{item.text}</Text>
                 <Text style={styles.messageTime}>{item.time}</Text>
-              </View>
+              </TouchableOpacity>
             );
           }}
         />
