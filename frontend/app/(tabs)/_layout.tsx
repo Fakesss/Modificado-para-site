@@ -50,41 +50,19 @@ export default function TabsLayout() {
   const [convite, setConvite] = useState<any>(null);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
 
-  // Estados da Chamada de Voz
+  // 🚨 Estados da Chamada de Voz
   const [jitsiRoom, setJitsiRoom] = useState<string | null>(null);
+  const [isCallMinimized, setIsCallMinimized] = useState<boolean>(false); // Controle de encolher a tela
+  
   const pan = useRef(new Animated.ValueXY()).current;
   
-  // Medidas da nossa janela "Mini-Rádio"
-  const BOX_WIDTH = 220;
-  const BOX_HEIGHT = 240;
-
-  // 🚨 SISTEMA MAGNÉTICO ATUALIZADO (Com as novas medidas)
+  // Controle de arrastar mais suave e livre de bugs
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
       onPanResponderRelease: () => {
-        pan.flattenOffset();
-        let newX = pan.x._value;
-        let newY = pan.y._value;
-
-        // Limites da tela para o Mini-Rádio não fugir
-        const minX = -(width * 0.05);
-        const maxX = width - (width * 0.05) - BOX_WIDTH;
-        const minY = -(height * 0.15);
-        const maxY = height - (height * 0.15) - BOX_HEIGHT;
-
-        if (newX < minX) newX = minX;
-        if (newX > maxX) newX = maxX;
-        if (newY < minY) newY = minY;
-        if (newY > maxY) newY = maxY;
-
-        Animated.spring(pan, {
-          toValue: { x: newX, y: newY },
-          useNativeDriver: false
-        }).start(() => {
-          pan.extractOffset();
-        });
+        pan.extractOffset();
       },
     })
   ).current;
@@ -139,6 +117,7 @@ export default function TabsLayout() {
 
     const openVoiceListener = DeviceEventEmitter.addListener('open_voice_call', (data) => {
       setJitsiRoom(`MatematicaTurbo_Sala_${data.roomId}`);
+      setIsCallMinimized(false); // Sempre abre grande primeiro
       pan.setOffset({ x: 0, y: 0 });
       pan.setValue({ x: 0, y: 0 }); 
     });
@@ -176,8 +155,11 @@ export default function TabsLayout() {
     setConvite(null);
   };
 
-  // URL configurada para forçar o layout de Áudio e não pedir cadastro
   const jitsiUrl = `https://meet.jit.si/${jitsiRoom}#config.prejoinPageEnabled=false&config.startAudioOnly=true&config.disableVideo=true`;
+
+  // 🚨 Cálculo Dinâmico do Tamanho da Tela da Chamada
+  const BOX_WIDTH = isCallMinimized ? 200 : (width > 500 ? 400 : width * 0.9);
+  const BOX_HEIGHT = isCallMinimized ? 45 : 450;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -185,28 +167,40 @@ export default function TabsLayout() {
       <AdminBanner />
       <NeonLineSimple color={teamColor} />
 
-      {/* 🚨 NOVA CAIXA FLUTUANTE "MINI-RÁDIO" */}
+      {/* 🚨 WIDGET FLUTUANTE EXPANSÍVEL */}
       {jitsiRoom && (
-        <Animated.View style={[styles.floatingCallBox, { transform: pan.getTranslateTransform() }]}>
+        <Animated.View style={[
+          styles.floatingCallBox, 
+          { width: BOX_WIDTH, height: BOX_HEIGHT, transform: pan.getTranslateTransform() }
+        ]}>
           
-          {/* Barra de cima para arrastar o Mini-Rádio */}
+          {/* BARRA SUPERIOR (Arrastar e Botões) */}
           <View style={styles.dragHandle} {...panResponder.panHandlers}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Ionicons name="radio" size={18} color="#000" />
-              <Text style={styles.dragHandleText}>Call da Sala</Text>
+              <Text style={styles.dragHandleText}>Call {isCallMinimized ? 'Ativa' : 'da Sala'}</Text>
             </View>
-            <TouchableOpacity style={styles.hangupButton} onPress={() => setJitsiRoom(null)}>
-              <Ionicons name="close" size={20} color="#fff" />
-            </TouchableOpacity>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              {/* BOTÃO DE MINIMIZAR / EXPANDIR */}
+              <TouchableOpacity onPress={() => setIsCallMinimized(!isCallMinimized)} style={styles.minimizeBtn}>
+                <Ionicons name={isCallMinimized ? "expand" : "contract"} size={20} color="#000" />
+              </TouchableOpacity>
+              
+              {/* BOTÃO DE DESLIGAR */}
+              <TouchableOpacity style={styles.hangupButton} onPress={() => setJitsiRoom(null)}>
+                <Ionicons name="close" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
           
-          {/* A tela do Jitsi agora é visível, para você poder liberar o Microfone! */}
-          <View style={styles.webViewContainer}>
+          {/* ÁREA DO NAVEGADOR (JITSI) */}
+          <View style={isCallMinimized ? styles.webViewHidden : styles.webViewVisible}>
             {Platform.OS === 'web' ? (
               <WebIframe 
                 src={jitsiUrl}
                 style={{ width: '100%', height: '100%', border: 'none' }}
-                allow="camera; microphone; display-capture; autoplay" // 🚨 Autoplay ativado para web!
+                allow="camera; microphone; display-capture; autoplay"
               />
             ) : (
               <WebView 
@@ -297,18 +291,16 @@ const styles = StyleSheet.create({
   btnAction: { flexDirection: 'row', width: '100%', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8 },
   btnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
 
-  // 🚨 Estilos do Novo "Mini-Rádio" Magnético
+  // 🚨 Estilos do Widget Expansível
   floatingCallBox: {
     position: 'absolute',
-    top: height * 0.15,
-    left: width * 0.05,
-    width: 220,
-    height: 240, // Altura suficiente para ver a foto do outro jogador e o botão de desmutar
+    top: 50,
+    left: 20,
     backgroundColor: '#1a1a2e', 
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: 'hidden',
-    zIndex: 9999,
-    elevation: 10,
+    zIndex: 99999,
+    elevation: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.5,
@@ -318,23 +310,28 @@ const styles = StyleSheet.create({
   },
   dragHandle: {
     backgroundColor: '#32CD32',
-    height: 40,
+    height: 45,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 15,
+    paddingHorizontal: 12,
   },
-  dragHandleText: {
-    color: '#000',
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  hangupButton: {
-    padding: 5,
-  },
-  webViewContainer: {
+  dragHandleText: { color: '#000', fontWeight: 'bold', marginLeft: 8 },
+  minimizeBtn: { padding: 4, backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: 6 },
+  hangupButton: { padding: 4 },
+  
+  // Classes para esconder/mostrar o Jitsi sem desligar a chamada
+  webViewVisible: {
     flex: 1,
     width: '100%',
     backgroundColor: '#1a1a2e'
+  },
+  webViewHidden: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0.01,
+    overflow: 'hidden',
+    top: -1000,
   }
 });
