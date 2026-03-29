@@ -1,42 +1,32 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
+  ActivityIndicator, Image, Platform, UIManager, LayoutAnimation
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as api from '../../src/services/api';
-import { Conteudo, ProgressoVideo } from '../../src/types';
+import { Conteudo } from '../../src/types';
+
+// Ativa as animações fluidas no Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export default function Videos() {
   const router = useRouter();
   const [videos, setVideos] = useState<Conteudo[]>([]);
-  const [progressMap, setProgressMap] = useState<Record<string, ProgressoVideo>>({});
+  const [viewedIds, setViewedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const videosData = await api.getConteudos('videos');
-      setVideos(videosData.filter((v: Conteudo) => v.tipo === 'VIDEO'));
-      
-      // Load progress for each video
-      const progressData: Record<string, ProgressoVideo> = {};
-      for (const video of videosData) {
-        try {
-          const progress = await api.getProgressoVideo(video.id);
-          progressData[video.id] = progress;
-        } catch (error) {
-          // No progress yet
-        }
-      }
-      setProgressMap(progressData);
+      const data = await api.getConteudos('videos');
+      setVideos(data.filter((v: Conteudo) => v.tipo === 'VIDEO' && v.ativo && !v.is_deleted));
+      await checkProgress();
     } catch (error) {
       console.error('Error loading videos:', error);
     } finally {
@@ -44,95 +34,121 @@ export default function Videos() {
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
+  const checkProgress = async () => {
+    try {
+      // Puxa as views do AsyncStorage (mesmo local que o video [id] salva)
+      const keys = await AsyncStorage.getAllKeys();
+      const viewed = keys.filter(k => k.startsWith('@video_done_')).map(k => k.replace('@video_done_', ''));
+      
+      // Animação caso a lista mude quando o usuário voltar da tela de vídeo
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setViewedIds(viewed);
+    } catch (error) { console.error(error); }
   };
 
-  const getProgressStatus = (videoId: string) => {
-    const progress = progressMap[videoId];
-    if (!progress) return { status: 'new', label: 'Novo', color: '#888' };
-    if (progress.concluido) return { status: 'completed', label: 'Concluído', color: '#32CD32' };
-    return { status: 'progress', label: 'Em andamento', color: '#FFD700' };
-  };
+  useEffect(() => { loadData(); }, [loadData]);
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // Atualiza inteligentemente quando volta da tela do player
+  useFocusEffect(useCallback(() => { checkProgress(); }, []));
+
+  // LÓGICA DE SEPARAÇÃO
+  const novos = videos.filter(v => !viewedIds.includes(v.id));
+  const concluidos = videos.filter(v => viewedIds.includes(v.id)).sort((a, b) => a.titulo.localeCompare(b.titulo));
+  
+  const pastasAgrupadas = concluidos.reduce((acc, curr) => {
+    const p = curr.pasta || 'Geral';
+    if (!acc[p]) acc[p] = [];
+    acc[p].push(curr);
+    return acc;
+  }, {} as Record<string, Conteudo[]>);
+
+  if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View>;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="play-circle" size={28} color="#4169E1" />
+        <Ionicons name="play-circle" size={28} color="#FFD700" />
         <Text style={styles.title}>Vídeo-aulas</Text>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
-        }
-      >
-        {videos.map((video) => {
-          const progressStatus = getProgressStatus(video.id);
-          const progress = progressMap[video.id];
-          
-          return (
-            <TouchableOpacity
-              key={video.id}
-              style={styles.videoCard}
-              onPress={() => router.push(`/video/${video.id}`)}
-            >
-              <View style={styles.videoThumbnail}>
-                <Ionicons name="play" size={32} color="#fff" />
-              </View>
-              <View style={styles.videoInfo}>
-                <Text style={styles.videoTitle}>{video.titulo}</Text>
-                {video.descricao && (
-                  <Text style={styles.videoDescription} numberOfLines={2}>
-                    {video.descricao}
-                  </Text>
-                )}
-                <View style={styles.videoMeta}>
-                  <View style={[styles.statusBadge, { backgroundColor: progressStatus.color + '30' }]}>
-                    <Ionicons
-                      name={progressStatus.status === 'completed' ? 'checkmark-circle' : 'ellipse'}
-                      size={14}
-                      color={progressStatus.color}
-                    />
-                    <Text style={[styles.statusText, { color: progressStatus.color }]}>
-                      {progressStatus.label}
-                    </Text>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }} tintColor="#FFD700" />}>
+        
+        {/* SEÇÃO 1: VÍDEOS NOVOS */}
+        {novos.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="flame" size={24} color="#FF4500" />
+              <Text style={styles.sectionTitle}>Para Assistir</Text>
+            </View>
+            <Text style={styles.sectionSubtitle}>Assista as aulas abaixo para ganhar pontos.</Text>
+            
+            {novos.map((video) => (
+              <TouchableOpacity key={video.id} style={styles.videoCard} onPress={() => router.push(`/video/${video.id}`)}>
+                <View style={styles.badgeNovo}><Text style={styles.badgeNovoText}>NOVO</Text></View>
+                
+                {video.thumbnail ? (
+                  <Image source={{ uri: video.thumbnail }} style={styles.videoThumbnail} />
+                ) : (
+                  <View style={[styles.videoThumbnail, { backgroundColor: '#FFD70020' }]}>
+                    <Ionicons name="play" size={32} color="#FFD700" />
                   </View>
-                  {progress?.pontosGerados > 0 && (
-                    <View style={styles.pointsBadge}>
-                      <Ionicons name="star" size={14} color="#FFD700" />
-                      <Text style={styles.pointsText}>+{progress.pontosGerados} pts</Text>
+                )}
+                
+                <View style={styles.videoInfo}>
+                  <Text style={styles.videoTitle}>{video.titulo}</Text>
+                  {video.descricao && <Text style={styles.videoDescription} numberOfLines={2}>{video.descricao}</Text>}
+                  
+                  <View style={styles.videoMeta}>
+                    <View style={styles.statusBadge}>
+                      <Ionicons name="ellipse" size={10} color="#FFD700" />
+                      <Text style={styles.statusText}>Pendente</Text>
                     </View>
-                  )}
+                    {video.pontos > 0 && (
+                      <View style={styles.pointsBadge}>
+                        <Ionicons name="star" size={12} color="#FFD700" />
+                        <Text style={styles.pointsText}>+{video.pontos} pts</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* SEÇÃO 2: PASTAS DE VÍDEOS VISTOS */}
+        {Object.keys(pastasAgrupadas).length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="checkmark-done-circle" size={24} color="#888" />
+              <Text style={[styles.sectionTitle, { color: '#888' }]}>Aulas Concluídas</Text>
+            </View>
+            
+            {Object.entries(pastasAgrupadas).sort().map(([nomePasta, itens]) => (
+              <View key={nomePasta} style={styles.pastaContainer}>
+                <View style={styles.pastaHeader}>
+                  <Ionicons name="folder" size={20} color="#FFD700" />
+                  <Text style={styles.pastaTitle}>{nomePasta}</Text>
+                </View>
+                
+                {itens.map((video) => (
+                  <TouchableOpacity key={video.id} style={styles.cardPastas} onPress={() => router.push(`/video/${video.id}`)}>
+                    <Ionicons name="play-circle" size={22} color="#666" style={{marginRight: 12}} />
+                    <View style={{flex: 1}}>
+                      <Text style={styles.cardPastasTitle}>{video.titulo}</Text>
+                    </View>
+                    <Ionicons name="checkmark" size={20} color="#32CD32" />
+                  </TouchableOpacity>
+                ))}
               </View>
-              <Ionicons name="chevron-forward" size={24} color="#666" />
-            </TouchableOpacity>
-          );
-        })}
+            ))}
+          </View>
+        )}
 
         {videos.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="videocam-outline" size={48} color="#666" />
-            <Text style={styles.emptyText}>Nenhum vídeo disponível</Text>
+            <Text style={styles.emptyText}>Nenhum vídeo disponível no momento.</Text>
           </View>
         )}
       </ScrollView>
@@ -141,101 +157,36 @@ export default function Videos() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0c0c0c',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    gap: 12,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  videoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1a2e',
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 12,
-  },
-  videoThumbnail: {
-    width: 80,
-    height: 60,
-    backgroundColor: '#4169E1' + '40',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  videoInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  videoTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  videoDescription: {
-    color: '#888',
-    fontSize: 13,
-    marginTop: 4,
-  },
-  videoMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    gap: 8,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    gap: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  pointsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: '#FFD700' + '30',
-    gap: 4,
-  },
-  pointsText: {
-    color: '#FFD700',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  emptyState: {
-    alignItems: 'center',
-    padding: 40,
-  },
-  emptyText: {
-    color: '#666',
-    fontSize: 16,
-    marginTop: 16,
-  },
+  container: { flex: 1, backgroundColor: '#0c0c0c' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a2e' },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 16, paddingBottom: 40 },
+  section: { marginBottom: 30 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  sectionSubtitle: { color: '#888', fontSize: 12, marginTop: 4, marginBottom: 12 },
+  
+  videoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 16, padding: 12, marginBottom: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#333' },
+  badgeNovo: { position: 'absolute', top: 0, right: 0, backgroundColor: '#FF4500', paddingHorizontal: 10, paddingVertical: 2, borderBottomLeftRadius: 12, zIndex: 10 },
+  badgeNovoText: { fontSize: 9, fontWeight: 'bold', color: '#fff' },
+  videoThumbnail: { width: 100, height: 70, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
+  videoInfo: { flex: 1, marginLeft: 12 },
+  videoTitle: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  videoDescription: { color: '#888', fontSize: 12, marginTop: 4 },
+  videoMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD70020', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, gap: 4 },
+  statusText: { fontSize: 10, fontWeight: 'bold', color: '#FFD700' },
+  pointsBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#32CD3220', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, gap: 4 },
+  pointsText: { color: '#32CD32', fontSize: 10, fontWeight: 'bold' },
+  
+  pastaContainer: { backgroundColor: '#151520', borderRadius: 16, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#222' },
+  pastaHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#222' },
+  pastaTitle: { color: '#FFD700', fontSize: 15, fontWeight: 'bold', textTransform: 'uppercase' },
+  cardPastas: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  cardPastasTitle: { color: '#bbb', fontSize: 14 },
+  
+  emptyState: { alignItems: 'center', padding: 40 },
+  emptyText: { color: '#666', fontSize: 14, marginTop: 16 },
 });
