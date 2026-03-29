@@ -106,7 +106,7 @@ class Conteudo(BaseModel):
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
-    pontos: int = 0  # Os pontos do conteúdo
+    pontos: int = 0 
     ativo: bool = True
     criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     is_deleted: bool = False
@@ -596,16 +596,12 @@ async def delete_conteudo(conteudo_id: str, current_user: dict = Depends(require
     await db.conteudos.update_one({"id": conteudo_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}})
     return {"message": "Conteúdo movido para a lixeira"}
 
-# =====================================================================
-# NOVA ROTA: CONCLUIR VÍDEO E GANHAR PONTOS OFICIAIS
-# =====================================================================
 @api_router.post("/conteudos/{conteudo_id}/concluir")
 async def concluir_conteudo(conteudo_id: str, current_user: dict = Depends(get_current_user)):
     conteudo = await db.conteudos.find_one({"id": conteudo_id})
     if not conteudo:
         raise HTTPException(status_code=404, detail="Conteúdo não encontrado")
     
-    # SISTEMA ANTI-TRAPAÇA NO BANCO: Verifica se o aluno já concluiu e ganhou os pontos antes
     ja_concluiu = await db.conteudos_concluidos.find_one({
         "usuarioId": current_user["id"], 
         "conteudoId": conteudo_id
@@ -614,7 +610,6 @@ async def concluir_conteudo(conteudo_id: str, current_user: dict = Depends(get_c
     if ja_concluiu:
         return {"message": "Conteúdo já estava concluído", "pontos": 0}
         
-    # Registra no banco que ele concluiu, para nunca mais dar pontos duplos
     await db.conteudos_concluidos.insert_one({
         "usuarioId": current_user["id"],
         "conteudoId": conteudo_id,
@@ -624,7 +619,6 @@ async def concluir_conteudo(conteudo_id: str, current_user: dict = Depends(get_c
     pontos = conteudo.get("pontos", 0)
     
     if pontos > 0:
-        # Entrega os pontos de fato pro usuário e pra equipe
         await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
         
         eq_raw = current_user.get("equipeId")
@@ -666,10 +660,6 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
         await db.questoes.delete_many({"exercicioId": item_id})
         return {"message": "Deletado"}
     raise HTTPException(400, "Tipo inválido")
-
-# =====================================================================
-# ROTAS DE RANKING COM "AUTO-HEALING"
-# =====================================================================
 
 @api_router.get("/ranking/geral")
 async def get_ranking_geral():
@@ -806,11 +796,9 @@ async def get_ranking_turma(turma_id: str):
 async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
     submissoes = await db.submissoes.find({"usuarioId": current_user["id"]}).sort("data", -1).to_list(100)
     
-    # Busca todos os vídeos/conteúdos concluídos pelo aluno
     concluidos = await db.conteudos_concluidos.find({"usuarioId": current_user["id"]}).to_list(1000)
     videos_concluidos = len(concluidos)
     
-    # Soma os pontos reais lendo direto do banco de dados!
     pontos_videos = 0
     if videos_concluidos > 0:
         conteudo_ids = [c["conteudoId"] for c in concluidos]
@@ -826,7 +814,6 @@ async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
         "submissoes": [{k: v for k, v in s.items() if k != '_id'} for s in submissoes]
     }
 
-# ============== MISSOES / JOGOS =========================
 class MissaoQuestao(BaseModel):
     id: str
     texto: str
@@ -959,52 +946,34 @@ async def reenviar_missao(missao_id: str, dados: ReenviarData, current_user: dic
     return new_missao.dict()
 
 # =====================================================================
-# SISTEMA DE PRESENÇA ONLINE (BLINDADO CONTRA ERRO 500)
+# SISTEMA DE PRESENÇA ONLINE (INTEGRADO AO SOCKET MULTIPLAYER)
 # =====================================================================
-class PingRequest(BaseModel):
-    nome: str
-    turmaId: Optional[str] = None
-    equipeId: Optional[str] = None
-
 @api_router.post("/online/ping")
-async def ping_online(data: PingRequest, credentials: HTTPAuthorizationCredentials = Depends(security)):
-    try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        if user_id:
-            agora = datetime.utcnow().isoformat()
-            await db.online_users.update_one(
-                {"id": user_id},
-                {
-                    "$set": {
-                        "nome": data.nome,
-                        "turmaId": data.turmaId,
-                        "equipeId": data.equipeId,
-                        "last_ping": agora
-                    }
-                },
-                upsert=True
-            )
-    except Exception:
-        pass
+async def ping_online():
+    # Mantido vazio apenas para não quebrar o aplicativo caso algum celular antigo chame
     return {"status": "ok"}
 
 @api_router.get("/online/users")
 async def get_online_users():
     try:
-        cutoff = (datetime.utcnow() - timedelta(seconds=45)).isoformat()
+        # A Mágica acontece aqui: Lemos a memória super-rápida do Socket Multiplayer
+        from socket_manager import players_online
         
-        # 1. FAZ A LEITURA ISOLADA (Seguro)
-        ativos = await db.online_users.find({"last_ping": {"$gte": cutoff}}).to_list(1000)
+        active_user_ids = []
+        for sid, p_data in players_online.items():
+            uid = p_data.get("user_id")
+            if uid and p_data.get("status") != "OFFLINE":
+                active_user_ids.append(uid)
         
-        # 2. ISOLAMENTO DE FALHAS
-        try:
-            await db.online_users.delete_many({"last_ping": {"$lt": cutoff}})
-        except Exception:
-            pass 
+        if not active_user_ids:
+            return []
             
+        # Puxamos os dados completos da pessoa (pra ter o id da equipe e as cores)
+        ativos = await db.usuarios.find({"id": {"$in": list(set(active_user_ids))}}).to_list(1000)
+        
         return [{"id": u["id"], "nome": u.get("nome"), "turmaId": u.get("turmaId"), "equipeId": u.get("equipeId")} for u in ativos]
-    except Exception:
+    except Exception as e:
+        print(f"Erro na rota online: {e}")
         return []
 
 app.include_router(api_router)
