@@ -245,24 +245,29 @@ const styles = StyleSheet.create({
   podiumContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginBottom: 32, paddingHorizontal: 4 },
   podiumItem: { flex: 1, alignItems: 'center', marginHorizontal: 6 },
   
-  /* 🎯 ESTILOS DA PÍLULA CORRIGIDOS */
+  /* 🎯 ESTILOS DA PÍLULA CORRIGIDOS (Uniformidade e Alinhamento) */
   teamNamePill: {
-    /* width: '100%',  <- RETIRADO para não esticar */
+    width: '92%', /* 🎯 Tamanho uniforme (pouco menor que a box) */
     alignSelf: 'center', /* Centraliza */
     paddingVertical: 6,
-    paddingHorizontal: 12, /* Mais padding horizontal para o formato de pílula real */
+    paddingHorizontal: 4, 
     borderRadius: 20,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'center', /* 🎯 Centraliza o Ômega verticalmente no meio */
     marginBottom: 8,
     zIndex: 10,
-    minHeight: 36,
+    minHeight: 38, /* Aumentado ligeiramente para nomes com acento ficarem confortáveis */
+    borderWidth: 1,
+    borderColor: '#1a1a2e',
   },
   teamNamePillText: {
     color: '#000',
     fontWeight: 'bold',
-    fontSize: 13, /* 🎯 AUMENTADO ligeiramente de 12 para 13 */
+    fontSize: 13, 
     textAlign: 'center',
+    /* 🎯 Garante que não haja alinhamento estranho de linha */
+    includeFontPadding: false, 
+    textAlignVertical: 'center',
   },
   
   podiumBox: { width: '100%', borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 6 },
