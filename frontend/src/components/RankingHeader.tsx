@@ -11,10 +11,9 @@ interface Props {
 const EMPTY_ITEM = { id: 'empty', nome: '-', cor: '#333', pontosTotais: 0, posicao: 0 };
 
 export default function RankingHeader({ ranking, loading }: Props) {
-  // 🚨 CORREÇÃO 1: Agora ordena pelos PONTOS e não pela posição antiga do servidor
+  // 🚨 A SUA LÓGICA PERFEITA MANTIDA: Ordena pelos PONTOS reais
   const sortedByPoints = [...ranking].sort((a, b) => b.pontosTotais - a.pontosTotais);
 
-  // Redefine as posições visuais baseadas em quem realmente tem mais pontos agora
   const first = sortedByPoints[0] ? { ...sortedByPoints[0], posicao: 1 } : { ...EMPTY_ITEM, posicao: 1 };
   const second = sortedByPoints[1] ? { ...sortedByPoints[1], posicao: 2 } : { ...EMPTY_ITEM, posicao: 2 };
   const third = sortedByPoints[2] ? { ...sortedByPoints[2], posicao: 3 } : { ...EMPTY_ITEM, posicao: 3 };
@@ -32,31 +31,47 @@ export default function RankingHeader({ ranking, loading }: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Ranking das Equipes</Text>
+      
       <View style={styles.podiumContainer}>
         {displayOrder.map((item, index) => {
           const isFirst = item.posicao === 1;
           const isEmpty = item.id === 'empty';
           
-          // 🚨 CORREÇÃO 2: Aumentei as alturas para o 3º lugar (Alfa) não vazar da caixa
-          const podiumHeight = isFirst ? 130 : item.posicao === 2 ? 110 : 90;
+          // Alturas ajustadas para o visual delicado
+          const podiumHeight = isFirst ? 140 : item.posicao === 2 ? 120 : 100;
           
-          // Quebra inteligente: só pula linha no primeiro espaço, evitando nomes esquisitos
+          // Quebra inteligente de nome mantida
           const partesNome = item.nome.split(' ');
           const nomeFormatado = partesNome.length > 1 
             ? `${partesNome[0]}\n${partesNome.slice(1).join(' ')}` 
             : item.nome;
 
           return (
-            <View key={`${item.id}-${index}`} style={styles.podiumItem}>
-              <View style={[styles.badge, { backgroundColor: item.cor }]}>
-                <Text style={styles.badgeText} numberOfLines={2} adjustsFontSizeToFit>
-                  {nomeFormatado}
+            <View key={`${item.id}-${index}`} style={[styles.podiumItem, isFirst && { zIndex: 2 }]}>
+              
+              {/* NOME DA EQUIPE (Estilo Pílula Delicada) */}
+              <View style={[styles.teamNamePill, { backgroundColor: isEmpty ? '#333' : item.cor }]}>
+                <Text style={styles.teamNamePillText} numberOfLines={2} adjustsFontSizeToFit>
+                  {isEmpty ? '-' : nomeFormatado}
                 </Text>
               </View>
               
-              <View style={[styles.podium, { height: podiumHeight, backgroundColor: item.cor + '30' }]}>
-                <View style={[styles.positionCircle, { backgroundColor: item.cor }]}>
-                  <Text style={styles.positionText}>{item.posicao}º</Text>
+              {/* CAIXA DO PÓDIO (Transparente com Posição Dentro) */}
+              <View style={[styles.podiumBox, { height: podiumHeight, backgroundColor: isEmpty ? '#33333330' : item.cor + '25' }]}>
+                
+                {/* Círculo de Posição Dentro da Caixa */}
+                <View style={[
+                  styles.insidePositionCircle, 
+                  { 
+                    backgroundColor: isEmpty ? '#333' : item.cor,
+                    width: isFirst ? 44 : 36,
+                    height: isFirst ? 44 : 36,
+                    borderRadius: isFirst ? 22 : 18
+                  }
+                ]}>
+                  <Text style={[styles.insidePositionText, { fontSize: isFirst ? 18 : 14, color: isEmpty ? '#888' : '#000' }]}>
+                    {item.posicao}º
+                  </Text>
                 </View>
                 
                 <Ionicons 
@@ -65,9 +80,10 @@ export default function RankingHeader({ ranking, loading }: Props) {
                   color={isEmpty ? '#555' : item.cor} 
                 />
                 
-                <Text style={[styles.points, { color: isEmpty ? '#555' : item.cor }]}>
+                <Text style={[styles.podiumPoints, { color: isEmpty ? '#555' : item.cor, fontSize: isFirst ? 16 : 14 }]}>
                   {isEmpty ? '- pts' : `${item.pontosTotais} pts`}
                 </Text>
+
               </View>
             </View>
           );
@@ -93,60 +109,49 @@ const styles = StyleSheet.create({
   },
   podiumContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end', // Garante que a escadinha do pódio fique alinhada por baixo
-    gap: 8,
+    justifyContent: 'center',
+    alignItems: 'flex-end', 
+    paddingHorizontal: 4,
   },
   podiumItem: {
+    flex: 1,
     alignItems: 'center',
-    flex: 1, 
-    justifyContent: 'flex-end',
+    marginHorizontal: 4,
   },
-  badge: {
+  teamNamePill: {
     width: '100%',
-    minHeight: 48,
-    justifyContent: 'center',
-    alignItems: 'center', 
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 4,
-    borderRadius: 12,
-    marginBottom: 18, 
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    zIndex: 10,
+    minHeight: 36,
   },
-  badgeText: {
+  teamNamePillText: {
     color: '#000',
     fontWeight: '900',
     fontSize: 12,
     textAlign: 'center',
-    lineHeight: 14,
   },
-  podium: {
+  podiumBox: {
     width: '100%',
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  positionCircle: {
-    width: 32,
-    height: 32,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'absolute', 
-    top: -16, 
-    zIndex: 2,
-    borderWidth: 2,
-    borderColor: '#1a1a2e',
+    paddingVertical: 12,
+    gap: 6,
   },
-  positionText: {
-    color: '#000',
-    fontWeight: 'bold',
-    fontSize: 14,
+  insidePositionCircle: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  points: {
+  insidePositionText: {
     fontWeight: 'bold',
-    fontSize: 13,
-    marginTop: 6,
+  },
+  podiumPoints: {
+    fontWeight: 'bold',
+    marginTop: 4,
   },
 });
