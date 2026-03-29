@@ -13,11 +13,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
 import { Exercicio } from '../../src/types';
-import { useAuth } from '../../src/context/AuthContext'; // 🚨 IMPORTADO
+import { useAuth } from '../../src/context/AuthContext';
 
 export default function Exercicios() {
   const router = useRouter();
-  const { user } = useAuth(); // 🚨 PUXANDO O ALUNO LOGADO
+  const { user } = useAuth();
   const [exercicios, setExercicios] = useState<Exercicio[]>([]);
   const [submissoes, setSubmissoes] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
@@ -27,11 +27,19 @@ export default function Exercicios() {
     try {
       const exerciciosData = await api.getExercicios();
       
-      // 🚨 PORTA DE SEGURANÇA: Filtra quem pode ver o quê
-      const filteredExercicios = exerciciosData.filter((ex: Exercicio) => {
-        if (ex.equipeId) return ex.equipeId === user?.equipeId;
-        if (ex.turmaId) return ex.turmaId === user?.turmaId;
-        return true; // Se não tem equipe nem turma, é Geral
+      // 🚨 SUPER TRAVA DE SEGURANÇA
+      const filteredExercicios = exerciciosData.filter((ex: any) => {
+        // Verifica se existem marcações e ignora textos vazios do banco
+        const alvoUsuario = ex.usuarioId && String(ex.usuarioId).trim() !== '';
+        const alvoEquipe = ex.equipeId && String(ex.equipeId).trim() !== '';
+        const alvoTurma = ex.turmaId && String(ex.turmaId).trim() !== '';
+
+        // Hierarquia de bloqueio
+        if (alvoUsuario) return ex.usuarioId === user?.id;
+        if (alvoEquipe) return ex.equipeId === user?.equipeId;
+        if (alvoTurma) return ex.turmaId === user?.turmaId;
+        
+        return true; // Se não tem dono, é Público para todos
       });
       
       setExercicios(filteredExercicios);
@@ -41,9 +49,7 @@ export default function Exercicios() {
         try {
           const sub = await api.getSubmissao(ex.id);
           if (sub) submissoesData[ex.id] = sub;
-        } catch (error) {
-          // Sem submissão ainda
-        }
+        } catch (error) {}
       }
       setSubmissoes(submissoesData);
     } catch (error) {
@@ -53,9 +59,7 @@ export default function Exercicios() {
     }
   }, [user]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -66,21 +70,12 @@ export default function Exercicios() {
   const getExerciseStatus = (exercicioId: string) => {
     const sub = submissoes[exercicioId];
     if (!sub) return { status: 'new', label: 'Novo', color: '#00BFFF' };
-    
     if (sub.nota >= 7) return { status: 'great', label: `Nota: ${sub.nota}`, color: '#32CD32' };
     if (sub.nota >= 5) return { status: 'ok', label: `Nota: ${sub.nota}`, color: '#FFD700' };
     return { status: 'retry', label: `Nota: ${sub.nota}`, color: '#E74C3C' };
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  if (loading) return <SafeAreaView style={styles.container}><View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View></SafeAreaView>;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -89,47 +84,20 @@ export default function Exercicios() {
         <Text style={styles.title}>Atividades</Text>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
-        }
-      >
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />}>
         {exercicios.map((exercicio) => {
           const exerciseStatus = getExerciseStatus(exercicio.id);
           const sub = submissoes[exercicio.id];
-          
           return (
-            <TouchableOpacity
-              key={exercicio.id}
-              style={styles.exerciseCard}
-              onPress={() => router.push(`/exercicio/${exercicio.id}`)}
-            >
-              <View style={styles.exerciseIcon}>
-                <Ionicons
-                  name={exercicio.modoCriacao === 'PDF' ? 'document' : 'list'}
-                  size={28}
-                  color="#32CD32"
-                />
-              </View>
+            <TouchableOpacity key={exercicio.id} style={styles.exerciseCard} onPress={() => router.push(`/exercicio/${exercicio.id}`)}>
+              <View style={styles.exerciseIcon}><Ionicons name={exercicio.modoCriacao === 'PDF' ? 'document' : 'list'} size={28} color="#32CD32" /></View>
               <View style={styles.exerciseInfo}>
                 <Text style={styles.exerciseTitle}>{exercicio.titulo}</Text>
-                {exercicio.descricao && (
-                  <Text style={styles.exerciseDescription} numberOfLines={2}>
-                    {exercicio.descricao}
-                  </Text>
-                )}
+                {exercicio.descricao && <Text style={styles.exerciseDescription} numberOfLines={2}>{exercicio.descricao}</Text>}
                 <View style={styles.exerciseMeta}>
                   <View style={[styles.statusBadge, { backgroundColor: exerciseStatus.color + '20' }]}>
-                    <Ionicons
-                      name={exerciseStatus.status === 'new' ? 'sparkles' : 'checkmark-circle'}
-                      size={14}
-                      color={exerciseStatus.color}
-                    />
-                    <Text style={[styles.statusText, { color: exerciseStatus.color }]}>
-                      {exerciseStatus.label}
-                    </Text>
+                    <Ionicons name={exerciseStatus.status === 'new' ? 'sparkles' : 'checkmark-circle'} size={14} color={exerciseStatus.color} />
+                    <Text style={[styles.statusText, { color: exerciseStatus.color }]}>{exerciseStatus.label}</Text>
                   </View>
                   {sub?.pontosGerados > 0 && (
                     <View style={styles.pointsBadge}>
@@ -141,9 +109,7 @@ export default function Exercicios() {
                 {exercicio.habilidadesBNCC.length > 0 && (
                   <View style={styles.tagsContainer}>
                     {exercicio.habilidadesBNCC.slice(0, 3).map((tag, index) => (
-                      <View key={index} style={styles.tag}>
-                        <Text style={styles.tagText}>{tag}</Text>
-                      </View>
+                      <View key={index} style={styles.tag}><Text style={styles.tagText}>{tag}</Text></View>
                     ))}
                   </View>
                 )}
