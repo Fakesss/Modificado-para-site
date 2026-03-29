@@ -111,28 +111,32 @@ export default function AdminHome() {
           </TouchableOpacity>
         </View>
 
-        {/* Stats Grid - AGORA SÃO BOTÕES CLICÁVEIS */}
+        {/* Stats Grid */}
         <View style={styles.statsGrid}>
           <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/usuarios')}>
             <Ionicons name="people" size={28} color="#4169E1" />
             <Text style={styles.statValue}>{stats?.totalUsuarios || 0}</Text>
             <Text style={styles.statLabel}>Usuários</Text>
           </TouchableOpacity>
+          
           <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/conteudos')}>
             <Ionicons name="play-circle" size={28} color="#32CD32" />
             <Text style={styles.statValue}>{stats?.totalVideos || 0}</Text>
             <Text style={styles.statLabel}>Vídeos</Text>
           </TouchableOpacity>
+          
           <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/exercicios')}>
             <Ionicons name="document-text" size={28} color="#FFD700" />
             <Text style={styles.statValue}>{stats?.totalExercicios || 0}</Text>
             <Text style={styles.statLabel}>Exercícios</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/relatorios')}>
+
+          {/* Transformado apenas em View (não clicável) para não jogar para outra tela */}
+          <View style={styles.statCard}>
             <Ionicons name="checkmark-circle" size={28} color="#9B59B6" />
             <Text style={styles.statValue}>{stats?.totalSubmissoes || 0}</Text>
             <Text style={styles.statLabel}>Submissões</Text>
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Average Grade */}
@@ -140,7 +144,8 @@ export default function AdminHome() {
           <Ionicons name="analytics" size={32} color="#FFD700" />
           <View style={styles.averageInfo}>
             <Text style={styles.averageLabel}>Média Geral das Notas</Text>
-            <Text style={styles.averageValue}>{stats?.mediaNotas?.toFixed(1) || '0.0'}</Text>
+            {/* Puxa o dado mediaGeral vindo do novo server.py */}
+            <Text style={styles.averageValue}>{stats?.mediaGeral?.toFixed(1) || '0.0'}</Text>
           </View>
         </View>
 
