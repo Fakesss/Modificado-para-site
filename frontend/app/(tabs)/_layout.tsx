@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, SafeAreaView, Platform, Modal, Alert } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Platform, Modal, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -79,7 +80,6 @@ export default function TabsLayout() {
 
     socket.on('connect', onConnect);
 
-    // CORREÇÃO AQUI: Agora o intervalo reforça quem você é E que você está no MENU!
     const identityInterval = setInterval(() => {
         if (socket.connected) {
             registrarJogador();
@@ -143,7 +143,7 @@ export default function TabsLayout() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <OnlineHeartbeat />
       <AdminBanner />
       <NeonLineSimple color={teamColor} />
@@ -195,15 +195,21 @@ export default function TabsLayout() {
           tabBarLabelStyle: { fontSize: 12, fontWeight: '600', marginBottom: Platform.OS === 'android' ? 4 : 0 },
         }}
       >
+        {/* ABAS VISÍVEIS (Com a nova aba de Salas) */}
         <Tabs.Screen name="index" options={{ title: 'Início', tabBarIcon: ({ color, size }) => (<Ionicons name="home" size={size} color={color} />) }} />
-        <Tabs.Screen name="ranking" options={{ title: 'Ranking', tabBarIcon: ({ color, size }) => (<Ionicons name="trophy" size={size} color={color} />) }} />
-        <Tabs.Screen name="conteudos" options={{ title: 'Conteúdos', tabBarIcon: ({ color, size }) => (<Ionicons name="folder-open" size={size} color={color} />) }} />
-        <Tabs.Screen name="exercicios" options={{ title: 'Atividades', tabBarIcon: ({ color, size }) => (<Ionicons name="document-text" size={size} color={color} />) }} />
-        <Tabs.Screen name="videos" options={{ href: null }} />
-        <Tabs.Screen name="progresso" options={{ title: 'Progresso', tabBarIcon: ({ color, size }) => (<Ionicons name="stats-chart" size={size} color={color} />) }} />
         <Tabs.Screen name="jogadores" options={{ title: 'Online', tabBarIcon: ({ color, size }) => (<Ionicons name="radio" size={size} color={color} /> ) }} />
-        <Tabs.Screen name="jogo" options={{ title: 'Jogo', tabBarIcon: ({ color, size }) => (<Ionicons name="game-controller" size={size} color={color} />), tabBarBadge: '🧪', tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 } }} />
+        <Tabs.Screen name="salas" options={{ title: 'Salas', tabBarIcon: ({ color, size }) => (<Ionicons name="chatbubbles" size={size} color={color} /> ) }} />
+        <Tabs.Screen name="jogo" options={{ title: 'Jogos', tabBarIcon: ({ color, size }) => (<Ionicons name="game-controller" size={size} color={color} />), tabBarBadge: '🧪', tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 } }} />
+        
+        {/* Aba Equipe: Só aparece para líder! */}
         <Tabs.Screen name="equipe" options={{ title: 'Equipe', href: isLeader ? undefined : null, tabBarIcon: ({ color, size }) => (<Ionicons name="people" size={size} color={color} />) }} />
+
+        {/* ABAS OCULTADAS (Para não poluir o menu inferior) */}
+        <Tabs.Screen name="ranking" options={{ href: null }} />
+        <Tabs.Screen name="conteudos" options={{ href: null }} />
+        <Tabs.Screen name="exercicios" options={{ href: null }} />
+        <Tabs.Screen name="videos" options={{ href: null }} />
+        <Tabs.Screen name="progresso" options={{ href: null }} />
       </Tabs>
     </SafeAreaView>
   );
