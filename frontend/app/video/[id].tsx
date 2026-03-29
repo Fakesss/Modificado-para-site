@@ -8,18 +8,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
-import { Conteudo } from '../../src/types';
 
 export default function VideoPlayer() {
   const params = useLocalSearchParams();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
-  const { user } = useAuth(); // Pegamos os dados do aluno para saber a equipe
+  const { user } = useAuth();
   
-  const [video, setVideo] = useState<Conteudo | null>(null);
+  const [video, setVideo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
-  // Estados do Sistema Anti-Trapaça e Recompensa
   const playerRef = useRef<any>(null);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -28,19 +26,19 @@ export default function VideoPlayer() {
   const [submitting, setSubmitting] = useState(false);
   
   const [showRewardModal, setShowRewardModal] = useState(false);
-  const PONTOS_RECOMPENSA = 50;
+  
+  // Pega os pontos reais cadastrados no banco de dados
+  const PONTOS_RECOMPENSA = video?.pontos || 0;
 
-  // Calcula a porcentagem assistida (Meta de 90%)
   const metaTempo = duration > 0 ? duration * 0.9 : 0;
   const progressoReal = metaTempo > 0 ? Math.min((watchedTime / metaTempo) * 100, 100) : 0;
   const isLiberado = progressoReal >= 100;
 
-  // Define a cor baseada na equipe do usuário
   const getTeamColor = () => {
-    if (user?.equipeId === 'equipe-alfa') return '#FFD700'; // Amarelo
-    if (user?.equipeId === 'equipe-delta') return '#4169E1'; // Azul
-    if (user?.equipeId === 'equipe-omega') return '#32CD32'; // Verde
-    return '#FFD700'; // Padrão
+    if (user?.equipeId === 'equipe-alfa') return '#FFD700';
+    if (user?.equipeId === 'equipe-delta') return '#4169E1';
+    if (user?.equipeId === 'equipe-omega') return '#32CD32';
+    return '#FFD700'; 
   };
   const teamColor = getTeamColor();
 
@@ -60,13 +58,12 @@ export default function VideoPlayer() {
     }
   }, [id]);
 
-  // Verifica na memória do celular se ele já assistiu esse vídeo antes (Anti-Farming)
   const checkLocalCompletion = async () => {
     try {
       const isDone = await AsyncStorage.getItem(`@video_done_${id}`);
       if (isDone === 'true') {
         setCompleted(true);
-        setWatchedTime(9999); // Trava a barra no final
+        setWatchedTime(9999); 
       }
     } catch (e) { console.log(e); }
   };
@@ -74,7 +71,7 @@ export default function VideoPlayer() {
   const loadVideo = async () => {
     try {
       const conteudos = await api.getConteudos();
-      const videoData = conteudos.find((v: Conteudo) => v.id === id);
+      const videoData = conteudos.find((v: any) => v.id === id);
       setVideo(videoData || null);
     } catch (error) {
       console.error(error);
@@ -83,7 +80,6 @@ export default function VideoPlayer() {
     }
   };
 
-  // Cronômetro Anti-Trapaça
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (playing && !completed && metaTempo > 0) {
@@ -110,23 +106,16 @@ export default function VideoPlayer() {
 
     setSubmitting(true);
     try {
-      // Tenta enviar para o backend (Se a rota já existir, salva no ranking)
-      // Usamos a instância original 'api.default' para não precisarmos editar o arquivo api.ts
-      try {
-        await api.default.post(`/conteudos/${id}/concluir`);
-      } catch (err) {
-        // Ignoramos silenciosamente se o backend ainda não tiver a rota pronta
-        console.log("Aviso: Rota de backend não encontrada, salvando progresso localmente.");
-      }
+      // CHAMA A ROTA OFICIAL DO BACKEND QUE VAMOS CRIAR!
+      await api.concluirConteudo(id as string);
 
-      // Salva na memória do celular para travar o botão para sempre
       await AsyncStorage.setItem(`@video_done_${id}`, 'true');
-      
       setCompleted(true);
-      setShowRewardModal(true); // Mostra o Pop-up visual da equipe
+      setShowRewardModal(true); 
 
     } catch (error) {
-      Alert.alert('Erro', 'Ocorreu um problema ao resgatar seus pontos.');
+      console.log(error);
+      Alert.alert('Aviso', 'Ocorreu um problema ao conectar com o servidor. Verifique com o administrador se a rota já foi ativada.');
     } finally {
       setSubmitting(false);
     }
@@ -146,7 +135,6 @@ export default function VideoPlayer() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* POP-UP DE RECOMPENSA COM A COR DA EQUIPE */}
       <Modal visible={showRewardModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { borderColor: teamColor }]}>
@@ -155,7 +143,9 @@ export default function VideoPlayer() {
             </View>
             <Text style={styles.modalTitle}>PARABÉNS!</Text>
             <Text style={styles.modalText}>Você concluiu a aula com sucesso.</Text>
-            <Text style={[styles.modalPoints, { color: teamColor }]}>+{PONTOS_RECOMPENSA} PONTOS</Text>
+            {PONTOS_RECOMPENSA > 0 && (
+              <Text style={[styles.modalPoints, { color: teamColor }]}>+{PONTOS_RECOMPENSA} PONTOS</Text>
+            )}
             
             <TouchableOpacity style={[styles.modalButton, { backgroundColor: teamColor }]} onPress={() => setShowRewardModal(false)}>
               <Text style={styles.modalButtonText}>Incrível!</Text>
@@ -211,12 +201,13 @@ export default function VideoPlayer() {
         {completed && (
           <View style={[styles.completedBadge, { backgroundColor: teamColor + '20' }]}>
             <Ionicons name="checkmark-circle" size={20} color={teamColor} />
-            <Text style={[styles.completedText, { color: teamColor }]}>Recompensa Coletada (+{PONTOS_RECOMPENSA} pts)</Text>
+            <Text style={[styles.completedText, { color: teamColor }]}>
+              Recompensa Coletada {PONTOS_RECOMPENSA > 0 ? `(+${PONTOS_RECOMPENSA} pts)` : ''}
+            </Text>
           </View>
         )}
       </View>
 
-      {/* O BOTÃO SÓ APARECE SE ELE AINDA NÃO TIVER COLETADO OS PONTOS */}
       {!completed && (
         <TouchableOpacity
           style={[styles.completeButton, !isLiberado && styles.completeButtonDisabled]}
@@ -273,7 +264,6 @@ const styles = StyleSheet.create({
   completeButtonDisabled: { backgroundColor: '#222' },
   completeButtonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
 
-  // Estilos do Modal de Recompensa
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: '#1a1a2e', width: '100%', borderRadius: 24, padding: 30, alignItems: 'center', borderWidth: 2 },
   iconCircle: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 20, marginTop: -60, borderWidth: 4, borderColor: '#1a1a2e' },
