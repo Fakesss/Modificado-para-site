@@ -11,7 +11,7 @@ interface Props {
 const EMPTY_ITEM = { id: 'empty', nome: '-', cor: '#333', pontosTotais: 0, posicao: 0 };
 
 export default function RankingHeader({ ranking, loading }: Props) {
-  // 🚨 A SUA LÓGICA PERFEITA MANTIDA: Ordena pelos PONTOS reais
+  // Mantendo a lógica perfeita de ordenação
   const sortedByPoints = [...ranking].sort((a, b) => b.pontosTotais - a.pontosTotais);
 
   const first = sortedByPoints[0] ? { ...sortedByPoints[0], posicao: 1 } : { ...EMPTY_ITEM, posicao: 1 };
@@ -37,7 +37,6 @@ export default function RankingHeader({ ranking, loading }: Props) {
           const isFirst = item.posicao === 1;
           const isEmpty = item.id === 'empty';
           
-          // Alturas ajustadas para o visual delicado
           const podiumHeight = isFirst ? 140 : item.posicao === 2 ? 120 : 100;
           
           // Quebra inteligente de nome mantida
@@ -49,17 +48,16 @@ export default function RankingHeader({ ranking, loading }: Props) {
           return (
             <View key={`${item.id}-${index}`} style={[styles.podiumItem, isFirst && { zIndex: 2 }]}>
               
-              {/* NOME DA EQUIPE (Estilo Pílula Delicada) */}
+              {/* 🎯 NOME DA EQUIPE (CORRIGIDO: Menor horizontalmente, Fonte maior) */}
               <View style={[styles.teamNamePill, { backgroundColor: isEmpty ? '#333' : item.cor }]}>
                 <Text style={styles.teamNamePillText} numberOfLines={2} adjustsFontSizeToFit>
                   {isEmpty ? '-' : nomeFormatado}
                 </Text>
               </View>
               
-              {/* CAIXA DO PÓDIO (Transparente com Posição Dentro) */}
+              {/* CAIXA DO PÓDIO */}
               <View style={[styles.podiumBox, { height: podiumHeight, backgroundColor: isEmpty ? '#33333330' : item.cor + '25' }]}>
                 
-                {/* Círculo de Posição Dentro da Caixa */}
                 <View style={[
                   styles.insidePositionCircle, 
                   { 
@@ -94,64 +92,34 @@ export default function RankingHeader({ ranking, loading }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  podiumContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'flex-end', 
-    paddingHorizontal: 4,
-  },
-  podiumItem: {
-    flex: 1,
-    alignItems: 'center',
-    marginHorizontal: 4,
-  },
+  container: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#333' },
+  title: { fontSize: 18, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 20 },
+  podiumContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', paddingHorizontal: 4 },
+  podiumItem: { flex: 1, alignItems: 'center', marginHorizontal: 4 },
+  
+  /* 🎯 ESTILOS DA PÍLULA CORRIGIDOS */
   teamNamePill: {
-    width: '100%',
+    /* width: '100%',  <- RETIRADO para não esticar */
+    alignSelf: 'center', /* Centraliza */
     paddingVertical: 6,
-    paddingHorizontal: 4,
+    paddingHorizontal: 12, /* Mais padding horizontal para o formato de pílula real */
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
     zIndex: 10,
     minHeight: 36,
+    borderWidth: 1,
+    borderColor: '#1a1a2e',
   },
   teamNamePillText: {
     color: '#000',
     fontWeight: '900',
-    fontSize: 12,
+    fontSize: 13, /* 🎯 AUMENTADO ligeiramente de 12 para 13 */
     textAlign: 'center',
   },
-  podiumBox: {
-    width: '100%',
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 6,
-  },
-  insidePositionCircle: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  insidePositionText: {
-    fontWeight: 'bold',
-  },
-  podiumPoints: {
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
+  podiumBox: { width: '100%', borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 6 },
+  insidePositionCircle: { alignItems: 'center', justifyContent: 'center' },
+  insidePositionText: { fontWeight: 'bold' },
+  podiumPoints: { fontWeight: 'bold', marginTop: 4 },
 });
