@@ -106,6 +106,7 @@ class Conteudo(BaseModel):
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
+    pontos: int = 0  # NOVO: Os pontos do conteúdo
     ativo: bool = True
     criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     is_deleted: bool = False
@@ -120,6 +121,7 @@ class ConteudoCreate(BaseModel):
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
+    pontos: int = 0  # NOVO: Os pontos do conteúdo
 
 class Alternativa(BaseModel):
     letra: str
@@ -211,7 +213,6 @@ class Token(BaseModel):
     token_type: str
     usuario: Dict[str, Any]
 
-# NOVOS MODELOS DE ATUALIZAÇÃO DA EQUIPE
 class EquipeUpdate(BaseModel):
     nome: Optional[str] = None
     cor: Optional[str] = None
@@ -353,7 +354,6 @@ async def create_equipe(equipe_data: dict, current_user: dict = Depends(require_
     await db.equipes.insert_one(equipe.dict())
     return equipe.dict()
 
-# A ROTA RECUPERADA PARA MUDAR A COR DA EQUIPE
 @api_router.put("/equipes/{equipe_id}")
 async def update_equipe(equipe_id: str, update_data: EquipeUpdate, current_user: dict = Depends(require_admin)):
     update_dict = update_data.dict(exclude_unset=True)
@@ -409,15 +409,11 @@ async def admin_delete_usuario(user_id: str, current_user: dict = Depends(requir
     await db.usuarios.update_one({"id": user_id}, {"$set": {"ativo": False}})
     return {"message": "Usuário desativado com sucesso"}
 
-# =====================================================================
-# A ROTA DE MESTRE DO JUÍZO FINAL (Zera os pontos de todo mundo)
-# =====================================================================
 @api_router.post("/usuarios/zerar-pontos")
 async def zerar_todos_pontos(current_user: dict = Depends(require_admin)):
     await db.usuarios.update_many({}, {"$set": {"pontosTotais": 0}})
     await db.equipes.update_many({}, {"$set": {"pontosTotais": 0}})
     return {"message": "Todos os pontos foram zerados com sucesso."}
-
 
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
@@ -600,6 +596,44 @@ async def delete_conteudo(conteudo_id: str, current_user: dict = Depends(require
     await db.conteudos.update_one({"id": conteudo_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}})
     return {"message": "Conteúdo movido para a lixeira"}
 
+# =====================================================================
+# NOVA ROTA: CONCLUIR VÍDEO E GANHAR PONTOS OFICIAIS
+# =====================================================================
+@api_router.post("/conteudos/{conteudo_id}/concluir")
+async def concluir_conteudo(conteudo_id: str, current_user: dict = Depends(get_current_user)):
+    conteudo = await db.conteudos.find_one({"id": conteudo_id})
+    if not conteudo:
+        raise HTTPException(status_code=404, detail="Conteúdo não encontrado")
+    
+    # SISTEMA ANTI-TRAPAÇA NO BANCO: Verifica se o aluno já concluiu e ganhou os pontos antes
+    ja_concluiu = await db.conteudos_concluidos.find_one({
+        "usuarioId": current_user["id"], 
+        "conteudoId": conteudo_id
+    })
+    
+    if ja_concluiu:
+        return {"message": "Conteúdo já estava concluído", "pontos": 0}
+        
+    # Registra no banco que ele concluiu, para nunca mais dar pontos duplos
+    await db.conteudos_concluidos.insert_one({
+        "usuarioId": current_user["id"],
+        "conteudoId": conteudo_id,
+        "data": datetime.utcnow().isoformat()
+    })
+
+    pontos = conteudo.get("pontos", 0)
+    
+    if pontos > 0:
+        # Entrega os pontos de fato pro usuário e pra equipe
+        await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
+        
+        eq_raw = current_user.get("equipeId")
+        if eq_raw:
+            eq_clean = str(eq_raw).strip()
+            await db.equipes.update_one({"id": eq_clean}, {"$inc": {"pontosTotais": pontos}})
+            
+    return {"message": "Conteúdo concluído com sucesso", "pontos": pontos}
+
 @api_router.get("/relatorios/geral")
 async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_u = await db.usuarios.count_documents({"ativo": True})
@@ -771,11 +805,15 @@ async def get_ranking_turma(turma_id: str):
 @api_router.get("/usuarios/progresso")
 async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
     submissoes = await db.submissoes.find({"usuarioId": current_user["id"]}).sort("data", -1).to_list(100)
+    
+    # NOVO: Conta quantos vídeos o aluno assistiu lendo do escudo anti-trapaça!
+    videos_concluidos = await db.conteudos_concluidos.count_documents({"usuarioId": current_user["id"]})
+    
     return {
         "pontosTotais": current_user.get("pontosTotais", 0),
         "totalExercicios": len(submissoes),
         "pontosExercicios": sum(s.get("pontosGerados", 0) for s in submissoes),
-        "totalVideos": 0,
+        "totalVideos": videos_concluidos,
         "pontosVideos": 0,
         "submissoes": [{k: v for k, v in s.items() if k != '_id'} for s in submissoes]
     }
