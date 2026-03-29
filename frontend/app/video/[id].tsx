@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import YoutubePlayer from 'react-native-youtube-iframe';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 import { Conteudo } from '../../src/types';
 
@@ -11,23 +14,35 @@ export default function VideoPlayer() {
   const params = useLocalSearchParams();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
+  const { user } = useAuth(); // Pegamos os dados do aluno para saber a equipe
   
   const [video, setVideo] = useState<Conteudo | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Estados do Sistema Anti-Trapaça
+  // Estados do Sistema Anti-Trapaça e Recompensa
   const playerRef = useRef<any>(null);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
-  const [watchedTime, setWatchedTime] = useState(0); // Tempo real assistido em segundos
+  const [watchedTime, setWatchedTime] = useState(0); 
   const [completed, setCompleted] = useState(false);
-  const [pointsEarned, setPointsEarned] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  
+  const [showRewardModal, setShowRewardModal] = useState(false);
+  const PONTOS_RECOMPENSA = 50;
 
-  // Calcula a porcentagem do tempo assistido em relação à meta (90% do vídeo)
+  // Calcula a porcentagem assistida (Meta de 90%)
   const metaTempo = duration > 0 ? duration * 0.9 : 0;
   const progressoReal = metaTempo > 0 ? Math.min((watchedTime / metaTempo) * 100, 100) : 0;
   const isLiberado = progressoReal >= 100;
+
+  // Define a cor baseada na equipe do usuário
+  const getTeamColor = () => {
+    if (user?.equipeId === 'equipe-alfa') return '#FFD700'; // Amarelo
+    if (user?.equipeId === 'equipe-delta') return '#4169E1'; // Azul
+    if (user?.equipeId === 'equipe-omega') return '#32CD32'; // Verde
+    return '#FFD700'; // Padrão
+  };
+  const teamColor = getTeamColor();
 
   const getYouTubeId = (url: string) => {
     if (!url) return null;
@@ -39,16 +54,28 @@ export default function VideoPlayer() {
   const youtubeId = video?.urlVideo ? getYouTubeId(video.urlVideo) : null;
 
   useEffect(() => {
-    if (id) loadVideo();
+    if (id) {
+      loadVideo();
+      checkLocalCompletion();
+    }
   }, [id]);
+
+  // Verifica na memória do celular se ele já assistiu esse vídeo antes (Anti-Farming)
+  const checkLocalCompletion = async () => {
+    try {
+      const isDone = await AsyncStorage.getItem(`@video_done_${id}`);
+      if (isDone === 'true') {
+        setCompleted(true);
+        setWatchedTime(9999); // Trava a barra no final
+      }
+    } catch (e) { console.log(e); }
+  };
 
   const loadVideo = async () => {
     try {
       const conteudos = await api.getConteudos();
       const videoData = conteudos.find((v: Conteudo) => v.id === id);
       setVideo(videoData || null);
-
-      // Como o backend não salva o progresso do vídeo, o aluno sempre começa do 0%
     } catch (error) {
       console.error(error);
     } finally {
@@ -56,19 +83,15 @@ export default function VideoPlayer() {
     }
   };
 
-  // Cronômetro Anti-Trapaça: Só roda se o vídeo estiver tocando!
+  // Cronômetro Anti-Trapaça
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    
     if (playing && !completed && metaTempo > 0) {
       interval = setInterval(() => {
         setWatchedTime((prev) => prev + 1);
       }, 1000);
     }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    return () => { if (interval) clearInterval(interval); };
   }, [playing, completed, metaTempo]);
 
   const onStateChange = useCallback((state: string) => {
@@ -83,61 +106,66 @@ export default function VideoPlayer() {
   }, []);
 
   const handleComplete = async () => {
-    if (completed) {
-      router.back();
-      return;
-    }
-
-    if (!isLiberado) return; // Trava de segurança extra
+    if (completed || !isLiberado) return;
 
     setSubmitting(true);
     try {
-      // SIMULAÇÃO: Como não há rota no backend, vamos simular o carregamento e sucesso
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Tenta enviar para o backend (Se a rota já existir, salva no ranking)
+      // Usamos a instância original 'api.default' para não precisarmos editar o arquivo api.ts
+      try {
+        await api.default.post(`/conteudos/${id}/concluir`);
+      } catch (err) {
+        // Ignoramos silenciosamente se o backend ainda não tiver a rota pronta
+        console.log("Aviso: Rota de backend não encontrada, salvando progresso localmente.");
+      }
 
-      setCompleted(true);
-      setPointsEarned(50); // Valor de pontos fictício para recompensar visualmente
+      // Salva na memória do celular para travar o botão para sempre
+      await AsyncStorage.setItem(`@video_done_${id}`, 'true');
       
-      Alert.alert('Parabéns!', `Você concluiu a aula e ganhou 50 pontos!`, [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
+      setCompleted(true);
+      setShowRewardModal(true); // Mostra o Pop-up visual da equipe
+
     } catch (error) {
-      Alert.alert('Erro', 'Erro ao marcar como concluído.');
+      Alert.alert('Erro', 'Ocorreu um problema ao resgatar seus pontos.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View>;
 
-  if (!video) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Ionicons name="videocam-off" size={48} color="#666" />
-          <Text style={styles.errorText}>Vídeo não encontrado</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Voltar</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  if (!video) return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.errorContainer}>
+        <Ionicons name="videocam-off" size={48} color="#666" />
+        <Text style={styles.errorText}>Vídeo não encontrado</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}><Text style={styles.backButtonText}>Voltar</Text></TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* POP-UP DE RECOMPENSA COM A COR DA EQUIPE */}
+      <Modal visible={showRewardModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { borderColor: teamColor }]}>
+            <View style={[styles.iconCircle, { backgroundColor: teamColor }]}>
+              <Ionicons name="trophy" size={40} color="#000" />
+            </View>
+            <Text style={styles.modalTitle}>PARABÉNS!</Text>
+            <Text style={styles.modalText}>Você concluiu a aula com sucesso.</Text>
+            <Text style={[styles.modalPoints, { color: teamColor }]}>+{PONTOS_RECOMPENSA} PONTOS</Text>
+            
+            <TouchableOpacity style={[styles.modalButton, { backgroundColor: teamColor }]} onPress={() => setShowRewardModal(false)}>
+              <Text style={styles.modalButtonText}>Incrível!</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color="#fff" /></TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{video.titulo}</Text>
         <View style={{ width: 24 }} />
       </View>
@@ -151,12 +179,7 @@ export default function VideoPlayer() {
             videoId={youtubeId}
             onChangeState={onStateChange}
             onReady={onReady}
-            initialPlayerParams={{
-              controls: true,
-              preventFullScreen: false,
-              rel: false,
-              modestbranding: true,
-            }}
+            initialPlayerParams={{ controls: true, preventFullScreen: false, rel: false, modestbranding: true }}
           />
         ) : (
           <View style={styles.noVideo}>
@@ -166,21 +189,18 @@ export default function VideoPlayer() {
         )}
       </View>
 
-      {/* BARRA DE PROGRESSO ANTI-TRAPAÇA */}
       <View style={styles.progressSection}>
         <View style={styles.progressHeader}>
           <Text style={styles.progressLabel}>Progresso da Aula</Text>
-          <Text style={[styles.progressPercent, isLiberado && { color: '#32CD32' }]}>
-            {Math.floor(progressoReal)}%
+          <Text style={[styles.progressPercent, completed && { color: teamColor }]}>
+            {completed ? '100%' : `${Math.floor(progressoReal)}%`}
           </Text>
         </View>
         <View style={styles.progressBarBg}>
-          <View style={[styles.progressBarFill, { width: `${progressoReal}%`, backgroundColor: isLiberado ? '#32CD32' : '#FFD700' }]} />
+          <View style={[styles.progressBarFill, { width: completed ? '100%' : `${progressoReal}%`, backgroundColor: completed ? teamColor : '#FFD700' }]} />
         </View>
         <Text style={styles.progressHint}>
-          {isLiberado 
-            ? "Aula concluída! Você já pode resgatar seus pontos." 
-            : "Assista pelo menos 90% do vídeo sem pular para ganhar os pontos."}
+          {completed ? "Aula concluída! Você já resgatou seus pontos." : "Assista sem pular para liberar a recompensa."}
         </Text>
       </View>
 
@@ -188,50 +208,33 @@ export default function VideoPlayer() {
         <Text style={styles.title}>{video.titulo}</Text>
         {video.descricao && <Text style={styles.description}>{video.descricao}</Text>}
 
-        <View style={styles.statusContainer}>
-          {completed && (
-            <View style={styles.completedBadge}>
-              <Ionicons name="checkmark-circle" size={20} color="#32CD32" />
-              <Text style={styles.completedText}>Concluído</Text>
-            </View>
-          )}
-          {pointsEarned > 0 && (
-            <View style={styles.pointsBadge}>
-              <Ionicons name="star" size={20} color="#FFD700" />
-              <Text style={styles.pointsText}>+{pointsEarned} pts</Text>
-            </View>
-          )}
-        </View>
+        {completed && (
+          <View style={[styles.completedBadge, { backgroundColor: teamColor + '20' }]}>
+            <Ionicons name="checkmark-circle" size={20} color={teamColor} />
+            <Text style={[styles.completedText, { color: teamColor }]}>Recompensa Coletada (+{PONTOS_RECOMPENSA} pts)</Text>
+          </View>
+        )}
       </View>
 
-      <TouchableOpacity
-        style={[
-          styles.completeButton, 
-          (!isLiberado && !completed) && styles.completeButtonDisabled,
-          completed && styles.completeButtonDone
-        ]}
-        onPress={handleComplete}
-        disabled={(!isLiberado && !completed) || submitting}
-      >
-        {submitting ? (
-          <ActivityIndicator color="#000" />
-        ) : (
-          <>
-            <Ionicons
-              name={completed ? 'checkmark-circle' : (!isLiberado ? 'lock-closed' : 'play-circle')}
-              size={24}
-              color={completed ? '#fff' : (!isLiberado ? '#666' : '#000')}
-            />
-            <Text style={[
-              styles.completeButtonText, 
-              completed && { color: '#fff' },
-              (!isLiberado && !completed) && { color: '#666' }
-            ]}>
-              {completed ? 'Vídeo Concluído - Voltar' : (!isLiberado ? 'Assista para Liberar' : 'Marcar como Concluído')}
-            </Text>
-          </>
-        )}
-      </TouchableOpacity>
+      {/* O BOTÃO SÓ APARECE SE ELE AINDA NÃO TIVER COLETADO OS PONTOS */}
+      {!completed && (
+        <TouchableOpacity
+          style={[styles.completeButton, !isLiberado && styles.completeButtonDisabled]}
+          onPress={handleComplete}
+          disabled={!isLiberado || submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <>
+              <Ionicons name={!isLiberado ? 'lock-closed' : 'play-circle'} size={24} color={!isLiberado ? '#666' : '#000'} />
+              <Text style={[styles.completeButtonText, !isLiberado && { color: '#666' }]}>
+                {!isLiberado ? 'Assista para Liberar' : 'Marcar como Concluído'}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      )}
 
     </SafeAreaView>
   );
@@ -262,14 +265,21 @@ const styles = StyleSheet.create({
   infoContainer: { padding: 16 },
   title: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
   description: { color: '#888', fontSize: 14, marginTop: 8, lineHeight: 20 },
-  statusContainer: { flexDirection: 'row', marginTop: 16, gap: 12 },
-  completedBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#32CD3230', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, gap: 6 },
-  completedText: { color: '#32CD32', fontWeight: '600' },
-  pointsBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD70030', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, gap: 6 },
-  pointsText: { color: '#FFD700', fontWeight: '600' },
+  
+  completedBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, gap: 8, marginTop: 20 },
+  completedText: { fontWeight: 'bold', fontSize: 14 },
   
   completeButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFD700', margin: 16, paddingVertical: 16, borderRadius: 12, gap: 8 },
   completeButtonDisabled: { backgroundColor: '#222' },
-  completeButtonDone: { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#32CD32' },
   completeButtonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
+
+  // Estilos do Modal de Recompensa
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#1a1a2e', width: '100%', borderRadius: 24, padding: 30, alignItems: 'center', borderWidth: 2 },
+  iconCircle: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 20, marginTop: -60, borderWidth: 4, borderColor: '#1a1a2e' },
+  modalTitle: { color: '#FFF', fontSize: 28, fontWeight: '900', marginBottom: 10, textAlign: 'center' },
+  modalText: { color: '#AAA', fontSize: 16, textAlign: 'center', marginBottom: 20 },
+  modalPoints: { fontSize: 32, fontWeight: '900', marginBottom: 30 },
+  modalButton: { width: '100%', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
+  modalButtonText: { color: '#000', fontSize: 18, fontWeight: 'bold' }
 });
