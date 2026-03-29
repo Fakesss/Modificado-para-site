@@ -54,7 +54,11 @@ export default function TabsLayout() {
   const [jitsiRoom, setJitsiRoom] = useState<string | null>(null);
   const pan = useRef(new Animated.ValueXY()).current;
   
-  // 🚨 SISTEMA MAGNÉTICO: Não deixa o botão sair da tela!
+  // Medidas da nossa janela "Mini-Rádio"
+  const BOX_WIDTH = 220;
+  const BOX_HEIGHT = 240;
+
+  // 🚨 SISTEMA MAGNÉTICO ATUALIZADO (Com as novas medidas)
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -64,11 +68,11 @@ export default function TabsLayout() {
         let newX = pan.x._value;
         let newY = pan.y._value;
 
-        // Limites da tela (A pílula tem 220 de largura e 50 de altura)
+        // Limites da tela para o Mini-Rádio não fugir
         const minX = -(width * 0.05);
-        const maxX = width - (width * 0.05) - 220;
+        const maxX = width - (width * 0.05) - BOX_WIDTH;
         const minY = -(height * 0.15);
-        const maxY = height - (height * 0.15) - 50;
+        const maxY = height - (height * 0.15) - BOX_HEIGHT;
 
         if (newX < minX) newX = minX;
         if (newX > maxX) newX = maxX;
@@ -172,8 +176,8 @@ export default function TabsLayout() {
     setConvite(null);
   };
 
-  // URL bloqueando todo o vídeo para garantir 100% de performance na voz
-  const jitsiUrl = `https://meet.jit.si/${jitsiRoom}#config.prejoinPageEnabled=false&config.startAudioOnly=true&config.disableVideo=true&config.startWithVideoMuted=true`;
+  // URL configurada para forçar o layout de Áudio e não pedir cadastro
+  const jitsiUrl = `https://meet.jit.si/${jitsiRoom}#config.prejoinPageEnabled=false&config.startAudioOnly=true&config.disableVideo=true`;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -181,33 +185,33 @@ export default function TabsLayout() {
       <AdminBanner />
       <NeonLineSimple color={teamColor} />
 
-      {/* 🚨 NOVA PÍLULA FLUTUANTE (Compacta e Segura) */}
+      {/* 🚨 NOVA CAIXA FLUTUANTE "MINI-RÁDIO" */}
       {jitsiRoom && (
-        <Animated.View style={[styles.floatingCallPill, { transform: pan.getTranslateTransform() }]}>
+        <Animated.View style={[styles.floatingCallBox, { transform: pan.getTranslateTransform() }]}>
           
-          {/* Lado Verde: Área de Arrastar */}
+          {/* Barra de cima para arrastar o Mini-Rádio */}
           <View style={styles.dragHandle} {...panResponder.panHandlers}>
-            <Ionicons name="mic" size={20} color="#000" />
-            <Text style={styles.dragHandleText}>Voz Ativa</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="radio" size={18} color="#000" />
+              <Text style={styles.dragHandleText}>Call da Sala</Text>
+            </View>
+            <TouchableOpacity style={styles.hangupButton} onPress={() => setJitsiRoom(null)}>
+              <Ionicons name="close" size={20} color="#fff" />
+            </TouchableOpacity>
           </View>
-
-          {/* Lado Vermelho: Botão de Desligar */}
-          <TouchableOpacity style={styles.hangupButton} onPress={() => setJitsiRoom(null)}>
-            <Ionicons name="call" size={20} color="#fff" style={{transform: [{rotate: '135deg'}]}} />
-          </TouchableOpacity>
           
-          {/* Caixa Mágica: O Jitsi está rodando invisível aqui dentro! */}
-          <View style={{ position: 'absolute', width: 1, height: 1, opacity: 0.01, overflow: 'hidden' }}>
+          {/* A tela do Jitsi agora é visível, para você poder liberar o Microfone! */}
+          <View style={styles.webViewContainer}>
             {Platform.OS === 'web' ? (
               <WebIframe 
                 src={jitsiUrl}
                 style={{ width: '100%', height: '100%', border: 'none' }}
-                allow="camera; microphone; display-capture"
+                allow="camera; microphone; display-capture; autoplay" // 🚨 Autoplay ativado para web!
               />
             ) : (
               <WebView 
                 source={{ uri: jitsiUrl }}
-                style={{ flex: 1 }}
+                style={{ flex: 1, backgroundColor: '#1a1a2e' }}
                 allowsInlineMediaPlayback={true}
                 mediaPlaybackRequiresUserAction={false}
                 javaScriptEnabled={true}
@@ -293,43 +297,44 @@ const styles = StyleSheet.create({
   btnAction: { flexDirection: 'row', width: '100%', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8 },
   btnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
 
-  // 🚨 Estilos da Nova Pílula Flutuante
-  floatingCallPill: {
+  // 🚨 Estilos do Novo "Mini-Rádio" Magnético
+  floatingCallBox: {
     position: 'absolute',
     top: height * 0.15,
     left: width * 0.05,
     width: 220,
-    height: 50,
-    backgroundColor: '#32CD32', // Fundo Verde
-    borderRadius: 25,
+    height: 240, // Altura suficiente para ver a foto do outro jogador e o botão de desmutar
+    backgroundColor: '#1a1a2e', 
+    borderRadius: 16,
+    overflow: 'hidden',
     zIndex: 9999,
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.5,
     shadowRadius: 10,
+    borderWidth: 2,
+    borderColor: '#32CD32',
+  },
+  dragHandle: {
+    backgroundColor: '#32CD32',
+    height: 40,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  dragHandle: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: 20,
-    height: '100%',
+    paddingHorizontal: 15,
   },
   dragHandleText: {
     color: '#000',
     fontWeight: 'bold',
-    marginLeft: 10,
+    marginLeft: 8,
   },
   hangupButton: {
-    backgroundColor: '#E74C3C',
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 5,
+  },
+  webViewContainer: {
+    flex: 1,
+    width: '100%',
+    backgroundColor: '#1a1a2e'
   }
 });
