@@ -14,3 +14,7 @@ export let activeMatchData: any = null;
 export const setActiveMatchData = (data: any) => {
   activeMatchData = data;
 };
+
+export const getActiveMatchData = () => {
+  return activeMatchData;
+};
