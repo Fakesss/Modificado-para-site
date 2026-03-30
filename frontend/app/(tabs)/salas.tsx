@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Modal, RefreshControl, DeviceEventEmitter
+  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Modal, RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ import { socket } from '../../src/services/socket';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
+import { Audio } from 'expo-av'; // 🚨 Nossa nova ferramenta de áudio
 
 export default function Salas() {
   const { user } = useAuth();
@@ -34,6 +36,11 @@ export default function Salas() {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // 🚨 Estados do Gravador de Áudio
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!socket.connected) socket.connect();
@@ -231,6 +238,69 @@ export default function Salas() {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
+  // =========================================================
+  // 🚨 SISTEMA DE ÁUDIO (Walkie-Talkie)
+  // =========================================================
+  const startRecording = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status === 'granted') {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+        });
+        const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+        setRecording(recording);
+        setIsRecording(true);
+      } else {
+        Alert.alert("Permissão negada", "Precisamos de acesso ao microfone para gravar áudio.");
+      }
+    } catch (err) {
+      console.error('Falha ao gravar:', err);
+    }
+  };
+
+  const stopRecordingAndSend = async () => {
+    if (!recording) return;
+    setIsRecording(false);
+    await recording.stopAndUnloadAsync();
+    const uri = recording.getURI();
+    setRecording(null);
+
+    if (uri && currentLobby) {
+      try {
+        const base64Audio = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+        const audioDataUrl = `data:audio/m4a;base64,${base64Audio}`;
+        socket.emit('send_lobby_message', { lobby_id: currentLobby.id, text: '', audio: audioDataUrl });
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      } catch (error) {
+        console.error("Erro ao processar áudio:", error);
+      }
+    }
+  };
+
+  const playAudio = async (base64Audio: string, msgId: string) => {
+    if (playingAudioId === msgId) return; // Se já está tocando, ignora
+    try {
+      setPlayingAudioId(msgId);
+      const { sound } = await Audio.Sound.createAsync({ uri: base64Audio });
+      await sound.playAsync();
+      
+      // Limpa o status de "tocando" quando o áudio terminar
+      sound.setOnPlaybackStatusUpdate((status: any) => {
+        if (status.didJustFinish) {
+          setPlayingAudioId(null);
+          sound.unloadAsync();
+        }
+      });
+    } catch (error) {
+      console.error("Erro ao tocar áudio:", error);
+      setPlayingAudioId(null);
+    }
+  };
+
+  // =========================================================
+
   const handleLancarDesafio = (gameType: string, modoOperacao: string = 'misto') => {
     socket.emit('create_lobby_challenge', { lobby_id: currentLobby.id, game_type: gameType, modo_operacao: modoOperacao });
     setShowChallengeModal(false);
@@ -356,13 +426,7 @@ export default function Salas() {
           </View>
           
           <View style={{ flexDirection: 'row', gap: 10 }}>
-            {/* 🚨 BOTÃO DE LIGAR VOZ (Envia a ordem para o _layout.tsx) */}
-            <TouchableOpacity 
-              style={[styles.voiceButton, { backgroundColor: '#32CD3230' }]} 
-              onPress={() => DeviceEventEmitter.emit('open_voice_call', { roomId: currentLobby.id })}
-            >
-               <Ionicons name="call" size={20} color="#32CD32" />
-            </TouchableOpacity>
+            {/* O Botão de Ligação foi embora! */}
 
             <TouchableOpacity style={[styles.voiceButton, { backgroundColor: '#FFD70030' }]} onPress={() => setShowChallengeModal(true)}>
                <Ionicons name="flash" size={20} color="#FFD700" />
@@ -382,7 +446,7 @@ export default function Salas() {
           </View>
         </View>
 
-        {/* ================= BARRA DE PARTICIPANTES (FILTRO ANTI-CLONE) ================= */}
+        {/* ================= BARRA DE PARTICIPANTES ================= */}
         <View style={styles.participantsBar}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {Array.from(new Set(currentLobby.players_names || [])).map((pName: unknown, index: number) => (
@@ -394,7 +458,7 @@ export default function Salas() {
           </ScrollView>
         </View>
 
-        {/* ================= ÁREA DE DESAFIOS (NO TOPO) ================= */}
+        {/* ================= ÁREA DE DESAFIOS ================= */}
         {desafiosAtivos.length > 0 && (
           <View style={styles.topChallengeArea}>
             {desafiosAtivos.map((desafio: any) => {
@@ -482,27 +546,37 @@ export default function Salas() {
             if (isSystem) return <View style={styles.systemMessage}><Text style={styles.systemMessageText}>{item.text}</Text></View>;
 
             if (item.apagada) {
-              if (isAdmin) {
-                return (
-                  <View style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther, { opacity: 0.6 }]}>
-                    {!isMe && <Text style={styles.messageSender}>{item.sender}</Text>}
-                    <Text style={styles.messageText}>{item.text}</Text>
-                    <Text style={[styles.messageTime, { color: '#FF4500', fontWeight: 'bold' }]}>Apagada ({item.time})</Text>
-                  </View>
-                );
-              } else {
-                return (
-                  <View style={[styles.messageBubble, { alignSelf: isMe ? 'flex-end' : 'flex-start', backgroundColor: '#333' }]}>
-                    <Text style={{ color: '#aaa', fontStyle: 'italic', fontSize: 13 }}>🚫 Esta mensagem foi apagada</Text>
-                  </View>
-                );
-              }
+              return (
+                <View style={[styles.messageBubble, { alignSelf: isMe ? 'flex-end' : 'flex-start', backgroundColor: '#333' }]}>
+                  <Text style={{ color: '#aaa', fontStyle: 'italic', fontSize: 13 }}>🚫 Esta mensagem foi apagada</Text>
+                </View>
+              );
             }
 
             return (
               <TouchableOpacity activeOpacity={0.8} onLongPress={() => handleLongPressMessage(item)} style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther]}>
                 {!isMe && <Text style={styles.messageSender}>{item.sender}</Text>}
-                <Text style={styles.messageText}>{item.text}</Text>
+                
+                {/* 🚨 Se a mensagem for de Áudio, mostra o Player! */}
+                {item.audio ? (
+                  <TouchableOpacity 
+                    style={[styles.audioPlayerBtn, { backgroundColor: isMe ? '#007ACC' : '#1A1A24' }]} 
+                    onPress={() => playAudio(item.audio, item.id)}
+                  >
+                    <Ionicons name={playingAudioId === item.id ? "pause" : "play"} size={24} color="#fff" />
+                    <View style={styles.audioWaveform}>
+                       <View style={[styles.audioBar, { height: 10 }]} />
+                       <View style={[styles.audioBar, { height: 20 }]} />
+                       <View style={[styles.audioBar, { height: 15 }]} />
+                       <View style={[styles.audioBar, { height: 25 }]} />
+                       <View style={[styles.audioBar, { height: 12 }]} />
+                    </View>
+                    <Text style={{color: '#fff', fontSize: 12}}>{playingAudioId === item.id ? "Tocando..." : "Mensagem de Voz"}</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.messageText}>{item.text}</Text>
+                )}
+                
                 <Text style={styles.messageTime}>{item.time}</Text>
               </TouchableOpacity>
             );
@@ -521,17 +595,35 @@ export default function Salas() {
           </TouchableOpacity>
         )}
 
+        {/* ================= BARRA DE DIGITAÇÃO / GRAVAÇÃO ================= */}
         <View style={styles.inputContainer}>
           <TextInput
-            style={styles.textInput} placeholder="Digite uma mensagem..." placeholderTextColor="#666"
-            value={messageText} onChangeText={setMessageText} onSubmitEditing={handleSendMessage}
+            style={[styles.textInput, isRecording && { opacity: 0.3 }]} 
+            placeholder={isRecording ? "🎤 Gravando áudio..." : "Digite uma mensagem..."} 
+            placeholderTextColor="#666"
+            value={messageText} 
+            onChangeText={setMessageText} 
+            onSubmitEditing={handleSendMessage}
+            editable={!isRecording}
           />
-          <TouchableOpacity style={[styles.sendButton, messageText.trim() === '' && { opacity: 0.5 }]} onPress={handleSendMessage} disabled={messageText.trim() === ''}>
-            <Ionicons name="send" size={20} color="#fff" />
-          </TouchableOpacity>
+
+          {/* Se tiver texto, vira o botão de enviar. Se não tiver, vira o Microfone! */}
+          {messageText.trim() !== '' ? (
+            <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
+              <Ionicons name="send" size={20} color="#fff" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              style={[styles.sendButton, { backgroundColor: isRecording ? '#FF4500' : '#32CD32' }]} 
+              onPressIn={startRecording}
+              onPressOut={stopRecordingAndSend}
+            >
+              <Ionicons name="mic" size={24} color="#fff" />
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* ================= MODAL DE LANÇAR DESAFIO (COM ESCOLHA DE MODO) ================= */}
+        {/* ================= MODAL DE LANÇAR DESAFIO ================= */}
         <Modal visible={showChallengeModal} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
@@ -636,6 +728,11 @@ const styles = StyleSheet.create({
   inputContainer: { flexDirection: 'row', padding: 16, backgroundColor: '#1a1a2e', alignItems: 'center', gap: 12 },
   textInput: { flex: 1, backgroundColor: '#2a2a3e', color: '#fff', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15 },
   sendButton: { backgroundColor: '#00BFFF', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+
+  // 🚨 Estilos do Player de Áudio
+  audioPlayerBtn: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 12, gap: 10 },
+  audioWaveform: { flexDirection: 'row', alignItems: 'center', gap: 3, marginHorizontal: 5 },
+  audioBar: { width: 3, backgroundColor: '#fff', borderRadius: 2 },
 
   topChallengeArea: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: '#0c0c0c', borderBottomWidth: 1, borderBottomColor: '#222' },
   floatingChallengeCard: { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#FFD700', borderRadius: 12, padding: 12, marginBottom: 10, position: 'relative' },
