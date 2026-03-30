@@ -188,7 +188,8 @@ async def send_lobby_message(sid, data):
             'id': str(uuid.uuid4()),
             'sender': players_online[sid]['name'],
             'sender_id': players_online[sid].get('user_id'),
-            'text': data.get('text'),
+            'text': data.get('text', ''),
+            'audio': data.get('audio', None), # 🚨 NOVO: Suporte a Áudio
             'time': datetime.utcnow().strftime('%H:%M'),
             'apagada': False
         }
