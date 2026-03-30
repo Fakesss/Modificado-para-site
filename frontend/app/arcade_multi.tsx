@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
+import { Audio } from 'expo-av'; // 🚨 Trouxemos o reprodutor de áudio de volta!
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.62; 
@@ -91,6 +92,41 @@ export default function ArcadeMultiplayer() {
   const [lasersAtivos, setLasersAtivos] = useState<any[]>([]);
   const [explosoes, setExplosoes] = useState<any[]>([]); 
 
+  // 🚨 SISTEMA DE EFEITOS SONOROS
+  const sonsRef = useRef<any>({});
+
+  useEffect(() => {
+    const carregarSons = async () => {
+      try {
+        // ATENÇÃO: Para o Expo não quebrar com erro de "Módulo não encontrado", 
+        // eu comentei as linhas abaixo. 
+        // QUANDO você baixar os 4 arquivos .mp3 e colocar na pasta 'assets', DESCOMENTE estas linhas:
+        
+        /*
+        sonsRef.current.shoot = (await Audio.Sound.createAsync(require('../../assets/shoot.mp3'))).sound;
+        sonsRef.current.hit = (await Audio.Sound.createAsync(require('../../assets/hit.mp3'))).sound;
+        sonsRef.current.miss = (await Audio.Sound.createAsync(require('../../assets/miss.mp3'))).sound;
+        sonsRef.current.damage = (await Audio.Sound.createAsync(require('../../assets/damage.mp3'))).sound;
+        */
+      } catch (error) {
+        console.log('Erro ao carregar sons', error);
+      }
+    };
+    carregarSons();
+    return () => {
+      Object.values(sonsRef.current).forEach((s: any) => s.unloadAsync());
+    };
+  }, []);
+
+  const tocarSom = async (tipo: string) => {
+    try {
+      if (sonsRef.current[tipo]) {
+        await sonsRef.current[tipo].replayAsync();
+      }
+    } catch (e) {}
+  };
+  // 🚨 FIM DO SISTEMA DE EFEITOS SONOROS
+
   const gameOver = () => { 
     jogoAtivoRef.current = false;
     if (spawnTimer.current) clearTimeout(spawnTimer.current); 
@@ -107,6 +143,9 @@ export default function ArcadeMultiplayer() {
     const expId = Math.random().toString();
     setExplosoes(prev => [...prev, { id: expId, x: opInfo.posX, y: DROP_LIMIT, texto: opInfo.textoTela, corEspecial: false }]);
     setTimeout(() => { setExplosoes(prev => prev.filter(e => e.id !== expId)); }, 800);
+
+    // 🔊 Toca som de choque/dano quando a conta bate no limite
+    tocarSom('damage');
 
     if (meuStatusRef.current === 'vivo' && modoRef.current !== 'espectador') {
         socket.emit('arcade_miss', { room_id: roomIdRef.current, op_id: opInfo.chaveOriginal });
@@ -144,11 +183,17 @@ export default function ArcadeMultiplayer() {
     const laserInfo = { x: midX, y: midY, h: distance, angle: `${angle}rad`, cor };
     setLasersAtivos([laserInfo]);
     
+    // 🔊 Toca som do laser saindo
+    tocarSom('shoot');
+
     laserAnim.setValue(1);
+    
+    const duracaoLaser = acertou ? 300 : 150;
+
     Animated.parallel([
       Animated.timing(laserAnim, { 
         toValue: 0, 
-        duration: acertou ? 300 : 150, 
+        duration: duracaoLaser, 
         useNativeDriver: true 
       }), 
       ...(alvo && acertou ? [ 
@@ -157,6 +202,12 @@ export default function ArcadeMultiplayer() {
       ] : [])
     ]).start(() => setLasersAtivos([]));
     
+    // 🔊 Toca som do impacto (Acerto ou Erro)
+    setTimeout(() => {
+        if (acertou) tocarSom('hit');
+        else tocarSom('miss');
+    }, duracaoLaser - 50);
+
     if (!acertou) {
       Animated.sequence([
         Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }), 
@@ -325,6 +376,10 @@ export default function ArcadeMultiplayer() {
       
       socket.emit('spectate_match', { room_id: roomId });
       setTela('jogo');
+      
+      // 🚨 CORREÇÃO: Liga o radar do espectador na mesma hora!
+      jogoAtivoRef.current = true;
+      iniciarLoopSpawner(); 
   };
 
   const abandonarPartida = () => {
@@ -333,7 +388,6 @@ export default function ArcadeMultiplayer() {
           if (modoRef.current === 'espectador') socket.emit('leave_spectator', { room_id: roomIdRef.current });
           else if (modoRef.current === 'multi') socket.emit('leave_match', { room_id: roomIdRef.current });
           setActiveMatchData(null);
-          // GARANTIDO: Status MENU ao sair
           socket.emit('update_status', { status: 'MENU' });
           router.back();
       };
@@ -392,10 +446,6 @@ export default function ArcadeMultiplayer() {
 
     const onArcadeNewBatch = (data: any) => {
         filaMultiplayerRef.current.push(...data.ops);
-        if (modoRef.current === 'espectador' && filaMultiplayerRef.current.length > 0 && !jogoAtivoRef.current) {
-            jogoAtivoRef.current = true;
-            iniciarLoopSpawner();
-        }
     };
 
     const onArcadeOpDestroyed = (data: any) => {
@@ -487,7 +537,6 @@ export default function ArcadeMultiplayer() {
         socket.off('opponent_disconnected', onOpponentDisconnected);
         socket.off('match_ended', onOpponentDisconnected);
         socket.off('spectator_joined', onSpectatorJoined);
-        // GARANTIDO: Status MENU ao desmontar a tela
         socket.emit('update_status', { status: 'MENU' });
     };
   }, []);
@@ -514,7 +563,6 @@ export default function ArcadeMultiplayer() {
           </View>
           <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => { 
               setActiveMatchData(null); 
-              // GARANTIDO: Status MENU ao fechar tela de resultado
               socket.emit('update_status', { status: 'MENU' });
               router.back(); 
           }}>
