@@ -5,8 +5,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { socket, getActiveMatchData } from '../../src/services/socket'; // Ajuste o caminho se necessário
-import { useAuth } from '../../src/context/AuthContext';
+import { socket, getActiveMatchData } from '../src/services/socket'; // Ajuste o caminho se necessário
+import { useAuth } from '../src/context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
