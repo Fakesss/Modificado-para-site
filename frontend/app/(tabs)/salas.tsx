@@ -28,6 +28,7 @@ export default function Salas() {
 
   const [showChallengeModal, setShowChallengeModal] = useState(false);
   const [arcadeModeSelect, setArcadeModeSelect] = useState(false);
+  const [tugModeSelect, setTugModeSelect] = useState(false); // NOVO: Controle para o menu do Cabo de Guerra
   const [hiddenChallenges, setHiddenChallenges] = useState<Set<string>>(new Set());
 
   const flatListRef = useRef<FlatList>(null);
@@ -235,6 +236,7 @@ export default function Salas() {
     socket.emit('create_lobby_challenge', { lobby_id: currentLobby.id, game_type: gameType, modo_operacao: modoOperacao });
     setShowChallengeModal(false);
     setArcadeModeSelect(false);
+    setTugModeSelect(false);
   };
 
   const handleAceitarDesafio = (challengeId: string) => {
@@ -244,6 +246,7 @@ export default function Salas() {
   const handleAssistirPartida = (roomId: string, gameType: string) => {
     if (gameType === 'tictactoe') router.push(`/tictactoe?spectate=${roomId}`);
     else if (gameType === 'arcade') router.push(`/arcade_multi?spectate=${roomId}`);
+    else if (gameType === 'tugofwar') router.push(`/cabo_de_guerra?spectate=${roomId}`); // NOVO: Roteamento espectador
   };
 
   const handleCancelarDesafio = (challengeId: string) => {
@@ -389,7 +392,13 @@ export default function Salas() {
             {desafiosAtivos.map((desafio: any) => {
               const isMeChallenger = desafio.challenger_sid === socket.id;
               const isMeAcceptor = desafio.acceptor_name && desafio.acceptor_name === user?.nome;
-              const nomeJogo = desafio.game_type === 'tictactoe' ? 'Jogo da Velha' : 'Arcade Mode';
+              
+              // NOVO: Adicionado nome do Cabo de Guerra
+              const nomeJogo = desafio.game_type === 'tictactoe' 
+                ? 'Jogo da Velha' 
+                : desafio.game_type === 'arcade' 
+                  ? 'Arcade Mode' 
+                  : 'Cabo de Guerra';
 
               if (desafio.status === 'ABERTO') {
                 return (
@@ -517,12 +526,12 @@ export default function Salas() {
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Lançar Desafio</Text>
-                <TouchableOpacity onPress={() => { setShowChallengeModal(false); setArcadeModeSelect(false); }}>
+                <TouchableOpacity onPress={() => { setShowChallengeModal(false); setArcadeModeSelect(false); setTugModeSelect(false); }}>
                   <Ionicons name="close" size={24} color="#888" />
                 </TouchableOpacity>
               </View>
               
-              {!arcadeModeSelect ? (
+              {!arcadeModeSelect && !tugModeSelect ? (
                 <>
                   <Text style={styles.inputLabel}>Escolha o modo de jogo para batalhar contra a sala:</Text>
                   <View style={{ gap: 12, marginTop: 10 }}>
@@ -535,20 +544,30 @@ export default function Salas() {
                       <Ionicons name="rocket-outline" size={24} color="#FF4500" />
                       <Text style={[styles.gameOptionText, { color: '#FF4500' }]}>Arcade Mode</Text>
                     </TouchableOpacity>
+
+                    {/* NOVO: Botão para Cabo de Guerra */}
+                    <TouchableOpacity style={[styles.gameOptionButton, { borderColor: '#32CD32' }]} onPress={() => setTugModeSelect(true)}>
+                      <Ionicons name="people-outline" size={24} color="#32CD32" />
+                      <Text style={[styles.gameOptionText, { color: '#32CD32' }]}>Cabo de Guerra</Text>
+                    </TouchableOpacity>
                   </View>
                 </>
               ) : (
                 <>
-                  <Text style={styles.inputLabel}>Escolha o tipo de operação para o Arcade:</Text>
+                  <Text style={styles.inputLabel}>Escolha o tipo de operação para a partida:</Text>
                   <View style={{ gap: 8, marginTop: 10 }}>
                     {['soma', 'subtracao', 'multiplicacao', 'divisao', 'potenciacao', 'misto'].map((modo) => (
-                      <TouchableOpacity key={modo} style={[styles.gameOptionButton, { padding: 12, borderColor: '#FF4500', justifyContent: 'center' }]} onPress={() => handleLancarDesafio('arcade', modo)}>
-                        <Text style={{ color: '#FF4500', fontWeight: 'bold', textTransform: 'uppercase', fontSize: 14 }}>
+                      <TouchableOpacity 
+                        key={modo} 
+                        style={[styles.gameOptionButton, { padding: 12, borderColor: arcadeModeSelect ? '#FF4500' : '#32CD32', justifyContent: 'center' }]} 
+                        onPress={() => handleLancarDesafio(arcadeModeSelect ? 'arcade' : 'tugofwar', modo)}
+                      >
+                        <Text style={{ color: arcadeModeSelect ? '#FF4500' : '#32CD32', fontWeight: 'bold', textTransform: 'uppercase', fontSize: 14 }}>
                           {modo === 'potenciacao' ? 'Potência e Raiz' : modo}
                         </Text>
                       </TouchableOpacity>
                     ))}
-                    <TouchableOpacity style={{ marginTop: 15, padding: 10, alignItems: 'center' }} onPress={() => setArcadeModeSelect(false)}>
+                    <TouchableOpacity style={{ marginTop: 15, padding: 10, alignItems: 'center' }} onPress={() => { setArcadeModeSelect(false); setTugModeSelect(false); }}>
                       <Text style={{ color: '#888', fontWeight: 'bold' }}>Voltar</Text>
                     </TouchableOpacity>
                   </View>
