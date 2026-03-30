@@ -28,7 +28,7 @@ export default function Salas() {
 
   const [showChallengeModal, setShowChallengeModal] = useState(false);
   const [arcadeModeSelect, setArcadeModeSelect] = useState(false);
-  const [tugModeSelect, setTugModeSelect] = useState(false); // NOVO: Controle para o menu do Cabo de Guerra
+  const [tugModeSelect, setTugModeSelect] = useState(false);
   const [hiddenChallenges, setHiddenChallenges] = useState<Set<string>>(new Set());
 
   const flatListRef = useRef<FlatList>(null);
@@ -246,7 +246,7 @@ export default function Salas() {
   const handleAssistirPartida = (roomId: string, gameType: string) => {
     if (gameType === 'tictactoe') router.push(`/tictactoe?spectate=${roomId}`);
     else if (gameType === 'arcade') router.push(`/arcade_multi?spectate=${roomId}`);
-    else if (gameType === 'tugofwar') router.push(`/cabo_de_guerra?spectate=${roomId}`); // NOVO: Roteamento espectador
+    else if (gameType === 'tugofwar') router.push(`/cabo_de_guerra?spectate=${roomId}`);
   };
 
   const handleCancelarDesafio = (challengeId: string) => {
@@ -393,7 +393,6 @@ export default function Salas() {
               const isMeChallenger = desafio.challenger_sid === socket.id;
               const isMeAcceptor = desafio.acceptor_name && desafio.acceptor_name === user?.nome;
               
-              // NOVO: Adicionado nome do Cabo de Guerra
               const nomeJogo = desafio.game_type === 'tictactoe' 
                 ? 'Jogo da Velha' 
                 : desafio.game_type === 'arcade' 
@@ -479,11 +478,23 @@ export default function Salas() {
             if (isSystem) return <View style={styles.systemMessage}><Text style={styles.systemMessageText}>{item.text}</Text></View>;
 
             if (item.apagada) {
-              return (
-                <View style={[styles.messageBubble, { alignSelf: isMe ? 'flex-end' : 'flex-start', backgroundColor: '#333' }]}>
-                  <Text style={{ color: '#aaa', fontStyle: 'italic', fontSize: 13 }}>🚫 Esta mensagem foi apagada</Text>
-                </View>
-              );
+              if (isAdmin) {
+                // VISÃO EXCLUSIVA DO ADMIN: Vê a mensagem original com estilo de alerta (riscada e borda vermelha)
+                return (
+                  <TouchableOpacity activeOpacity={0.8} style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther, { backgroundColor: '#2a2a3e', borderWidth: 1, borderColor: '#E74C3C' }]}>
+                    {!isMe && <Text style={[styles.messageSender, { color: '#E74C3C' }]}>{item.sender} <Text style={{fontSize: 10}}>(Apagada)</Text></Text>}
+                    <Text style={[styles.messageText, { color: '#ccc', textDecorationLine: 'line-through' }]}>{item.text}</Text>
+                    <Text style={styles.messageTime}>{item.time}</Text>
+                  </TouchableOpacity>
+                );
+              } else {
+                // Visão do aluno: Apenas o aviso
+                return (
+                  <View style={[styles.messageBubble, { alignSelf: isMe ? 'flex-end' : 'flex-start', backgroundColor: '#333' }]}>
+                    <Text style={{ color: '#aaa', fontStyle: 'italic', fontSize: 13 }}>🚫 Esta mensagem foi apagada</Text>
+                  </View>
+                );
+              }
             }
 
             return (
@@ -545,7 +556,6 @@ export default function Salas() {
                       <Text style={[styles.gameOptionText, { color: '#FF4500' }]}>Arcade Mode</Text>
                     </TouchableOpacity>
 
-                    {/* NOVO: Botão para Cabo de Guerra */}
                     <TouchableOpacity style={[styles.gameOptionButton, { borderColor: '#32CD32' }]} onPress={() => setTugModeSelect(true)}>
                       <Ionicons name="people-outline" size={24} color="#32CD32" />
                       <Text style={[styles.gameOptionText, { color: '#32CD32' }]}>Cabo de Guerra</Text>
