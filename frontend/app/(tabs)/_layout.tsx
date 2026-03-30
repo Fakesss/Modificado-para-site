@@ -82,6 +82,7 @@ export default function TabsLayout() {
       setActiveMatchData(data);
       setConvite(null);
       if (data.game_type === 'arcade') router.push('/arcade_multi');
+      else if (data.game_type === 'tugofwar') router.push('/cabo_de_guerra');
       else router.push('/tictactoe'); 
     };
 
@@ -130,7 +131,7 @@ export default function TabsLayout() {
             </View>
             <Text style={styles.modalTitle}>DESAFIO RECEBIDO!</Text>
             <Text style={styles.modalText}>
-              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : 'Matemática Turbo'}!
+              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : convite?.game_type === 'arcade' ? 'Matemática Turbo' : 'Cabo de Guerra'}!
             </Text>
             <View style={{ width: '100%', gap: 10, marginTop: 20 }}>
               <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#32CD32' }]} onPress={aceitarConvite}>
