@@ -160,7 +160,6 @@ export default function ArcadeMultiplayer() {
 
     if (acertou && alvo) {
         targetX = alvo.posX + CARD_WIDTH / 2;
-        // 🚨 Busca a altura de forma segura para não travar o app
         const alvoAtual = operacoesAtuaisRef.current.find(o => o.chave === alvo.id);
         const targetYVal = alvoAtual ? (alvoAtual.currentY || 0) : 0;
         targetY = targetYVal + 20;
@@ -222,7 +221,7 @@ export default function ArcadeMultiplayer() {
 
   const verificarResposta = () => verificarRespostaComValor(resposta);
 
-  // 🚨 RE-CRIA CONTAS NA TELA DO ESPECTADOR (CLONE DO HOST)
+  // 🚨 NASCIMENTO PERFEITO: Desenha as contas na exata posição em que estão para o Host
   const spawnarQuestaoRecuperada = (dados: any) => {
     let numLanes = 3;
     if (rodadaRef.current >= 4) numLanes = 4; if (rodadaRef.current >= 7) numLanes = 5; if (rodadaRef.current >= 10) numLanes = 6;
@@ -231,7 +230,6 @@ export default function ArcadeMultiplayer() {
     const lane = dados.lane_precalc || 0;
     const id = Math.random().toString();
     
-    // Inicia da altura exata do Host
     const startY = dados.startY || 0;
     operacoesAtuaisRef.current.push({ lane, y: startY, currentY: startY, chaveOriginal: dados.id, chave: id, missed: false });
 
@@ -242,7 +240,7 @@ export default function ArcadeMultiplayer() {
       const ref = operacoesAtuaisRef.current.find((o:any) => o.chave === id);
       if (ref) {
          ref.y = value;
-         ref.currentY = value; // 🚨 Salva a posição Y para o laser acertar em cheio!
+         ref.currentY = value; 
          if (value >= DROP_LIMIT && !ref.missed) { ref.missed = true; processarErro(id); }
       }
     });
@@ -258,10 +256,11 @@ export default function ArcadeMultiplayer() {
         if (jogoAtivoRef.current) {
             const distanciaRestante = Math.max(10, (height + 100) - startY);
             const distanciaTotal = height + 100;
-            const proporcao = Math.min(1, Math.max(0.1, distanciaRestante / distanciaTotal));
-            const tempoReal = (novaOp.speed * (distanciaTotal / DROP_LIMIT)) * proporcao;
+            const proporcao = Math.min(1, Math.max(0.01, distanciaRestante / distanciaTotal));
+            const tempoOriginal = dados.speed * (distanciaTotal / DROP_LIMIT);
+            const tempoRestante = tempoOriginal * proporcao;
 
-            Animated.timing(novaOp.y, { toValue: height + 100, duration: tempoReal, useNativeDriver: true }).start();
+            Animated.timing(novaOp.y, { toValue: height + 100, duration: tempoRestante, useNativeDriver: true }).start();
         }
     }, 50);
   };
@@ -402,6 +401,10 @@ export default function ArcadeMultiplayer() {
       
       socket.emit('spectate_match', { room_id: roomId });
       setTela('jogo'); jogoAtivoRef.current = true;
+      
+      // 🚨 O GRITO DO ESPECTADOR: "Estou aqui, me manda o status da tela!"
+      socket.emit('arcade_sync_batch', { room_id: roomId, ops: [{ type: 'REQUEST_SYNC' }] });
+      
       iniciarLoopSpawner(); 
   };
 
@@ -449,27 +452,44 @@ export default function ArcadeMultiplayer() {
     socket.emit('update_status', { status: 'JOGANDO_ONLINE' });
 
     const onArcadeNewBatch = (data: any) => {
-        // 🚨 SE FOR PACOTE DE SINCRONIZAÇÃO DO ESPECTADOR:
-        if (data.ops.length > 0 && data.ops[0].type === 'SPECTATOR_SYNC') {
-            if (modoRef.current === 'espectador') {
-                const syncData = data.ops[0];
-                
-                // Limpa a tela para não duplicar nada
-                operacoesAtuaisRef.current.forEach(o => {
-                    const ref = operacoesListRef.current.find(op => op.id === o.chave);
-                    if(ref && ref.y) ref.y.stopAnimation();
-                });
-                setOperacoes([]);
-                operacoesAtuaisRef.current = [];
-
-                // Faz chover as contas recuperadas da tela do Host!
-                syncData.onScreenOps.forEach((op: any) => spawnarQuestaoRecuperada(op));
-                filaMultiplayerRef.current = syncData.queue;
+        if (data.ops.length > 0) {
+            // 🚨 SE FOR UM PEDIDO DE SYNC DO ESPECTADOR
+            if (data.ops[0].type === 'REQUEST_SYNC') {
+                if (isHostRef.current) {
+                    const onScreenOps = operacoesListRef.current.map(op => {
+                        const opAtual = operacoesAtuaisRef.current.find(o => o.chave === op.id);
+                        return {
+                            id: op.chaveOriginal, texto: op.textoTela, resposta: op.resposta,
+                            speed: op.speed, lane_precalc: op.lane, startY: opAtual ? (opAtual.currentY || 0) : 0
+                        };
+                    });
+                    const syncData = { type: 'SPECTATOR_SYNC', onScreenOps, queue: filaMultiplayerRef.current };
+                    socket.emit('arcade_sync_batch', { room_id: roomIdRef.current, ops: [syncData] });
+                }
+                return;
             }
-            return; // O Player 2 ignora esse pacote para não bugar a fila dele.
+
+            // 🚨 SE FOR A RESPOSTA DE SYNC DO HOST
+            if (data.ops[0].type === 'SPECTATOR_SYNC') {
+                if (modoRef.current === 'espectador') {
+                    const syncData = data.ops[0];
+                    
+                    // Limpa tudo e aplica a fotografia instantaneamente
+                    operacoesAtuaisRef.current.forEach(o => {
+                        const ref = operacoesListRef.current.find(op => op.id === o.chave);
+                        if(ref && ref.y) ref.y.stopAnimation();
+                    });
+                    setOperacoes([]);
+                    operacoesAtuaisRef.current = [];
+
+                    syncData.onScreenOps.forEach((op: any) => spawnarQuestaoRecuperada(op));
+                    filaMultiplayerRef.current = syncData.queue;
+                }
+                return;
+            }
         }
 
-        // Pacote normal de jogo
+        // Se for um pacote normal de contas, todo mundo enfileira
         filaMultiplayerRef.current.push(...data.ops);
     };
 
@@ -477,7 +497,6 @@ export default function ArcadeMultiplayer() {
         const { op_id, winner_sid, pontos: novosPontos } = data;
         const opInfo = operacoesListRef.current.find(o => o.chaveOriginal === op_id);
         
-        // Remove da fila se a conta foi destruída muito rápido
         filaMultiplayerRef.current = filaMultiplayerRef.current.filter(op => (op.chave || op.id) !== op_id);
 
         let playerIndex = 0; let isMe = false;
@@ -529,19 +548,6 @@ export default function ArcadeMultiplayer() {
         setVidas(data.vidas[sids[0]]); setVidasOponente(data.vidas[sids[1]]);
         setPontos(data.pontos[sids[0]]); setPontosOponente(data.pontos[sids[1]]);
         
-        // 🚨 MÁGICA: Assim que o espectador entra, o Host manda a FOTO DA TELA ATUAL pra ele!
-        if (isHostRef.current) {
-            const onScreenOps = operacoesListRef.current.map(op => {
-                const opAtual = operacoesAtuaisRef.current.find(o => o.chave === op.id);
-                return {
-                    id: op.chaveOriginal, texto: op.textoTela, resposta: op.resposta,
-                    speed: op.speed, lane_precalc: op.lane, startY: opAtual ? (opAtual.currentY || 0) : 0
-                };
-            });
-            const syncData = { type: 'SPECTATOR_SYNC', onScreenOps, queue: filaMultiplayerRef.current };
-            socket.emit('arcade_sync_batch', { room_id: roomIdRef.current, ops: [syncData] });
-        }
-
         const maxPts = Math.max(data.pontos[sids[0]], data.pontos[sids[1]]);
         rodadaRef.current = 1 + Math.floor(maxPts / 150);
     };
@@ -637,7 +643,6 @@ export default function ArcadeMultiplayer() {
            <View style={styles.linhaEletricaGlow} />
         </View>
 
-        {/* 🚨 AVISO VISUAL: Ele some em 1 segundo, assim que o Host mandar a foto da tela */}
         {modoRef.current === 'espectador' && operacoes.length === 0 && (
             <View style={styles.syncContainer}>
                 <ActivityIndicator size="large" color="#00FFFF" />
