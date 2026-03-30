@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Alert, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Alert, Pressable, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -93,7 +93,7 @@ export default function ArcadeMultiplayer() {
   const [explosoes, setExplosoes] = useState<any[]>([]); 
 
   // 🚨 CONTROLE DE VOLUME SEGURO
-  const [volumeUI, setVolumeUI] = useState<number>(0.3); // Começa baixinho pra não assustar
+  const [volumeUI, setVolumeUI] = useState<number>(0.3);
   const volumeRef = useRef<number>(0.3);
   const sonsRef = useRef<any>({});
 
@@ -111,7 +111,7 @@ export default function ArcadeMultiplayer() {
         sonsRef.current.miss = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/miss.mp3' })).sound;
         sonsRef.current.damage = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/explosion.mp3' })).sound;
       } catch (error) {
-        console.log('Erro ao carregar sons da internet', error);
+        console.log('Erro ao carregar sons', error);
       }
     };
     carregarSons();
@@ -155,7 +155,6 @@ export default function ArcadeMultiplayer() {
   }, []);
 
   const dispararLaserUnico = (alvo: any, acertou: boolean, isMe: boolean, isSpectator: boolean, playerIndex: number) => {
-    // 🚨 Retornado ao centro conforme você pediu!
     let originX = width / 2;
     let originY = DROP_LIMIT + 30;
     
@@ -185,27 +184,19 @@ export default function ArcadeMultiplayer() {
     setLasersAtivos([laserInfo]);
     
     tocarSom('shoot');
-
     laserAnim.setValue(1);
     
     const duracaoLaser = acertou ? 300 : 150;
 
     Animated.parallel([
-      Animated.timing(laserAnim, { 
-        toValue: 0, 
-        duration: duracaoLaser, 
-        useNativeDriver: true 
-      }), 
+      Animated.timing(laserAnim, { toValue: 0, duration: duracaoLaser, useNativeDriver: true }), 
       ...(alvo && acertou ? [ 
         Animated.timing(alvo.scale, { toValue: alvo.baseScale * 1.4, duration: 150, useNativeDriver: true }), 
         Animated.timing(alvo.opacity, { toValue: 0, duration: 150, useNativeDriver: true }) 
       ] : [])
     ]).start(() => setLasersAtivos([]));
     
-    setTimeout(() => {
-        if (acertou) tocarSom('hit');
-        else tocarSom('miss');
-    }, duracaoLaser - 50);
+    setTimeout(() => { if (acertou) tocarSom('hit'); else tocarSom('miss'); }, duracaoLaser - 50);
 
     if (!acertou) {
       Animated.sequence([
@@ -231,21 +222,66 @@ export default function ArcadeMultiplayer() {
 
   const verificarResposta = () => verificarRespostaComValor(resposta);
 
+  // 🚨 FUNÇÃO EXCLUSIVA DO ESPECTADOR (RECUPERAR CONTAS DA TELA)
+  const spawnarQuestaoRecuperada = (dados: any) => {
+    let numLanes = 3;
+    if (rodadaRef.current >= 4) numLanes = 4; if (rodadaRef.current >= 7) numLanes = 5; if (rodadaRef.current >= 10) numLanes = 6;
+    const laneWidth = width / numLanes; const baseScale = 3 / numLanes; 
+
+    const lane = dados.lane_precalc;
+    const id = Math.random().toString();
+    operacoesAtuaisRef.current.push({ lane, y: 0, chaveOriginal: dados.chave || dados.id, chave: id, missed: false });
+
+    const posX = (lane * laneWidth) + (laneWidth / 2) - (CARD_WIDTH / 2);
+    
+    // Inicia da exata posição Y que o Host mandou
+    const yValue = new Animated.Value(dados.startY || 0);
+    
+    yValue.addListener(({ value }: any) => {
+      const ref = operacoesAtuaisRef.current.find((o:any) => o.chave === id);
+      if (ref) {
+         ref.y = value;
+         if (value >= DROP_LIMIT && !ref.missed) { ref.missed = true; processarErro(id); }
+      }
+    });
+
+    const novaOp = { 
+      id, chaveOriginal: dados.chave || dados.id, resposta: dados.resposta, textoTela: dados.texto, y: yValue, speed: dados.speed, posX, lane, tipoEspecial: 'nenhum', baseScale,
+      opacity: new Animated.Value(1), scale: new Animated.Value(baseScale) 
+    };
+
+    setOperacoes(prev => [...prev, novaOp]); 
+    
+    setTimeout(() => {
+        if (jogoAtivoRef.current) {
+            const distanciaRestante = Math.max(10, (height + 100) - dados.startY);
+            const distanciaTotal = height + 100;
+            const proporcao = distanciaRestante / distanciaTotal;
+            const tempoReal = (novaOp.speed * (distanciaTotal / DROP_LIMIT)) * proporcao;
+
+            Animated.timing(novaOp.y, { toValue: height + 100, duration: tempoReal, useNativeDriver: true }).start();
+        }
+    }, 50);
+  };
+
   const spawnarQuestao = () => {
     if (filaMultiplayerRef.current.length === 0) return;
     const dados = filaMultiplayerRef.current.shift();
     
     let numLanes = 3;
     if (rodadaRef.current >= 4) numLanes = 4; if (rodadaRef.current >= 7) numLanes = 5; if (rodadaRef.current >= 10) numLanes = 6;
-    const laneWidth = width / numLanes; const baseScale = 3 / numLanes; 
+    const laneWidth = width / numLanes; const baseScale = 3 / numLanes; const minDropDistance = 0.20; 
     
-    // 🚨 CORREÇÃO DA SINCRONIA (DETERMINISMO): A conta cai exatamente no mesmo lugar pra todo mundo!
-    let lane = dados.lane_precalc;
-    if (lane === undefined) {
-        const charCode = (dados.chave || dados.id).charCodeAt(0) || 0;
-        lane = charCode % numLanes;
-    }
+    const pistasDisponiveis = Array.from({length: numLanes}, (_, i) => i).filter(p => {
+      const opsNaPista = operacoesAtuaisRef.current.filter(o => o.lane === p);
+      if (opsNaPista.length === 0) return true;
+      const menorY = Math.min(...opsNaPista.map(o => (o.y as any)._value || 0));
+      return menorY > (DROP_LIMIT * minDropDistance);
+    });
+    
+    if (pistasDisponiveis.length === 0) { filaMultiplayerRef.current.unshift(dados); return; }
 
+    const lane = dados.lane_precalc !== undefined ? dados.lane_precalc : pistasDisponiveis[Math.floor(Math.random() * pistasDisponiveis.length)];
     const id = Math.random().toString();
     operacoesAtuaisRef.current.push({ lane, y: 0, chaveOriginal: dados.chave || dados.id, chave: id, missed: false });
 
@@ -256,10 +292,7 @@ export default function ArcadeMultiplayer() {
       const ref = operacoesAtuaisRef.current.find((o:any) => o.chave === id);
       if (ref) {
          ref.y = value;
-         if (value >= DROP_LIMIT && !ref.missed) {
-            ref.missed = true;
-            processarErro(id);
-         }
+         if (value >= DROP_LIMIT && !ref.missed) { ref.missed = true; processarErro(id); }
       }
     });
 
@@ -295,9 +328,7 @@ export default function ArcadeMultiplayer() {
 
       let numMax = 8 + (rodadaRef.current * 2);
       let multMax = 5 + Math.floor(rodadaRef.current / 1.5); 
-      
-      let numLanes = 3;
-      if (rodadaRef.current >= 4) numLanes = 4; if (rodadaRef.current >= 7) numLanes = 5; if (rodadaRef.current >= 10) numLanes = 6;
+      let numLanes = 3; if (rodadaRef.current >= 4) numLanes = 4; if (rodadaRef.current >= 7) numLanes = 5; if (rodadaRef.current >= 10) numLanes = 6;
 
       for(let i=0; i<15; i++) {
           const op = opsPermitidas[r(opsPermitidas.length)];
@@ -314,11 +345,18 @@ export default function ArcadeMultiplayer() {
             case '√': res=r(multMax+4)+2; n1=res*res; n2=''; txt=`√${n1}`; break;
           }
           const speed = Math.max(3500, 10000 - (rodadaRef.current * 200));
-          // 🚨 PRECALCULA A PISTA AQUI: Garante que nunca haverá contas sobrepostas!
           novasOps.push({ id: Math.random().toString(), texto: txt, resposta: res, speed, lane_precalc: i % numLanes });
       }
+
+      // 🚨 MÁGICA: O Host embute a situação atual da tela dele no lote!
+      const opsDeRecuperacao = operacoesListRef.current.map(op => ({
+          chave: op.chaveOriginal, texto: op.textoTela, resposta: op.resposta, speed: op.speed, lane_precalc: op.lane,
+          isRecovery: true, startY: (op.y as any)._value || 0
+      }));
+
+      const pacoteCompleto = [...opsDeRecuperacao, ...novasOps];
       filaMultiplayerRef.current.push(...novasOps);
-      socket.emit('arcade_sync_batch', { room_id: roomIdRef.current, ops: novasOps });
+      socket.emit('arcade_sync_batch', { room_id: roomIdRef.current, ops: pacoteCompleto });
       rodadaRef.current += 1;
   };
 
@@ -339,8 +377,7 @@ export default function ArcadeMultiplayer() {
   };
 
   const setupMultiplayerMatch = (data: any) => {
-      setModo('multi'); 
-      modoRef.current = 'multi';
+      setModo('multi'); modoRef.current = 'multi';
       modoMatematicaRef.current = data.modo_operacao || 'misto';
       roomIdRef.current = data.room_id;
       setOponenteNome(data.opponentName);
@@ -348,23 +385,19 @@ export default function ArcadeMultiplayer() {
 
       setVidas(5); setVidasOponente(5);
       setPontos(0); setPontosOponente(0);
-      setMeuStatus('vivo');
-      meuStatusRef.current = 'vivo';
+      setMeuStatus('vivo'); meuStatusRef.current = 'vivo';
 
       filaMultiplayerRef.current = [];
       setOperacoes([]); setExplosoes([]); setResposta('');
       operacoesAtuaisRef.current = []; rodadaRef.current = 1;
       
-      setTela('jogo');
-      jogoAtivoRef.current = true;
-
+      setTela('jogo'); jogoAtivoRef.current = true;
       if (data.is_host) { gerarEnviarBatchMultiplayer(data.modo_operacao || 'misto'); }
       setTimeout(() => { iniciarLoopSpawner(); }, 1000);
   };
 
   const setupSpectatorMode = (roomId: string) => {
-      setModo('espectador'); 
-      modoRef.current = 'espectador';
+      setModo('espectador'); modoRef.current = 'espectador';
       roomIdRef.current = roomId;
       setVidas(5); setVidasOponente(5);
       setPontos(0); setPontosOponente(0);
@@ -372,9 +405,7 @@ export default function ArcadeMultiplayer() {
       setOperacoes([]); setExplosoes([]);
       
       socket.emit('spectate_match', { room_id: roomId });
-      setTela('jogo');
-      
-      jogoAtivoRef.current = true;
+      setTela('jogo'); jogoAtivoRef.current = true;
       iniciarLoopSpawner(); 
   };
 
@@ -383,19 +414,10 @@ export default function ArcadeMultiplayer() {
       const executarSaida = () => {
           if (modoRef.current === 'espectador') socket.emit('leave_spectator', { room_id: roomIdRef.current });
           else if (modoRef.current === 'multi') socket.emit('leave_match', { room_id: roomIdRef.current });
-          setActiveMatchData(null);
-          socket.emit('update_status', { status: 'MENU' });
-          router.back();
+          setActiveMatchData(null); socket.emit('update_status', { status: 'MENU' }); router.back();
       };
-
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          if (window.confirm(msg)) executarSaida();
-      } else {
-          Alert.alert("Sair", msg, [
-              { text: "Não", style: "cancel" },
-              { text: "Sim", style: "destructive", onPress: executarSaida }
-          ]);
-      }
+      if (Platform.OS === 'web' && typeof window !== 'undefined') { if (window.confirm(msg)) executarSaida();
+      } else { Alert.alert("Sair", msg, [ { text: "Não", style: "cancel" }, { text: "Sim", style: "destructive", onPress: executarSaida } ]); }
   };
 
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
@@ -405,13 +427,9 @@ export default function ArcadeMultiplayer() {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const handleKeyDownLocal = (e: any) => {
             if (!jogoAtivoRef.current || meuStatusRef.current === 'morto' || modoRef.current === 'espectador') return;
-            if (e.key >= '0' && e.key <= '9') {
-                setResposta(prev => prev.length < 5 ? prev + e.key : prev);
-            } else if (e.key === 'Backspace' || e.key === 'Delete') {
-                setResposta(prev => prev.slice(0, -1));
-            } else if (e.key === 'Enter') {
-                verificarRespostaComValor(respostaRef.current);
-            }
+            if (e.key >= '0' && e.key <= '9') { setResposta(prev => prev.length < 5 ? prev + e.key : prev);
+            } else if (e.key === 'Backspace' || e.key === 'Delete') { setResposta(prev => prev.slice(0, -1));
+            } else if (e.key === 'Enter') { verificarRespostaComValor(respostaRef.current); }
         };
         window.addEventListener('keydown', handleKeyDownLocal);
         return () => window.removeEventListener('keydown', handleKeyDownLocal);
@@ -423,15 +441,9 @@ export default function ArcadeMultiplayer() {
       const handleVisibilityChange = () => {
         if (document.hidden && jogoAtivoRef.current && meuStatusRef.current === 'vivo' && modoRef.current !== 'espectador') {
           const opsNaTela = [...operacoesAtuaisRef.current];
-          opsNaTela.forEach(op => {
-            if (!op.missed) {
-              op.missed = true; 
-              processarErro(op.chave);
-            }
-          });
+          opsNaTela.forEach(op => { if (!op.missed) { op.missed = true; processarErro(op.chave); } });
         }
       };
-
       document.addEventListener('visibilitychange', handleVisibilityChange);
       return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
     }
@@ -441,18 +453,27 @@ export default function ArcadeMultiplayer() {
     socket.emit('update_status', { status: 'JOGANDO_ONLINE' });
 
     const onArcadeNewBatch = (data: any) => {
-        filaMultiplayerRef.current.push(...data.ops);
+        const novas = data.ops.filter((op: any) => !op.isRecovery);
+        const recuperacao = data.ops.filter((op: any) => op.isRecovery);
+
+        filaMultiplayerRef.current.push(...novas);
+
+        // 🚨 SE FOR ESPECTADOR e a tela estiver vazia, clona a tela do Host na hora!
+        if (modoRef.current === 'espectador' && operacoesAtuaisRef.current.length === 0) {
+            recuperacao.forEach((recOp: any) => {
+                spawnarQuestaoRecuperada(recOp);
+            });
+        }
     };
 
     const onArcadeOpDestroyed = (data: any) => {
         const { op_id, winner_sid, pontos: novosPontos } = data;
         const opInfo = operacoesListRef.current.find(o => o.chaveOriginal === op_id);
         
-        // 🚨 PREVENÇÃO DE GHOSTS: O espectador remove da fila as contas que os jogadores já acertaram!
+        // Remove da fila se a conta foi destruída antes mesmo do espectador processá-la
         filaMultiplayerRef.current = filaMultiplayerRef.current.filter(op => (op.chave || op.id) !== op_id);
 
-        let playerIndex = 0;
-        let isMe = false;
+        let playerIndex = 0; let isMe = false;
 
         if (modoRef.current === 'espectador') {
             const sids = Object.keys(novosPontos);
@@ -481,44 +502,26 @@ export default function ArcadeMultiplayer() {
     const onArcadeStateUpdate = (data: any) => {
         if (modoRef.current === 'espectador') {
             const sids = Object.keys(data.vidas);
-            setVidas(data.vidas[sids[0]]);
-            setVidasOponente(data.vidas[sids[1]]);
+            setVidas(data.vidas[sids[0]]); setVidasOponente(data.vidas[sids[1]]);
         } else {
-            const mySid = socket.id;
-            const newMyLives = data.vidas[mySid];
+            const mySid = socket.id; const newMyLives = data.vidas[mySid];
             setVidas(newMyLives);
             const oppSid = Object.keys(data.vidas).find(sid => sid !== mySid);
             if(oppSid) setVidasOponente(data.vidas[oppSid]);
-
             if (newMyLives <= 0 && meuStatusRef.current === 'vivo') {
-                setMeuStatus('morto');
-                meuStatusRef.current = 'morto';
-                setResposta('');
+                setMeuStatus('morto'); meuStatusRef.current = 'morto'; setResposta('');
             }
         }
     };
 
-    const onGameOver = (data: any) => {
-        setGanhador(data.ganhador);
-        gameOver();
-    };
-
-    const onOpponentDisconnected = () => {
-        Alert.alert("Fim de Jogo", "Um dos jogadores abandonou a partida.");
-        setGanhador(modoRef.current === 'espectador' ? 'Empate' : socket.id);
-        gameOver();
-    };
+    const onGameOver = (data: any) => { setGanhador(data.ganhador); gameOver(); };
+    const onOpponentDisconnected = () => { Alert.alert("Fim de Jogo", "Um dos jogadores abandonou a partida."); setGanhador(modoRef.current === 'espectador' ? 'Empate' : socket.id); gameOver(); };
 
     const onSpectatorJoined = (data: any) => {
         const sids = Object.keys(data.names);
-        setPlayer1Name(data.names[sids[0]]);
-        setOponenteNome(data.names[sids[1]]);
-        setVidas(data.vidas[sids[0]]);
-        setVidasOponente(data.vidas[sids[1]]);
-        setPontos(data.pontos[sids[0]]);
-        setPontosOponente(data.pontos[sids[1]]);
-
-        // 🚨 SINCRONIZA A VELOCIDADE DO ESPECTADOR COM O HOST!
+        setPlayer1Name(data.names[sids[0]]); setOponenteNome(data.names[sids[1]]);
+        setVidas(data.vidas[sids[0]]); setVidasOponente(data.vidas[sids[1]]);
+        setPontos(data.pontos[sids[0]]); setPontosOponente(data.pontos[sids[1]]);
         const maxPts = Math.max(data.pontos[sids[0]], data.pontos[sids[1]]);
         rodadaRef.current = 1 + Math.floor(maxPts / 150);
     };
@@ -544,11 +547,8 @@ export default function ArcadeMultiplayer() {
   }, []);
 
   useEffect(() => {
-      if (activeMatchData && activeMatchData.game_type === 'arcade') {
-          setupMultiplayerMatch(activeMatchData);
-      } else if (params.spectate) {
-          setupSpectatorMode(params.spectate as string);
-      }
+      if (activeMatchData && activeMatchData.game_type === 'arcade') { setupMultiplayerMatch(activeMatchData);
+      } else if (params.spectate) { setupSpectatorMode(params.spectate as string); }
   }, [activeMatchData, params.spectate]);
 
   if (tela === 'resultado') {
@@ -563,11 +563,7 @@ export default function ArcadeMultiplayer() {
             <Text style={styles.resultadoPontos}>{pontos}</Text>
             <Text style={styles.resultadoLabel}>Seus Pontos Totais</Text>
           </View>
-          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => { 
-              setActiveMatchData(null); 
-              socket.emit('update_status', { status: 'MENU' });
-              router.back(); 
-          }}>
+          <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => { setActiveMatchData(null); socket.emit('update_status', { status: 'MENU' }); router.back(); }}>
             <Ionicons name="home" size={22} color="#000" />
             <Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text>
           </TouchableOpacity>
@@ -587,9 +583,7 @@ export default function ArcadeMultiplayer() {
       <View style={styles.gameHeader}>
         <View style={styles.playerInfoBox}>
           <View style={[styles.playerTag, { borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.1)' }]}>
-            <Text style={[styles.nomeJogador, { color: '#00FFFF' }]}>
-              {modoRef.current === 'espectador' ? player1Name : 'Você'}
-            </Text>
+            <Text style={[styles.nomeJogador, { color: '#00FFFF' }]}>{modoRef.current === 'espectador' ? player1Name : 'Você'}</Text>
           </View>
           <Text style={styles.textoPlacar}>Pts: {pontos}</Text>
           <View style={styles.vidasContainer}>
@@ -597,10 +591,10 @@ export default function ArcadeMultiplayer() {
           </View>
         </View>
 
-        {/* 🚨 BOTÕES DE VOLUME E SAIR! */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        {/* 🚨 BOTOES DE VOLUME COM MARGIN EM VEZ DE GAP */}
+        <View style={styles.botoesCentro}>
             <TouchableOpacity onPress={alternarVolume} style={styles.btnAcao}>
-               <Ionicons name={volumeUI === 0.0 ? "volume-mute" : volumeUI === 0.3 ? "volume-medium" : "volume-high"} size={22} color="#FFF" />
+               <Ionicons name={volumeUI === 0.0 ? "volume-mute" : volumeUI === 0.3 ? "volume-low" : "volume-high"} size={22} color="#FFF" />
             </TouchableOpacity>
             <TouchableOpacity onPress={abandonarPartida} style={styles.btnAcao}>
               <Ionicons name="exit-outline" size={22} color="#FFF" />
@@ -624,17 +618,20 @@ export default function ArcadeMultiplayer() {
            <View style={styles.linhaEletricaGlow} />
         </View>
 
+        {/* 🚨 MENSAGEM DE ESPERA DO ESPECTADOR */}
+        {modoRef.current === 'espectador' && operacoes.length === 0 && (
+            <View style={styles.syncContainer}>
+                <ActivityIndicator size="large" color="#00FFFF" />
+                <Text style={styles.syncText}>Sincronizando radar com a partida...</Text>
+            </View>
+        )}
+
         {operacoes.map((op) => (
           <Animated.View
             key={op.id}
             style={[
               styles.cardOperacao,
-              {
-                left: op.posX,
-                transform: [{ translateY: op.y }, { scale: op.scale }],
-                opacity: op.opacity,
-                width: CARD_WIDTH
-              },
+              { left: op.posX, transform: [{ translateY: op.y }, { scale: op.scale }], opacity: op.opacity, width: CARD_WIDTH }
             ]}
           >
             <Text style={styles.textoOperacao}>{op.textoTela}</Text>
@@ -643,24 +640,14 @@ export default function ArcadeMultiplayer() {
 
         {explosoes.map(exp => (
           <View key={exp.id} style={[styles.explosaoContainer, { left: exp.x, top: exp.y - 20 }]}>
-             {exp.texto.split('').map((char: string, i: number) => (
-               <Particula key={i} char={char} />
-             ))}
+             {exp.texto.split('').map((char: string, i: number) => <Particula key={i} char={char} />)}
           </View>
         ))}
 
         {lasersAtivos.map((laser, index) => (
           <Animated.View
             key={`laser-${index}`}
-            style={[styles.laser, {
-              left: laser.x - 2,
-              top: laser.y - laser.h / 2,
-              height: laser.h,
-              backgroundColor: laser.cor,
-              transform: [ { rotate: laser.angle } ],
-              opacity: laserAnim,
-              shadowColor: laser.cor,
-            }]}
+            style={[styles.laser, { left: laser.x - 2, top: laser.y - laser.h / 2, height: laser.h, backgroundColor: laser.cor, transform: [ { rotate: laser.angle } ], opacity: laserAnim, shadowColor: laser.cor }]}
           />
         ))}
       </View>
@@ -727,10 +714,15 @@ const styles = StyleSheet.create({
   nomeJogador: { fontWeight: '900', fontSize: 14, textTransform: 'uppercase' },
   textoPlacar: { color: '#FFF', fontSize: 14, fontWeight: 'bold', marginBottom: 2 },
   vidasContainer: { flexDirection: 'row', alignItems: 'center', height: 16 },
-  btnAcao: { padding: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 }, 
+  
+  botoesCentro: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  btnAcao: { padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, marginHorizontal: 6 }, 
   
   gameArea: { height: GAME_AREA_HEIGHT, backgroundColor: '#0a0a0a', overflow: 'hidden', position: 'relative', zIndex: 1 },
   
+  syncContainer: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
+  syncText: { color: '#00FFFF', marginTop: 15, fontSize: 14, fontWeight: 'bold', fontStyle: 'italic' },
+
   linhaEletricaContainer: { position: 'absolute', top: DROP_LIMIT, width: '100%', height: 10, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
   linhaEletricaCore: { width: '100%', height: 2, backgroundColor: '#00FFFF', shadowColor: '#00FFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 8, elevation: 8 },
   linhaEletricaGlow: { position: 'absolute', width: '100%', height: 8, backgroundColor: 'rgba(0, 255, 255, 0.3)' },
