@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
-import { Audio } from 'expo-av'; // 🚨 Trouxemos o reprodutor de áudio de volta!
+import { Audio } from 'expo-av'; 
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.62; 
@@ -92,24 +92,30 @@ export default function ArcadeMultiplayer() {
   const [lasersAtivos, setLasersAtivos] = useState<any[]>([]);
   const [explosoes, setExplosoes] = useState<any[]>([]); 
 
-  // 🚨 SISTEMA DE EFEITOS SONOROS
+  // 🚨 SISTEMA DE EFEITOS SONOROS (VIA INTERNET)
   const sonsRef = useRef<any>({});
 
   useEffect(() => {
     const carregarSons = async () => {
       try {
-        // ATENÇÃO: Para o Expo não quebrar com erro de "Módulo não encontrado", 
-        // eu comentei as linhas abaixo. 
-        // QUANDO você baixar os 4 arquivos .mp3 e colocar na pasta 'assets', DESCOMENTE estas linhas:
+        sonsRef.current.shoot = (await Audio.Sound.createAsync(
+          { uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/laser.mp3' }
+        )).sound;
         
-        /*
-        sonsRef.current.shoot = (await Audio.Sound.createAsync(require('../../assets/shoot.mp3'))).sound;
-        sonsRef.current.hit = (await Audio.Sound.createAsync(require('../../assets/hit.mp3'))).sound;
-        sonsRef.current.miss = (await Audio.Sound.createAsync(require('../../assets/miss.mp3'))).sound;
-        sonsRef.current.damage = (await Audio.Sound.createAsync(require('../../assets/damage.mp3'))).sound;
-        */
+        sonsRef.current.hit = (await Audio.Sound.createAsync(
+          { uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/hit.mp3' }
+        )).sound;
+        
+        sonsRef.current.miss = (await Audio.Sound.createAsync(
+          { uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/miss.mp3' }
+        )).sound;
+        
+        sonsRef.current.damage = (await Audio.Sound.createAsync(
+          { uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/explosion.mp3' }
+        )).sound;
+
       } catch (error) {
-        console.log('Erro ao carregar sons', error);
+        console.log('Erro ao carregar sons da internet', error);
       }
     };
     carregarSons();
@@ -125,7 +131,6 @@ export default function ArcadeMultiplayer() {
       }
     } catch (e) {}
   };
-  // 🚨 FIM DO SISTEMA DE EFEITOS SONOROS
 
   const gameOver = () => { 
     jogoAtivoRef.current = false;
