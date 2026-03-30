@@ -19,7 +19,8 @@ lobbies: Dict[str, dict] = {}
 
 matchmaking_queues = {
     'tictactoe': [],
-    'arcade': []
+    'arcade': [],
+    'tugofwar': [] # NOVA FILA ADICIONADA
 }
 
 # ====================================================
@@ -265,6 +266,8 @@ async def accept_lobby_challenge(sid, data):
             room_id = await start_tictactoe_match(p1_sid, sid)
         elif desafio['game_type'] == 'arcade':
             room_id = await start_arcade_match(p1_sid, sid, desafio['modo_operacao'])
+        elif desafio['game_type'] == 'tugofwar': # ADICIONADO CHAMADA DO TUG OF WAR
+            room_id = await start_tugofwar_match(p1_sid, sid, desafio['modo_operacao'])
 
         if room_id:
             desafio['room_id'] = room_id
@@ -349,6 +352,7 @@ async def accept_invite(sid, data):
     if data.get('from_sid') in players_online:
         if data.get('game_type') == 'tictactoe': await start_tictactoe_match(data.get('from_sid'), sid)
         elif data.get('game_type') == 'arcade': await start_arcade_match(data.get('from_sid'), sid, data.get('modo_operacao', 'misto'))
+        elif data.get('game_type') == 'tugofwar': await start_tugofwar_match(data.get('from_sid'), sid, data.get('modo_operacao', 'misto')) # ADICIONADO
 
 @sio.event
 async def decline_invite(sid, data):
@@ -367,6 +371,7 @@ async def spectate_match(sid, data):
         rooms[room_id]['spectators'].append(sid)
         if rooms[room_id]['type'] == 'tictactoe': await sio.emit('spectator_joined', {'board': rooms[room_id].get('board'), 'turn': rooms[room_id].get('turn'), 'vidas': rooms[room_id].get('vidas'), 'names': rooms[room_id].get('names')}, room=sid)
         elif rooms[room_id]['type'] == 'arcade': await sio.emit('spectator_joined', {'pontos': rooms[room_id].get('pontos'), 'vidas': rooms[room_id].get('vidas'), 'names': rooms[room_id].get('names')}, room=sid)
+        elif rooms[room_id]['type'] == 'tugofwar': await sio.emit('spectator_joined', {'rope_position': rooms[room_id].get('rope_position'), 'names': rooms[room_id].get('names')}, room=sid) # ADICIONADO
 
 @sio.event
 async def leave_spectator(sid, data):
@@ -383,6 +388,7 @@ async def find_match(sid, data):
         p1, p2 = matchmaking_queues[game_type].pop(0), matchmaking_queues[game_type].pop(0)
         if game_type == 'tictactoe': await start_tictactoe_match(p1, p2)
         elif game_type == 'arcade': await start_arcade_match(p1, p2, 'misto')
+        elif game_type == 'tugofwar': await start_tugofwar_match(p1, p2, 'misto') # ADICIONADO
 
 @sio.event
 async def cancel_matchmaking(sid):
@@ -488,6 +494,75 @@ async def arcade_miss(sid, data):
         await remover_desafio_por_sala(room_id) # 🚨 Limpa o banner
         del rooms[room_id]
         await broadcast_online_users()
+
+# ====================================================
+# 🪢 SISTEMA DO CABO DE GUERRA (TUG OF WAR) - NOVO!
+# ====================================================
+async def start_tugofwar_match(p1_sid, p2_sid, modo_operacao):
+    room_id = f"tug_{p1_sid[:5]}_{p2_sid[:5]}"
+    p1_op = gerar_operacao_simples()
+    p2_op = gerar_operacao_simples()
+    
+    rooms[room_id] = {
+        'type': 'tugofwar', 
+        'modo_operacao': modo_operacao, 
+        'players': [p1_sid, p2_sid], 
+        'spectators': [], 
+        'names': {p1_sid: players_online[p1_sid]['name'], p2_sid: players_online[p2_sid]['name']}, 
+        'rope_position': 0, # 0 = Centro. Positivo = p1 puxando, Negativo = p2 puxando
+        'current_ops': {p1_sid: p1_op, p2_sid: p2_op}
+    }
+    await sio.enter_room(p1_sid, room_id)
+    await sio.enter_room(p2_sid, room_id)
+    players_online[p1_sid]['status'] = players_online[p2_sid]['status'] = 'JOGANDO_ONLINE'
+    await broadcast_online_users()
+    
+    # Envia os dados iniciais específicos para cada um
+    await sio.emit('match_found', {'room_id': room_id, 'game_type': 'tugofwar', 'is_p1': True, 'opponentName': rooms[room_id]['names'][p2_sid], 'initial_op': p1_op}, room=p1_sid)
+    await sio.emit('match_found', {'room_id': room_id, 'game_type': 'tugofwar', 'is_p1': False, 'opponentName': rooms[room_id]['names'][p1_sid], 'initial_op': p2_op}, room=p2_sid)
+    
+    return room_id
+
+@sio.event
+async def tugofwar_answer(sid, data):
+    room_id = data.get('room_id')
+    resposta = data.get('resposta')
+    
+    if room_id not in rooms or rooms[room_id]['type'] != 'tugofwar': return 
+    
+    room = rooms[room_id]
+    p1_sid, p2_sid = room['players']
+    
+    try:
+        if int(resposta) == room['current_ops'][sid]['resposta']:
+            # Puxa a corda (+1 para p1, -1 para p2)
+            if sid == p1_sid:
+                room['rope_position'] += 1
+            else:
+                room['rope_position'] -= 1
+                
+            # Atualiza todos na sala sobre a nova posição da corda
+            await sio.emit('tugofwar_state_update', {'rope_position': room['rope_position']}, room=room_id)
+            
+            # Gera e envia a próxima conta apenas para quem acertou
+            room['current_ops'][sid] = gerar_operacao_simples()
+            await sio.emit('tugofwar_new_op', {'new_op': room['current_ops'][sid]}, room=sid)
+            
+            # Condição de vitória (ex: 10 puxões de diferença)
+            if room['rope_position'] >= 10:
+                await sio.emit('game_over', {'ganhador': p1_sid}, room=room_id)
+            elif room['rope_position'] <= -10:
+                await sio.emit('game_over', {'ganhador': p2_sid}, room=room_id)
+                
+            # Limpa a sala caso alguém tenha ganho
+            if room['rope_position'] >= 10 or room['rope_position'] <= -10:
+                for p in room['players']:
+                    if p in players_online: players_online[p]['status'] = 'MENU'
+                await remover_desafio_por_sala(room_id)
+                del rooms[room_id]
+                await broadcast_online_users()
+    except Exception as e:
+        print(f"Erro em tugofwar_answer: {e}")
 
 @sio.event
 async def leave_match(sid, data):
