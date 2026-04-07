@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Platform, Modal, Alert, AppState } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -35,6 +35,7 @@ function NeonLineSimple({ color }: { color: string }) {
 }
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets(); // Calcula o tamanho seguro da tela (foge dos botões virtuais)
   const { user, isAdminViewingAsStudent } = useAuth();
   const router = useRouter();
   const isLeader = user?.perfil === 'ALUNO_LIDER';
@@ -158,9 +159,10 @@ export default function TabsLayout() {
             backgroundColor: '#1a1a2e',
             borderTopColor: teamColor + '40',
             borderTopWidth: 2,
-            paddingBottom: Platform.OS === 'ios' ? 20 : 12,
+            // Ajuste dinâmico do padding inferior e altura total com base nos insets
+            paddingBottom: Platform.OS === 'ios' ? 20 : Math.max(12, insets.bottom + 5),
             paddingTop: 8,
-            height: Platform.OS === 'ios' ? 85 : 70,
+            height: Platform.OS === 'ios' ? 85 : 60 + insets.bottom,
           },
           tabBarActiveTintColor: teamColor,
           tabBarInactiveTintColor: '#666',
