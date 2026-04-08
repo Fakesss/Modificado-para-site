@@ -26,7 +26,6 @@ export default function AdminHome() {
   const [diaSemana, setDiaSemana] = useState('Sexta-feira');
   const [diaMes, setDiaMes] = useState('15');
 
-  // MOCK: Para visualização dos top 3 (Conectaremos à API depois)
   const top3 = [
     { nome: 'Ana C.', pontos: 15420 },
     { nome: 'Pedro', pontos: 12300 },
@@ -67,6 +66,21 @@ export default function AdminHome() {
   const handleSalvarAuto = () => {
     const freq = intervaloAuto === 'semanal' ? `toda ${diaSemana}` : `todo dia ${diaMes} do mês`;
     Alert.alert('Configuração Salva', `O sistema automático de premiação foi ${isAutoAtivo ? 'ATIVADO para rodar ' + freq : 'DESATIVADO'}.`);
+  };
+
+  // Botão de perigo - Zerar tudo
+  const handleZerarRanking = () => {
+    Alert.alert(
+      "Aviso de Segurança!",
+      "Você tem CERTEZA que deseja apagar a pontuação de TODOS os jogadores no Arcade? Essa ação não poderá ser desfeita.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Sim, Zerar Tudo", style: "destructive", onPress: () => {
+          Alert.alert("Sucesso", "O ranking do Arcade foi completamente zerado.");
+          setModalPremiacaoVisible(false);
+        }}
+      ]
+    );
   };
 
   if (loading) {
@@ -133,7 +147,6 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
-        {/* BOTÃO PREMIAÇÃO ARCADE */}
         <TouchableOpacity style={styles.menuItem} onPress={() => setModalPremiacaoVisible(true)}>
           <View style={[styles.menuIcon, { backgroundColor: '#FFD70030' }]}><Ionicons name="trophy" size={24} color="#FFD700" /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Premiação do Arcade</Text><Text style={styles.menuDescription}>Dar pontos e configurar robô automático</Text></View>
@@ -187,7 +200,6 @@ export default function AdminHome() {
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
               
-              {/* SESSÃO 1: QUANTIDADE DE PONTOS (Usada em ambos) */}
               <View style={styles.modalSection}>
                 <Text style={styles.sectionLabelModal}>VALOR DO PRÊMIO</Text>
                 <View style={styles.inputRow}>
@@ -204,7 +216,6 @@ export default function AdminHome() {
                 </View>
               </View>
 
-              {/* SESSÃO 2: MANUAL E OS 3 MELHORES */}
               <View style={styles.modalSection}>
                 <Text style={styles.sectionLabelModal}>PAGAMENTO MANUAL</Text>
                 <Text style={styles.sectionDescModal}>Envie os pontos agora mesmo para os jogadores que estão no topo hoje.</Text>
@@ -221,7 +232,6 @@ export default function AdminHome() {
                 </TouchableOpacity>
               </View>
 
-              {/* SESSÃO 3: AUTOMÁTICA (ROBÔ) */}
               <View style={styles.modalSection}>
                  <Text style={styles.sectionLabelModal}>SISTEMA AUTOMÁTICO</Text>
                  <Text style={styles.sectionDescModal}>O servidor enviará os pontos sozinho para quem estiver no Top 3 no dia marcado.</Text>
@@ -242,7 +252,6 @@ export default function AdminHome() {
                        </TouchableOpacity>
                      </View>
 
-                     {/* Filtro extra dependendo do período escolhido */}
                      {intervaloAuto === 'semanal' ? (
                        <View style={styles.diaRow}>
                          <Text style={styles.diaLabel}>Dia do pagamento:</Text>
@@ -268,6 +277,17 @@ export default function AdminHome() {
                     <Text style={styles.btnSalvarAutoText}>SALVAR CONFIGURAÇÃO</Text>
                  </TouchableOpacity>
               </View>
+
+              {/* SESSÃO 4: ZONA DE PERIGO (ZERAR RANKING) */}
+              <View style={[styles.modalSection, { backgroundColor: 'rgba(231, 76, 60, 0.1)', borderColor: '#E74C3C50', borderWidth: 1 }]}>
+                 <Text style={[styles.sectionLabelModal, { color: '#E74C3C' }]}>ZONA DE PERIGO</Text>
+                 <Text style={styles.sectionDescModal}>Zerar a pontuação de todos os jogadores do Arcade de forma permanente.</Text>
+                 <TouchableOpacity style={[styles.btnPremiar, { backgroundColor: '#E74C3C' }]} onPress={handleZerarRanking}>
+                    <Ionicons name="trash-outline" size={18} color="#FFF" />
+                    <Text style={[styles.btnPremiarText, { color: '#FFF' }]}>ZERAR RANKING DO ARCADE</Text>
+                 </TouchableOpacity>
+              </View>
+
             </ScrollView>
 
             <TouchableOpacity style={styles.btnFechar} onPress={() => setModalPremiacaoVisible(false)}>
@@ -308,7 +328,6 @@ const styles = StyleSheet.create({
   studentViewButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFD70020', borderRadius: 12, paddingVertical: 14, marginTop: 16, gap: 8 },
   studentViewText: { color: '#FFD700', fontSize: 16, fontWeight: '600' },
 
-  // MODAL DE PREMIAÇÃO
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 20 },
   modalContent: { backgroundColor: '#1a1a2e', borderRadius: 24, padding: 24, maxHeight: '85%', borderWidth: 1, borderColor: '#FFD70040' },
   modalHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)', paddingBottom: 15 },
