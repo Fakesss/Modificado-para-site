@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext'; 
@@ -103,41 +103,21 @@ const Particula = ({ char }: { char: string }) => {
 };
 
 // =========================================================================
-// O TECLADO PIANO BLINDADO V4 (POINTER DOWN - MULTITOUCH INDEPENDENTE)
+// BOTÃO PURAMENTE VISUAL (Controlado pelo Radar Matemático)
 // =========================================================================
-const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
-  const [pressed, setPressed] = useState(false);
-
+const BotaoVisual = ({ valor, isPressed, children, styleExtra, onPressWeb }: any) => {
   return (
-    <View 
+    <Pressable
       style={[
-        styles.tecla, 
-        styleExtra, 
-        pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }
+        styles.tecla,
+        styleExtra,
+        isPressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }
       ]}
-      // onPointerDown rastreia os dedos de forma separada na tela,
-      // acabando com o bug de segurar um botão e apertar o outro.
-      onPointerDown={() => {
-        if (Platform.OS !== 'web') {
-          setPressed(true);
-          onPress(valor);
-        }
-      }}
-      onPointerUp={() => { if (Platform.OS !== 'web') setPressed(false); }}
-      onPointerCancel={() => { if (Platform.OS !== 'web') setPressed(false); }}
-      
-      // Fallback para o site (Mouse)
-      onMouseDown={() => {
-        if (Platform.OS === 'web') {
-          setPressed(true);
-          onPress(valor);
-        }
-      }}
-      onMouseUp={() => { if (Platform.OS === 'web') setPressed(false); }}
-      onMouseLeave={() => { if (Platform.OS === 'web') setPressed(false); }}
+      onPress={Platform.OS === 'web' ? () => onPressWeb(valor) : undefined}
+      disabled={Platform.OS !== 'web'} // Desativa os cliques nativos no mobile para o radar funcionar 100% livre
     >
       {children}
-    </View>
+    </Pressable>
   );
 };
 
@@ -188,29 +168,100 @@ export default function Arcade() {
   const desempenhoOcultoRef = useRef(0); 
   const ultimasRespostasRef = useRef<number[]>([]);
 
-  const respostaRef = useRef('');
-  useEffect(() => { respostaRef.current = resposta; }, [resposta]);
+  // =========================================================================
+  // SISTEMA NUCLEAR DE TECLADO (RADAR CARTESIANO + ANIMAÇÕES)
+  // =========================================================================
+  const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
+  const triggeredTouchesRef = useRef<Set<string>>(new Set());
 
-  useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
-  useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
-  useEffect(() => { if (tela === 'menu') carregarMissoes(); }, [tela]);
+  const executarAcaoTecla = (valor: string) => {
+    setResposta(currentResposta => {
+        if (valor === 'apagar') {
+            return currentResposta.slice(0, -1);
+        } else if (valor === 'enviar') {
+            setTimeout(() => verificarRespostaComValor(currentResposta), 0);
+            return currentResposta;
+        } else {
+            return currentResposta.length < 5 ? currentResposta + valor : currentResposta;
+        }
+    });
+  };
+
+  const getTeclaFromCoords = (x: number, y: number) => {
+    let col = -1;
+    if (x >= 0 && x <= 92) col = 0;
+    else if (x > 92 && x <= 187) col = 1;
+    else if (x > 187 && x <= 280) col = 2;
+
+    let row = -1;
+    if (y >= 0 && y <= 50) row = 0;
+    else if (y > 50 && y <= 103) row = 1;
+    else if (y > 103 && y <= 156) row = 2;
+    else if (y > 156 && y <= 210) row = 3;
+
+    if (col === -1 || row === -1) return null;
+
+    const layout = [
+        ['7', '8', '9'],
+        ['4', '5', '6'],
+        ['1', '2', '3'],
+        ['apagar', '0', 'enviar']
+    ];
+    return layout[row][col];
+  };
+
+  const handleMultiTouch = (evt: any) => {
+    if (Platform.OS === 'web') return;
+
+    const touches = evt.nativeEvent.touches;
+    const currentActive = new Set<string>();
+
+    for (let i = 0; i < touches.length; i++) {
+        const key = getTeclaFromCoords(touches[i].locationX, touches[i].locationY);
+        if (key) currentActive.add(key);
+    }
+
+    setTeclasPressionadas(Array.from(currentActive));
+
+    currentActive.forEach(key => {
+        if (!triggeredTouchesRef.current.has(key)) {
+            triggeredTouchesRef.current.add(key);
+            executarAcaoTecla(key);
+        }
+    });
+
+    triggeredTouchesRef.current.forEach(key => {
+        if (!currentActive.has(key)) {
+            triggeredTouchesRef.current.delete(key);
+        }
+    });
+  };
 
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const handleKeyDownLocal = (e: any) => {
             if (tela !== 'jogo' || !jogoAtivoRef.current || jogoPausadoRef.current) return;
-            if (e.key >= '0' && e.key <= '9') {
-                setResposta(prev => prev.length < 5 ? prev + e.key : prev);
-            } else if (e.key === 'Backspace' || e.key === 'Delete') {
-                setResposta(prev => prev.slice(0, -1));
-            } else if (e.key === 'Enter') {
-                verificarRespostaComValor(respostaRef.current);
+            
+            let key = '';
+            if (e.key >= '0' && e.key <= '9') key = e.key;
+            else if (e.key === 'Backspace' || e.key === 'Delete') key = 'apagar';
+            else if (e.key === 'Enter') key = 'enviar';
+
+            if (key) {
+                executarAcaoTecla(key);
+                setTeclasPressionadas(prev => [...prev, key]);
+                setTimeout(() => setTeclasPressionadas(prev => prev.filter(k => k !== key)), 150);
             }
         };
         window.addEventListener('keydown', handleKeyDownLocal);
         return () => window.removeEventListener('keydown', handleKeyDownLocal);
     }
   }, [tela]);
+  // =========================================================================
+
+  useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
+  useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
+  useEffect(() => { if (tela === 'menu') carregarMissoes(); }, [tela]);
 
   const processarErroRef = useRef<any>(null);
 
@@ -471,14 +522,11 @@ export default function Arcade() {
 
       dispararLaserUnico(alvo, true);
       operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== alvo.id);
-      setTimeout(() => { setOperacoes(prev => prev.filter(o => o.id !== alvo.id)); }, 300);
+      setTimeout(() => { setOperacoes(prev => prev.filter(o => o.id !== alvo.id)); setResposta(''); }, 300);
     } else { 
-      dispararLaserUnico(null, false); processarErro('nenhum'); 
+      dispararLaserUnico(null, false); processarErro('nenhum'); setResposta('');
     }
-    setResposta('');
   };
-
-  const verificarResposta = () => verificarRespostaComValor(respostaRef.current);
 
   const calcularDadosLaser = (alvo: any, acertou: boolean) => {
     const originX = width / 2; const originY = DROP_LIMIT + 30; 
@@ -526,7 +574,6 @@ export default function Arcade() {
     ];
 
     const meuNome = user?.nome?.split(' ')[0] || 'Você';
-    // MOCK DOS DADOS - AGORA FILTRANDO QUEM TEM 0 PONTOS AUTOMATICAMENTE
     const rankingFalso = [
       { posicao: 1, nome: 'Ana C.', pontosMaximos: 15420, isMe: false, equipe: 'Equipe Alfa', cor: '#FFD700', turma: '3º Ano A' },
       { posicao: 2, nome: 'Pedro', pontosMaximos: 12300, isMe: false, equipe: 'Equipe Omega', cor: '#32CD32', turma: '2º Ano B' },
@@ -534,7 +581,7 @@ export default function Arcade() {
       { posicao: 4, nome: 'Sofia', pontosMaximos: 8500, isMe: false, equipe: 'Equipe Alfa', cor: '#FFD700', turma: '1º Ano C' },
       { posicao: 5, nome: meuNome, pontosMaximos: 7200, isMe: true, equipe: 'Equipe Delta', cor: '#4169E1', turma: '2º Ano B' },
       { posicao: 6, nome: 'Maria', pontosMaximos: 0, isMe: false, equipe: 'Equipe Omega', cor: '#32CD32', turma: '1º Ano A' }
-    ].filter(jogador => jogador.pontosMaximos > 0); // Trava invisível ativada!
+    ].filter(jogador => jogador.pontosMaximos > 0);
 
     return (
       <SafeAreaView style={styles.container}>
@@ -705,14 +752,48 @@ export default function Arcade() {
         <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
         
         <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
+        
+        {/* ============================================================== */}
+        {/* NOVA CONSTRUÇÃO DO TECLADO - (FUNDO VISUAL + RADAR INVISÍVEL)  */}
+        {/* ============================================================== */}
         <View style={styles.tecladoContainer}>
-          {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => <View key={i} style={styles.tecladoRow}>{row.map(num => <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r.length < 5 ? r + v : r)}><Text style={styles.teclaText}>{num}</Text></BotaoTeclado>)}</View>)}
-          <View style={styles.tecladoRow}>
-            <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}><Ionicons name="close" size={24} color="#fff" /></BotaoTeclado>
-            <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r.length < 5 ? r + v : r)}><Text style={styles.teclaText}>0</Text></BotaoTeclado>
-            <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}><Ionicons name="checkmark" size={28} color="#fff" /></BotaoTeclado>
+          
+          <View style={styles.tecladoGrid}>
+            {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
+              <View key={i} style={styles.tecladoRow}>
+                {row.map(num => (
+                  <BotaoVisual key={num} valor={num} isPressed={teclasPressionadas.includes(num)} onPressWeb={executarAcaoTecla}>
+                    <Text style={styles.teclaText}>{num}</Text>
+                  </BotaoVisual>
+                ))}
+              </View>
+            ))}
+            <View style={styles.tecladoRow}>
+              <BotaoVisual valor="apagar" isPressed={teclasPressionadas.includes('apagar')} onPressWeb={executarAcaoTecla} styleExtra={styles.teclaApagar}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </BotaoVisual>
+              <BotaoVisual valor="0" isPressed={teclasPressionadas.includes('0')} onPressWeb={executarAcaoTecla}>
+                <Text style={styles.teclaText}>0</Text>
+              </BotaoVisual>
+              <BotaoVisual valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={executarAcaoTecla} styleExtra={styles.teclaEnviar}>
+                <Ionicons name="checkmark" size={28} color="#fff" />
+              </BotaoVisual>
+            </View>
           </View>
+
+          {Platform.OS !== 'web' && (
+             <View
+                style={StyleSheet.absoluteFillObject}
+                onStartShouldSetResponder={() => true}
+                onResponderGrant={handleMultiTouch}
+                onResponderMove={handleMultiTouch}
+                onResponderRelease={handleMultiTouch}
+                onResponderTerminate={handleMultiTouch}
+             />
+          )}
         </View>
+        {/* ============================================================== */}
+
       </View>
     </SafeAreaView>
   );
@@ -780,7 +861,9 @@ const styles = StyleSheet.create({
   
   displayContainer: { backgroundColor: 'rgba(26, 26, 46, 0.7)', width: 280, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  tecladoContainer: { width: 280, gap: 5 },
+  
+  tecladoContainer: { width: 280, position: 'relative' },
+  tecladoGrid: { width: '100%', gap: 5 },
   tecladoRow: { flexDirection: 'row', gap: 5, justifyContent: 'space-between' },
   tecla: { backgroundColor: 'rgba(26, 26, 46, 0.75)', flex: 1, height: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   teclaText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
