@@ -103,10 +103,9 @@ const Particula = ({ char }: { char: string }) => {
 };
 
 // =========================================================================
-// O TECLADO PIANO BLINDADO
+// O TECLADO PIANO BLINDADO (Com Correção Multi-touch Native)
 // =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
-  const lastPress = useRef(0);
   return (
     <Pressable 
       style={({ pressed }) => [
@@ -115,9 +114,14 @@ const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
         pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }
       ]}
       onPressIn={() => {
-        const now = Date.now();
-        if (now - lastPress.current > 150) {
-          lastPress.current = now;
+        // A Web funciona melhor com o onPress tradicional
+        if (Platform.OS === 'web') onPress(valor);
+      }}
+      onTouchStart={(e) => {
+        // No celular (Native), pegamos o toque EXATAMENTE na hora que a pele encosta na tela,
+        // cancelando a trava de segurança do Android (stopPropagation) que criava o bug de digitar rápido.
+        if (Platform.OS !== 'web') {
+          e.stopPropagation();
           onPress(valor);
         }
       }}
@@ -174,9 +178,37 @@ export default function Arcade() {
   const desempenhoOcultoRef = useRef(0); 
   const ultimasRespostasRef = useRef<number[]>([]);
 
+  // Ref de resposta para usar dentro do EventListener do Teclado PC
+  const respostaRef = useRef('');
+  useEffect(() => { respostaRef.current = resposta; }, [resposta]);
+
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
   useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
   useEffect(() => { if (tela === 'menu') carregarMissoes(); }, [tela]);
+
+  // =========================================================================
+  // SUPORTE A TECLADO FÍSICO DE PC (VERSÃO WEB)
+  // =========================================================================
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const handleKeyDownLocal = (e: any) => {
+            // Bloqueia digitação se não estiver no jogo ou se estiver pausado
+            if (tela !== 'jogo' || !jogoAtivoRef.current || jogoPausadoRef.current) return;
+
+            if (e.key >= '0' && e.key <= '9') {
+                setResposta(prev => prev.length < 5 ? prev + e.key : prev);
+            } else if (e.key === 'Backspace' || e.key === 'Delete') {
+                setResposta(prev => prev.slice(0, -1));
+            } else if (e.key === 'Enter') {
+                verificarRespostaComValor(respostaRef.current);
+            }
+        };
+        
+        window.addEventListener('keydown', handleKeyDownLocal);
+        return () => window.removeEventListener('keydown', handleKeyDownLocal);
+    }
+  }, [tela]); // O listener recarrega baseando-se na tela atual
+
 
   const processarErroRef = useRef<any>(null);
 
@@ -573,9 +605,12 @@ export default function Arcade() {
     setTela('resultado'); 
   };
 
-  const verificarResposta = () => {
-    if (jogoPausadoRef.current || !jogoAtivoRef.current || isNaN(parseInt(resposta))) return;
-    const alvo = operacoes.find(op => op.resposta === parseInt(resposta));
+  // Alterada para receber valor, para permitir funcionar tanto com cliques quanto teclado de PC
+  const verificarRespostaComValor = (valorStr: string) => {
+    if (jogoPausadoRef.current || !jogoAtivoRef.current || isNaN(parseInt(valorStr))) return;
+    
+    // Busca a operação usando a referência sempre atualizada
+    const alvo = operacoesListRef.current.find(op => op.resposta === parseInt(valorStr));
 
     if (alvo) {
       alvo.y.stopAnimation();
@@ -609,6 +644,8 @@ export default function Arcade() {
     }
     setResposta('');
   };
+
+  const verificarResposta = () => verificarRespostaComValor(respostaRef.current);
 
   const calcularDadosLaser = (alvo: any, acertou: boolean) => {
     const originX = width / 2;
@@ -701,16 +738,14 @@ export default function Arcade() {
     // ==========================================
     const meuNome = user?.nome?.split(' ')[0] || 'Você';
     const rankingFalso = [
-      { posicao: 1, nome: 'Ana C.', pontosMaximos: 15420, isMe: false },
-      { posicao: 2, nome: 'Pedro', pontosMaximos: 12300, isMe: false },
-      { posicao: 3, nome: 'Lucas', pontosMaximos: 9800, isMe: false },
-      { posicao: 4, nome: 'Sofia', pontosMaximos: 8500, isMe: false },
-      { posicao: 5, nome: meuNome, pontosMaximos: 7200, isMe: true }, // Simulando o usuário atual
-      { posicao: 6, nome: 'Maria', pontosMaximos: 6400, isMe: false },
-      { posicao: 7, nome: 'João', pontosMaximos: 5100, isMe: false },
-      { posicao: 8, nome: 'Clara', pontosMaximos: 4200, isMe: false },
-      { posicao: 9, nome: 'Miguel', pontosMaximos: 3100, isMe: false },
-      { posicao: 10, nome: 'Julia', pontosMaximos: 2500, isMe: false },
+      { posicao: 1, nome: 'Ana C.', pontosMaximos: 15420, isMe: false, equipe: 'Equipe Alfa', cor: '#FFD700', turma: '3º Ano A' },
+      { posicao: 2, nome: 'Pedro', pontosMaximos: 12300, isMe: false, equipe: 'Equipe Omega', cor: '#32CD32', turma: '2º Ano B' },
+      { posicao: 3, nome: 'Lucas', pontosMaximos: 9800, isMe: false, equipe: 'Equipe Delta', cor: '#4169E1', turma: '3º Ano A' },
+      { posicao: 4, nome: 'Sofia', pontosMaximos: 8500, isMe: false, equipe: 'Equipe Alfa', cor: '#FFD700', turma: '1º Ano C' },
+      { posicao: 5, nome: meuNome, pontosMaximos: 7200, isMe: true, equipe: 'Equipe Delta', cor: '#4169E1', turma: '2º Ano B' },
+      { posicao: 6, nome: 'Maria', pontosMaximos: 6400, isMe: false, equipe: 'Equipe Omega', cor: '#32CD32', turma: '1º Ano A' },
+      { posicao: 7, nome: 'João', pontosMaximos: 5100, isMe: false, equipe: 'Equipe Delta', cor: '#4169E1', turma: '3º Ano B' },
+      { posicao: 8, nome: 'Clara', pontosMaximos: 4200, isMe: false, equipe: 'Equipe Alfa', cor: '#FFD700', turma: '1º Ano C' },
     ];
 
     return (
@@ -750,7 +785,14 @@ export default function Arcade() {
                       <View key={jogador.posicao} style={[styles.rankingRow, jogador.isMe && styles.rankingRowMe]}>
                         <View style={styles.rankingLeft}>
                           <Text style={[styles.rankingPosText, { color: corPosicao }]}>#{jogador.posicao}</Text>
-                          <Text style={[styles.rankingNameText, jogador.isMe && { color: '#00FFFF' }]}>{jogador.nome}</Text>
+                          <View>
+                            <Text style={[styles.rankingNameText, jogador.isMe && { color: '#00FFFF' }]}>{jogador.nome}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: jogador.cor }} />
+                              <Text style={{ color: '#AAA', fontSize: 11, fontWeight: 'bold' }}>{jogador.equipe}</Text>
+                              <Text style={{ color: '#666', fontSize: 11 }}>• {jogador.turma}</Text>
+                            </View>
+                          </View>
                         </View>
                         <Text style={[styles.rankingScoreText, jogador.isMe && { color: '#00FFFF' }]}>{jogador.pontosMaximos} pts</Text>
                       </View>
@@ -956,10 +998,10 @@ export default function Arcade() {
         
         <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
         <View style={styles.tecladoContainer}>
-          {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => <View key={i} style={styles.tecladoRow}>{row.map(num => <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>{num}</Text></BotaoTeclado>)}</View>)}
+          {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => <View key={i} style={styles.tecladoRow}>{row.map(num => <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r.length < 5 ? r + v : r)}><Text style={styles.teclaText}>{num}</Text></BotaoTeclado>)}</View>)}
           <View style={styles.tecladoRow}>
             <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}><Ionicons name="close" size={24} color="#fff" /></BotaoTeclado>
-            <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r + v)}><Text style={styles.teclaText}>0</Text></BotaoTeclado>
+            <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r.length < 5 ? r + v : r)}><Text style={styles.teclaText}>0</Text></BotaoTeclado>
             <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}><Ionicons name="checkmark" size={28} color="#fff" /></BotaoTeclado>
           </View>
         </View>
