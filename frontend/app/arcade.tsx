@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../src/context/AuthContext'; // CAMINHO CORRIGIDO AQUI (../)
-import * as api from '../src/services/api'; // CAMINHO CORRIGIDO AQUI (../)
+import { useAuth } from '../src/context/AuthContext'; 
+import * as api from '../src/services/api'; 
 import { useFocusEffect, useRouter } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
@@ -696,6 +696,23 @@ export default function Arcade() {
       { id: 'radiciacao', name: 'Raízes', color: '#00CED1', icon: 'flash' }
     ];
 
+    // ==========================================
+    // DADOS FALSOS PARA O NOVO RANKING ARCADE
+    // ==========================================
+    const meuNome = user?.nome?.split(' ')[0] || 'Você';
+    const rankingFalso = [
+      { posicao: 1, nome: 'Ana C.', pontosMaximos: 15420, isMe: false },
+      { posicao: 2, nome: 'Pedro', pontosMaximos: 12300, isMe: false },
+      { posicao: 3, nome: 'Lucas', pontosMaximos: 9800, isMe: false },
+      { posicao: 4, nome: 'Sofia', pontosMaximos: 8500, isMe: false },
+      { posicao: 5, nome: meuNome, pontosMaximos: 7200, isMe: true }, // Simulando o usuário atual
+      { posicao: 6, nome: 'Maria', pontosMaximos: 6400, isMe: false },
+      { posicao: 7, nome: 'João', pontosMaximos: 5100, isMe: false },
+      { posicao: 8, nome: 'Clara', pontosMaximos: 4200, isMe: false },
+      { posicao: 9, nome: 'Miguel', pontosMaximos: 3100, isMe: false },
+      { posicao: 10, nome: 'Julia', pontosMaximos: 2500, isMe: false },
+    ];
+
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.menuContainer}>
@@ -710,6 +727,50 @@ export default function Arcade() {
               <Text style={styles.menuTitle}>Matemática Turbo</Text>
               <Text style={styles.menuSubtitle}>Treinamento Adaptativo</Text>
             </View>
+
+            {/* ========================================== */}
+            {/* 🏆 HALL DA FAMA - LISTA ROLÁVEL COM RADAR  */}
+            {/* ========================================== */}
+            <View style={styles.rankingContainer}>
+              <View style={styles.rankingHeaderRow}>
+                <Ionicons name="trophy" size={24} color="#FFD700" />
+                <Text style={styles.rankingTitle}>HALL DA FAMA - ARCADE</Text>
+              </View>
+
+              {/* Área Rolável do Ranking */}
+              <View style={styles.rankingScrollWrapper}>
+                <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={true}>
+                  {rankingFalso.map((jogador) => {
+                    let corPosicao = '#888';
+                    if (jogador.posicao === 1) corPosicao = '#FFD700'; // Ouro
+                    else if (jogador.posicao === 2) corPosicao = '#C0C0C0'; // Prata
+                    else if (jogador.posicao === 3) corPosicao = '#CD7F32'; // Bronze
+
+                    return (
+                      <View key={jogador.posicao} style={[styles.rankingRow, jogador.isMe && styles.rankingRowMe]}>
+                        <View style={styles.rankingLeft}>
+                          <Text style={[styles.rankingPosText, { color: corPosicao }]}>#{jogador.posicao}</Text>
+                          <Text style={[styles.rankingNameText, jogador.isMe && { color: '#00FFFF' }]}>{jogador.nome}</Text>
+                        </View>
+                        <Text style={[styles.rankingScoreText, jogador.isMe && { color: '#00FFFF' }]}>{jogador.pontosMaximos} pts</Text>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* Posição do Usuário Fixa no Rodapé do Card */}
+              {rankingFalso.find(j => j.isMe) && (
+                <View style={styles.myRankingFixed}>
+                  <Text style={styles.myRankingLabel}>Sua Posição Atual:</Text>
+                  <View style={styles.rankingLeft}>
+                    <Text style={[styles.rankingPosText, { color: '#00FFFF' }]}>#{rankingFalso.find(j => j.isMe)?.posicao}</Text>
+                    <Text style={[styles.rankingScoreText, { color: '#00FFFF' }]}>{rankingFalso.find(j => j.isMe)?.pontosMaximos} pts</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+            {/* ========================================== */}
 
             {missoesDisponiveis.length > 0 && (
               <View style={{width: '100%', marginBottom: 20}}>
@@ -914,6 +975,22 @@ const styles = StyleSheet.create({
   menuHeader: { alignItems: 'center', marginBottom: 30, marginTop: 20 },
   menuTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginTop: 12 },
   menuSubtitle: { fontSize: 15, color: '#888', marginTop: 4 },
+  
+  // === NOVOS ESTILOS DO RANKING ===
+  rankingContainer: { width: '100%', marginBottom: 25, backgroundColor: '#1a1a2e', borderRadius: 16, padding: 15, borderWidth: 1, borderColor: '#FFD70040' },
+  rankingHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 },
+  rankingTitle: { color: '#FFD700', fontSize: 18, fontWeight: '900' },
+  rankingScrollWrapper: { maxHeight: 180, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8, overflow: 'hidden' },
+  rankingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  rankingRowMe: { backgroundColor: 'rgba(0, 255, 255, 0.15)' },
+  rankingLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rankingPosText: { fontWeight: '900', fontSize: 16, width: 30 },
+  rankingNameText: { color: '#FFF', fontSize: 15, fontWeight: '600' },
+  rankingScoreText: { color: '#00FFFF', fontWeight: 'bold', fontSize: 15 },
+  myRankingFixed: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  myRankingLabel: { color: '#AAA', fontSize: 13, fontWeight: '600' },
+  // ================================
+
   sectionLabel: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 12, alignSelf: 'flex-start', marginTop: 10 },
   missaoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF69B4', padding: 15, borderRadius: 16, width: '100%', elevation: 3 },
   missaoIcon: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 15 },
