@@ -8,6 +8,9 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
+  Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -21,6 +24,16 @@ export default function AdminHome() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // ==========================================
+  // ESTADOS DO MODAL DE PREMIAÇÃO DO ARCADE
+  // ==========================================
+  const [modalPremiacaoVisible, setModalPremiacaoVisible] = useState(false);
+  const [pts1, setPts1] = useState('500');
+  const [pts2, setPts2] = useState('300');
+  const [pts3, setPts3] = useState('100');
+  const [isAutoAtivo, setIsAutoAtivo] = useState(false);
+  const [intervaloAuto, setIntervaloAuto] = useState<'semanal'|'mensal'>('semanal');
 
   useEffect(() => {
     loadStats();
@@ -74,6 +87,16 @@ export default function AdminHome() {
       return;
     }
     router.push(route as any);
+  };
+
+  // Funções simuladas para a Premiação do Arcade (Serão conectadas ao Python depois)
+  const handlePremiarManualmente = async () => {
+    Alert.alert('Sucesso!', `Você acaba de dar pontos aos 3 melhores do ranking Arcade!\n\n🥇 1º: +${pts1} pts\n🥈 2º: +${pts2} pts\n🥉 3º: +${pts3} pts`);
+    setModalPremiacaoVisible(false);
+  };
+
+  const handleSalvarAuto = async () => {
+    Alert.alert('Configuração Salva', `O sistema automático de premiação foi ${isAutoAtivo ? 'ATIVADO para rodar de forma ' + intervaloAuto.toUpperCase() : 'DESATIVADO'}.`);
   };
 
   if (loading) {
@@ -131,7 +154,6 @@ export default function AdminHome() {
             <Text style={styles.statLabel}>Exercícios</Text>
           </TouchableOpacity>
 
-          {/* Transformado apenas em View (não clicável) para não jogar para outra tela */}
           <View style={styles.statCard}>
             <Ionicons name="checkmark-circle" size={28} color="#9B59B6" />
             <Text style={styles.statValue}>{stats?.totalSubmissoes || 0}</Text>
@@ -144,7 +166,6 @@ export default function AdminHome() {
           <Ionicons name="analytics" size={32} color="#FFD700" />
           <View style={styles.averageInfo}>
             <Text style={styles.averageLabel}>Média Geral das Notas</Text>
-            {/* Puxa o dado mediaGeral vindo do novo server.py */}
             <Text style={styles.averageValue}>{stats?.mediaGeral?.toFixed(1) || '0.0'}</Text>
           </View>
         </View>
@@ -192,6 +213,18 @@ export default function AdminHome() {
           <View style={styles.menuInfo}>
             <Text style={styles.menuTitle}>Jogos Personalizados</Text>
             <Text style={styles.menuDescription}>Criar missões e desafios específicos</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+
+        {/* NOVO BOTÃO: PREMIAÇÃO DO ARCADE */}
+        <TouchableOpacity style={styles.menuItem} onPress={() => setModalPremiacaoVisible(true)}>
+          <View style={[styles.menuIcon, { backgroundColor: '#FFD700' + '30' }]}>
+            <Ionicons name="trophy" size={24} color="#FFD700" />
+          </View>
+          <View style={styles.menuInfo}>
+            <Text style={styles.menuTitle}>Premiação do Arcade</Text>
+            <Text style={styles.menuDescription}>Dar pontos e configurar robô automático</Text>
           </View>
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
@@ -249,6 +282,99 @@ export default function AdminHome() {
           <Text style={styles.studentViewText}>Ver como aluno</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* ========================================== */}
+      {/* MODAL DE PREMIAÇÃO DO ARCADE               */}
+      {/* ========================================== */}
+      <Modal visible={modalPremiacaoVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            
+            <View style={styles.modalHeader}>
+               <Ionicons name="trophy" size={32} color="#FFD700" />
+               <View style={{ marginLeft: 12 }}>
+                 <Text style={styles.modalTitle}>Premiação do Arcade</Text>
+                 <Text style={styles.modalSubtitle}>Recompense os reis do Hall da Fama</Text>
+               </View>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
+              
+              {/* SESSÃO MANUAL */}
+              <View style={styles.modalSection}>
+                <Text style={styles.sectionLabelModal}>DISTRIBUIÇÃO MANUAL</Text>
+                <Text style={styles.sectionDescModal}>Dê pontos extras imediatamente para os 3 primeiros colocados do ranking atual.</Text>
+                
+                <View style={styles.inputRow}>
+                  <Text style={styles.inputLabel}>🥇 1º Lugar:</Text>
+                  <View style={styles.inputWrapper}>
+                     <TextInput style={styles.inputPts} keyboardType="numeric" value={pts1} onChangeText={setPts1} />
+                     <Text style={styles.inputPtsSuffix}>pts</Text>
+                  </View>
+                </View>
+                <View style={styles.inputRow}>
+                  <Text style={styles.inputLabel}>🥈 2º Lugar:</Text>
+                  <View style={styles.inputWrapper}>
+                     <TextInput style={styles.inputPts} keyboardType="numeric" value={pts2} onChangeText={setPts2} />
+                     <Text style={styles.inputPtsSuffix}>pts</Text>
+                  </View>
+                </View>
+                <View style={styles.inputRow}>
+                  <Text style={styles.inputLabel}>🥉 3º Lugar:</Text>
+                  <View style={styles.inputWrapper}>
+                     <TextInput style={styles.inputPts} keyboardType="numeric" value={pts3} onChangeText={setPts3} />
+                     <Text style={styles.inputPtsSuffix}>pts</Text>
+                  </View>
+                </View>
+                
+                <TouchableOpacity style={styles.btnPremiar} onPress={handlePremiarManualmente}>
+                  <Ionicons name="send" size={18} color="#000" />
+                  <Text style={styles.btnPremiarText}>PREMIAR AGORA</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* SESSÃO AUTOMÁTICA */}
+              <View style={styles.modalSection}>
+                 <Text style={styles.sectionLabelModal}>SISTEMA AUTOMÁTICO</Text>
+                 <Text style={styles.sectionDescModal}>Programe o servidor para limpar o ranking e dar os pontos aos ganhadores sozinho.</Text>
+                 
+                 <View style={styles.switchRow}>
+                   <Text style={styles.switchLabel}>Ativar Robô Automático?</Text>
+                   <Switch 
+                      value={isAutoAtivo} 
+                      onValueChange={setIsAutoAtivo} 
+                      trackColor={{ false: '#333', true: '#FFD700' }} 
+                      thumbColor={isAutoAtivo ? '#fff' : '#888'} 
+                   />
+                 </View>
+
+                 {isAutoAtivo && (
+                   <View style={styles.intervaloContainer}>
+                     <TouchableOpacity style={[styles.btnIntervalo, intervaloAuto === 'semanal' && styles.btnIntervaloAtivo]} onPress={() => setIntervaloAuto('semanal')}>
+                       <Text style={[styles.txtIntervalo, intervaloAuto === 'semanal' && styles.txtIntervaloAtivo]}>Toda Semana</Text>
+                     </TouchableOpacity>
+                     <TouchableOpacity style={[styles.btnIntervalo, intervaloAuto === 'mensal' && styles.btnIntervaloAtivo]} onPress={() => setIntervaloAuto('mensal')}>
+                       <Text style={[styles.txtIntervalo, intervaloAuto === 'mensal' && styles.txtIntervaloAtivo]}>Todo Mês</Text>
+                     </TouchableOpacity>
+                   </View>
+                 )}
+                 
+                 <TouchableOpacity style={styles.btnSalvarAuto} onPress={handleSalvarAuto}>
+                    <Ionicons name="save-outline" size={18} color="#FFD700" />
+                    <Text style={styles.btnSalvarAutoText}>SALVAR CONFIGURAÇÃO</Text>
+                 </TouchableOpacity>
+              </View>
+
+            </ScrollView>
+
+            <TouchableOpacity style={styles.btnFechar} onPress={() => setModalPremiacaoVisible(false)}>
+              <Text style={styles.btnFecharText}>VOLTAR</Text>
+            </TouchableOpacity>
+            
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -393,4 +519,171 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+
+  // ==========================================
+  // ESTILOS DO MODAL DE PREMIAÇÃO
+  // ==========================================
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 24,
+    padding: 24,
+    maxHeight: '85%',
+    borderWidth: 1,
+    borderColor: '#FFD70040',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+    paddingBottom: 15,
+  },
+  modalTitle: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  modalSubtitle: {
+    color: '#888',
+    fontSize: 14,
+    marginTop: 2,
+  },
+  modalSection: {
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 15,
+  },
+  sectionLabelModal: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+    letterSpacing: 1,
+    marginBottom: 5,
+  },
+  sectionDescModal: {
+    color: '#888',
+    fontSize: 13,
+    marginBottom: 15,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  inputLabel: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  inputPts: {
+    color: '#FFD700',
+    fontSize: 20,
+    fontWeight: '900',
+    textAlign: 'right',
+    minWidth: 60,
+  },
+  inputPtsSuffix: {
+    color: '#888',
+    fontSize: 14,
+    marginLeft: 5,
+    fontWeight: 'bold',
+  },
+  btnPremiar: {
+    flexDirection: 'row',
+    backgroundColor: '#FFD700',
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    gap: 8,
+  },
+  btnPremiarText: {
+    color: '#000',
+    fontWeight: '900',
+    fontSize: 16,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 10,
+  },
+  switchLabel: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  intervaloContainer: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  btnIntervalo: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+  },
+  btnIntervaloAtivo: {
+    backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    borderColor: '#FFD700',
+  },
+  txtIntervalo: {
+    color: '#888',
+    fontWeight: 'bold',
+  },
+  txtIntervaloAtivo: {
+    color: '#FFD700',
+  },
+  btnSalvarAuto: {
+    flexDirection: 'row',
+    borderWidth: 2,
+    borderColor: '#FFD700',
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 5,
+    gap: 8,
+  },
+  btnSalvarAutoText: {
+    color: '#FFD700',
+    fontWeight: '900',
+    fontSize: 15,
+  },
+  btnFechar: {
+    padding: 15,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  btnFecharText: {
+    color: '#888',
+    fontWeight: 'bold',
+    fontSize: 16,
+  }
 });
