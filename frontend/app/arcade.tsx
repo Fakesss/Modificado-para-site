@@ -103,7 +103,7 @@ const Particula = ({ char }: { char: string }) => {
 };
 
 // =========================================================================
-// O TECLADO PIANO BLINDADO V3 (SENSOR PRIMITIVO - RESOLVE MULTITOUCH)
+// O TECLADO PIANO BLINDADO V4 (POINTER DOWN - MULTITOUCH INDEPENDENTE)
 // =========================================================================
 const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
   const [pressed, setPressed] = useState(false);
@@ -115,14 +115,18 @@ const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
         styleExtra, 
         pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }
       ]}
-      // No Android/iOS: O sensor primitivo bypassa a trava de gestos do React Native
-      onTouchStart={() => {
-        setPressed(true);
-        onPress(valor);
+      // onPointerDown rastreia os dedos de forma separada na tela,
+      // acabando com o bug de segurar um botão e apertar o outro.
+      onPointerDown={() => {
+        if (Platform.OS !== 'web') {
+          setPressed(true);
+          onPress(valor);
+        }
       }}
-      onTouchEnd={() => setPressed(false)}
-      onTouchCancel={() => setPressed(false)}
-      // No PC (Site): Funciona com clique do mouse
+      onPointerUp={() => { if (Platform.OS !== 'web') setPressed(false); }}
+      onPointerCancel={() => { if (Platform.OS !== 'web') setPressed(false); }}
+      
+      // Fallback para o site (Mouse)
       onMouseDown={() => {
         if (Platform.OS === 'web') {
           setPressed(true);
@@ -522,14 +526,15 @@ export default function Arcade() {
     ];
 
     const meuNome = user?.nome?.split(' ')[0] || 'Você';
+    // MOCK DOS DADOS - AGORA FILTRANDO QUEM TEM 0 PONTOS AUTOMATICAMENTE
     const rankingFalso = [
       { posicao: 1, nome: 'Ana C.', pontosMaximos: 15420, isMe: false, equipe: 'Equipe Alfa', cor: '#FFD700', turma: '3º Ano A' },
       { posicao: 2, nome: 'Pedro', pontosMaximos: 12300, isMe: false, equipe: 'Equipe Omega', cor: '#32CD32', turma: '2º Ano B' },
       { posicao: 3, nome: 'Lucas', pontosMaximos: 9800, isMe: false, equipe: 'Equipe Delta', cor: '#4169E1', turma: '3º Ano A' },
       { posicao: 4, nome: 'Sofia', pontosMaximos: 8500, isMe: false, equipe: 'Equipe Alfa', cor: '#FFD700', turma: '1º Ano C' },
       { posicao: 5, nome: meuNome, pontosMaximos: 7200, isMe: true, equipe: 'Equipe Delta', cor: '#4169E1', turma: '2º Ano B' },
-      { posicao: 6, nome: 'Maria', pontosMaximos: 6400, isMe: false, equipe: 'Equipe Omega', cor: '#32CD32', turma: '1º Ano A' }
-    ];
+      { posicao: 6, nome: 'Maria', pontosMaximos: 0, isMe: false, equipe: 'Equipe Omega', cor: '#32CD32', turma: '1º Ano A' }
+    ].filter(jogador => jogador.pontosMaximos > 0); // Trava invisível ativada!
 
     return (
       <SafeAreaView style={styles.container}>
@@ -553,25 +558,31 @@ export default function Arcade() {
               </View>
               <View style={styles.rankingScrollWrapper}>
                 <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={true}>
-                  {rankingFalso.map((jogador) => {
-                    let corPosicao = '#888'; if (jogador.posicao === 1) corPosicao = '#FFD700'; else if (jogador.posicao === 2) corPosicao = '#C0C0C0'; else if (jogador.posicao === 3) corPosicao = '#CD7F32';
-                    return (
-                      <View key={jogador.posicao} style={[styles.rankingRow, jogador.isMe && styles.rankingRowMe]}>
-                        <View style={styles.rankingLeft}>
-                          <Text style={[styles.rankingPosText, { color: corPosicao }]}>#{jogador.posicao}</Text>
-                          <View>
-                            <Text style={[styles.rankingNameText, jogador.isMe && { color: '#00FFFF' }]}>{jogador.nome}</Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: jogador.cor }} />
-                              <Text style={{ color: '#AAA', fontSize: 11, fontWeight: 'bold' }}>{jogador.equipe}</Text>
-                              <Text style={{ color: '#666', fontSize: 11 }}>• {jogador.turma}</Text>
+                  {rankingFalso.length > 0 ? (
+                    rankingFalso.map((jogador) => {
+                      let corPosicao = '#888'; if (jogador.posicao === 1) corPosicao = '#FFD700'; else if (jogador.posicao === 2) corPosicao = '#C0C0C0'; else if (jogador.posicao === 3) corPosicao = '#CD7F32';
+                      return (
+                        <View key={jogador.posicao} style={[styles.rankingRow, jogador.isMe && styles.rankingRowMe]}>
+                          <View style={styles.rankingLeft}>
+                            <Text style={[styles.rankingPosText, { color: corPosicao }]}>#{jogador.posicao}</Text>
+                            <View>
+                              <Text style={[styles.rankingNameText, jogador.isMe && { color: '#00FFFF' }]}>{jogador.nome}</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: jogador.cor }} />
+                                <Text style={{ color: '#AAA', fontSize: 11, fontWeight: 'bold' }}>{jogador.equipe}</Text>
+                                <Text style={{ color: '#666', fontSize: 11 }}>• {jogador.turma}</Text>
+                              </View>
                             </View>
                           </View>
+                          <Text style={[styles.rankingScoreText, jogador.isMe && { color: '#00FFFF' }]}>{jogador.pontosMaximos} pts</Text>
                         </View>
-                        <Text style={[styles.rankingScoreText, jogador.isMe && { color: '#00FFFF' }]}>{jogador.pontosMaximos} pts</Text>
-                      </View>
-                    );
-                  })}
+                      );
+                    })
+                  ) : (
+                    <View style={{ padding: 15, alignItems: 'center' }}>
+                      <Text style={{ color: '#888', fontStyle: 'italic' }}>Nenhum jogador pontuou ainda. Seja o primeiro!</Text>
+                    </View>
+                  )}
                 </ScrollView>
               </View>
               {rankingFalso.find(j => j.isMe) && (
