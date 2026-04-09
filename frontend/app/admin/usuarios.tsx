@@ -36,7 +36,7 @@ export default function AdminUsuarios() {
   const [editPerfil, setEditPerfil] = useState('');
   const [editTurma, setEditTurma] = useState('');
   const [editEquipe, setEditEquipe] = useState('');
-  const [editPontos, setEditPontos] = useState(''); // NOVO: Estado dos Pontos
+  const [editPontos, setEditPontos] = useState(''); 
 
   useEffect(() => {
     loadData();
@@ -99,7 +99,7 @@ export default function AdminUsuarios() {
     setEditTurma(user.turmaId || '');
     setEditEquipe(user.equipeId || '');
     setEditSenha(''); 
-    setEditPontos(String(user.pontosTotais || 0)); // Preenche com os pontos atuais
+    setEditPontos(String(user.pontosTotais || 0)); 
     setModalVisible(true);
   };
 
@@ -111,7 +111,7 @@ export default function AdminUsuarios() {
         perfil: editPerfil, 
         turmaId: editTurma || null, 
         equipeId: editEquipe || null,
-        pontosTotais: Number(editPontos) // Converte a string do input para número pro banco de dados
+        pontosTotais: Number(editPontos) 
       };
       if (editSenha.trim() !== '') data.senha = editSenha;
       await api.updateUsuario(selectedUser.id, data);
@@ -148,7 +148,6 @@ export default function AdminUsuarios() {
     }
   };
 
-  // FUNÇÃO MESTRE: ZERAR TODOS OS PONTOS
   const confirmarZerarTodos = () => {
     const mensagem = 'Isso vai ZERAR a pontuação de TODOS os jogadores do jogo e mudar o ranking. Essa ação não pode ser desfeita. Deseja continuar?';
     
@@ -169,7 +168,7 @@ export default function AdminUsuarios() {
       Alert.alert('Sucesso', 'O ranking foi limpo! Todos os pontos estão zerados.');
       loadData();
     } catch (error) {
-      Alert.alert('Aviso', 'A função de zerar precisa ser adicionada no backend primeiro (Rota: POST /usuarios/zerar-pontos).');
+      Alert.alert('Aviso', 'A função de zerar precisa ser adicionada no backend primeiro.');
     }
   };
 
@@ -183,6 +182,23 @@ export default function AdminUsuarios() {
     if (perfil === 'ADMIN') return 'Admin';
     if (perfil === 'ALUNO_LIDER') return 'Líder';
     return 'Aluno';
+  };
+
+  // HELPER: Formata a data de último acesso
+  const formatarUltimoAcesso = (dataIso?: string) => {
+    if (!dataIso) return 'Nunca acessou';
+    try {
+      const data = new Date(dataIso);
+      return data.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return 'Data inválida';
+    }
   };
 
   if (loading) {
@@ -215,7 +231,6 @@ export default function AdminUsuarios() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />}>
         
-        {/* BOTÃO DE ZERAR PONTUAÇÃO GERAL */}
         <TouchableOpacity style={styles.zerarAllButton} onPress={confirmarZerarTodos}>
           <Ionicons name="warning" size={20} color="#FFF" />
           <Text style={styles.zerarAllText}>Zerar Pontos de Todos os Jogadores</Text>
@@ -239,11 +254,19 @@ export default function AdminUsuarios() {
                   </View>
                 </View>
 
-                <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 8}}>
-                    <Text style={{color: isOnline ? '#32CD32' : '#555', fontSize: 12, fontWeight: 'bold'}}>
-                        {isOnline ? 'Online agora' : 'Offline'}
+                {/* BLOCO ATUALIZADO DO ONLINE / ÚLTIMO ACESSO */}
+                <View style={{ marginBottom: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={{ color: isOnline ? '#32CD32' : '#555', fontSize: 12, fontWeight: 'bold' }}>
+                      {isOnline ? 'Online agora' : 'Offline'}
                     </Text>
                     <Text style={styles.userEmail}> • {user.email}</Text>
+                  </View>
+                  {!isOnline && (
+                    <Text style={{ color: '#666', fontSize: 11, marginTop: 2, fontStyle: 'italic' }}>
+                      Último acesso: {formatarUltimoAcesso(user.ultimoAcesso)}
+                    </Text>
+                  )}
                 </View>
 
                 <View style={styles.userMeta}>
@@ -268,7 +291,6 @@ export default function AdminUsuarios() {
         })}
       </ScrollView>
 
-      {/* Modal de Edição */}
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -276,7 +298,6 @@ export default function AdminUsuarios() {
               <Text style={styles.modalTitle}>Painel do Usuário</Text>
               <Text style={styles.modalSubtitle}>{selectedUser?.email}</Text>
 
-              {/* EDIÇÃO DE PONTOS */}
               <Text style={[styles.inputLabel, { color: '#FFD700' }]}>🏆 Pontos Atuais</Text>
               <TextInput style={[styles.textInput, { borderColor: '#FFD700' }]} value={editPontos} onChangeText={setEditPontos} keyboardType="numeric" placeholder="Zerar ou Diminuir pontos..." placeholderTextColor="#666" />
 
