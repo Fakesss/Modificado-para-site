@@ -63,6 +63,8 @@ class Usuario(BaseModel):
     recordeJogoSingle: int = 0
     recordeJogoMulti: int = 0
     criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    ultimoAcesso: Optional[str] = None
+    dataUltimoPontoArcade: Optional[str] = None
 
 class UsuarioCreate(BaseModel):
     nome: str
@@ -287,7 +289,8 @@ async def register(user_data: UsuarioCreate):
     if existing: raise HTTPException(status_code=400, detail="Email já cadastrado")
     usuario = Usuario(
         nome=user_data.nome, email=user_data.email, senha=get_password_hash(user_data.senha),
-        turmaId=user_data.turmaId, equipeId=user_data.equipeId, streakDias=1, streakUltimoLoginData=datetime.utcnow().date().isoformat()
+        turmaId=user_data.turmaId, equipeId=user_data.equipeId, streakDias=1, streakUltimoLoginData=datetime.utcnow().date().isoformat(),
+        ultimoAcesso=datetime.utcnow().isoformat()
     )
     await db.usuarios.insert_one(usuario.dict())
     access_token = create_access_token(data={"sub": usuario.id})
@@ -307,14 +310,24 @@ async def login(credentials: UsuarioLogin):
     if not ativo: raise HTTPException(status_code=401, detail="Usuário desativado")
     
     new_streak, new_date = calculate_streak(user.get("streakUltimoLoginData"), user.get("streakDias", 0))
-    await db.usuarios.update_one({"id": user["id"]}, {"$set": {"streakDias": new_streak, "streakUltimoLoginData": new_date}})
+    agora = datetime.utcnow().isoformat()
+    
+    await db.usuarios.update_one(
+        {"id": user["id"]}, 
+        {"$set": {"streakDias": new_streak, "streakUltimoLoginData": new_date, "ultimoAcesso": agora}}
+    )
     user["streakDias"] = new_streak
     user["streakUltimoLoginData"] = new_date
+    user["ultimoAcesso"] = agora
+    
     access_token = create_access_token(data={"sub": user["id"]})
     return Token(access_token=access_token, token_type="bearer", usuario={k: v for k, v in user.items() if k not in ['senha', '_id']})
 
 @api_router.get("/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
+    agora = datetime.utcnow().isoformat()
+    await db.usuarios.update_one({"id": current_user["id"]}, {"$set": {"ultimoAcesso": agora}})
+    current_user["ultimoAcesso"] = agora
     return {k: v for k, v in current_user.items() if k not in ['senha', '_id']}
 
 @api_router.put("/auth/me")
@@ -758,23 +771,50 @@ async def get_ranking_turma(turma_id: str):
 
 @api_router.post("/arcade/score")
 async def submit_arcade_score(data: ArcadeScore, current_user: dict = Depends(get_current_user)):
-    pontos = data.pontos
-    if pontos <= 0: return {"message": "Nenhum ponto recebido"}
+    pontos_score = data.pontos
+    if pontos_score <= 0: return {"message": "Nenhum ponto recebido"}
     
-    update_fields = {"$inc": {"pontosTotais": pontos}}
-    
+    # 1. SALVA O SCORE APENAS NO HALL DA FAMA (Arcade)
     current_record = current_user.get("recordeJogoSingle", 0)
-    is_new_record = pontos > current_record
-    if is_new_record:
-        update_fields["$set"] = {"recordeJogoSingle": pontos}
-        
-    await db.usuarios.update_one({"id": current_user["id"]}, update_fields)
+    is_new_record = pontos_score > current_record
     
-    eq_raw = current_user.get("equipeId")
-    if eq_raw:
-        await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": pontos}})
+    if is_new_record:
+        # Usamos $set para apenas atualizar o recorde, sem somar em nada
+        await db.usuarios.update_one(
+            {"id": current_user["id"]}, 
+            {"$set": {"recordeJogoSingle": pontos_score}}
+        )
         
-    return {"message": "Pontos e recorde salvos com sucesso", "newRecord": is_new_record}
+    # 2. FUNCIONALIDADE DA PONTUAÇÃO DIÁRIA (Ranking Geral)
+    # Aqui o sistema vai ignorar os pontos gigantes do score e dar apenas a
+    # pontuação fixa configurada (ex: 10 pontos) uma vez ao dia.
+    
+    # Deixei o código pronto, mas comentado (inativo). Quando for
+    # ativar no painel do admin, basta tirar as aspas e buscar o valor real.
+    
+    """
+    hoje = datetime.utcnow().date().isoformat()
+    if current_user.get("dataUltimoPontoArcade") != hoje:
+        pontos_diarios = 10 # Futuramente: conf.get("pontosDiariosArcade", 0)
+        
+        if pontos_diarios > 0:
+            await db.usuarios.update_one(
+                {"id": current_user["id"]}, 
+                {
+                    "$inc": {"pontosTotais": pontos_diarios},
+                    "$set": {"dataUltimoPontoArcade": hoje}
+                }
+            )
+            
+            eq_raw = current_user.get("equipeId")
+            if eq_raw:
+                await db.equipes.update_one(
+                    {"id": str(eq_raw).strip()}, 
+                    {"$inc": {"pontosTotais": pontos_diarios}}
+                )
+    """
+        
+    return {"message": "Score processado com sucesso", "newRecord": is_new_record}
 
 @api_router.get("/ranking/arcade")
 async def get_ranking_arcade():
