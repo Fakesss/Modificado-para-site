@@ -8,6 +8,14 @@ export interface User {
   equipeId?: string;
   pontosTotais?: number;
   streakDias?: number;
+  ultimoAcesso?: string;
+}
+
+export interface Usuario extends User {
+  id: string;
+  perfil: string;
+  senha?: string;
+  ativo?: boolean;
 }
 
 export interface Turma {
