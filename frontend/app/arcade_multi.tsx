@@ -36,17 +36,20 @@ const Particula = ({ char }: { char: string }) => {
   );
 };
 
-const BotaoTeclado = ({ valor, onPress, children, styleExtra }: any) => {
-  const lastPress = useRef(0);
+// =========================================================================
+// BOTÃO PURAMENTE VISUAL (Controlado pelo Radar Matemático Nuclear)
+// =========================================================================
+const BotaoVisual = ({ valor, isPressed, children, styleExtra, onPressWeb }: any) => {
   return (
-    <Pressable style={({ pressed }) => [styles.tecla, styleExtra, pressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]}
-      onPressIn={() => { 
-        const now = Date.now(); 
-        if (now - lastPress.current > 150) { 
-          lastPress.current = now; 
-          onPress(valor); 
-        } 
-      }}>
+    <Pressable
+      style={[
+        styles.tecla,
+        styleExtra,
+        isPressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }
+      ]}
+      onPress={Platform.OS === 'web' ? () => onPressWeb(valor) : undefined}
+      disabled={Platform.OS !== 'web'} 
+    >
       {children}
     </Pressable>
   );
@@ -206,6 +209,75 @@ export default function ArcadeMultiplayer() {
     }
   };
 
+  // =========================================================================
+  // SISTEMA NUCLEAR DE TECLADO (RADAR CARTESIANO + ANIMAÇÕES)
+  // =========================================================================
+  const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
+  const triggeredTouchesRef = useRef<Set<string>>(new Set());
+
+  const executarAcaoTecla = (valor: string) => {
+    setResposta(currentResposta => {
+        if (valor === 'apagar') {
+            return currentResposta.slice(0, -1);
+        } else if (valor === 'enviar') {
+            setTimeout(() => verificarRespostaComValor(currentResposta), 0);
+            return currentResposta;
+        } else {
+            return currentResposta.length < 5 ? currentResposta + valor : currentResposta;
+        }
+    });
+  };
+
+  const getTeclaFromCoords = (x: number, y: number) => {
+    let col = -1;
+    if (x >= 0 && x <= 92) col = 0;
+    else if (x > 92 && x <= 187) col = 1;
+    else if (x > 187 && x <= 280) col = 2;
+
+    let row = -1;
+    if (y >= 0 && y <= 50) row = 0;
+    else if (y > 50 && y <= 103) row = 1;
+    else if (y > 103 && y <= 156) row = 2;
+    else if (y > 156 && y <= 210) row = 3;
+
+    if (col === -1 || row === -1) return null;
+
+    const layout = [
+        ['7', '8', '9'],
+        ['4', '5', '6'],
+        ['1', '2', '3'],
+        ['apagar', '0', 'enviar']
+    ];
+    return layout[row][col];
+  };
+
+  const handleMultiTouch = (evt: any) => {
+    if (Platform.OS === 'web') return;
+
+    const touches = evt.nativeEvent.touches;
+    const currentActive = new Set<string>();
+
+    for (let i = 0; i < touches.length; i++) {
+        const key = getTeclaFromCoords(touches[i].locationX, touches[i].locationY);
+        if (key) currentActive.add(key);
+    }
+
+    setTeclasPressionadas(Array.from(currentActive));
+
+    currentActive.forEach(key => {
+        if (!triggeredTouchesRef.current.has(key)) {
+            triggeredTouchesRef.current.add(key);
+            executarAcaoTecla(key);
+        }
+    });
+
+    triggeredTouchesRef.current.forEach(key => {
+        if (!currentActive.has(key)) {
+            triggeredTouchesRef.current.delete(key);
+        }
+    });
+  };
+
   const verificarRespostaComValor = (valorStr: string) => {
     if (!jogoAtivoRef.current || isNaN(parseInt(valorStr)) || meuStatusRef.current === 'morto') return;
     const alvo = operacoesListRef.current.find(op => op.resposta === parseInt(valorStr));
@@ -346,7 +418,8 @@ export default function ArcadeMultiplayer() {
               n2 = r(maxExp - 1) + 2; res = Math.pow(n1, n2); const s:any = {2:'²',3:'³',4:'⁴',5:'⁵',6:'⁶',7:'⁷'}; txt = `${n1}${s[n2] || '^'+n2}`; break;
             case '√': res=r(multMax+4)+2; n1=res*res; n2=''; txt=`√${n1}`; break;
           }
-          const speed = Math.max(3500, 10000 - (rodadaRef.current * 200));
+          // 🚨 DIFICULDADE ATUALIZADA: Cai 800ms a cada rodada (15 contas) para ficar frenético de verdade
+          const speed = Math.max(3500, 10000 - (rodadaRef.current * 800));
           novasOps.push({ id: Math.random().toString(), texto: txt, resposta: res, speed, lane_precalc: i % numLanes });
       }
 
@@ -355,20 +428,29 @@ export default function ArcadeMultiplayer() {
       rodadaRef.current += 1;
   };
 
+  // 🚨 O METRÔNOMO DE SINCRONIA: Apenas o HOST emite o sinal para todo mundo spawnar junto
   const iniciarLoopSpawner = () => {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
+    if (modoRef.current === 'espectador') return; 
+
     const loop = () => {
-      if (!jogoAtivoRef.current) return;
-      if (filaMultiplayerRef.current.length > 0) {
-          const maxOps = modoRef.current === 'espectador' ? 15 : Math.min(15, 3 + Math.floor(pontos / 150)); 
-          if (operacoesListRef.current.length < maxOps) spawnarQuestao();
+      if (!jogoAtivoRef.current || meuStatusRef.current === 'morto') return;
+
+      if (isHostRef.current) {
+          if (filaMultiplayerRef.current.length > 0) {
+              const maxOps = Math.min(15, 3 + Math.floor(pontos / 150)); 
+              if (operacoesListRef.current.length < maxOps) {
+                  // O Host manda o servidor avisar todo mundo na sala (incluindo ele mesmo e os espectadores)
+                  socket.emit('arcade_host_spawn', { room_id: roomIdRef.current });
+              }
+          }
+          if (filaMultiplayerRef.current.length < 5) {
+              gerarEnviarBatchMultiplayer(modoMatematicaRef.current);
+          }
+          spawnTimer.current = setTimeout(loop, Math.max(800, 2500 - (rodadaRef.current * 150)));
       }
-      if (isHostRef.current && filaMultiplayerRef.current.length < 5) {
-          gerarEnviarBatchMultiplayer(modoMatematicaRef.current);
-      }
-      spawnTimer.current = setTimeout(loop, Math.max(800, 2500 - (rodadaRef.current * 100)));
     };
-    loop();
+    if (isHostRef.current) loop();
   };
 
   const setupMultiplayerMatch = (data: any) => {
@@ -402,10 +484,7 @@ export default function ArcadeMultiplayer() {
       socket.emit('spectate_match', { room_id: roomId });
       setTela('jogo'); jogoAtivoRef.current = true;
       
-      // 🚨 O GRITO DO ESPECTADOR: "Estou aqui, me manda o status da tela!"
       socket.emit('arcade_sync_batch', { room_id: roomId, ops: [{ type: 'REQUEST_SYNC' }] });
-      
-      iniciarLoopSpawner(); 
   };
 
   const abandonarPartida = () => {
@@ -426,9 +505,17 @@ export default function ArcadeMultiplayer() {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const handleKeyDownLocal = (e: any) => {
             if (!jogoAtivoRef.current || meuStatusRef.current === 'morto' || modoRef.current === 'espectador') return;
-            if (e.key >= '0' && e.key <= '9') { setResposta(prev => prev.length < 5 ? prev + e.key : prev);
-            } else if (e.key === 'Backspace' || e.key === 'Delete') { setResposta(prev => prev.slice(0, -1));
-            } else if (e.key === 'Enter') { verificarRespostaComValor(respostaRef.current); }
+            
+            let key = '';
+            if (e.key >= '0' && e.key <= '9') key = e.key;
+            else if (e.key === 'Backspace' || e.key === 'Delete') key = 'apagar';
+            else if (e.key === 'Enter') key = 'enviar';
+
+            if (key) {
+                executarAcaoTecla(key);
+                setTeclasPressionadas(prev => [...prev, key]);
+                setTimeout(() => setTeclasPressionadas(prev => prev.filter(k => k !== key)), 150);
+            }
         };
         window.addEventListener('keydown', handleKeyDownLocal);
         return () => window.removeEventListener('keydown', handleKeyDownLocal);
@@ -453,7 +540,6 @@ export default function ArcadeMultiplayer() {
 
     const onArcadeNewBatch = (data: any) => {
         if (data.ops.length > 0) {
-            // 🚨 SE FOR UM PEDIDO DE SYNC DO ESPECTADOR
             if (data.ops[0].type === 'REQUEST_SYNC') {
                 if (isHostRef.current) {
                     const onScreenOps = operacoesListRef.current.map(op => {
@@ -469,12 +555,9 @@ export default function ArcadeMultiplayer() {
                 return;
             }
 
-            // 🚨 SE FOR A RESPOSTA DE SYNC DO HOST
             if (data.ops[0].type === 'SPECTATOR_SYNC') {
                 if (modoRef.current === 'espectador') {
                     const syncData = data.ops[0];
-                    
-                    // Limpa tudo e aplica a fotografia instantaneamente
                     operacoesAtuaisRef.current.forEach(o => {
                         const ref = operacoesListRef.current.find(op => op.id === o.chave);
                         if(ref && ref.y) ref.y.stopAnimation();
@@ -488,9 +571,14 @@ export default function ArcadeMultiplayer() {
                 return;
             }
         }
-
-        // Se for um pacote normal de contas, todo mundo enfileira
         filaMultiplayerRef.current.push(...data.ops);
+    };
+
+    // 🚨 QUANDO O SERVIDOR MANDAR, O JOGADOR CRIA A CONTA NA TELA
+    const onArcadeDoSpawn = () => {
+        if (jogoAtivoRef.current) {
+            spawnarQuestao();
+        }
     };
 
     const onArcadeOpDestroyed = (data: any) => {
@@ -553,6 +641,7 @@ export default function ArcadeMultiplayer() {
     };
 
     socket.on('arcade_new_batch', onArcadeNewBatch);
+    socket.on('arcade_do_spawn', onArcadeDoSpawn);
     socket.on('arcade_op_destroyed', onArcadeOpDestroyed);
     socket.on('arcade_state_update', onArcadeStateUpdate);
     socket.on('game_over', onGameOver);
@@ -562,6 +651,7 @@ export default function ArcadeMultiplayer() {
 
     return () => {
         socket.off('arcade_new_batch', onArcadeNewBatch);
+        socket.off('arcade_do_spawn', onArcadeDoSpawn);
         socket.off('arcade_op_destroyed', onArcadeOpDestroyed);
         socket.off('arcade_state_update', onArcadeStateUpdate);
         socket.off('game_over', onGameOver);
@@ -683,26 +773,40 @@ export default function ArcadeMultiplayer() {
           </Animated.View>
           
           <View style={styles.tecladoContainer}>
-            {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
-              <View key={i} style={styles.tecladoRow}>
-                {row.map(num => (
-                  <BotaoTeclado key={num} valor={num} onPress={(v:string) => setResposta(r => r.length < 5 ? r + v : r)}>
-                    <Text style={styles.teclaText}>{num}</Text>
-                  </BotaoTeclado>
+            <View style={styles.tecladoGrid}>
+                {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
+                <View key={i} style={styles.tecladoRow}>
+                    {row.map(num => (
+                    <BotaoVisual key={num} valor={num} isPressed={teclasPressionadas.includes(num)} onPressWeb={executarAcaoTecla}>
+                        <Text style={styles.teclaText}>{num}</Text>
+                    </BotaoVisual>
+                    ))}
+                </View>
                 ))}
-              </View>
-            ))}
-            <View style={styles.tecladoRow}>
-              <BotaoTeclado valor="apagar" onPress={() => setResposta(r => r.slice(0, -1))} styleExtra={styles.teclaApagar}>
-                <Ionicons name="close" size={24} color="#fff" />
-              </BotaoTeclado>
-              <BotaoTeclado valor="0" onPress={(v:string) => setResposta(r => r.length < 5 ? r + v : r)}>
-                <Text style={styles.teclaText}>0</Text>
-              </BotaoTeclado>
-              <BotaoTeclado valor="enviar" onPress={verificarResposta} styleExtra={styles.teclaEnviar}>
-                <Ionicons name="checkmark" size={28} color="#fff" />
-              </BotaoTeclado>
+                <View style={styles.tecladoRow}>
+                <BotaoVisual valor="apagar" isPressed={teclasPressionadas.includes('apagar')} onPressWeb={executarAcaoTecla} styleExtra={styles.teclaApagar}>
+                    <Ionicons name="close" size={24} color="#fff" />
+                </BotaoVisual>
+                <BotaoVisual valor="0" isPressed={teclasPressionadas.includes('0')} onPressWeb={executarAcaoTecla}>
+                    <Text style={styles.teclaText}>0</Text>
+                </BotaoVisual>
+                <BotaoVisual valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={executarAcaoTecla} styleExtra={styles.teclaEnviar}>
+                    <Ionicons name="checkmark" size={28} color="#fff" />
+                </BotaoVisual>
+                </View>
             </View>
+
+            {/* RADAR INVISÍVEL NO ANDROID/iOS */}
+            {Platform.OS !== 'web' && (
+                <View
+                    style={StyleSheet.absoluteFillObject}
+                    onStartShouldSetResponder={() => true}
+                    onResponderGrant={handleMultiTouch}
+                    onResponderMove={handleMultiTouch}
+                    onResponderRelease={handleMultiTouch}
+                    onResponderTerminate={handleMultiTouch}
+                />
+            )}
           </View>
         </View>
       )}
@@ -761,7 +865,9 @@ const styles = StyleSheet.create({
   bottomPanel: { position: 'absolute', bottom: 0, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10 },
   displayContainer: { backgroundColor: 'rgba(26, 26, 46, 0.7)', width: '100%', maxWidth: 370, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  tecladoContainer: { width: '100%', maxWidth: 400, gap: 5, paddingHorizontal: 15 },
+  
+  tecladoContainer: { width: '100%', maxWidth: 400, position: 'relative', gap: 5, paddingHorizontal: 15 },
+  tecladoGrid: { width: '100%', gap: 5 },
   tecladoRow: { flexDirection: 'row', gap: 5, justifyContent: 'space-between' },
   tecla: { backgroundColor: 'rgba(26, 26, 46, 0.75)', flex: 1, height: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   teclaText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
