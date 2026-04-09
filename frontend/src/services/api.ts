@@ -99,7 +99,7 @@ export const concluirMissao = async (id: string) => (await api.post(`/missoes/${
 export const reenviarJogo = async (id: string, d: any) => (await api.post(`/missoes/${id}/reenviar`, d)).data;
 export const registrarTentativaMissao = async (id: string) => (await api.post(`/missoes/${id}/tentativa`)).data;
 
-// OUTROS E RANKING
+// OUTROS E RANKING GERAL
 export const getRelatorioGeral = async () => { try { return (await api.get('/relatorios/geral')).data; } catch { return {}; } };
 export const getLixeira = async () => (await api.get('/admin/lixeira')).data;
 export const restaurarItem = async (id: string, tipo: string) => (await api.post(`/admin/lixeira/${id}/restaurar?tipo=${tipo}`)).data;
@@ -108,6 +108,10 @@ export const getRankingGeral = async () => { try { return (await api.get('/ranki
 export const getRankingPorTurma = async (turmaId: string) => { try { return (await api.get(`/ranking/turma/${turmaId}`)).data; } catch { return []; } };
 export const getMeuProgresso = async () => { try { return (await api.get('/usuarios/progresso')).data; } catch { return null; } };
 export const zerarTodosPontos = async () => (await api.post('/usuarios/zerar-pontos')).data;
+
+// ======== ROTAS DO RANKING ARCADE ========
+export const getRankingArcade = async () => { try { return (await api.get('/ranking/arcade')).data; } catch { return []; } };
+export const submitArcadeScore = async (pontos: number) => (await api.post('/arcade/score', { pontos })).data;
 
 // ======== ROTAS DE RELATÓRIO DA BNCC ========
 export const getBNCCRelatorio = async (tipo: string, turmaId?: string, equipeId?: string) => {
