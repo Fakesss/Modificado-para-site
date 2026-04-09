@@ -114,7 +114,7 @@ const BotaoVisual = ({ valor, isPressed, children, styleExtra, onPressWeb }: any
         isPressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }
       ]}
       onPress={Platform.OS === 'web' ? () => onPressWeb(valor) : undefined}
-      disabled={Platform.OS !== 'web'} // Desativa os cliques nativos no mobile para o radar funcionar 100% livre
+      disabled={Platform.OS !== 'web'} 
     >
       {children}
     </Pressable>
@@ -133,6 +133,7 @@ export default function Arcade() {
   const [missoesDisponiveis, setMissoesDisponiveis] = useState<any[]>([]);
   const [modoMatematica, setModoMatematica] = useState('misto');
   
+  const [rankingArcade, setRankingArcade] = useState<any[]>([]);
   const [corLaserPersonalizada, setCorLaserPersonalizada] = useState('#32CD32');
   const [pausado, setPausado] = useState(false);
   
@@ -168,12 +169,28 @@ export default function Arcade() {
   const desempenhoOcultoRef = useRef(0); 
   const ultimasRespostasRef = useRef<number[]>([]);
 
-  // =========================================================================
-  // SISTEMA NUCLEAR DE TECLADO (RADAR CARTESIANO + ANIMAÇÕES)
-  // =========================================================================
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
+  const respostaRef = useRef('');
 
+  useEffect(() => { respostaRef.current = resposta; }, [resposta]);
+  useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
+  useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
+
+  // Carrega os dados reais do Ranking e as missões
+  const carregarDadosMenu = async () => {
+    carregarMissoes();
+    try {
+      const data = await api.getRankingArcade();
+      setRankingArcade(Array.isArray(data) ? data : []);
+    } catch (e) {}
+  };
+
+  useEffect(() => { if (tela === 'menu') carregarDadosMenu(); }, [tela]);
+
+  // =========================================================================
+  // SISTEMA DE TECLADO 
+  // =========================================================================
   const executarAcaoTecla = (valor: string) => {
     setResposta(currentResposta => {
         if (valor === 'apagar') {
@@ -200,19 +217,12 @@ export default function Arcade() {
     else if (y > 156 && y <= 210) row = 3;
 
     if (col === -1 || row === -1) return null;
-
-    const layout = [
-        ['7', '8', '9'],
-        ['4', '5', '6'],
-        ['1', '2', '3'],
-        ['apagar', '0', 'enviar']
-    ];
+    const layout = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['apagar', '0', 'enviar']];
     return layout[row][col];
   };
 
   const handleMultiTouch = (evt: any) => {
     if (Platform.OS === 'web') return;
-
     const touches = evt.nativeEvent.touches;
     const currentActive = new Set<string>();
 
@@ -220,20 +230,15 @@ export default function Arcade() {
         const key = getTeclaFromCoords(touches[i].locationX, touches[i].locationY);
         if (key) currentActive.add(key);
     }
-
     setTeclasPressionadas(Array.from(currentActive));
-
     currentActive.forEach(key => {
         if (!triggeredTouchesRef.current.has(key)) {
             triggeredTouchesRef.current.add(key);
             executarAcaoTecla(key);
         }
     });
-
     triggeredTouchesRef.current.forEach(key => {
-        if (!currentActive.has(key)) {
-            triggeredTouchesRef.current.delete(key);
-        }
+        if (!currentActive.has(key)) triggeredTouchesRef.current.delete(key);
     });
   };
 
@@ -241,7 +246,6 @@ export default function Arcade() {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const handleKeyDownLocal = (e: any) => {
             if (tela !== 'jogo' || !jogoAtivoRef.current || jogoPausadoRef.current) return;
-            
             let key = '';
             if (e.key >= '0' && e.key <= '9') key = e.key;
             else if (e.key === 'Backspace' || e.key === 'Delete') key = 'apagar';
@@ -257,11 +261,6 @@ export default function Arcade() {
         return () => window.removeEventListener('keydown', handleKeyDownLocal);
     }
   }, [tela]);
-  // =========================================================================
-
-  useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
-  useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
-  useEffect(() => { if (tela === 'menu') carregarMissoes(); }, [tela]);
 
   const processarErroRef = useRef<any>(null);
 
@@ -366,6 +365,10 @@ export default function Arcade() {
   };
 
   const sairDoJogo = () => {
+    // SALVA OS PONTOS DO MODO LIVRE AO SAIR
+    if (modoRef.current === 'single' && pontos > 0) {
+        api.submitArcadeScore(pontos).catch(()=>{});
+    }
     jogoAtivoRef.current = false; jogoPausadoRef.current = false; transicaoAtivaRef.current = false; fasePendenteRef.current = false;
     setPausado(false); setMostrarFase(false); if (spawnTimer.current) clearTimeout(spawnTimer.current);
     setOperacoes([]); setExplosoes([]); setTela('menu');
@@ -501,7 +504,14 @@ export default function Arcade() {
 
   const gameOver = () => { 
     jogoAtivoRef.current = false; jogoPausadoRef.current = false; transicaoAtivaRef.current = false; fasePendenteRef.current = false; setPausado(false);
-    if (spawnTimer.current) clearTimeout(spawnTimer.current); setOperacoes([]); setExplosoes([]); setTela('resultado'); 
+    if (spawnTimer.current) clearTimeout(spawnTimer.current); setOperacoes([]); setExplosoes([]);
+    
+    // SALVA OS PONTOS DO MODO LIVRE
+    if (modoRef.current === 'single' && pontos > 0) {
+        api.submitArcadeScore(pontos).catch(()=>{});
+    }
+    
+    setTela('resultado'); 
   };
 
   const verificarRespostaComValor = (valorStr: string) => {
@@ -573,15 +583,7 @@ export default function Arcade() {
       { id: 'radiciacao', name: 'Raízes', color: '#00CED1', icon: 'flash' }
     ];
 
-    const meuNome = user?.nome?.split(' ')[0] || 'Você';
-    const rankingFalso = [
-      { posicao: 1, nome: 'Ana C.', pontosMaximos: 15420, isMe: false, equipe: 'Equipe Alfa', cor: '#FFD700', turma: '3º Ano A' },
-      { posicao: 2, nome: 'Pedro', pontosMaximos: 12300, isMe: false, equipe: 'Equipe Omega', cor: '#32CD32', turma: '2º Ano B' },
-      { posicao: 3, nome: 'Lucas', pontosMaximos: 9800, isMe: false, equipe: 'Equipe Delta', cor: '#4169E1', turma: '3º Ano A' },
-      { posicao: 4, nome: 'Sofia', pontosMaximos: 8500, isMe: false, equipe: 'Equipe Alfa', cor: '#FFD700', turma: '1º Ano C' },
-      { posicao: 5, nome: meuNome, pontosMaximos: 7200, isMe: true, equipe: 'Equipe Delta', cor: '#4169E1', turma: '2º Ano B' },
-      { posicao: 6, nome: 'Maria', pontosMaximos: 0, isMe: false, equipe: 'Equipe Omega', cor: '#32CD32', turma: '1º Ano A' }
-    ].filter(jogador => jogador.pontosMaximos > 0);
+    const meuRank = rankingArcade.find(j => j.id === user?.id);
 
     return (
       <SafeAreaView style={styles.container}>
@@ -605,23 +607,33 @@ export default function Arcade() {
               </View>
               <View style={styles.rankingScrollWrapper}>
                 <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={true}>
-                  {rankingFalso.length > 0 ? (
-                    rankingFalso.map((jogador) => {
-                      let corPosicao = '#888'; if (jogador.posicao === 1) corPosicao = '#FFD700'; else if (jogador.posicao === 2) corPosicao = '#C0C0C0'; else if (jogador.posicao === 3) corPosicao = '#CD7F32';
+                  {rankingArcade.length > 0 ? (
+                    rankingArcade.map((jogador) => {
+                      let corPosicao = '#888'; 
+                      if (jogador.posicao === 1) corPosicao = '#FFD700'; 
+                      else if (jogador.posicao === 2) corPosicao = '#C0C0C0'; 
+                      else if (jogador.posicao === 3) corPosicao = '#CD7F32';
+                      
+                      const isMe = jogador.id === user?.id;
+
                       return (
-                        <View key={jogador.posicao} style={[styles.rankingRow, jogador.isMe && styles.rankingRowMe]}>
+                        <View key={jogador.posicao} style={[styles.rankingRow, isMe && styles.rankingRowMe]}>
                           <View style={styles.rankingLeft}>
                             <Text style={[styles.rankingPosText, { color: corPosicao }]}>#{jogador.posicao}</Text>
                             <View>
-                              <Text style={[styles.rankingNameText, jogador.isMe && { color: '#00FFFF' }]}>{jogador.nome}</Text>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: jogador.cor }} />
-                                <Text style={{ color: '#AAA', fontSize: 11, fontWeight: 'bold' }}>{jogador.equipe}</Text>
-                                <Text style={{ color: '#666', fontSize: 11 }}>• {jogador.turma}</Text>
-                              </View>
+                              <Text style={[styles.rankingNameText, isMe && { color: '#00FFFF' }, jogador.isProf && { color: '#E74C3C' }]}>
+                                {jogador.nome} {jogador.isProf ? '👑' : ''}
+                              </Text>
+                              {!jogador.isProf && jogador.equipe ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: jogador.cor }} />
+                                  <Text style={{ color: '#AAA', fontSize: 11, fontWeight: 'bold' }}>{jogador.equipe}</Text>
+                                  {jogador.turma ? <Text style={{ color: '#666', fontSize: 11 }}>• {jogador.turma}</Text> : null}
+                                </View>
+                              ) : null}
                             </View>
                           </View>
-                          <Text style={[styles.rankingScoreText, jogador.isMe && { color: '#00FFFF' }]}>{jogador.pontosMaximos} pts</Text>
+                          <Text style={[styles.rankingScoreText, isMe && { color: '#00FFFF' }]}>{jogador.pontosMaximos} pts</Text>
                         </View>
                       );
                     })
@@ -632,12 +644,12 @@ export default function Arcade() {
                   )}
                 </ScrollView>
               </View>
-              {rankingFalso.find(j => j.isMe) && (
+              {meuRank && (
                 <View style={styles.myRankingFixed}>
                   <Text style={styles.myRankingLabel}>Sua Posição Atual:</Text>
                   <View style={styles.rankingLeft}>
-                    <Text style={[styles.rankingPosText, { color: '#00FFFF' }]}>#{rankingFalso.find(j => j.isMe)?.posicao}</Text>
-                    <Text style={[styles.rankingScoreText, { color: '#00FFFF' }]}>{rankingFalso.find(j => j.isMe)?.pontosMaximos} pts</Text>
+                    <Text style={[styles.rankingPosText, { color: '#00FFFF' }]}>#{meuRank.posicao}</Text>
+                    <Text style={[styles.rankingScoreText, { color: '#00FFFF' }]}>{meuRank.pontosMaximos} pts</Text>
                   </View>
                 </View>
               )}
@@ -754,7 +766,7 @@ export default function Arcade() {
         <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
         
         {/* ============================================================== */}
-        {/* NOVA CONSTRUÇÃO DO TECLADO - (FUNDO VISUAL + RADAR INVISÍVEL)  */}
+        {/* TECLADO INVISÍVEL COM RADAR (MANTIDO INTACTO)                  */}
         {/* ============================================================== */}
         <View style={styles.tecladoContainer}>
           
