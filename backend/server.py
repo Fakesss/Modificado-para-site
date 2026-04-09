@@ -91,7 +91,9 @@ class AdminUsuarioUpdate(BaseModel):
     ativo: Optional[bool] = None
     pontosTotais: Optional[int] = None
 
-# ---- ATUALIZAÇÃO PASSO 1: THUMBNAIL E PASTA ----
+class ArcadeScore(BaseModel):
+    pontos: int
+
 class Conteudo(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tipo: str
@@ -99,8 +101,8 @@ class Conteudo(BaseModel):
     descricao: Optional[str] = None
     urlVideo: Optional[str] = None
     arquivo: Optional[str] = None
-    thumbnail: Optional[str] = None  # NOVO CAMPO: Capa do vídeo
-    pasta: Optional[str] = None      # NOVO CAMPO: Pasta de organização
+    thumbnail: Optional[str] = None  
+    pasta: Optional[str] = None      
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
@@ -116,8 +118,8 @@ class ConteudoCreate(BaseModel):
     descricao: Optional[str] = None
     urlVideo: Optional[str] = None
     arquivo: Optional[str] = None  
-    thumbnail: Optional[str] = None  # NOVO
-    pasta: Optional[str] = None      # NOVO
+    thumbnail: Optional[str] = None  
+    pasta: Optional[str] = None      
     ordem: int = 0
     abaCategoria: str = "videos"
     turmaId: Optional[str] = None
@@ -393,9 +395,9 @@ async def admin_delete_usuario(user_id: str, current_user: dict = Depends(requir
 
 @api_router.post("/usuarios/zerar-pontos")
 async def zerar_todos_pontos(current_user: dict = Depends(require_admin)):
-    await db.usuarios.update_many({}, {"$set": {"pontosTotais": 0}})
+    await db.usuarios.update_many({}, {"$set": {"pontosTotais": 0, "recordeJogoSingle": 0, "recordeJogoMulti": 0}})
     await db.equipes.update_many({}, {"$set": {"pontosTotais": 0}})
-    return {"message": "Todos os pontos foram zerados com sucesso."}
+    return {"message": "Todos os pontos e recordes foram zerados com sucesso."}
 
 
 @api_router.get("/exercicios")
@@ -518,9 +520,6 @@ async def retry_submissao(exercicio_id: str, current_user: dict = Depends(get_cu
         await db.submissoes.delete_one({"_id": sub["_id"]})
     return {"message": "Pronto para tentar novamente"}
 
-# =====================================================================
-# ATUALIZAÇÃO PASSO 1: ROTAS DE CONTEÚDO E PASTAS
-# =====================================================================
 @api_router.get("/conteudos")
 async def get_conteudos(categoria: Optional[str] = None, turmaId: Optional[str] = None):
     query = {"ativo": True, "is_deleted": {"$ne": True}}
@@ -531,15 +530,13 @@ async def get_conteudos(categoria: Optional[str] = None, turmaId: Optional[str] 
 
 @api_router.get("/pastas")
 async def get_pastas(turmaId: Optional[str] = None):
-    # Rota inteligente para descobrir quais pastas já existem no banco
     query = {"ativo": True, "is_deleted": {"$ne": True}}
     if turmaId: query["$or"] = [{"turmaId": turmaId}, {"turmaId": None}]
     conteudos = await db.conteudos.find(query).to_list(1000)
     pastas = set()
     for c in conteudos:
         p = c.get("pasta")
-        if p and str(p).strip():
-            pastas.add(str(p).strip())
+        if p and str(p).strip(): pastas.add(str(p).strip())
     return sorted(list(pastas))
 
 @api_router.post("/conteudos")
@@ -580,7 +577,6 @@ async def concluir_conteudo(conteudo_id: str, current_user: dict = Depends(get_c
 @api_router.get("/relatorios/geral")
 async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     total_u = await db.usuarios.count_documents({"ativo": True})
-    
     exercicios_ativos = await db.exercicios.find({"is_deleted": {"$ne": True}}).to_list(10000)
     total_e = len(exercicios_ativos)
     ids_ativos = [e["id"] for e in exercicios_ativos]
@@ -597,33 +593,16 @@ async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     for sub in submissoes_exercicios:
         uid = sub.get("usuarioId")
         nota = float(sub.get("nota", 0.0))
-        if uid not in notas_por_aluno:
-            notas_por_aluno[uid] = []
+        if uid not in notas_por_aluno: notas_por_aluno[uid] = []
         notas_por_aluno[uid].append(nota)
         
-    medias_alunos = []
-    for uid, notas in notas_por_aluno.items():
-        if len(notas) > 0:
-            medias_alunos.append(sum(notas) / len(notas))
-            
-    media_geral = 0.0
-    if len(medias_alunos) > 0:
-        media_geral = sum(medias_alunos) / len(medias_alunos)
+    medias_alunos = [sum(n) / len(n) for n in notas_por_aluno.values() if len(n) > 0]
+    media_geral = sum(medias_alunos) / len(medias_alunos) if len(medias_alunos) > 0 else 0.0
         
-    return {
-        "totalUsuarios": total_u, 
-        "totalExercicios": total_e, 
-        "totalSubmissoes": total_s,
-        "mediaGeral": round(media_geral, 1)
-    }
+    return { "totalUsuarios": total_u, "totalExercicios": total_e, "totalSubmissoes": total_s, "mediaGeral": round(media_geral, 1) }
 
 @api_router.get("/relatorios/bncc")
-async def get_relatorio_bncc(
-    filtro_tipo: str = "GERAL",
-    turma_id: Optional[str] = None,
-    equipe_id: Optional[str] = None,
-    current_user: dict = Depends(require_admin)
-):
+async def get_relatorio_bncc(filtro_tipo: str = "GERAL", turma_id: Optional[str] = None, equipe_id: Optional[str] = None, current_user: dict = Depends(require_admin)):
     submissoes = await db.submissoes.find({"ignorarNoRelatorioBNCC": {"$ne": True}}).to_list(10000)
     usuarios = {u["id"]: u for u in await db.usuarios.find({}).to_list(5000)}
     turmas = {str(t.get("id", t.get("_id"))): t for t in await db.turmas.find({}).to_list(100)}
@@ -635,11 +614,9 @@ async def get_relatorio_bncc(
         if turma: max_grade = parse_turma_grade(turma.get("nome", ""))
             
     bncc_stats = {} 
-    
     for sub in submissoes:
         user = usuarios.get(sub.get("usuarioId"))
         if not user: continue
-        
         u_turma = str(user.get("turmaId", ""))
         u_equipe = str(user.get("equipeId", ""))
         
@@ -675,13 +652,9 @@ async def limpar_relatorio_bncc(req: LimparRelatorioRequest, current_user: dict 
     if req.tipo == "TURMA" and req.alvoId:
         usuarios = await db.usuarios.find({"turmaId": req.alvoId}).to_list(5000)
         query = {"usuarioId": {"$in": [u["id"] for u in usuarios]}}
-    elif req.tipo == "USUARIO" and req.alvoId:
-        query = {"usuarioId": req.alvoId}
-    elif req.tipo == "TUDO":
-        query = {}
-    else:
-        raise HTTPException(status_code=400, detail="Filtro inválido")
-
+    elif req.tipo == "USUARIO" and req.alvoId: query = {"usuarioId": req.alvoId}
+    elif req.tipo == "TUDO": query = {}
+    else: raise HTTPException(status_code=400, detail="Filtro inválido")
     result = await db.submissoes.update_many(query, {"$set": {"ignorarNoRelatorioBNCC": True}})
     return {"message": f"Dados ocultados. {result.modified_count} registros arquivados com sucesso."}
 
@@ -705,11 +678,13 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
         return {"message": "Deletado"}
     raise HTTPException(400, "Tipo inválido")
 
+# =====================================================================
+# ROTAS DO RANKING (GERAL E ARCADE)
+# =====================================================================
 @api_router.get("/ranking/geral")
 async def get_ranking_geral():
     equipes = await db.equipes.find({}).to_list(100)
-    pontos_por_equipe = {}
-    for e in equipes: pontos_por_equipe[str(e.get("id", e.get("_id", ""))).strip().lower()] = 0
+    pontos_por_equipe = {str(e.get("id", e.get("_id", ""))).strip().lower(): 0 for e in equipes}
         
     for aluno in await db.usuarios.find({}).to_list(5000):
         perfil = str(aluno.get("perfil") or "ALUNO").strip().upper()
@@ -747,8 +722,7 @@ async def get_ranking_geral():
 @api_router.get("/ranking/turma/{turma_id}")
 async def get_ranking_turma(turma_id: str):
     equipes = await db.equipes.find({}).to_list(100)
-    pontos_por_equipe = {}
-    for e in equipes: pontos_por_equipe[str(e.get("id", e.get("_id", ""))).strip().lower()] = 0
+    pontos_por_equipe = {str(e.get("id", e.get("_id", ""))).strip().lower(): 0 for e in equipes}
         
     turma_alvo_limpa = str(turma_id).strip().lower()
     turma_obj = await db.turmas.find_one({"id": turma_id})
@@ -782,6 +756,66 @@ async def get_ranking_turma(turma_id: str):
     for i, e in enumerate(equipes_ranking): e["posicao"] = i + 1
     return equipes_ranking
 
+@api_router.post("/arcade/score")
+async def submit_arcade_score(data: ArcadeScore, current_user: dict = Depends(get_current_user)):
+    pontos = data.pontos
+    if pontos <= 0: return {"message": "Nenhum ponto recebido"}
+    
+    update_fields = {"$inc": {"pontosTotais": pontos}}
+    
+    current_record = current_user.get("recordeJogoSingle", 0)
+    is_new_record = pontos > current_record
+    if is_new_record:
+        update_fields["$set"] = {"recordeJogoSingle": pontos}
+        
+    await db.usuarios.update_one({"id": current_user["id"]}, update_fields)
+    
+    eq_raw = current_user.get("equipeId")
+    if eq_raw:
+        await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": pontos}})
+        
+    return {"message": "Pontos e recorde salvos com sucesso", "newRecord": is_new_record}
+
+@api_router.get("/ranking/arcade")
+async def get_ranking_arcade():
+    usuarios = await db.usuarios.find({"ativo": True}).to_list(5000)
+    equipes = {str(e.get("id", e.get("_id", ""))): e for e in await db.equipes.find({}).to_list(100)}
+    turmas = {str(t.get("id", t.get("_id", ""))): t for t in await db.turmas.find({}).to_list(100)}
+    
+    ranking = []
+    for u in usuarios:
+        recorde = u.get("recordeJogoSingle", 0)
+        is_admin = u.get("perfil") == "ADMIN"
+        
+        if is_admin:
+            if recorde == 0: recorde = 1
+            ranking.append({
+                "id": u["id"],
+                "nome": u.get("nome", "Admin").split(" ")[0],
+                "pontosMaximos": recorde,
+                "equipe": "",
+                "cor": "",
+                "turma": "",
+                "isProf": True
+            })
+        elif recorde > 0:
+            eq = equipes.get(str(u.get("equipeId", "")))
+            turma = turmas.get(str(u.get("turmaId", "")))
+            ranking.append({
+                "id": u["id"],
+                "nome": u.get("nome", "Aluno").split(" ")[0],
+                "pontosMaximos": recorde,
+                "equipe": eq.get("nome", "") if eq else "",
+                "cor": eq.get("cor", "#888") if eq else "#888",
+                "turma": turma.get("nome", "") if turma else "",
+                "isProf": False
+            })
+            
+    ranking.sort(key=lambda x: x["pontosMaximos"], reverse=True)
+    for i, r in enumerate(ranking):
+        r["posicao"] = i + 1
+    return ranking
+
 @api_router.get("/usuarios/progresso")
 async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
     submissoes = await db.submissoes.find({"usuarioId": current_user["id"]}).sort("data", -1).to_list(100)
@@ -799,6 +833,9 @@ async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
         "submissoes": [{k: v for k, v in s.items() if k != '_id'} for s in submissoes]
     }
 
+# =====================================================================
+# ROTAS DE MISSÕES (JOGOS PERSONALIZADOS)
+# =====================================================================
 class MissaoQuestao(BaseModel):
     id: str
     texto: str
