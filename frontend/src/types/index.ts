@@ -38,10 +38,19 @@ export interface RankingItem {
 
 export interface Questao {
   id: string;
-  pergunta: string;
-  tipo: string;
-  alternativas?: string[];
+  // Propriedades do formato antigo
+  pergunta?: string;
+  tipo?: string;
   respostaCorreta?: string;
+  // Propriedades do formato novo
+  numero?: number;
+  tipoResposta?: string;
+  enunciado?: string;
+  imagemBase64?: string;
+  alternativas?: any; 
+  correta?: string;
+  pontuacaoMax?: number;
+  habilidadesBNCC?: string[];
 }
 
 export interface Exercicio {
@@ -54,8 +63,8 @@ export interface Exercicio {
   ativo: boolean;
   turmaId?: string;
   equipeId?: string;
-  usuarioId?: string; 
-  alunoId?: string;   
+  usuarioId?: string;
+  alunoId?: string;
   pontosPorQuestao: number;
   questoes?: Questao[];
 }
@@ -67,14 +76,15 @@ export interface Conteudo {
   descricao?: string;
   urlVideo?: string;
   arquivo?: string;
+  thumbnail?: string; 
   ordem: number;
   abaCategoria: string;
   pasta?: string;
   pontos?: number;
   turmaId?: string;
   equipeId?: string;
-  usuarioId?: string; 
-  alunoId?: string;   
+  usuarioId?: string;
+  alunoId?: string;
   ativo: boolean;
   is_deleted?: boolean;
 }
