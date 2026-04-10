@@ -704,7 +704,8 @@ async def get_ranking_geral():
         ativo_val = aluno.get("ativo", True)
         ativo = ativo_val.lower() in ['true', '1', 't', 'y', 'yes'] if isinstance(ativo_val, str) else bool(ativo_val)
         
-        if perfil == "ALUNO" and ativo:
+        # 🚨 CORREÇÃO: Agora o Radar enxerga ALUNO e ALUNO_LIDER!
+        if perfil in ["ALUNO", "ALUNO_LIDER"] and ativo:
             eq_id_clean = str(aluno.get("equipeId") or "").strip().lower()
             try: pts = int(float(aluno.get("pontosTotais", 0)))
             except: pts = 0
@@ -746,7 +747,8 @@ async def get_ranking_turma(turma_id: str):
         ativo_val = aluno.get("ativo", True)
         ativo = ativo_val.lower() in ['true', '1', 't', 'y', 'yes'] if isinstance(ativo_val, str) else bool(ativo_val)
         
-        if perfil == "ALUNO" and ativo:
+        # 🚨 CORREÇÃO: Agora o Radar enxerga ALUNO e ALUNO_LIDER!
+        if perfil in ["ALUNO", "ALUNO_LIDER"] and ativo:
             aluno_turma = str(aluno.get("turmaId") or "").strip().lower()
             if aluno_turma == turma_alvo_limpa or (turma_nome_limpo and aluno_turma == turma_nome_limpo):
                 eq_id_clean = str(aluno.get("equipeId") or "").strip().lower()
