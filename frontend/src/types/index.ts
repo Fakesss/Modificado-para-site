@@ -9,14 +9,12 @@ export interface User {
   pontosTotais?: number;
   streakDias?: number;
   ultimoAcesso?: string;
-}
-
-export interface Usuario extends User {
-  id: string;
-  perfil: string;
+  perfil?: string;
   senha?: string;
   ativo?: boolean;
 }
+
+export interface Usuario extends User {}
 
 export interface Turma {
   id: string;
@@ -56,8 +54,8 @@ export interface Exercicio {
   ativo: boolean;
   turmaId?: string;
   equipeId?: string;
-  usuarioId?: string; // 🚨 A trava de usuário
-  alunoId?: string;   // 🚨 A trava extra pro padrão do seu Painel
+  usuarioId?: string; 
+  alunoId?: string;   
   pontosPorQuestao: number;
   questoes?: Questao[];
 }
@@ -75,8 +73,8 @@ export interface Conteudo {
   pontos?: number;
   turmaId?: string;
   equipeId?: string;
-  usuarioId?: string; // 🚨 A trava de usuário
-  alunoId?: string;   // 🚨 A trava extra pro padrão do seu Painel
+  usuarioId?: string; 
+  alunoId?: string;   
   ativo: boolean;
   is_deleted?: boolean;
 }
