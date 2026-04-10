@@ -129,4 +129,11 @@ export const limparRelatorioBNCC = async (tipo: string, alvoId?: string) => {
   return (await api.post('/relatorios/bncc/limpar', { tipo, alvoId })).data;
 };
 
+// ======== ROTAS ADICIONAIS FALTANTES ========
+export const getRankingAlunosEquipe = async (equipeId?: string) => { try { return (await api.get(`/ranking/equipe/${equipeId}`)).data; } catch { return []; } };
+export const getAlunoBNCC = async (alunoId: string) => { try { return (await api.get(`/relatorios/bncc/aluno/${alunoId}`)).data; } catch { return null; } };
+export const getConfiguracaoJogo = async () => { try { return (await api.get('/configuracoes')).data; } catch { return null; } };
+export const salvarConfiguracaoJogo = async (dados: any) => { try { return (await api.post('/configuracoes', dados)).data; } catch { return null; } };
+export const limparItensExpirados = async () => { try { return (await api.post('/admin/limpar-expirados')).data; } catch { return null; } };
+
 export default api;
