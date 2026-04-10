@@ -828,14 +828,14 @@ async def get_ranking_arcade():
         is_admin = u.get("perfil") == "ADMIN"
         
         if is_admin:
-            if recorde == 0: recorde = 1
+            pontos_finais = recorde if recorde > 0 else 1
             ranking.append({
                 "id": u["id"],
                 "nome": u.get("nome", "Admin").split(" ")[0],
-                "pontosMaximos": recorde,
+                "pontosMaximos": pontos_finais,
                 "equipe": "",
-                "cor": "",
-                "turma": "",
+                "cor": "#FFD700",
+                "turma": "Professor",
                 "isProf": True
             })
         elif recorde > 0:
