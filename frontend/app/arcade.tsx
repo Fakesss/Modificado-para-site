@@ -126,6 +126,8 @@ export default function Arcade() {
   const { user } = useAuth(); 
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [pontos, setPontos] = useState(0);
+  const pontosRef = useRef(0); // ESPELHO DO SCORE (CORRIGE O BUG DO CLOSURE)
+  
   const [vidas, setVidas] = useState(5); 
   const [resposta, setResposta] = useState('');
   const [operacoes, setOperacoes] = useState<any[]>([]); 
@@ -176,6 +178,9 @@ export default function Arcade() {
   useEffect(() => { respostaRef.current = resposta; }, [resposta]);
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
   useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
+  
+  // MANTÉM O PONTOS_REF SEMPRE ATUALIZADO
+  useEffect(() => { pontosRef.current = pontos; }, [pontos]);
 
   // Carrega os dados reais do Ranking e as missões
   const carregarDadosMenu = async () => {
@@ -365,9 +370,9 @@ export default function Arcade() {
   };
 
   const sairDoJogo = () => {
-    // SALVA OS PONTOS DO MODO LIVRE AO SAIR
-    if (modoRef.current === 'single' && pontos > 0) {
-        api.submitArcadeScore(pontos).catch(()=>{});
+    // SALVA OS PONTOS DO MODO LIVRE USANDO A REFERÊNCIA CORRETA
+    if (modoRef.current === 'single' && pontosRef.current > 0) {
+        api.submitArcadeScore(pontosRef.current).catch(()=>{});
     }
     jogoAtivoRef.current = false; jogoPausadoRef.current = false; transicaoAtivaRef.current = false; fasePendenteRef.current = false;
     setPausado(false); setMostrarFase(false); if (spawnTimer.current) clearTimeout(spawnTimer.current);
@@ -384,7 +389,10 @@ export default function Arcade() {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     if (botTimer.current) clearInterval(botTimer.current);
     
-    setOperacoes([]); setExplosoes([]); setPontos(0); setResposta(''); setPowerUpDisponivel(false); 
+    setOperacoes([]); setExplosoes([]); 
+    setPontos(0); pontosRef.current = 0; // Zera as duas contagens
+    
+    setResposta(''); setPowerUpDisponivel(false); 
     setPausado(false); setMostrarFase(false); setFaseAtualVisor(1);
     
     operacoesAtuaisRef.current = []; ultimasRespostasRef.current = []; desempenhoOcultoRef.current = 0; questoesEmJogoRef.current = 0;
@@ -408,11 +416,11 @@ export default function Arcade() {
       if (!fasePendenteRef.current) {
         if (modoRef.current === 'missao' && filaQuestoesRef.current.length === 0) {} 
         else {
-          const maxOps = Math.min(15, 3 + Math.floor(pontos / 200)); 
+          const maxOps = Math.min(15, 3 + Math.floor(pontosRef.current / 200)); 
           if (operacoesListRef.current.length < maxOps) spawnarQuestao();
         }
       }
-      if (!transicaoAtivaRef.current) spawnTimer.current = setTimeout(loop, Math.max(800, 2500 - (pontos * 1.5)));
+      if (!transicaoAtivaRef.current) spawnTimer.current = setTimeout(loop, Math.max(800, 2500 - (pontosRef.current * 1.5)));
     };
     if (!transicaoAtivaRef.current) loop();
   };
@@ -506,9 +514,9 @@ export default function Arcade() {
     jogoAtivoRef.current = false; jogoPausadoRef.current = false; transicaoAtivaRef.current = false; fasePendenteRef.current = false; setPausado(false);
     if (spawnTimer.current) clearTimeout(spawnTimer.current); setOperacoes([]); setExplosoes([]);
     
-    // SALVA OS PONTOS DO MODO LIVRE
-    if (modoRef.current === 'single' && pontos > 0) {
-        api.submitArcadeScore(pontos).catch(()=>{});
+    // SALVA OS PONTOS DO MODO LIVRE COM A REFERÊNCIA CORRETA
+    if (modoRef.current === 'single' && pontosRef.current > 0) {
+        api.submitArcadeScore(pontosRef.current).catch(()=>{});
     }
     
     setTela('resultado'); 
