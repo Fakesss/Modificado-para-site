@@ -5,13 +5,43 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
 
-// IMPORTAÇÃO DO MOTOR DE SPRITES E DAS IMAGENS
-import SpriteAnimado from '../src/components/SpriteAnimado';
-const ImgLulaMolusco = require('../assets/images/PC_Squidward.jpg');
-const ImgLord = require('../assets/images/PC_LordRoyal.jpg');
-
 const { width } = Dimensions.get('window');
 
+// =========================================================================
+// O NOVO AVATAR ANIMADO (Substitui as Sprites)
+// =========================================================================
+const AvatarNeon = ({ nome, isEsquerda, isPuxando, cor }: any) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isPuxando) {
+      // Efeito de pulso e tremor de esforço
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 1.2, duration: 100, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: isEsquerda ? -10 : 10, duration: 50, useNativeDriver: true }),
+        Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 1, duration: 150, useNativeDriver: true })
+      ]).start();
+    }
+  }, [isPuxando]);
+
+  return (
+    <View style={styles.playerWrapper}>
+      <Text style={[styles.playerName, { color: cor }]}>{nome}</Text>
+      <Animated.View style={[
+        styles.avatarCircle,
+        { borderColor: cor, shadowColor: cor, transform: [{ scale: scaleAnim }, { translateX: shakeAnim }] }
+      ]}>
+        <Ionicons name="person" size={50} color={cor} />
+      </Animated.View>
+    </View>
+  );
+};
+
+// =========================================================================
+// BOTÃO VISUAL DO TECLADO
+// =========================================================================
 const BotaoVisual = ({ valor, isPressed, onPressWeb }: any) => {
   return (
     <TouchableOpacity
@@ -40,19 +70,11 @@ export default function CaboDeGuerraOnline() {
   const [operacao, setOperacao] = useState<{ texto: string, resposta: number } | null>(null);
   const [resposta, setResposta] = useState('');
   const [ganhador, setGanhador] = useState<string | null>(null);
+  const [puxandoEsq, setPuxandoEsq] = useState(false);
+  const [puxandoDir, setPuxandoDir] = useState(false);
 
   const roomIdRef = useRef<string>('');
   const ropeAnim = useRef(new Animated.Value(0)).current;
-
-  // =========================================================================
-  // MAPEAMENTO DA ANIMAÇÃO CORRIGIDO (Linhas 10, 11, 12, 13)
-  // =========================================================================
-  const framesCaboDeGuerra = [
-    { linha: 10, coluna: 0 },
-    { linha: 11, coluna: 0 },
-    { linha: 12, coluna: 0 },
-    { linha: 13, coluna: 0 }
-  ];
 
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
@@ -149,7 +171,17 @@ export default function CaboDeGuerraOnline() {
   useEffect(() => {
     socket.emit('update_status', { status: 'JOGANDO_ONLINE' });
 
+    let ultimaPosicao = 0;
+
     const onStateUpdate = (data: any) => {
+      // Gatilho visual de esforço: quem puxou a corda agora?
+      if (data.rope_position > ultimaPosicao) {
+         setPuxandoEsq(true); setTimeout(() => setPuxandoEsq(false), 200);
+      } else if (data.rope_position < ultimaPosicao) {
+         setPuxandoDir(true); setTimeout(() => setPuxandoDir(false), 200);
+      }
+      ultimaPosicao = data.rope_position;
+
       const limiteFisico = (width / 2) - 50; 
       const targetVal = (data.rope_position / 10) * limiteFisico;
       
@@ -225,29 +257,19 @@ export default function CaboDeGuerraOnline() {
       <View style={styles.arena}>
         <View style={styles.playersRow}>
           
-          <View style={styles.playerWrapper}>
-            <Text style={[styles.playerName, { color: isP1 ? '#00FFFF' : '#FFA500' }]}>{isP1 ? 'Você' : oponenteNome}</Text>
-            <SpriteAnimado 
-              imagem={isP1 ? ImgLulaMolusco : ImgLord} 
-              larguraFrame={120} 
-              alturaFrame={120} 
-              frames={framesCaboDeGuerra} 
-              isPuxando={tela === 'jogo'} 
-              viradoParaEsquerda={false}
-            />
-          </View>
+          <AvatarNeon 
+            nome={isP1 ? 'Você' : oponenteNome} 
+            isEsquerda={true} 
+            isPuxando={puxandoEsq} 
+            cor={isP1 ? '#00FFFF' : '#FFA500'} 
+          />
 
-          <View style={styles.playerWrapper}>
-            <Text style={[styles.playerName, { color: !isP1 ? '#00FFFF' : '#FFA500' }]}>{!isP1 ? 'Você' : oponenteNome}</Text>
-            <SpriteAnimado 
-              imagem={!isP1 ? ImgLulaMolusco : ImgLord} 
-              larguraFrame={120} 
-              alturaFrame={120} 
-              frames={framesCaboDeGuerra} 
-              isPuxando={tela === 'jogo'} 
-              viradoParaEsquerda={true} 
-            />
-          </View>
+          <AvatarNeon 
+            nome={!isP1 ? 'Você' : oponenteNome} 
+            isEsquerda={false} 
+            isPuxando={puxandoDir} 
+            cor={!isP1 ? '#00FFFF' : '#FFA500'} 
+          />
 
         </View>
 
@@ -317,9 +339,11 @@ const styles = StyleSheet.create({
   
   arena: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
   playersRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, alignItems: 'flex-end' },
+  
   playerWrapper: { alignItems: 'center', zIndex: 2 },
   playerName: { fontWeight: '900', fontSize: 16, textTransform: 'uppercase', marginBottom: 10 },
-  
+  avatarCircle: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10, elevation: 10 },
+
   ropeContainer: { height: 80, justifyContent: 'center', alignItems: 'center', position: 'relative', marginTop: -60, zIndex: 1 },
   rope: { position: 'absolute', width: '100%', height: 12, backgroundColor: '#8B4513', borderRadius: 6, elevation: 3 },
   ropeCenterMark: { position: 'absolute', width: 4, height: 24, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2 },
