@@ -92,6 +92,7 @@ class AdminUsuarioUpdate(BaseModel):
     senha: Optional[str] = None
     ativo: Optional[bool] = None
     pontosTotais: Optional[int] = None
+    recordeJogoSingle: Optional[int] = None
 
 class ArcadeScore(BaseModel):
     pontos: int
