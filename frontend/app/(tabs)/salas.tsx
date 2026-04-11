@@ -9,6 +9,8 @@ import { socket } from '../../src/services/socket';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 
 export default function Salas() {
   const { user } = useAuth();
