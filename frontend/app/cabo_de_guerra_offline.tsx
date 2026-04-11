@@ -135,8 +135,6 @@ export default function CaboDeGuerraOffline() {
   const [resposta, setResposta] = useState('');
   const [ganhador, setGanhador] = useState<'player' | 'bot' | 'empate' | null>(null);
   const [ropePosition, setRopePosition] = useState(0);
-  
-  // NOVO: CRONÔMETRO (2 minutos)
   const [tempoRestante, setTempoRestante] = useState(120);
 
   const [leftState, setLeftState] = useState('idle');
@@ -150,7 +148,41 @@ export default function CaboDeGuerraOffline() {
   const ropeAnim = useRef(new Animated.Value(0)).current;
 
   // =========================================================================
-  // FÁBRICA DE MATEMÁTICA CORRIGIDA (FRONTEND)
+  // SISTEMA DE ÁUDIO INTELIGENTE (SEM FADIGA AUDITIVA)
+  // =========================================================================
+  const lastSoundTime = useRef<number>(0);
+
+  const tocarSomPuxada = async () => {
+    const now = Date.now();
+    // Cooldown: O som só toca se tiver passado 400ms desde o último
+    if (now - lastSoundTime.current < 400) return; 
+    lastSoundTime.current = now;
+
+    // Um som genérico, limpo e curto de "swoosh" (puxão)
+    const urlSom = 'https://www.myinstants.com/media/sounds/swoosh.mp3'; 
+    // Varia o tom entre 0.8 (grave) e 1.2 (agudo) para não parecer um disco arranhado
+    const rate = 0.8 + Math.random() * 0.4; 
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        try {
+            const audio = new Audio(urlSom);
+            audio.playbackRate = rate;
+            audio.play();
+        } catch(e) {}
+    } else {
+        try {
+            const { Audio } = require('expo-av');
+            const { sound } = await Audio.Sound.createAsync({ uri: urlSom });
+            await sound.setRateAsync(rate, true);
+            await sound.playAsync();
+            // Descarrega o som da memória do celular após 1 segundo
+            setTimeout(() => sound.unloadAsync(), 1000); 
+        } catch(e) { console.log("Erro ao tocar som: ", e) }
+    }
+  };
+
+  // =========================================================================
+  // FÁBRICA DE MATEMÁTICA CORRIGIDA
   // =========================================================================
   const gerarNovaOperacao = (modo: string) => {
     const ops_disponiveis = modo === 'soma' ? ['+'] :
@@ -158,7 +190,7 @@ export default function CaboDeGuerraOffline() {
                             modo === 'multiplicacao' ? ['x'] :
                             modo === 'divisao' ? ['/'] :
                             modo === 'potenciacao' ? ['^', 'v'] :
-                            ['+', '-', 'x', '/', '^', 'v']; // misto
+                            ['+', '-', 'x', '/', '^', 'v'];
                             
     const op = ops_disponiveis[Math.floor(Math.random() * ops_disponiveis.length)];
     let texto = "";
@@ -174,15 +206,12 @@ export default function CaboDeGuerraOffline() {
         const n1 = Math.floor(Math.random() * 10) + 1; const n2 = Math.floor(Math.random() * 10) + 1;
         res = n1 * n2; texto = `${n1} x ${n2}`;
     } else if (op === '/') {
-        const n2 = Math.floor(Math.random() * 9) + 2; 
-        res = Math.floor(Math.random() * 9) + 2; 
+        const n2 = Math.floor(Math.random() * 9) + 2; res = Math.floor(Math.random() * 9) + 2; 
         const n1 = n2 * res; texto = `${n1} ÷ ${n2}`;
     } else if (op === '^') {
-        const n1 = Math.floor(Math.random() * 9) + 2; 
-        res = n1 * n1; texto = `${n1}²`;
+        const n1 = Math.floor(Math.random() * 9) + 2; res = n1 * n1; texto = `${n1}²`;
     } else if (op === 'v') {
-        res = Math.floor(Math.random() * 9) + 2; 
-        const n1 = res * res; texto = `√${n1}`;
+        res = Math.floor(Math.random() * 9) + 2; const n1 = res * res; texto = `√${n1}`;
     }
     setOperacao({ texto, resposta: res });
     timeUltimaPergunta.current = Date.now();
@@ -214,13 +243,9 @@ export default function CaboDeGuerraOffline() {
       if (botTimer.current) clearTimeout(botTimer.current);
 
       setRopePosition(prev => {
-          if (prev > 0) {
-              handleFimDeJogo('player');
-          } else if (prev < 0) {
-              handleFimDeJogo('bot');
-          } else {
-              handleFimDeJogo('empate');
-          }
+          if (prev > 0) handleFimDeJogo('player');
+          else if (prev < 0) handleFimDeJogo('bot');
+          else handleFimDeJogo('empate');
           return prev;
       });
   };
@@ -236,25 +261,27 @@ export default function CaboDeGuerraOffline() {
   // =========================================================================
   const agendarPuxadaRobo = () => {
     if (botTimer.current) clearTimeout(botTimer.current);
-    if (isGameOver.current || tela !== 'jogo') return;
+    
+    // CORREÇÃO: O robô travava porque a variável "tela" não atualizava na memória dele a tempo. 
+    // Usamos apenas o isGameOver.current que é 100% à prova de falhas.
+    if (isGameOver.current) return;
 
     let delayDoRobo = 4500; 
     
     if (playerTimes.current.length > 0) {
         const mediaAluno = playerTimes.current.reduce((a,b)=>a+b,0) / playerTimes.current.length;
         delayDoRobo = mediaAluno * 1.15; 
-        
         if (delayDoRobo < 1500) delayDoRobo = 1500; 
         if (delayDoRobo > 7000) delayDoRobo = 7000; 
     }
 
     botTimer.current = setTimeout(() => {
-        if (isGameOver.current || tela !== 'jogo') return;
+        if (isGameOver.current) return;
+        
+        tocarSomPuxada(); // O Robô fez força!
         
         setRopePosition(prev => {
-            const next = prev - 1; // Robô puxa para a esquerda (negativo)
-            
-            // CORREÇÃO: Removido o * -1 que invertia a direção visual
+            const next = prev - 1; 
             Animated.spring(ropeAnim, { toValue: next, useNativeDriver: false, friction: 5, tension: 30 }).start();
             
             setLeftState('pull');
@@ -264,17 +291,14 @@ export default function CaboDeGuerraOffline() {
             return next;
         });
 
-        // CORREÇÃO: O robô agora agenda a próxima puxada por conta própria
-        if (!isGameOver.current) {
-            agendarPuxadaRobo(); 
-        }
+        if (!isGameOver.current) agendarPuxadaRobo(); 
     }, delayDoRobo);
   };
 
   const iniciarJogo = (modo: string) => {
       setModoEscolhido(modo);
       setRopePosition(0);
-      setTempoRestante(120); // Reseta o cronômetro
+      setTempoRestante(120); 
       playerTimes.current = [];
       isGameOver.current = false;
       setGanhador(null);
@@ -284,20 +308,16 @@ export default function CaboDeGuerraOffline() {
       
       setTela('jogo');
       gerarNovaOperacao(modo);
-      agendarPuxadaRobo(); // Dá a largada no robô
+      agendarPuxadaRobo(); 
   };
 
   const handleFimDeJogo = async (vencedor: 'player' | 'bot' | 'empate') => {
       isGameOver.current = true;
       if (botTimer.current) clearTimeout(botTimer.current);
       
-      if (vencedor === 'bot') {
-          setLeftState('win'); setRightState('lose');
-      } else if (vencedor === 'player') {
-          setLeftState('lose'); setRightState('win');
-      } else {
-          setLeftState('lose'); setRightState('lose'); // Ambos perdem/cansam no empate
-      }
+      if (vencedor === 'bot') { setLeftState('win'); setRightState('lose'); } 
+      else if (vencedor === 'player') { setLeftState('lose'); setRightState('win'); } 
+      else { setLeftState('lose'); setRightState('lose'); }
 
       setGanhador(vencedor);
       setTimeout(() => setTela('resultado'), 1500);
@@ -306,18 +326,14 @@ export default function CaboDeGuerraOffline() {
       if (vencedor === 'bot') {
          if (Platform.OS === 'web' && typeof window !== 'undefined') {
             const utter = new SpeechSynthesisUtterance("Ha ha ha ha! Eu venci!");
-            utter.lang = 'pt-BR';
-            utter.pitch = 0.5; // Voz grossa
-            window.speechSynthesis.speak(utter);
+            utter.lang = 'pt-BR'; utter.pitch = 0.5; window.speechSynthesis.speak(utter);
          } else {
              try {
                  const { Audio } = require('expo-av');
                  const somRisada = new Audio.Sound();
                  await somRisada.loadAsync({ uri: 'https://www.myinstants.com/media/sounds/evil-laugh.mp3' });
                  await somRisada.playAsync();
-             } catch (e) {
-                 console.log("Áudio não pôde ser reproduzido, usando apenas emojis visuais.");
-             }
+             } catch (e) { console.log("Áudio bloqueado."); }
          }
       }
   };
@@ -329,16 +345,8 @@ export default function CaboDeGuerraOffline() {
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
 
   const getTeclaFromCoords = (x: number, y: number) => {
-    let col = -1;
-    if (x >= 0 && x <= 100) col = 0;
-    else if (x > 100 && x <= 200) col = 1;
-    else if (x > 200 && x <= 300) col = 2;
-    let row = -1;
-    if (y >= 0 && y <= 60) row = 0;
-    else if (y > 60 && y <= 120) row = 1;
-    else if (y > 120 && y <= 180) row = 2;
-    else if (y > 180 && y <= 240) row = 3;
-
+    let col = -1; if (x >= 0 && x <= 100) col = 0; else if (x > 100 && x <= 200) col = 1; else if (x > 200 && x <= 300) col = 2;
+    let row = -1; if (y >= 0 && y <= 60) row = 0; else if (y > 60 && y <= 120) row = 1; else if (y > 120 && y <= 180) row = 2; else if (y > 180 && y <= 240) row = 3;
     if (col === -1 || row === -1) return null;
     const layout = [['7','8','9'], ['4','5','6'], ['1','2','3'], ['apagar','0','enviar']];
     return layout[row][col];
@@ -348,32 +356,19 @@ export default function CaboDeGuerraOffline() {
     if (Platform.OS === 'web') return;
     const touches = evt.nativeEvent.touches;
     const currentActive = new Set<string>();
-
     for (let i = 0; i < touches.length; i++) {
       const key = getTeclaFromCoords(touches[i].locationX, touches[i].locationY);
       if (key) currentActive.add(key);
     }
     setTeclasPressionadas(Array.from(currentActive));
-
-    currentActive.forEach(key => {
-      if (!triggeredTouchesRef.current.has(key)) {
-        triggeredTouchesRef.current.add(key);
-        executarAcaoTecla(key);
-      }
-    });
-
-    triggeredTouchesRef.current.forEach(key => {
-      if (!currentActive.has(key)) triggeredTouchesRef.current.delete(key);
-    });
+    currentActive.forEach(key => { if (!triggeredTouchesRef.current.has(key)) { triggeredTouchesRef.current.add(key); executarAcaoTecla(key); } });
+    triggeredTouchesRef.current.forEach(key => { if (!currentActive.has(key)) triggeredTouchesRef.current.delete(key); });
   };
 
   const executarAcaoTecla = (valor: string) => {
     setResposta(prev => {
         if (valor === 'apagar') return prev.slice(0, -1);
-        if (valor === 'enviar') {
-            setTimeout(() => submeterResposta(prev), 0);
-            return prev;
-        }
+        if (valor === 'enviar') { setTimeout(() => submeterResposta(prev), 0); return prev; }
         return prev.length < 5 ? prev + valor : prev;
     });
   };
@@ -382,14 +377,13 @@ export default function CaboDeGuerraOffline() {
     if (!operacao || isGameOver.current) return;
 
     if (parseInt(valorAtual) === operacao.resposta) {
-        // ACERTOU! Salva o tempo para o Robô aprender e puxa a corda
         const tempoGasto = Date.now() - timeUltimaPergunta.current;
         playerTimes.current.push(tempoGasto);
         
+        tocarSomPuxada(); // O Aluno fez força!
+        
         setRopePosition(prev => {
-            const next = prev + 1; // Player puxa para a direita (positivo)
-            
-            // CORREÇÃO: Removido o * -1 que invertia a direção visual
+            const next = prev + 1; 
             Animated.spring(ropeAnim, { toValue: next, useNativeDriver: false, friction: 5, tension: 30 }).start();
             
             setRightState('pull');
@@ -412,10 +406,8 @@ export default function CaboDeGuerraOffline() {
             if (e.key >= '0' && e.key <= '9') key = e.key;
             else if (e.key === 'Backspace' || e.key === 'Delete') key = 'apagar';
             else if (e.key === 'Enter') key = 'enviar';
-
             if (key) {
-                executarAcaoTecla(key);
-                setTeclasPressionadas(prev => [...prev, key]);
+                executarAcaoTecla(key); setTeclasPressionadas(prev => [...prev, key]);
                 setTimeout(() => setTeclasPressionadas(prev => prev.filter(k => k !== key)), 150);
             }
         };
@@ -424,10 +416,7 @@ export default function CaboDeGuerraOffline() {
     }
   }, [tela, operacao]);
 
-  // Limpeza de Timers ao sair
-  useEffect(() => {
-     return () => { if (botTimer.current) clearTimeout(botTimer.current); };
-  }, []);
+  useEffect(() => { return () => { if (botTimer.current) clearTimeout(botTimer.current); }; }, []);
 
   const ropeKnotPosition = ropeAnim.interpolate({ inputRange: [-10, 10], outputRange: ['10%', '90%'], extrapolate: 'clamp' });
 
@@ -471,16 +460,14 @@ export default function CaboDeGuerraOffline() {
     const venci = ganhador === 'player';
     const empate = ganhador === 'empate';
 
-    const titulo = empate ? 'Tempo Esgotado! Empate!' : (venci ? 'Você Venceu o Robô!' : 'Fim da Linha!');
+    const titulo = empate ? 'Tempo Esgotado!' : (venci ? 'Você Venceu o Robô!' : 'Fim da Linha!');
     const cor = empate ? '#888' : (venci ? '#32CD32' : '#FF4500');
     const icone = empate ? 'time' : (venci ? 'trophy' : 'skull');
 
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.resultadoContainer}>
-          <Text style={[styles.resultadoTitle, { color: cor }]}>
-              {titulo}
-          </Text>
+          <Text style={[styles.resultadoTitle, { color: cor }]}>{titulo}</Text>
           <Ionicons name={icone} size={100} color={cor} style={{ marginBottom: 20 }} />
           <Text style={{ color: '#aaa', fontSize: 16, marginBottom: 30, textAlign: 'center' }}>
               {empate ? 'Nenhum dos dois teve força suficiente para vencer a tempo.' : 
@@ -511,14 +498,17 @@ export default function CaboDeGuerraOffline() {
       </View>
 
       <View style={styles.arena}>
-        <View style={styles.namesRow}>
-           <Text style={[styles.playerName, { color: '#555', textShadowColor: '#FF0000', textShadowRadius: 10 }]}>ROBÔ I.A.</Text>
-           
+        
+        {/* CORREÇÃO DO CRONÔMETRO: Removido do meio e isolado no topo */}
+        <View style={styles.timerTopContainer}>
            <View style={styles.timerContainer}>
-              <Ionicons name="time-outline" size={16} color={tempoRestante <= 15 ? '#FF4500' : '#FFF'} />
+              <Ionicons name="time-outline" size={18} color={tempoRestante <= 15 ? '#FF4500' : '#FFF'} />
               <Text style={[styles.timerText, { color: tempoRestante <= 15 ? '#FF4500' : '#FFF' }]}>{formatarTempo(tempoRestante)}</Text>
            </View>
+        </View>
 
+        <View style={styles.namesRow}>
+           <Text style={[styles.playerName, { color: '#555', textShadowColor: '#FF0000', textShadowRadius: 10 }]}>ROBÔ I.A.</Text>
            <Text style={[styles.playerName, { color: '#4169E1', textShadowColor: '#4169E1', textShadowRadius: 10 }]}>VOCÊ</Text>
         </View>
 
@@ -592,11 +582,13 @@ const styles = StyleSheet.create({
   menuButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 
   arena: { flex: 1, justifyContent: 'center', paddingHorizontal: 10, position: 'relative' },
-  namesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'absolute', top: 10, width: '100%', paddingHorizontal: 20, zIndex: 10 },
-  playerName: { fontWeight: '900', fontSize: 18, textTransform: 'uppercase' },
   
-  timerContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#222', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, gap: 6, borderWidth: 1, borderColor: '#444' },
+  timerTopContainer: { alignItems: 'center', marginBottom: 10, zIndex: 10 },
+  timerContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#222', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, gap: 6, borderWidth: 1, borderColor: '#444' },
   timerText: { fontWeight: 'bold', fontSize: 16 },
+
+  namesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'absolute', top: 50, width: '100%', paddingHorizontal: 20, zIndex: 5 },
+  playerName: { fontWeight: '900', fontSize: 18, textTransform: 'uppercase' },
 
   field: { height: 120, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 10, position: 'relative', marginTop: 30 },
   teamLeftZone: { flex: 1, alignItems: 'flex-start', zIndex: 5, paddingLeft: 10 },
