@@ -7,25 +7,32 @@ export default function OnlineHeartbeat() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!user) return;
+    // Se o usuário não estiver logado, garante que a conexão seja encerrada
+    if (!user) {
+      if (socket.connected) {
+        socket.disconnect();
+      }
+      return;
+    }
 
-    // Essa é a função salva-vidas. Ela obriga o servidor a registrar
-    // o ID novo do socket como o usuário real, tirando ele do modo "Fantasma"
     const restaurarConexao = () => {
       socket.emit('register_player', { user_id: user.id, name: user.nome });
       socket.emit('request_sync');
       socket.emit('get_lobbies');
     };
 
-    // 1. Quando o componente monta e já tem internet
+    // 1. Quando o componente monta (ex: fez login)
     if (socket.connected) {
       restaurarConexao();
+    } else {
+      // OPA! Se não estiver conectado, manda conectar AGORA!
+      socket.connect();
     }
 
-    // 2. Se a internet cair (caminhar na rua, trocar de Wi-Fi pra 4G) e voltar
+    // 2. Se a internet cair e voltar
     socket.on('connect', restaurarConexao);
 
-    // 3. O SEGREDO DO MOBILE: Se o aluno bloquear a tela e desbloquear
+    // 3. Quando o aluno bloquear a tela e desbloquear
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
         if (!socket.connected) {
