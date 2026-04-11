@@ -5,16 +5,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
 
-// IMPORTAÇÃO DO MOTOR DE SPRITES E DAS IMAGENS QUE VOCÊ SALVOU
+// IMPORTAÇÃO DO MOTOR DE SPRITES E DAS IMAGENS
 import SpriteAnimado from '../src/components/SpriteAnimado';
 const ImgLulaMolusco = require('../assets/images/PC_Squidward.jpg');
 const ImgLord = require('../assets/images/PC_LordRoyal.jpg');
 
 const { width } = Dimensions.get('window');
 
-// =========================================================================
-// BOTÃO VISUAL (Controlado pelo Radar Matemático Nuclear)
-// =========================================================================
 const BotaoVisual = ({ valor, isPressed, onPressWeb }: any) => {
   return (
     <TouchableOpacity
@@ -47,16 +44,16 @@ export default function CaboDeGuerraOnline() {
   const roomIdRef = useRef<string>('');
   const ropeAnim = useRef(new Animated.Value(0)).current;
 
-  // MAPEAMENTO DA ANIMAÇÃO (Ajuste a linha e coluna se cortar a cabeça do personagem)
+  // =========================================================================
+  // MAPEAMENTO DA ANIMAÇÃO CORRIGIDO (Linhas 10, 11, 12, 13)
+  // =========================================================================
   const framesCaboDeGuerra = [
-    { linha: 8, coluna: 0 },
-    { linha: 8, coluna: 1 },
-    { linha: 8, coluna: 2 }
+    { linha: 10, coluna: 0 },
+    { linha: 11, coluna: 0 },
+    { linha: 12, coluna: 0 },
+    { linha: 13, coluna: 0 }
   ];
 
-  // =========================================================================
-  // SISTEMA NUCLEAR DE TECLADO (RADAR CARTESIANO)
-  // =========================================================================
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
 
@@ -139,9 +136,6 @@ export default function CaboDeGuerraOnline() {
     }
   }, [tela]);
 
-  // =========================================================================
-  // SINCRONIZAÇÃO COM O SERVIDOR
-  // =========================================================================
   useEffect(() => {
     if (activeMatchData && activeMatchData.game_type === 'tugofwar') {
       roomIdRef.current = activeMatchData.room_id;
@@ -231,7 +225,6 @@ export default function CaboDeGuerraOnline() {
       <View style={styles.arena}>
         <View style={styles.playersRow}>
           
-          {/* LADO ESQUERDO: LULA MOLUSCO */}
           <View style={styles.playerWrapper}>
             <Text style={[styles.playerName, { color: isP1 ? '#00FFFF' : '#FFA500' }]}>{isP1 ? 'Você' : oponenteNome}</Text>
             <SpriteAnimado 
@@ -244,7 +237,6 @@ export default function CaboDeGuerraOnline() {
             />
           </View>
 
-          {/* LADO DIREITO: LORD ROYAL HIGHNESS */}
           <View style={styles.playerWrapper}>
             <Text style={[styles.playerName, { color: !isP1 ? '#00FFFF' : '#FFA500' }]}>{!isP1 ? 'Você' : oponenteNome}</Text>
             <SpriteAnimado 
