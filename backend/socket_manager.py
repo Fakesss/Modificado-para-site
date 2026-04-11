@@ -313,9 +313,25 @@ async def cancel_lobby_challenge(sid, data):
 # ====================================================
 @sio.event
 async def register_player(sid, data):
+    user_id = data.get('user_id')
+    if not user_id: return
+
+    # 🧹 CAÇA-FANTASMAS: Se o jogador reconectou (celular bloqueou/desbloqueou), 
+    # varre o servidor e mata as conexões antigas dele presas na memória.
+    sids_to_disconnect = []
+    for old_sid, info in players_online.items():
+        if old_sid != sid and info.get('user_id') == user_id:
+            sids_to_disconnect.append(old_sid)
+            
+    for old_sid in sids_to_disconnect:
+        try:
+            await sio.disconnect(old_sid)
+        except Exception:
+            pass
+
     if sid in players_online:
         players_online[sid]['name'] = data.get('name', 'Jogador')
-        players_online[sid]['user_id'] = data.get('user_id')
+        players_online[sid]['user_id'] = user_id
         await broadcast_online_users()
 
 @sio.event
@@ -557,7 +573,6 @@ async def start_tugofwar_match(p1_sid, p2_sid, modo_operacao):
     p1_eq, p1_perf = None, "ALUNO"
     p2_eq, p2_perf = None, "ALUNO"
     
-    # 🚀 Busca as equipes reais usando o banco seguro inicializado neste arquivo
     if db is not None:
         try:
             user1 = await db.usuarios.find_one({"id": players_online[p1_sid].get('user_id')})
