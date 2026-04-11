@@ -3,14 +3,13 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Alert, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
 import { useAuth } from '../src/context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
 // =========================================================================
-// O TIME ANIMADO (Os 3 Personagens com Estados de Animação)
+// O TIME ANIMADO (3 Personagens)
 // =========================================================================
 const AnimatedTeam = ({ isLeft, config, teamState }: any) => {
   const animVal = useRef(new Animated.Value(0)).current;
@@ -70,21 +69,8 @@ const AnimatedTeam = ({ isLeft, config, teamState }: any) => {
   );
 };
 
-const NeonRopeSide = ({ config, isLeft }: any) => {
-  if (config.isRainbow) {
-    return (
-      <LinearGradient 
-        style={styles.ropeGradient} 
-        colors={isLeft ? ['#00BFFF', '#32CD32', '#FFD700', '#00BFFF'] : ['#FFD700', '#32CD32', '#00BFFF', '#FFD700']} 
-        start={{x: 0, y: 0}} end={{x: 1, y: 0}} 
-      />
-    );
-  }
-  return <View style={[styles.solidRope, { backgroundColor: config.core, shadowColor: config.glow }]} />;
-};
-
 // =========================================================================
-// BOTÃO VISUAL DO TECLADO RADAR
+// BOTÃO VISUAL DO TECLADO
 // =========================================================================
 const BotaoVisual = ({ valor, isPressed, onPressWeb }: any) => {
   return (
@@ -126,7 +112,7 @@ export default function CaboDeGuerraOnline() {
   const ropeAnim = useRef(new Animated.Value(0)).current;
 
   // =========================================================================
-  // MOTOR DE CORES DINÂMICO (Suas equipes exatas)
+  // MOTOR DE CORES E ARCO-ÍRIS DO ADMIN
   // =========================================================================
   const baseTeamColors: any = {
     'AZUL': '#00BFFF',
@@ -146,12 +132,18 @@ export default function CaboDeGuerraOnline() {
     return () => clearInterval(interval);
   }, []);
 
-  const getTeamConfig = (equipeName: string, role: string, isLocalPlayer: boolean, opponentEquipe: string) => {
-    if (role === 'ADMIN' || role?.includes('admin')) return { isRainbow: true, core: adminColor, glow: adminColor };
+  const getTeamConfig = (equipeName: string, role: string, email: string, isLocalPlayer: boolean, opponentEquipe: string) => {
+    // Verifica se é o Admin (Prof. Daniel)
+    if (role === 'ADMIN' || role?.includes('admin') || email === 'danielprofessormatematica@gmail.com') {
+        return { isRainbow: true, core: adminColor, glow: adminColor, isGhost: false };
+    }
   
     const name = equipeName?.toUpperCase() || 'AZUL';
-    const teamColor = baseTeamColors[name] || baseTeamColors['AZUL'];
+    let teamColor = '#00BFFF';
+    if (name.includes('AMARELO')) teamColor = '#FFD700';
+    else if (name.includes('VERDE')) teamColor = '#32CD32';
   
+    // Prevenção de conflito visual se ambos forem do mesmo time
     if (!isLocalPlayer && name === opponentEquipe?.toUpperCase()) {
         return { isRainbow: false, core: '#FFFFFF', glow: teamColor, isGhost: true };
     }
@@ -160,7 +152,7 @@ export default function CaboDeGuerraOnline() {
   };
 
   // =========================================================================
-  // RADAR MATEMÁTICO INVISÍVEL
+  // TECLADO RADAR
   // =========================================================================
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
@@ -256,7 +248,7 @@ export default function CaboDeGuerraOnline() {
 
   const abandonarPartida = () => {
     if (Platform.OS === 'web') {
-      if (window.confirm("Tem certeza que deseja abandonar a corda?")) {
+      if (window.confirm("Tem certeza que deseja abandonar a corda? Oponente vencerá!")) {
         performLeaveMatch();
         router.replace('/salas');
       }
@@ -311,21 +303,21 @@ export default function CaboDeGuerraOnline() {
       const diff = data.rope_position - ultimaPosicao.current;
       
       if (diff !== 0) {
-         // Lógica Perfeita: Se eu sou P1, meu favor é negativo. Se eu sou P2, meu favor é positivo.
+         // O jogador local (Você) sempre está na DIREITA. 
          const iPulled = isP1 ? (diff < 0) : (diff > 0);
          
          if (iPulled) {
-            setRightState('pull'); // Eu fico sempre na Direita
+            setRightState('pull');
             setTimeout(() => { if(!isGameOver.current) setRightState('idle') }, 300);
          } else {
-            setLeftState('pull'); // Oponente fica na Esquerda
+            setLeftState('pull');
             setTimeout(() => { if(!isGameOver.current) setLeftState('idle') }, 300);
          }
       }
       
       ultimaPosicao.current = data.rope_position;
 
-      // Mapeamento Visual: -10 (Oponente ganha / Nó vai pra Esquerda), +10 (Eu ganho / Nó vai pra Direita)
+      // Mapeamento Visual: Oponente(Esq) puxa -> negativo. Você(Dir) puxa -> positivo.
       const visualTarget = isP1 ? (data.rope_position * -1) : data.rope_position;
 
       Animated.spring(ropeAnim, { toValue: visualTarget, useNativeDriver: false, friction: 5, tension: 30 }).start();
@@ -382,18 +374,18 @@ export default function CaboDeGuerraOnline() {
   const meuTime = user?.equipe || 'AZUL';
   const timeOponente = activeMatchData?.opponentTeam || 'AMARELO'; 
   const roleOponente = activeMatchData?.opponentRole || 'ALUNO';
+  const meuEmail = user?.email || '';
 
-  // Configurações travadas na perspectiva (Esquerda = Oponente, Direita = Você)
-  const leftConfig = getTeamConfig(timeOponente, roleOponente, false, meuTime);
-  const rightConfig = getTeamConfig(meuTime, user?.role || 'ALUNO', true, timeOponente);
+  // Você sempre fica na Direita, o Oponente na Esquerda
+  const leftConfig = getTeamConfig(timeOponente, roleOponente, '', false, meuTime);
+  const rightConfig = getTeamConfig(meuTime, user?.role || 'ALUNO', meuEmail, true, timeOponente);
 
-  const leftWidth = ropeAnim.interpolate({ inputRange: [-10, 10], outputRange: ['100%', '0%'], extrapolate: 'clamp' });
-  const rightWidth = ropeAnim.interpolate({ inputRange: [-10, 10], outputRange: ['0%', '100%'], extrapolate: 'clamp' });
+  // Animação da bolinha no cabo (-10 = Vitória do Oponente/Esquerda, +10 = Sua Vitória/Direita)
   const knotPosition = ropeAnim.interpolate({ inputRange: [-10, 10], outputRange: ['10%', '90%'], extrapolate: 'clamp' });
 
   if (tela === 'resultado') {
     const venci = ganhador === socket.id;
-    const finalColor = venci ? (rightConfig.isRainbow ? '#FFD700' : rightConfig.core) : '#888';
+    const finalColor = venci ? (rightConfig.isRainbow ? adminColor : rightConfig.core) : '#888';
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.resultadoContainer}>
@@ -420,7 +412,7 @@ export default function CaboDeGuerraOnline() {
 
       <View style={styles.arena}>
         <View style={styles.namesRow}>
-           <Text style={[styles.playerName, { color: leftConfig.isRainbow ? '#FFD700' : leftConfig.core, textShadowColor: leftConfig.glow, textShadowRadius: 10 }]}>{oponenteNome}</Text>
+           <Text style={[styles.playerName, { color: leftConfig.isRainbow ? adminColor : leftConfig.core, textShadowColor: leftConfig.glow, textShadowRadius: 10 }]}>{oponenteNome}</Text>
            <Text style={[styles.playerName, { color: rightConfig.isGhost ? '#FFF' : rightConfig.core, textShadowColor: rightConfig.glow, textShadowRadius: 10 }]}>Você</Text>
         </View>
 
@@ -433,12 +425,11 @@ export default function CaboDeGuerraOnline() {
                <AnimatedTeam isLeft={false} config={rightConfig} teamState={rightState} />
             </View>
 
-            {/* Eixo da corda subiu para top: '45%' (Alinhado com as mãos) */}
-            <View style={styles.neonTrack}>
-               <Animated.View style={[styles.ropeLeft, { width: leftWidth }]}><NeonRopeSide config={leftConfig} isLeft={true} /></Animated.View>
-               <Animated.View style={[styles.ropeKnot, { left: knotPosition }]}><View style={[styles.knotCore, { shadowColor: '#FFF' }]} /></Animated.View>
-               <Animated.View style={[styles.ropeRight, { width: rightWidth }]}><NeonRopeSide config={rightConfig} isLeft={false} /></Animated.View>
-            </View>
+            {/* A Corda Clássica: Linha Branca e Nó Vermelho subiu para top: 40 */}
+            <View style={styles.ropeLine} />
+            <Animated.View style={[styles.ropeKnot, { left: knotPosition }]}>
+               <View style={styles.knotCore} />
+            </Animated.View>
         </View>
       </View>
 
@@ -501,19 +492,14 @@ const styles = StyleSheet.create({
   namesRow: { flexDirection: 'row', justifyContent: 'space-between', position: 'absolute', top: 10, width: '100%', paddingHorizontal: 20 },
   playerName: { fontWeight: '900', fontSize: 18, textTransform: 'uppercase' },
 
-  field: { height: 120, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'relative' },
+  field: { height: 120, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 10, position: 'relative' },
   teamLeftZone: { flex: 1, alignItems: 'flex-start', zIndex: 5, paddingLeft: 10 },
   teamRightZone: { flex: 1, alignItems: 'flex-end', zIndex: 5, paddingRight: 10 },
   teamContainer: { alignItems: 'flex-end', paddingBottom: 10 },
 
-  neonTrack: { position: 'absolute', top: '45%', width: '100%', height: 6, flexDirection: 'row', zIndex: 1, marginHorizontal: 10 },
-  ropeLeft: { height: '100%', borderRadius: 3, overflow: 'hidden' },
-  ropeRight: { height: '100%', borderRadius: 3, overflow: 'hidden' },
-  ropeGradient: { flex: 1, shadowColor: '#FFF', shadowOpacity: 0.8, shadowRadius: 10, elevation: 10 },
-  solidRope: { flex: 1, shadowOpacity: 1, shadowRadius: 12, elevation: 10 },
-  
-  ropeKnot: { position: 'absolute', top: -9, width: 24, height: 24, marginLeft: -12, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-  knotCore: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#FFF', shadowOpacity: 1, shadowRadius: 15, elevation: 15 },
+  ropeLine: { position: 'absolute', top: 40, width: '100%', height: 3, backgroundColor: '#FFF', shadowColor: '#FFF', shadowOpacity: 0.8, shadowRadius: 10, elevation: 10, zIndex: 1 },
+  ropeKnot: { position: 'absolute', top: 40, width: 24, height: 24, marginTop: -10, marginLeft: -12, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+  knotCore: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#FF4500', shadowColor: '#FF4500', shadowOpacity: 1, shadowRadius: 15, elevation: 15, borderWidth: 2, borderColor: '#FFF' },
 
   panel: { backgroundColor: '#1a1a2e', padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30, alignItems: 'center', elevation: 10, borderTopWidth: 1, borderTopColor: '#333' },
   instruction: { color: '#AAA', fontSize: 14, marginBottom: 15, fontWeight: 'bold' },
