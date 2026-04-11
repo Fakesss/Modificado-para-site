@@ -316,8 +316,6 @@ async def register_player(sid, data):
     user_id = data.get('user_id')
     if not user_id: return
 
-    # 🧹 CAÇA-FANTASMAS: Se o jogador reconectou (celular bloqueou/desbloqueou), 
-    # varre o servidor e mata as conexões antigas dele presas na memória.
     sids_to_disconnect = []
     for old_sid, info in players_online.items():
         if old_sid != sid and info.get('user_id') == user_id:
@@ -435,30 +433,56 @@ async def cancel_matchmaking(sid):
     for q_name in matchmaking_queues:
         if sid in matchmaking_queues[q_name]: matchmaking_queues[q_name].remove(sid)
 
-
+# ====================================================
+# FÁBRICA DE MATEMÁTICA CORRIGIDA
+# ====================================================
 def gerar_operacao_simples(modo='misto'):
-    ops_disponiveis = ['+', '-', 'x']
+    ops_disponiveis = ['+', '-', 'x', '/', '^', 'v']
+    
     if modo == 'soma': 
         ops_disponiveis = ['+']
     elif modo == 'subtracao': 
         ops_disponiveis = ['-']
     elif modo == 'multiplicacao': 
         ops_disponiveis = ['x']
+    elif modo == 'divisao': 
+        ops_disponiveis = ['/']
+    elif modo == 'potenciacao': 
+        ops_disponiveis = ['^', 'v']
         
     op = random.choice(ops_disponiveis)
     
+    texto = ""
+    res = 0
+
     if op == '+': 
         n1, n2 = random.randint(1, 20), random.randint(1, 20)
         res = n1 + n2
+        texto = f"{n1} + {n2}"
     elif op == '-': 
         n1 = random.randint(10, 30)
         n2 = random.randint(1, n1)
         res = n1 - n2
-    else: 
+        texto = f"{n1} - {n2}"
+    elif op == 'x': 
         n1, n2 = random.randint(1, 10), random.randint(1, 10)
         res = n1 * n2
+        texto = f"{n1} x {n2}"
+    elif op == '/':
+        n2 = random.randint(2, 10)  # O Divisor
+        res = random.randint(2, 10) # O Resultado exato
+        n1 = n2 * res               # O Dividendo calculado para ser exato
+        texto = f"{n1} ÷ {n2}"
+    elif op == '^':
+        n1 = random.randint(2, 10)  # Base da potência
+        res = n1 ** 2               # Resultado
+        texto = f"{n1}²"
+    elif op == 'v':
+        res = random.randint(2, 10) # O resultado da raiz
+        n1 = res ** 2               # O que fica dentro da raiz
+        texto = f"√{n1}"
         
-    return {"texto": f"{n1} {op} {n2}", "resposta": res, "marcadoPor": None}
+    return {"texto": texto, "resposta": res, "marcadoPor": None}
 
 
 def check_win(board):
@@ -523,7 +547,6 @@ async def start_arcade_match(p1_sid, p2_sid, modo_operacao):
     
     return room_id 
 
-# 🚨 NOVO SINAL DO METRÔNOMO
 @sio.event
 async def arcade_host_spawn(sid, data):
     room_id = data.get('room_id')
