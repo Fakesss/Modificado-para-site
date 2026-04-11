@@ -18,7 +18,25 @@ export default function JogadoresOnline() {
   const [jogadorParaConvidar, setJogadorParaConvidar] = useState<any>(null);
   const [mostrarModosArcade, setMostrarModosArcade] = useState(false);
 
+  // =====================================================================
+  // CORREÇÃO DA CONDIÇÃO DE CORRIDA: REGISTRO SEGURO DE EVENTOS
+  // =====================================================================
   useEffect(() => {
+    const initSocket = () => {
+      if (user) socket.emit('register_player', { name: user.nome, user_id: user.id });
+      socket.emit('request_sync');
+      socket.emit('get_active_matches');
+    };
+
+    if (!socket.connected) {
+      socket.connect();
+    } else {
+      initSocket();
+    }
+
+    // Se o telefone estiver mudo no início, pede a lista logo após dar linha!
+    socket.on('connect', initSocket);
+
     const atualizaJogadores = (data: any[]) => {
       const eu = data.find(u => u.user_id === user?.id);
       if (eu) setAceitaConvites(eu.aceita_convites);
@@ -29,6 +47,7 @@ export default function JogadoresOnline() {
     socket.on('active_matches_list', setActiveMatches);
 
     return () => {
+      socket.off('connect', initSocket);
       socket.off('online_users_list', atualizaJogadores);
       socket.off('active_matches_list');
     };
@@ -37,23 +56,24 @@ export default function JogadoresOnline() {
   useFocusEffect(
     useCallback(() => {
       socket.emit('update_status', { status: 'MENU' });
-      socket.emit('get_active_matches');
-      socket.emit('request_sync');
-
-      // LOOP INTELIGENTE (Só funciona na Aba Online)
-      const interval = setInterval(() => {
-        socket.emit('request_sync');
-        socket.emit('get_active_matches');
-      }, 3000);
-
-      return () => {
-        clearInterval(interval);
+      
+      const fetchJogadores = () => {
+        if (socket.connected) {
+          socket.emit('request_sync');
+          socket.emit('get_active_matches');
+        }
       };
+
+      fetchJogadores();
+      const interval = setInterval(fetchJogadores, 3000);
+
+      return () => clearInterval(interval);
     }, [])
   );
 
   const onRefresh = () => {
     setRefreshing(true);
+    if (!socket.connected) socket.connect();
     socket.emit('get_active_matches');
     socket.emit('request_sync'); 
     setTimeout(() => setRefreshing(false), 1000);
@@ -79,6 +99,8 @@ export default function JogadoresOnline() {
   const assistirPartida = (roomId: string, gameType: string) => {
     if (gameType === 'arcade') {
       router.push(`/arcade_multi?spectate=${roomId}`);
+    } else if (gameType === 'tugofwar') {
+      router.push(`/cabo_de_guerra?spectate=${roomId}`);
     } else {
       router.push(`/tictactoe?spectate=${roomId}`);
     }
@@ -153,7 +175,9 @@ export default function JogadoresOnline() {
         {abaAtual === 'partidas' && activeMatches.map(match => (
           <View key={match.room_id} style={styles.card}>
             <View style={styles.info}>
-              <Text style={{color: '#FFD700', fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>{match.game_type === 'arcade' ? 'ARCADE TURBO' : 'JOGO DA VELHA'}</Text>
+              <Text style={{color: '#FFD700', fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>
+                {match.game_type === 'arcade' ? 'ARCADE TURBO' : match.game_type === 'tugofwar' ? 'CABO DE GUERRA' : 'JOGO DA VELHA'}
+              </Text>
               <Text style={styles.name}>{match.player1} <Text style={{color: '#FF4444'}}>vs</Text> {match.player2}</Text>
               <Text style={styles.statusText}>👁 {match.spectators_count} assistindo</Text>
             </View>
@@ -189,15 +213,16 @@ export default function JogadoresOnline() {
                 <TouchableOpacity style={styles.gameOptionBtn} onPress={() => setMostrarModosArcade(true)}>
                     <View style={[styles.iconContainer, {backgroundColor: '#4169E120'}]}><Ionicons name="rocket" size={28} color="#4169E1" /></View>
                     <View style={{flex: 1}}>
-                       <Text style={styles.gameOptionText}>Arcade Turbo</Text>
+                       <Text style={styles.gameOptionText}>Desafio por Tempo</Text>
                        <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Escolher operação...</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color="#888" />
                 </TouchableOpacity>
+
               </>
             ) : (
               <>
-                <Text style={styles.modalTitle}>MODO ARCADE</Text>
+                <Text style={styles.modalTitle}>ESCOLHA O MODO</Text>
                 <Text style={styles.modalText}>Selecione o desafio para {jogadorParaConvidar?.name}:</Text>
                 
                 <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center'}}>
@@ -209,12 +234,20 @@ export default function JogadoresOnline() {
                         {id: 'potenciacao', nome: 'Potên.', cor: '#FF8C00'},
                     ].map(m => (
                         <TouchableOpacity key={m.id} style={{backgroundColor: '#0c0c0c', padding: 15, borderRadius: 10, width: '45%', borderLeftWidth: 4, borderLeftColor: m.cor}} onPress={() => enviarConviteFinal('arcade', m.id)}>
-                            <Text style={{color: '#FFF', fontWeight: 'bold', textAlign: 'center'}}>{m.nome}</Text>
+                            <Text style={{color: '#FFF', fontWeight: 'bold', textAlign: 'center'}}>Arcade: {m.nome}</Text>
+                        </TouchableOpacity>
+                    ))}
+                    
+                    {[
+                        {id: 'soma', nome: 'Cabo de Guerra', cor: '#FF1493'},
+                    ].map(m => (
+                        <TouchableOpacity key={m.id} style={{backgroundColor: '#0c0c0c', padding: 15, borderRadius: 10, width: '92%', borderLeftWidth: 4, borderLeftColor: m.cor, marginTop: 10}} onPress={() => enviarConviteFinal('tugofwar', m.id)}>
+                            <Text style={{color: '#FFF', fontWeight: 'bold', textAlign: 'center'}}>⚔️ {m.nome} (Força e Velocidade)</Text>
                         </TouchableOpacity>
                     ))}
                 </View>
                 <TouchableOpacity style={{marginTop: 25, padding: 10}} onPress={() => setMostrarModosArcade(false)}>
-                    <Text style={{color: '#888', textAlign: 'center'}}>Voltar</Text>
+                    <Text style={{color: '#888', textAlign: 'center', fontWeight: 'bold'}}>Voltar</Text>
                 </TouchableOpacity>
               </>
             )}
