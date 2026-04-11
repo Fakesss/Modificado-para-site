@@ -3,43 +3,79 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Alert, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
 import { useAuth } from '../src/context/AuthContext';
 
+const { width } = Dimensions.get('window');
+
 // =========================================================================
-// O RAIO DE ENERGIA NEON (Substitui a Corda e Bandeira)
+// O TIME ANIMADO (Os 3 Personagens com Estados de Animação)
 // =========================================================================
-const BeamSide = ({ color, isLeft, isGhost }: any) => {
-  if (color === 'RAINBOW') {
-    return (
-      <LinearGradient 
-        style={StyleSheet.absoluteFill} 
-        colors={isLeft ? ['#00BFFF', '#32CD32', '#FFD700', '#FF4500'] : ['#FF4500', '#FFD700', '#32CD32', '#00BFFF']} 
-        start={{x: 0, y: 0}} end={{x: 1, y: 0}} 
-      />
-    );
-  }
-  
-  if (isGhost) {
-    return (
-       <View style={[
-         StyleSheet.absoluteFill, 
-         { backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: color, shadowColor: color, shadowRadius: 10, shadowOpacity: 1, elevation: 10 }
-       ]} />
-    );
-  }
+const AnimatedTeam = ({ isLeft, config, teamState }: any) => {
+  const animVal = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    animVal.stopAnimation();
+    if (teamState === 'pull') {
+      // Animação de fazer força (inclina para trás)
+      Animated.sequence([
+        Animated.timing(animVal, { toValue: 1, duration: 100, useNativeDriver: true }),
+        Animated.timing(animVal, { toValue: 0, duration: 300, useNativeDriver: true })
+      ]).start();
+    } else if (teamState === 'win') {
+      // Animação de pular (Vitória)
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(animVal, { toValue: 2, duration: 250, useNativeDriver: true }),
+          Animated.timing(animVal, { toValue: 0, duration: 250, useNativeDriver: true })
+        ])
+      ).start();
+    } else if (teamState === 'lose') {
+      // Animação de cair no chão (Derrota)
+      Animated.timing(animVal, { toValue: 3, duration: 400, useNativeDriver: true }).start();
+    } else {
+      // Estado Parado (Idle)
+      Animated.timing(animVal, { toValue: 0, duration: 200, useNativeDriver: true }).start();
+    }
+  }, [teamState]);
+
+  // Interpolações para cada estado
+  const rotation = animVal.interpolate({
+    inputRange: [0, 1, 2, 3],
+    outputRange: ['0deg', isLeft ? '-25deg' : '25deg', '0deg', isLeft ? '-90deg' : '90deg'] // 1=Força, 2=Pulo, 3=Caído
+  });
+
+  const translateY = animVal.interpolate({
+    inputRange: [0, 1, 2, 3],
+    outputRange: [0, 0, -25, 20] // 2=Pula para cima, 3=Cai no chão
+  });
+
+  const translateX = animVal.interpolate({
+    inputRange: [0, 1, 2, 3],
+    outputRange: [0, isLeft ? -10 : 10, 0, isLeft ? -15 : 15]
+  });
+
+  const color = config.isGhost ? '#FFF' : config.core;
+  const shadow = config.glow;
 
   return (
-    <View style={[
-      StyleSheet.absoluteFill, 
-      { backgroundColor: color, shadowColor: color, shadowRadius: 10, shadowOpacity: 1, elevation: 10 }
-    ]} />
+    <View style={[styles.teamContainer, { flexDirection: isLeft ? 'row' : 'row-reverse' }]}>
+      {[0, 1, 2].map((i) => (
+        <Animated.View key={i} style={{ 
+          transform: [{ rotate: rotation }, { translateY }, { translateX }],
+          marginLeft: isLeft && i > 0 ? -15 : 0, 
+          marginRight: !isLeft && i > 0 ? -15 : 0,
+          zIndex: 3 - i
+        }}>
+          <Ionicons name="body" size={55} color={color} style={{ textShadowColor: shadow, textShadowRadius: 10 }} />
+        </Animated.View>
+      ))}
+    </View>
   );
 };
 
 // =========================================================================
-// BOTÃO VISUAL DO TECLADO
+// BOTÃO VISUAL DO TECLADO RADAR
 // =========================================================================
 const BotaoVisual = ({ valor, isPressed, onPressWeb }: any) => {
   return (
@@ -70,70 +106,52 @@ export default function CaboDeGuerraOnline() {
   const [operacao, setOperacao] = useState<{ texto: string, resposta: number } | null>(null);
   const [resposta, setResposta] = useState('');
   const [ganhador, setGanhador] = useState<string | null>(null);
+  
+  // Estados de Animação do Time ('idle' | 'pull' | 'win' | 'lose')
+  const [leftState, setLeftState] = useState('idle');
+  const [rightState, setRightState] = useState('idle');
 
   const roomIdRef = useRef<string>('');
   const hasLeftMatch = useRef(false);
+  const isGameOver = useRef(false);
   const ropeAnim = useRef(new Animated.Value(0)).current;
 
   // =========================================================================
-  // SISTEMA DE CORES DE EQUIPES
+  // MOTOR DE CORES (Equipes + Arco-íris do Administrador)
   // =========================================================================
-  const getTeamColor = (teamName: string, role?: string, email?: string) => {
-    if (role === 'ADMIN' || email?.includes('admin')) return 'RAINBOW';
-    const upper = teamName?.toUpperCase() || '';
-    if (upper === 'VERMELHO') return '#FF4500';
-    if (upper === 'AMARELO') return '#FFD700';
-    if (upper === 'VERDE') return '#32CD32';
-    return '#00BFFF'; // Azul (Padrão)
+  const [adminColor, setAdminColor] = useState('#FFD700');
+
+  useEffect(() => {
+    // Fica rodando as 3 cores das equipes se for Administrador
+    let colors = ['#00BFFF', '#FFD700', '#32CD32']; // Azul, Amarelo, Verde
+    let i = 0;
+    const interval = setInterval(() => {
+      i = (i + 1) % colors.length;
+      setAdminColor(colors[i]);
+    }, 400);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getTeamConfig = (equipeName: string, role: string, isLocalPlayer: boolean, opponentEquipe: string) => {
+    if (role === 'ADMIN' || role?.includes('admin')) return { isRainbow: true, core: adminColor, glow: adminColor };
+  
+    // Suas Equipes Oficiais
+    let teamColor = '#00BFFF'; // Azul Padrão
+    const name = equipeName?.toUpperCase() || '';
+    if (name.includes('AMARELO')) teamColor = '#FFD700';
+    else if (name.includes('VERDE')) teamColor = '#32CD32';
+    else if (name.includes('AZUL')) teamColor = '#00BFFF';
+  
+    // Sistema Espelho: Se as duas equipes são iguais (Ex: Verde vs Verde)
+    if (!isLocalPlayer && equipeName === opponentEquipe) {
+        return { isRainbow: false, core: '#FFFFFF', glow: teamColor, isGhost: true };
+    }
+  
+    return { isRainbow: false, core: teamColor, glow: teamColor, isGhost: false };
   };
 
-  const isP1Local = isP1;
-  const leftName = isP1Local ? 'Você' : oponenteNome;
-  const rightName = !isP1Local ? 'Você' : oponenteNome;
-
-  const meuTime = user?.equipe || 'AZUL';
-  // Fallback inteligente para garantir que haja distinção
-  const timeOponente = activeMatchData?.opponentTeam || (meuTime === 'AZUL' ? 'VERMELHO' : 'AZUL'); 
-
-  const minhaCor = getTeamColor(meuTime, user?.role, user?.email);
-  const oponenteCor = activeMatchData?.opponentRole === 'ADMIN' ? 'RAINBOW' : getTeamColor(timeOponente, '', '');
-
-  const corEsquerda = isP1Local ? minhaCor : oponenteCor;
-  const corDireita = !isP1Local ? minhaCor : oponenteCor;
-
-  // Solução para oponente da Mesma Equipe
-  let rightIsGhost = false;
-  if (corEsquerda === corDireita && corEsquerda !== 'RAINBOW') {
-      rightIsGhost = true;
-  }
-
-  const displayColorLeft = corEsquerda === 'RAINBOW' ? '#FFD700' : corEsquerda;
-  const displayColorRight = corDireita === 'RAINBOW' ? '#FFD700' : corDireita;
-
   // =========================================================================
-  // ANIMAÇÃO DE DISPUTA DE ENERGIA
-  // =========================================================================
-  // -10: P1 (Esquerda) dominou 100% da tela. +10: P2 (Direita) dominou 100%.
-  const leftWidth = ropeAnim.interpolate({
-    inputRange: [-10, 10],
-    outputRange: ['100%', '0%'],
-    extrapolate: 'clamp'
-  });
-
-  const rightWidth = ropeAnim.interpolate({
-    inputRange: [-10, 10],
-    outputRange: ['0%', '100%'],
-    extrapolate: 'clamp'
-  });
-
-  const knotPosition = ropeAnim.interpolate({
-    inputRange: [-10, 10],
-    outputRange: ['100%', '0%'],
-    extrapolate: 'clamp'
-  });
-
-  // =========================================================================
-  // RADAR MATEMÁTICO (TECLADO)
+  // RADAR MATEMÁTICO INVISÍVEL
   // =========================================================================
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
@@ -240,10 +258,15 @@ export default function CaboDeGuerraOnline() {
   }, [tela]);
 
   useEffect(() => {
-    return () => {
-      // Limpeza brutal: se o componente for destruído e o jogo não acabou, avisa o servidor!
-      if (tela === 'jogo') performLeaveMatch();
-    };
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handleUnload = () => performLeaveMatch();
+      window.addEventListener('beforeunload', handleUnload);
+      return () => window.removeEventListener('beforeunload', handleUnload);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => { if (tela === 'jogo') performLeaveMatch(); };
   }, [tela]);
 
   useEffect(() => {
@@ -254,38 +277,61 @@ export default function CaboDeGuerraOnline() {
       setOperacao(activeMatchData.initial_op);
       setTela('jogo');
       hasLeftMatch.current = false;
+      isGameOver.current = false;
     }
   }, [activeMatchData]);
 
   useEffect(() => {
     socket.emit('update_status', { status: 'JOGANDO_ONLINE' });
+    let ultimaPosicao = 0;
 
     const onStateUpdate = (data: any) => {
-      Animated.spring(ropeAnim, {
-        toValue: data.rope_position,
-        useNativeDriver: false, // Obrigatório false para animar 'width' e 'left'
-        friction: 5,
-        tension: 30
-      }).start();
+      if (isGameOver.current) return; // Não anima puxão se já acabou
+      
+      // Controla a animação de fazer força
+      if (data.rope_position > ultimaPosicao) { 
+          setLeftState('pull'); 
+          setTimeout(() => { if(!isGameOver.current) setLeftState('idle') }, 300); 
+      } 
+      else if (data.rope_position < ultimaPosicao) { 
+          setRightState('pull'); 
+          setTimeout(() => { if(!isGameOver.current) setRightState('idle') }, 300); 
+      }
+      ultimaPosicao = data.rope_position;
+
+      Animated.spring(ropeAnim, { toValue: data.rope_position, useNativeDriver: false, friction: 5, tension: 30 }).start();
     };
 
     const onNewOp = (data: any) => setOperacao(data.new_op);
     
     const onGameOver = (data: any) => { 
-      setGanhador(data.ganhador); 
-      setTela('resultado'); 
+      isGameOver.current = true;
+      const amIWinner = data.ganhador === socket.id;
+      const leftWins = (amIWinner && isP1) || (!amIWinner && !isP1);
+
+      // Animação de fim de jogo
+      setLeftState(leftWins ? 'win' : 'lose');
+      setRightState(leftWins ? 'lose' : 'win');
+
+      setTimeout(() => {
+         setGanhador(data.ganhador); 
+         setTela('resultado'); 
+      }, 2000); // Espera 2s para mostrar os times comemorando/caindo antes de mudar de tela
     };
 
     const onOpponentDisconnected = () => {
       if (tela === 'jogo') {
-        Alert.alert('Fim de Jogo', 'O oponente fugiu do combate!');
-        setGanhador(socket.id);
-        setTela('resultado');
+        isGameOver.current = true;
+        setLeftState('win'); setRightState('lose'); // Se ele fugiu, a gente comemora!
+        setTimeout(() => {
+            Alert.alert('Fim de Jogo', 'A equipe adversária fugiu da batalha!');
+            setGanhador(socket.id);
+            setTela('resultado');
+        }, 1500);
       }
     };
 
     const onLobbyLeft = () => {
-      // Se a sala for apagada pelo Admin durante o jogo
       performLeaveMatch();
       Alert.alert('Aviso', 'A sala foi encerrada pelo administrador.');
       router.replace('/salas');
@@ -299,34 +345,43 @@ export default function CaboDeGuerraOnline() {
     socket.on('lobby_left', onLobbyLeft);
 
     return () => {
-      socket.off('tugofwar_state_update', onStateUpdate);
-      socket.off('tugofwar_new_op', onNewOp);
-      socket.off('game_over', onGameOver);
-      socket.off('match_ended', onGameOver);
-      socket.off('opponent_disconnected', onOpponentDisconnected);
-      socket.off('lobby_left', onLobbyLeft);
+      socket.off('tugofwar_state_update'); socket.off('tugofwar_new_op');
+      socket.off('game_over'); socket.off('match_ended');
+      socket.off('opponent_disconnected'); socket.off('lobby_left');
       socket.emit('update_status', { status: 'MENU' });
     };
   }, [tela]);
 
   const abandonarPartida = () => {
-    Alert.alert("Desistir", "Tem certeza que deseja recuar da disputa?", [
+    Alert.alert("Recuar", "Tem certeza que deseja abandonar a corda?", [
       { text: "Não", style: "cancel" },
-      { text: "Sim", style: "destructive", onPress: () => {
-        performLeaveMatch();
-        router.back();
-      }}
+      { text: "Sim", style: "destructive", onPress: () => { performLeaveMatch(); router.back(); }}
     ]);
   };
 
+  // Resgatando as Cores da Equipe (Se não houver cor preenchida, ele cai para Azul)
+  const meuTime = user?.equipe || 'AZUL';
+  const timeOponente = activeMatchData?.opponentTeam || 'AMARELO'; 
+  const roleOponente = activeMatchData?.opponentRole || 'ALUNO';
+
+  const leftConfig = getTeamConfig(meuTime, user?.role || 'ALUNO', true, timeOponente);
+  const rightConfig = getTeamConfig(timeOponente, roleOponente, false, meuTime);
+
+  // A Física da Corda que os personagens estão segurando
+  const knotPosition = ropeAnim.interpolate({ inputRange: [-10, 10], outputRange: ['90%', '10%'], extrapolate: 'clamp' });
+
   if (tela === 'resultado') {
     const venci = ganhador === socket.id;
+    const finalColor = venci ? (leftConfig.isRainbow ? '#FFD700' : leftConfig.core) : '#888';
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.resultadoContainer}>
-          <Text style={styles.resultadoTitle}>{venci ? 'Seu Raio Venceu!' : 'Você Foi Superado!'}</Text>
-          <Ionicons name={venci ? 'trophy' : 'sad'} size={90} color={venci ? displayColorLeft : '#888'} />
-          <TouchableOpacity style={[styles.btnVoltar, { backgroundColor: venci ? displayColorLeft : '#333' }]} onPress={() => { performLeaveMatch(); router.back(); }}>
+          <Text style={styles.resultadoTitle}>{venci ? 'Sua Equipe Venceu!' : 'Vocês Foram Puxados!'}</Text>
+          <Ionicons name={venci ? 'trophy' : 'sad'} size={90} color={finalColor} style={{ marginBottom: 20 }} />
+          {/* Animação comemorativa no resultado */}
+          <AnimatedTeam isLeft={true} config={venci ? leftConfig : rightConfig} teamState="win" />
+          
+          <TouchableOpacity style={[styles.btnVoltar, { backgroundColor: finalColor === '#888' ? '#333' : finalColor }]} onPress={() => { performLeaveMatch(); router.back(); }}>
             <Text style={[styles.btnVoltarText, { color: venci ? '#000' : '#FFF' }]}>Voltar ao Menu</Text>
           </TouchableOpacity>
         </View>
@@ -340,43 +395,40 @@ export default function CaboDeGuerraOnline() {
         <TouchableOpacity onPress={abandonarPartida} style={styles.btnSair}>
           <Ionicons name="exit-outline" size={24} color="#FFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>DISPUTA NEON</Text>
+        <Text style={styles.headerTitle}>CABO DE GUERRA</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.arena}>
-        <View style={styles.playersRow}>
-          <View style={styles.playerWrapper}>
-             <Text style={[styles.playerName, { color: displayColorLeft, textShadowColor: displayColorLeft, textShadowRadius: 8 }]}>{leftName}</Text>
-          </View>
-          <View style={styles.playerWrapper}>
-             <Text style={[styles.playerName, { color: rightIsGhost ? '#FFF' : displayColorRight, textShadowColor: rightIsGhost ? displayColorRight : 'transparent', textShadowRadius: rightIsGhost ? 10 : 8 }]}>{rightName}</Text>
-          </View>
+        
+        {/* Nomes dos Jogadores no topo da Arena */}
+        <View style={styles.namesRow}>
+           <Text style={[styles.playerName, { color: leftConfig.isRainbow ? '#FFD700' : leftConfig.core, textShadowColor: leftConfig.glow, textShadowRadius: 10 }]}>{isP1 ? 'Você' : oponenteNome}</Text>
+           <Text style={[styles.playerName, { color: rightConfig.isGhost ? '#FFF' : rightConfig.core, textShadowColor: rightConfig.glow, textShadowRadius: 10 }]}>{!isP1 ? 'Você' : oponenteNome}</Text>
         </View>
 
-        {/* O Tubo de Colisão */}
-        <View style={styles.neonTrack}>
-           {/* Raio do Jogador 1 (Esquerda) */}
-           <Animated.View style={[styles.ropeLeft, { width: leftWidth }]}>
-              <BeamSide color={corEsquerda} isLeft={true} isGhost={false} />
-           </Animated.View>
-           
-           {/* Ponto de Impacto Central */}
-           <Animated.View style={[styles.ropeKnot, { left: knotPosition }]}>
-              <View style={styles.knotCore}>
-                 <Ionicons name="flash" size={20} color="#000" />
-              </View>
-           </Animated.View>
+        <View style={styles.field}>
+            {/* O Time 1 */}
+            <View style={styles.teamLeftZone}>
+               <AnimatedTeam isLeft={true} config={leftConfig} teamState={leftState} />
+            </View>
 
-           {/* Raio do Jogador 2 (Direita) */}
-           <Animated.View style={[styles.ropeRight, { width: rightWidth }]}>
-              <BeamSide color={corDireita} isLeft={false} isGhost={rightIsGhost} />
-           </Animated.View>
+            {/* O Time 2 */}
+            <View style={styles.teamRightZone}>
+               <AnimatedTeam isLeft={false} config={rightConfig} teamState={rightState} />
+            </View>
+
+            {/* A Corda e o Nó Central (Neon) */}
+            <View style={styles.ropeLine} />
+            <Animated.View style={[styles.ropeKnot, { left: knotPosition }]}>
+               <View style={styles.knotCore} />
+            </Animated.View>
         </View>
+
       </View>
 
       <View style={styles.panel}>
-        <Text style={styles.instruction}>Resolva para empurrar a energia!</Text>
+        <Text style={styles.instruction}>Resolva para puxar a corda!</Text>
         
         {operacao ? (
           <View style={styles.operationCard}>
@@ -430,17 +482,18 @@ const styles = StyleSheet.create({
   btnSair: { padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12 },
   headerTitle: { color: '#FFF', fontSize: 22, fontWeight: '900', letterSpacing: 1 },
   
-  arena: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
-  playersRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, paddingHorizontal: 10 },
-  playerWrapper: { alignItems: 'center' },
+  arena: { flex: 1, justifyContent: 'center', paddingHorizontal: 10, position: 'relative' },
+  namesRow: { flexDirection: 'row', justifyContent: 'space-between', position: 'absolute', top: 20, width: '100%', paddingHorizontal: 20 },
   playerName: { fontWeight: '900', fontSize: 18, textTransform: 'uppercase' },
 
-  neonTrack: { height: 26, flexDirection: 'row', backgroundColor: '#000', borderRadius: 13, borderWidth: 1, borderColor: '#222', position: 'relative', marginTop: 10 },
-  ropeLeft: { height: '100%', borderTopLeftRadius: 13, borderBottomLeftRadius: 13, overflow: 'hidden' },
-  ropeRight: { height: '100%', borderTopRightRadius: 13, borderBottomRightRadius: 13, overflow: 'hidden' },
-  
-  ropeKnot: { position: 'absolute', top: -12, width: 50, height: 50, marginLeft: -25, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-  knotCore: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', shadowColor: '#FFF', shadowRadius: 15, shadowOpacity: 1, elevation: 15 },
+  field: { height: 120, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'relative' },
+  teamLeftZone: { flex: 1, alignItems: 'flex-start', zIndex: 5, paddingLeft: 10 },
+  teamRightZone: { flex: 1, alignItems: 'flex-end', zIndex: 5, paddingRight: 10 },
+  teamContainer: { alignItems: 'flex-end', paddingBottom: 10 },
+
+  ropeLine: { position: 'absolute', top: '65%', width: '100%', height: 4, backgroundColor: '#FFF', shadowColor: '#FFF', shadowOpacity: 0.8, shadowRadius: 10, elevation: 10, zIndex: 1 },
+  ropeKnot: { position: 'absolute', top: '65%', width: 24, height: 24, marginTop: -10, marginLeft: -12, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+  knotCore: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#FF4500', shadowColor: '#FF4500', shadowOpacity: 1, shadowRadius: 15, elevation: 15, borderWidth: 2, borderColor: '#FFF' },
 
   panel: { backgroundColor: '#1a1a2e', padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30, alignItems: 'center', elevation: 10, borderTopWidth: 1, borderTopColor: '#333' },
   instruction: { color: '#AAA', fontSize: 14, marginBottom: 15, fontWeight: 'bold' },
