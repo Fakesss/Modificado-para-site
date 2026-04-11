@@ -154,13 +154,10 @@ export default function CaboDeGuerraOffline() {
 
   const tocarSomPuxada = async () => {
     const now = Date.now();
-    // Cooldown: O som só toca se tiver passado 400ms desde o último
     if (now - lastSoundTime.current < 400) return; 
     lastSoundTime.current = now;
 
-    // Um som genérico, limpo e curto de "swoosh" (puxão)
     const urlSom = 'https://www.myinstants.com/media/sounds/swoosh.mp3'; 
-    // Varia o tom entre 0.8 (grave) e 1.2 (agudo) para não parecer um disco arranhado
     const rate = 0.8 + Math.random() * 0.4; 
 
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -175,7 +172,6 @@ export default function CaboDeGuerraOffline() {
             const { sound } = await Audio.Sound.createAsync({ uri: urlSom });
             await sound.setRateAsync(rate, true);
             await sound.playAsync();
-            // Descarrega o som da memória do celular após 1 segundo
             setTimeout(() => sound.unloadAsync(), 1000); 
         } catch(e) { console.log("Erro ao tocar som: ", e) }
     }
@@ -257,28 +253,28 @@ export default function CaboDeGuerraOffline() {
   };
 
   // =========================================================================
-  // I.A. ADAPTATIVA DO ROBÔ
+  // I.A. ADAPTATIVA DO ROBÔ (AGORA MAIS RÁPIDA)
   // =========================================================================
   const agendarPuxadaRobo = () => {
     if (botTimer.current) clearTimeout(botTimer.current);
-    
-    // CORREÇÃO: O robô travava porque a variável "tela" não atualizava na memória dele a tempo. 
-    // Usamos apenas o isGameOver.current que é 100% à prova de falhas.
     if (isGameOver.current) return;
 
-    let delayDoRobo = 4500; 
+    // Começa mais rápido (3.5s em vez de 4.5s)
+    let delayDoRobo = 3500; 
     
     if (playerTimes.current.length > 0) {
         const mediaAluno = playerTimes.current.reduce((a,b)=>a+b,0) / playerTimes.current.length;
-        delayDoRobo = mediaAluno * 1.15; 
-        if (delayDoRobo < 1500) delayDoRobo = 1500; 
+        // Robô agora é apenas 5% mais lento que a sua média (quase empate técnico)
+        delayDoRobo = mediaAluno * 1.05; 
+        // Limite mínimo destravado para 1.2s (para acompanhar quem digita muito rápido)
+        if (delayDoRobo < 1200) delayDoRobo = 1200; 
         if (delayDoRobo > 7000) delayDoRobo = 7000; 
     }
 
     botTimer.current = setTimeout(() => {
         if (isGameOver.current) return;
         
-        tocarSomPuxada(); // O Robô fez força!
+        tocarSomPuxada(); 
         
         setRopePosition(prev => {
             const next = prev - 1; 
@@ -322,18 +318,21 @@ export default function CaboDeGuerraOffline() {
       setGanhador(vencedor);
       setTimeout(() => setTela('resultado'), 1500);
 
-      // RISADA SONORA DO ROBÔ
+      // RISADA SONORA DO ROBÔ (AGORA EM MP3 PARA FUNCIONAR NA WEB)
       if (vencedor === 'bot') {
+         const urlRisada = 'https://www.myinstants.com/media/sounds/evil-laugh.mp3';
          if (Platform.OS === 'web' && typeof window !== 'undefined') {
-            const utter = new SpeechSynthesisUtterance("Ha ha ha ha! Eu venci!");
-            utter.lang = 'pt-BR'; utter.pitch = 0.5; window.speechSynthesis.speak(utter);
+             try {
+                 const audio = new Audio(urlRisada);
+                 audio.play();
+             } catch(e) { console.log(e); }
          } else {
              try {
                  const { Audio } = require('expo-av');
                  const somRisada = new Audio.Sound();
-                 await somRisada.loadAsync({ uri: 'https://www.myinstants.com/media/sounds/evil-laugh.mp3' });
+                 await somRisada.loadAsync({ uri: urlRisada });
                  await somRisada.playAsync();
-             } catch (e) { console.log("Áudio bloqueado."); }
+             } catch (e) { console.log("Áudio bloqueado no mobile."); }
          }
       }
   };
@@ -380,7 +379,7 @@ export default function CaboDeGuerraOffline() {
         const tempoGasto = Date.now() - timeUltimaPergunta.current;
         playerTimes.current.push(tempoGasto);
         
-        tocarSomPuxada(); // O Aluno fez força!
+        tocarSomPuxada(); 
         
         setRopePosition(prev => {
             const next = prev + 1; 
@@ -499,7 +498,6 @@ export default function CaboDeGuerraOffline() {
 
       <View style={styles.arena}>
         
-        {/* CORREÇÃO DO CRONÔMETRO: Removido do meio e isolado no topo */}
         <View style={styles.timerTopContainer}>
            <View style={styles.timerContainer}>
               <Ionicons name="time-outline" size={18} color={tempoRestante <= 15 ? '#FF4500' : '#FFF'} />
