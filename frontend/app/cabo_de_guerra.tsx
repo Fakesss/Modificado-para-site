@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
 import { useAuth } from '../src/context/AuthContext';
+import * as api from '../src/services/api'; // Nova importação para ler as cores do BD
 
 const { width } = Dimensions.get('window');
 
@@ -105,46 +106,49 @@ export default function CaboDeGuerraOnline() {
   const [leftState, setLeftState] = useState('idle');
   const [rightState, setRightState] = useState('idle');
 
+  // Estado para armazenar as equipes reais do banco
+  const [equipesDb, setEquipesDb] = useState<any[]>([]);
+
   const roomIdRef = useRef<string>('');
   const hasLeftMatch = useRef(false);
   const isGameOver = useRef(false);
   const ultimaPosicao = useRef(0);
   const ropeAnim = useRef(new Animated.Value(0)).current;
 
+  // Carrega as equipes dinâmicas da API ao montar a tela
+  useEffect(() => {
+    api.getEquipes().then(data => setEquipesDb(data)).catch(console.error);
+  }, []);
+
   // =========================================================================
   // MOTOR DE CORES E ARCO-ÍRIS DO ADMIN
   // =========================================================================
-  const baseTeamColors: any = {
-    'AZUL': '#00BFFF',
-    'AMARELO': '#FFD700',
-    'VERDE': '#32CD32'
-  };
-
-  const [adminColor, setAdminColor] = useState(baseTeamColors['AZUL']);
+  const [adminColor, setAdminColor] = useState('#00BFFF');
 
   useEffect(() => {
-    const colors = Object.values(baseTeamColors);
+    // Se não encontrou equipes ainda, usa um fallback. Se encontrou, usa as cores reais do banco!
+    const colors = equipesDb.length > 0 ? equipesDb.map(e => e.cor) : ['#00BFFF', '#FFD700', '#32CD32'];
+    
     let i = 0;
     const interval = setInterval(() => {
       i = (i + 1) % colors.length;
       setAdminColor(colors[i] as string);
     }, 400); 
     return () => clearInterval(interval);
-  }, []);
+  }, [equipesDb]);
 
   const getTeamConfig = (equipeName: string, role: string, email: string, isLocalPlayer: boolean, opponentEquipe: string) => {
-    // Verifica se é o Admin (Prof. Daniel)
+    // ADMIN: O core é branco (corpo branco) e o glow (neon) roda pelas cores do BD
     if (role === 'ADMIN' || role?.includes('admin') || email === 'danielprofessormatematica@gmail.com') {
-        return { isRainbow: true, core: adminColor, glow: adminColor, isGhost: false };
+        return { isRainbow: true, core: '#FFFFFF', glow: adminColor, isGhost: false };
     }
   
-    const name = equipeName?.toUpperCase() || 'AZUL';
-    let teamColor = '#00BFFF';
-    if (name.includes('AMARELO')) teamColor = '#FFD700';
-    else if (name.includes('VERDE')) teamColor = '#32CD32';
+    // Lê dinamicamente do Banco de Dados a cor da equipe
+    const equipeEncontrada = equipesDb.find(e => e.nome?.toUpperCase() === equipeName?.toUpperCase());
+    const teamColor = equipeEncontrada ? equipeEncontrada.cor : '#00BFFF';
   
     // Prevenção de conflito visual se ambos forem do mesmo time
-    if (!isLocalPlayer && name === opponentEquipe?.toUpperCase()) {
+    if (!isLocalPlayer && equipeName?.toUpperCase() === opponentEquipe?.toUpperCase()) {
         return { isRainbow: false, core: '#FFFFFF', glow: teamColor, isGhost: true };
     }
   
@@ -279,7 +283,7 @@ export default function CaboDeGuerraOnline() {
   useEffect(() => { return () => { if (tela === 'jogo') performLeaveMatch(); }; }, [tela]);
 
   // =========================================================================
-  // SINCRONIZAÇÃO COM O SERVIDOR
+  // SINCRONIZAÇÃO COM O SERVIDOR E CORREÇÃO DE LADOS
   // =========================================================================
   useEffect(() => {
     if (activeMatchData && activeMatchData.game_type === 'tugofwar') {
@@ -303,8 +307,8 @@ export default function CaboDeGuerraOnline() {
       const diff = data.rope_position - ultimaPosicao.current;
       
       if (diff !== 0) {
-         // O jogador local (Você) sempre está na DIREITA. 
-         const iPulled = isP1 ? (diff < 0) : (diff > 0);
+         // CORREÇÃO DE LÓGICA: Se p1_sid puxa, a diferença aumenta (diff > 0). 
+         const iPulled = isP1 ? (diff > 0) : (diff < 0);
          
          if (iPulled) {
             setRightState('pull');
@@ -317,8 +321,10 @@ export default function CaboDeGuerraOnline() {
       
       ultimaPosicao.current = data.rope_position;
 
-      // Mapeamento Visual: Oponente(Esq) puxa -> negativo. Você(Dir) puxa -> positivo.
-      const visualTarget = isP1 ? (data.rope_position * -1) : data.rope_position;
+      // CORREÇÃO VISUAL DE MESA: O jogador local (Você) sempre está na Direita (valores positivos no visual).
+      // Se Você é P1, seu ganho (+10 no backend) é positivo para o VisualTarget.
+      // Se Você é P2, seu ganho (-10 no backend) precisa ser convertido para positivo (+10 no visualTarget) para mover pra Direita.
+      const visualTarget = isP1 ? data.rope_position : (data.rope_position * -1);
 
       Animated.spring(ropeAnim, { toValue: visualTarget, useNativeDriver: false, friction: 5, tension: 30 }).start();
     };
@@ -380,7 +386,6 @@ export default function CaboDeGuerraOnline() {
   const leftConfig = getTeamConfig(timeOponente, roleOponente, '', false, meuTime);
   const rightConfig = getTeamConfig(meuTime, user?.role || 'ALUNO', meuEmail, true, timeOponente);
 
-  // Animação da bolinha no cabo (-10 = Vitória do Oponente/Esquerda, +10 = Sua Vitória/Direita)
   const knotPosition = ropeAnim.interpolate({ inputRange: [-10, 10], outputRange: ['10%', '90%'], extrapolate: 'clamp' });
 
   if (tela === 'resultado') {
@@ -425,7 +430,7 @@ export default function CaboDeGuerraOnline() {
                <AnimatedTeam isLeft={false} config={rightConfig} teamState={rightState} />
             </View>
 
-            {/* A Corda Clássica: Linha Branca e Nó Vermelho subiu para top: 40 */}
+            {/* CORREÇÃO DO EIXO Y DA CORDA: Modificado top de 40 para 25 */}
             <View style={styles.ropeLine} />
             <Animated.View style={[styles.ropeKnot, { left: knotPosition }]}>
                <View style={styles.knotCore} />
@@ -497,8 +502,9 @@ const styles = StyleSheet.create({
   teamRightZone: { flex: 1, alignItems: 'flex-end', zIndex: 5, paddingRight: 10 },
   teamContainer: { alignItems: 'flex-end', paddingBottom: 10 },
 
-  ropeLine: { position: 'absolute', top: 40, width: '100%', height: 3, backgroundColor: '#FFF', shadowColor: '#FFF', shadowOpacity: 0.8, shadowRadius: 10, elevation: 10, zIndex: 1 },
-  ropeKnot: { position: 'absolute', top: 40, width: 24, height: 24, marginTop: -10, marginLeft: -12, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+  /* CORREÇÃO DO EIXO Y DA CORDA: Modificado top de 40 para 25 */
+  ropeLine: { position: 'absolute', top: 25, width: '100%', height: 3, backgroundColor: '#FFF', shadowColor: '#FFF', shadowOpacity: 0.8, shadowRadius: 10, elevation: 10, zIndex: 1 },
+  ropeKnot: { position: 'absolute', top: 25, width: 24, height: 24, marginTop: -10, marginLeft: -12, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
   knotCore: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#FF4500', shadowColor: '#FF4500', shadowOpacity: 1, shadowRadius: 15, elevation: 15, borderWidth: 2, borderColor: '#FFF' },
 
   panel: { backgroundColor: '#1a1a2e', padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30, alignItems: 'center', elevation: 10, borderTopWidth: 1, borderTopColor: '#333' },
