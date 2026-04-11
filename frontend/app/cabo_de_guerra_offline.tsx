@@ -133,8 +133,11 @@ export default function CaboDeGuerraOffline() {
   const [modoEscolhido, setModoEscolhido] = useState('misto');
   const [operacao, setOperacao] = useState<{ texto: string, resposta: number } | null>(null);
   const [resposta, setResposta] = useState('');
-  const [ganhador, setGanhador] = useState<'player' | 'bot' | null>(null);
+  const [ganhador, setGanhador] = useState<'player' | 'bot' | 'empate' | null>(null);
   const [ropePosition, setRopePosition] = useState(0);
+  
+  // NOVO: CRONÔMETRO (2 minutos)
+  const [tempoRestante, setTempoRestante] = useState(120);
 
   const [leftState, setLeftState] = useState('idle');
   const [rightState, setRightState] = useState('idle');
@@ -186,52 +189,92 @@ export default function CaboDeGuerraOffline() {
   };
 
   // =========================================================================
+  // SISTEMA DO CRONÔMETRO
+  // =========================================================================
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (tela === 'jogo' && !isGameOver.current) {
+        interval = setInterval(() => {
+            setTempoRestante(prev => {
+                if (prev <= 1) {
+                    clearInterval(interval);
+                    finalizarPorTempo();
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [tela]);
+
+  const finalizarPorTempo = () => {
+      if (isGameOver.current) return;
+      isGameOver.current = true;
+      if (botTimer.current) clearTimeout(botTimer.current);
+
+      setRopePosition(prev => {
+          if (prev > 0) {
+              handleFimDeJogo('player');
+          } else if (prev < 0) {
+              handleFimDeJogo('bot');
+          } else {
+              handleFimDeJogo('empate');
+          }
+          return prev;
+      });
+  };
+
+  const formatarTempo = (segundos: number) => {
+      const m = Math.floor(segundos / 60).toString().padStart(2, '0');
+      const s = (segundos % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+  };
+
+  // =========================================================================
   // I.A. ADAPTATIVA DO ROBÔ
   // =========================================================================
   const agendarPuxadaRobo = () => {
     if (botTimer.current) clearTimeout(botTimer.current);
     if (isGameOver.current || tela !== 'jogo') return;
 
-    // A MÁGICA ADAPTATIVA ACONTECE AQUI
-    let delayDoRobo = 4500; // Padrão inicial: 4.5 segundos
+    let delayDoRobo = 4500; 
     
     if (playerTimes.current.length > 0) {
-        // Calcula a média de tempo que o aluno leva para responder
         const mediaAluno = playerTimes.current.reduce((a,b)=>a+b,0) / playerTimes.current.length;
-        
-        // O Robô ajusta sua velocidade para ser 15% mais lento que a média do aluno
         delayDoRobo = mediaAluno * 1.15; 
         
-        if (delayDoRobo < 1500) delayDoRobo = 1500; // Limite Máximo (muito rápido)
-        if (delayDoRobo > 7000) delayDoRobo = 7000; // Limite Mínimo (muito lento)
+        if (delayDoRobo < 1500) delayDoRobo = 1500; 
+        if (delayDoRobo > 7000) delayDoRobo = 7000; 
     }
 
-    // ===== NÍVEIS DE DIFICULDADE FIXA (DESATIVADOS) =====
-    // Para ativar a velocidade fixa, remova os "//" abaixo e comente a lógica Adaptativa acima
-    // const VELOCIDADES_FIXAS = { facil: 6000, medio: 4000, dificil: 2500, hardcore: 1200 };
-    // delayDoRobo = VELOCIDADES_FIXAS.medio; 
-
     botTimer.current = setTimeout(() => {
-        if (isGameOver.current) return;
+        if (isGameOver.current || tela !== 'jogo') return;
         
         setRopePosition(prev => {
             const next = prev - 1; // Robô puxa para a esquerda (negativo)
-            Animated.spring(ropeAnim, { toValue: next * -1, useNativeDriver: false, friction: 5, tension: 30 }).start();
+            
+            // CORREÇÃO: Removido o * -1 que invertia a direção visual
+            Animated.spring(ropeAnim, { toValue: next, useNativeDriver: false, friction: 5, tension: 30 }).start();
             
             setLeftState('pull');
             setTimeout(() => { if (!isGameOver.current) setLeftState('idle') }, 300);
 
             if (next <= -10) handleFimDeJogo('bot');
-            else agendarPuxadaRobo(); // Agenda a próxima puxada se o jogo continuar
-
             return next;
         });
+
+        // CORREÇÃO: O robô agora agenda a próxima puxada por conta própria
+        if (!isGameOver.current) {
+            agendarPuxadaRobo(); 
+        }
     }, delayDoRobo);
   };
 
   const iniciarJogo = (modo: string) => {
       setModoEscolhido(modo);
       setRopePosition(0);
+      setTempoRestante(120); // Reseta o cronômetro
       playerTimes.current = [];
       isGameOver.current = false;
       setGanhador(null);
@@ -244,17 +287,22 @@ export default function CaboDeGuerraOffline() {
       agendarPuxadaRobo(); // Dá a largada no robô
   };
 
-  const handleFimDeJogo = async (vencedor: 'player' | 'bot') => {
+  const handleFimDeJogo = async (vencedor: 'player' | 'bot' | 'empate') => {
       isGameOver.current = true;
       if (botTimer.current) clearTimeout(botTimer.current);
       
-      setLeftState(vencedor === 'bot' ? 'win' : 'lose');
-      setRightState(vencedor === 'player' ? 'win' : 'lose');
+      if (vencedor === 'bot') {
+          setLeftState('win'); setRightState('lose');
+      } else if (vencedor === 'player') {
+          setLeftState('lose'); setRightState('win');
+      } else {
+          setLeftState('lose'); setRightState('lose'); // Ambos perdem/cansam no empate
+      }
+
       setGanhador(vencedor);
-      
       setTimeout(() => setTela('resultado'), 1500);
 
-      // RISADA SONORA DO ROBÔ (Seguro: funciona no Web e tenta no Mobile)
+      // RISADA SONORA DO ROBÔ
       if (vencedor === 'bot') {
          if (Platform.OS === 'web' && typeof window !== 'undefined') {
             const utter = new SpeechSynthesisUtterance("Ha ha ha ha! Eu venci!");
@@ -340,7 +388,9 @@ export default function CaboDeGuerraOffline() {
         
         setRopePosition(prev => {
             const next = prev + 1; // Player puxa para a direita (positivo)
-            Animated.spring(ropeAnim, { toValue: next * -1, useNativeDriver: false, friction: 5, tension: 30 }).start();
+            
+            // CORREÇÃO: Removido o * -1 que invertia a direção visual
+            Animated.spring(ropeAnim, { toValue: next, useNativeDriver: false, friction: 5, tension: 30 }).start();
             
             setRightState('pull');
             setTimeout(() => { if (!isGameOver.current) setRightState('idle') }, 300);
@@ -350,9 +400,6 @@ export default function CaboDeGuerraOffline() {
         });
 
         gerarNovaOperacao(modoEscolhido);
-    } else {
-        // Errou, a corda escorrega um pouco para o robô por penalidade (Opcional)
-        // Aqui deixei sem penalidade de corda, apenas perdeu tempo
     }
     setResposta('');
   };
@@ -422,15 +469,22 @@ export default function CaboDeGuerraOffline() {
 
   if (tela === 'resultado') {
     const venci = ganhador === 'player';
+    const empate = ganhador === 'empate';
+
+    const titulo = empate ? 'Tempo Esgotado! Empate!' : (venci ? 'Você Venceu o Robô!' : 'Fim da Linha!');
+    const cor = empate ? '#888' : (venci ? '#32CD32' : '#FF4500');
+    const icone = empate ? 'time' : (venci ? 'trophy' : 'skull');
+
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.resultadoContainer}>
-          <Text style={[styles.resultadoTitle, { color: venci ? '#32CD32' : '#FF4500' }]}>
-              {venci ? 'Você Venceu o Robô!' : 'Fim da Linha!'}
+          <Text style={[styles.resultadoTitle, { color: cor }]}>
+              {titulo}
           </Text>
-          <Ionicons name={venci ? 'trophy' : 'skull'} size={100} color={venci ? '#FFD700' : '#888'} style={{ marginBottom: 20 }} />
-          <Text style={{ color: '#aaa', fontSize: 16, marginBottom: 30 }}>
-              {venci ? 'Você foi muito rápido!' : 'A Inteligência Artificial foi mais veloz desta vez.'}
+          <Ionicons name={icone} size={100} color={cor} style={{ marginBottom: 20 }} />
+          <Text style={{ color: '#aaa', fontSize: 16, marginBottom: 30, textAlign: 'center' }}>
+              {empate ? 'Nenhum dos dois teve força suficiente para vencer a tempo.' : 
+                (venci ? 'Você foi muito rápido!' : 'A Inteligência Artificial foi mais veloz desta vez.')}
           </Text>
           
           <View style={{ flexDirection: 'row', gap: 15 }}>
@@ -459,6 +513,12 @@ export default function CaboDeGuerraOffline() {
       <View style={styles.arena}>
         <View style={styles.namesRow}>
            <Text style={[styles.playerName, { color: '#555', textShadowColor: '#FF0000', textShadowRadius: 10 }]}>ROBÔ I.A.</Text>
+           
+           <View style={styles.timerContainer}>
+              <Ionicons name="time-outline" size={16} color={tempoRestante <= 15 ? '#FF4500' : '#FFF'} />
+              <Text style={[styles.timerText, { color: tempoRestante <= 15 ? '#FF4500' : '#FFF' }]}>{formatarTempo(tempoRestante)}</Text>
+           </View>
+
            <Text style={[styles.playerName, { color: '#4169E1', textShadowColor: '#4169E1', textShadowRadius: 10 }]}>VOCÊ</Text>
         </View>
 
@@ -532,10 +592,13 @@ const styles = StyleSheet.create({
   menuButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 
   arena: { flex: 1, justifyContent: 'center', paddingHorizontal: 10, position: 'relative' },
-  namesRow: { flexDirection: 'row', justifyContent: 'space-between', position: 'absolute', top: 10, width: '100%', paddingHorizontal: 20 },
+  namesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', position: 'absolute', top: 10, width: '100%', paddingHorizontal: 20, zIndex: 10 },
   playerName: { fontWeight: '900', fontSize: 18, textTransform: 'uppercase' },
+  
+  timerContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#222', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, gap: 6, borderWidth: 1, borderColor: '#444' },
+  timerText: { fontWeight: 'bold', fontSize: 16 },
 
-  field: { height: 120, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 10, position: 'relative' },
+  field: { height: 120, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 10, position: 'relative', marginTop: 30 },
   teamLeftZone: { flex: 1, alignItems: 'flex-start', zIndex: 5, paddingLeft: 10 },
   teamRightZone: { flex: 1, alignItems: 'flex-end', zIndex: 5, paddingRight: 10 },
   teamContainer: { alignItems: 'flex-end', paddingBottom: 10 },
