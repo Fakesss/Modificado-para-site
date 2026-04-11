@@ -1,10 +1,12 @@
 import asyncio
+import os
 from typing import Dict, List, Optional
 from datetime import datetime
 import time
 import socketio
 import random
 import uuid 
+from motor.motor_asyncio import AsyncIOMotorClient
 
 sio = socketio.AsyncServer(
     async_mode='asgi',
@@ -12,6 +14,17 @@ sio = socketio.AsyncServer(
     logger=False,
     engineio_logger=False
 )
+
+# ====================================================
+# CONEXÃO INDEPENDENTE COM O BANCO DE DADOS
+# Evita Import Circular e travamentos no Render
+# ====================================================
+mongo_url = os.getenv('MONGO_URL')
+if mongo_url:
+    client = AsyncIOMotorClient(mongo_url)
+    db = client.get_default_database()
+else:
+    db = None
 
 players_online: Dict[str, dict] = {}
 rooms: Dict[str, dict] = {}
@@ -24,25 +37,28 @@ matchmaking_queues = {
 }
 
 # ====================================================
-# 🧹 FAXINEIRO DE DESAFIOS (NOVA FUNÇÃO)
+# 🧹 FAXINEIRO DE DESAFIOS 
 # ====================================================
 async def remover_desafio_por_sala(room_id):
-    for lobby_id, lobby in lobbies.items():
-        desafios_para_remover = []
-        for ch_id, desafio in lobby.get('desafios', {}).items():
-            if desafio.get('room_id') == room_id:
-                desafios_para_remover.append(ch_id)
-        for ch_id in desafios_para_remover:
-            del lobby['desafios'][ch_id]
-            await sio.emit('lobby_challenge_cancelled', {'challenge_id': ch_id}, room=lobby_id)
+    try:
+        for lobby_id, lobby in lobbies.items():
+            desafios_para_remover = []
+            for ch_id, desafio in lobby.get('desafios', {}).items():
+                if desafio.get('room_id') == room_id:
+                    desafios_para_remover.append(ch_id)
+            for ch_id in desafios_para_remover:
+                del lobby['desafios'][ch_id]
+                await sio.emit('lobby_challenge_cancelled', {'challenge_id': ch_id}, room=lobby_id)
+    except Exception as e:
+        print(f"Erro ao remover desafio: {e}")
 
 # ====================================================
 # 🛡️ MOTOR DE HISTÓRICO NO MONGODB
 # ====================================================
 async def save_chat_log(lobby_data):
     if not lobby_data.get('messages'): return
+    if db is None: return
     try:
-        from server import db  
         await db.chat_logs.create_index("criadoEm", expireAfterSeconds=1728000)
         
         log_doc = {
@@ -99,12 +115,15 @@ async def disconnect(sid):
 # 🚀 SISTEMA DE SALAS (LOBBY E CHAT)
 # ====================================================
 async def broadcast_lobbies():
-    safe_lobbies = []
-    for l_id, l_data in lobbies.items():
-        if l_data['status'] == 'ESPERA':
-            players_names = [players_online[p_sid]['name'] for p_sid in l_data['players'] if p_sid in players_online]
-            safe_lobbies.append({'id': l_id, 'nome': l_data['nome'], 'tipo': l_data['tipo'], 'host_name': players_online[l_data['host']]['name'] if l_data['host'] in players_online else 'Desconhecido', 'jogadores_count': len(l_data['players']), 'max_jogadores': l_data['max_jogadores'], 'players_names': players_names})
-    await sio.emit('lobbies_list', safe_lobbies)
+    try:
+        safe_lobbies = []
+        for l_id, l_data in lobbies.items():
+            if l_data['status'] == 'ESPERA':
+                players_names = [players_online[p_sid]['name'] for p_sid in l_data['players'] if p_sid in players_online]
+                safe_lobbies.append({'id': l_id, 'nome': l_data['nome'], 'tipo': l_data['tipo'], 'host_name': players_online[l_data['host']]['name'] if l_data['host'] in players_online else 'Desconhecido', 'jogadores_count': len(l_data['players']), 'max_jogadores': l_data['max_jogadores'], 'players_names': players_names})
+        await sio.emit('lobbies_list', safe_lobbies)
+    except Exception as e:
+        print(f"Erro no broadcast_lobbies: {e}")
 
 @sio.event
 async def get_lobbies(sid, data=None):
@@ -294,15 +313,32 @@ async def cancel_lobby_challenge(sid, data):
 # ====================================================
 @sio.event
 async def register_player(sid, data):
+    user_id = data.get('user_id')
+    if not user_id: return
+
+    sids_to_disconnect = []
+    for old_sid, info in players_online.items():
+        if old_sid != sid and info.get('user_id') == user_id:
+            sids_to_disconnect.append(old_sid)
+            
+    for old_sid in sids_to_disconnect:
+        try:
+            await sio.disconnect(old_sid)
+        except Exception:
+            pass
+
     if sid in players_online:
         players_online[sid]['name'] = data.get('name', 'Jogador')
-        players_online[sid]['user_id'] = data.get('user_id')
+        players_online[sid]['user_id'] = user_id
         await broadcast_online_users()
 
 @sio.event
 async def request_sync(sid):
-    safe_list = [{'sid': s, 'name': info['name'], 'user_id': info['user_id'], 'status': info['status'], 'aceita_convites': info['aceita_convites']} for s, info in players_online.items() if info['user_id']]
-    await sio.emit('online_users_list', safe_list, room=sid)
+    try:
+        safe_list = [{'sid': s, 'name': info['name'], 'user_id': info['user_id'], 'status': info['status'], 'aceita_convites': info['aceita_convites']} for s, info in players_online.items() if info['user_id']]
+        await sio.emit('online_users_list', safe_list, room=sid)
+    except Exception as e:
+        print(f"Erro em request_sync: {e}")
 
 @sio.event
 async def update_status(sid, data):
@@ -321,8 +357,11 @@ async def toggle_invites(sid, data):
         await broadcast_online_users()
 
 async def broadcast_online_users():
-    safe_list = [{'sid': s, 'name': info['name'], 'user_id': info['user_id'], 'status': info['status'], 'aceita_convites': info['aceita_convites']} for s, info in players_online.items() if info['user_id']]
-    await sio.emit('online_users_list', safe_list)
+    try:
+        safe_list = [{'sid': s, 'name': info['name'], 'user_id': info['user_id'], 'status': info['status'], 'aceita_convites': info['aceita_convites']} for s, info in players_online.items() if info.get('user_id')]
+        await sio.emit('online_users_list', safe_list)
+    except Exception as e:
+        print(f"Erro no broadcast_online_users: {e}")
 
 @sio.event
 async def send_invite(sid, data):
@@ -394,12 +433,57 @@ async def cancel_matchmaking(sid):
     for q_name in matchmaking_queues:
         if sid in matchmaking_queues[q_name]: matchmaking_queues[q_name].remove(sid)
 
-def gerar_operacao_simples():
-    op = random.choice(['+', '-', 'x'])
-    if op == '+': n1, n2, res = random.randint(1, 20), random.randint(1, 20), 0; res = n1 + n2
-    elif op == '-': n1 = random.randint(10, 30); n2 = random.randint(1, n1); res = n1 - n2
-    else: n1, n2 = random.randint(1, 10), random.randint(1, 10); res = n1 * n2
-    return {"texto": f"{n1} {op} {n2}", "resposta": res, "marcadoPor": None}
+# ====================================================
+# FÁBRICA DE MATEMÁTICA CORRIGIDA
+# ====================================================
+def gerar_operacao_simples(modo='misto'):
+    ops_disponiveis = ['+', '-', 'x', '/', '^', 'v']
+    
+    if modo == 'soma': 
+        ops_disponiveis = ['+']
+    elif modo == 'subtracao': 
+        ops_disponiveis = ['-']
+    elif modo == 'multiplicacao': 
+        ops_disponiveis = ['x']
+    elif modo == 'divisao': 
+        ops_disponiveis = ['/']
+    elif modo == 'potenciacao': 
+        ops_disponiveis = ['^', 'v']
+        
+    op = random.choice(ops_disponiveis)
+    
+    texto = ""
+    res = 0
+
+    if op == '+': 
+        n1, n2 = random.randint(1, 20), random.randint(1, 20)
+        res = n1 + n2
+        texto = f"{n1} + {n2}"
+    elif op == '-': 
+        n1 = random.randint(10, 30)
+        n2 = random.randint(1, n1)
+        res = n1 - n2
+        texto = f"{n1} - {n2}"
+    elif op == 'x': 
+        n1, n2 = random.randint(1, 10), random.randint(1, 10)
+        res = n1 * n2
+        texto = f"{n1} x {n2}"
+    elif op == '/':
+        n2 = random.randint(2, 10)  # O Divisor
+        res = random.randint(2, 10) # O Resultado exato
+        n1 = n2 * res               # O Dividendo calculado para ser exato
+        texto = f"{n1} ÷ {n2}"
+    elif op == '^':
+        n1 = random.randint(2, 10)  # Base da potência
+        res = n1 ** 2               # Resultado
+        texto = f"{n1}²"
+    elif op == 'v':
+        res = random.randint(2, 10) # O resultado da raiz
+        n1 = res ** 2               # O que fica dentro da raiz
+        texto = f"√{n1}"
+        
+    return {"texto": texto, "resposta": res, "marcadoPor": None}
+
 
 def check_win(board):
     for a, b, c in [[0,1,2], [3,4,5], [6,7,8], [0,3,6], [1,4,7], [2,5,8], [0,4,8], [2,4,6]]:
@@ -463,7 +547,6 @@ async def start_arcade_match(p1_sid, p2_sid, modo_operacao):
     
     return room_id 
 
-# 🚨 NOVO SINAL DO METRÔNOMO
 @sio.event
 async def arcade_host_spawn(sid, data):
     room_id = data.get('room_id')
@@ -507,9 +590,25 @@ async def arcade_miss(sid, data):
 # ====================================================
 async def start_tugofwar_match(p1_sid, p2_sid, modo_operacao):
     room_id = f"tug_{p1_sid[:5]}_{p2_sid[:5]}"
-    p1_op = gerar_operacao_simples()
-    p2_op = gerar_operacao_simples()
+    p1_op = gerar_operacao_simples(modo_operacao)
+    p2_op = gerar_operacao_simples(modo_operacao)
     
+    p1_eq, p1_perf = None, "ALUNO"
+    p2_eq, p2_perf = None, "ALUNO"
+    
+    if db is not None:
+        try:
+            user1 = await db.usuarios.find_one({"id": players_online[p1_sid].get('user_id')})
+            user2 = await db.usuarios.find_one({"id": players_online[p2_sid].get('user_id')})
+            if user1:
+                p1_eq = user1.get("equipeId")
+                p1_perf = user1.get("perfil", "ALUNO")
+            if user2:
+                p2_eq = user2.get("equipeId")
+                p2_perf = user2.get("perfil", "ALUNO")
+        except Exception as e:
+            print(f"Erro ao buscar perfis no banco para cabo de guerra: {e}")
+
     rooms[room_id] = {
         'type': 'tugofwar', 
         'modo_operacao': modo_operacao, 
@@ -524,8 +623,25 @@ async def start_tugofwar_match(p1_sid, p2_sid, modo_operacao):
     players_online[p1_sid]['status'] = players_online[p2_sid]['status'] = 'JOGANDO_ONLINE'
     await broadcast_online_users()
     
-    await sio.emit('match_found', {'room_id': room_id, 'game_type': 'tugofwar', 'is_p1': True, 'opponentName': rooms[room_id]['names'][p2_sid], 'initial_op': p1_op}, room=p1_sid)
-    await sio.emit('match_found', {'room_id': room_id, 'game_type': 'tugofwar', 'is_p1': False, 'opponentName': rooms[room_id]['names'][p1_sid], 'initial_op': p2_op}, room=p2_sid)
+    await sio.emit('match_found', {
+        'room_id': room_id, 
+        'game_type': 'tugofwar', 
+        'is_p1': True, 
+        'opponentName': rooms[room_id]['names'][p2_sid], 
+        'opponentEquipeId': p2_eq, 
+        'opponentPerfil': p2_perf, 
+        'initial_op': p1_op
+    }, room=p1_sid)
+    
+    await sio.emit('match_found', {
+        'room_id': room_id, 
+        'game_type': 'tugofwar', 
+        'is_p1': False, 
+        'opponentName': rooms[room_id]['names'][p1_sid], 
+        'opponentEquipeId': p1_eq, 
+        'opponentPerfil': p1_perf, 
+        'initial_op': p2_op
+    }, room=p2_sid)
     
     return room_id
 
@@ -548,7 +664,8 @@ async def tugofwar_answer(sid, data):
                 
             await sio.emit('tugofwar_state_update', {'rope_position': room['rope_position']}, room=room_id)
             
-            room['current_ops'][sid] = gerar_operacao_simples()
+            modo = room.get('modo_operacao', 'misto')
+            room['current_ops'][sid] = gerar_operacao_simples(modo)
             await sio.emit('tugofwar_new_op', {'new_op': room['current_ops'][sid]}, room=sid)
             
             if room['rope_position'] >= 10:

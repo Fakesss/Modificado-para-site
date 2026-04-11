@@ -53,6 +53,23 @@ export default function HubJogos() {
           </View>
         </TouchableOpacity>
 
+        {/* NOVO: BOTÃO DO CABO DE GUERRA OFFLINE */}
+        <TouchableOpacity 
+          style={styles.gameCard} 
+          onPress={() => router.push('/cabo_de_guerra_offline')}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: '#FF450020' }]}>
+            <Ionicons name="people" size={40} color="#FF4500" />
+          </View>
+          <View style={styles.gameInfo}>
+            <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
+              Cabo de Guerra (Treino)
+            </Text>
+            <Text style={styles.gameDesc}>Jogue offline contra um Robô Inteligente que se adapta à sua velocidade!</Text>
+          </View>
+        </TouchableOpacity>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -72,7 +89,9 @@ const styles = StyleSheet.create({
     padding: 20, 
     marginBottom: 20, 
     width: '100%', 
-    alignItems: 'center'
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#333'
   },
   iconContainer: { 
     width: 80, 

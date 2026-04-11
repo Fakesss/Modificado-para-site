@@ -16,7 +16,7 @@ export default function JogadoresOnline() {
   const [aceitaConvites, setAceitaConvites] = useState(true);
   
   const [jogadorParaConvidar, setJogadorParaConvidar] = useState<any>(null);
-  const [mostrarModosArcade, setMostrarModosArcade] = useState(false);
+  const [jogoSelecionadoParaDesafio, setJogoSelecionadoParaDesafio] = useState<'arcade' | 'tugofwar' | null>(null);
 
   // =====================================================================
   // CORREÇÃO DA CONDIÇÃO DE CORRIDA: REGISTRO SEGURO DE EVENTOS
@@ -92,7 +92,7 @@ export default function JogadoresOnline() {
         modo_operacao: modoOperacao
       });
       setJogadorParaConvidar(null);
-      setMostrarModosArcade(false);
+      setJogoSelecionadoParaDesafio(null);
     }
   };
 
@@ -160,7 +160,7 @@ export default function JogadoresOnline() {
             </View>
 
             {jogador.aceita_convites ? (
-              <TouchableOpacity style={styles.btnAcao} onPress={() => {setJogadorParaConvidar(jogador); setMostrarModosArcade(false);}}>
+              <TouchableOpacity style={styles.btnAcao} onPress={() => {setJogadorParaConvidar(jogador); setJogoSelecionadoParaDesafio(null);}}>
                 <Ionicons name="game-controller" size={20} color="#FFF" />
                 <Text style={styles.btnAcaoText}>Desafiar</Text>
               </TouchableOpacity>
@@ -176,7 +176,7 @@ export default function JogadoresOnline() {
           <View key={match.room_id} style={styles.card}>
             <View style={styles.info}>
               <Text style={{color: '#FFD700', fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>
-                {match.game_type === 'arcade' ? 'ARCADE TURBO' : match.game_type === 'tugofwar' ? 'CABO DE GUERRA' : 'JOGO DA VELHA'}
+                {match.game_type === 'arcade' ? 'MATEMÁTICA TURBO' : match.game_type === 'tugofwar' ? 'CABO DE GUERRA' : 'JOGO DA VELHA'}
               </Text>
               <Text style={styles.name}>{match.player1} <Text style={{color: '#FF4444'}}>vs</Text> {match.player2}</Text>
               <Text style={styles.statusText}>👁 {match.spectators_count} assistindo</Text>
@@ -199,7 +199,7 @@ export default function JogadoresOnline() {
       <Modal visible={!!jogadorParaConvidar} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalGameContent}>
-            {!mostrarModosArcade ? (
+            {!jogoSelecionadoParaDesafio ? (
               <>
                 <Text style={styles.modalTitle}>DESAFIAR JOGADOR</Text>
                 <Text style={styles.modalText}>Qual jogo você quer jogar com {jogadorParaConvidar?.name}?</Text>
@@ -210,49 +210,52 @@ export default function JogadoresOnline() {
                     <Ionicons name="chevron-forward" size={20} color="#888" />
                 </TouchableOpacity>
                 
-                <TouchableOpacity style={styles.gameOptionBtn} onPress={() => setMostrarModosArcade(true)}>
+                <TouchableOpacity style={styles.gameOptionBtn} onPress={() => setJogoSelecionadoParaDesafio('arcade')}>
                     <View style={[styles.iconContainer, {backgroundColor: '#4169E120'}]}><Ionicons name="rocket" size={28} color="#4169E1" /></View>
                     <View style={{flex: 1}}>
-                       <Text style={styles.gameOptionText}>Desafio por Tempo</Text>
+                       <Text style={styles.gameOptionText}>Matemática Turbo</Text>
                        <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Escolher operação...</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color="#888" />
                 </TouchableOpacity>
 
+                <TouchableOpacity style={styles.gameOptionBtn} onPress={() => setJogoSelecionadoParaDesafio('tugofwar')}>
+                    <View style={[styles.iconContainer, {backgroundColor: '#FF149320'}]}><Ionicons name="people" size={28} color="#FF1493" /></View>
+                    <View style={{flex: 1}}>
+                       <Text style={styles.gameOptionText}>Cabo de Guerra</Text>
+                       <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Escolher operação...</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#888" />
+                </TouchableOpacity>
               </>
             ) : (
               <>
-                <Text style={styles.modalTitle}>ESCOLHA O MODO</Text>
-                <Text style={styles.modalText}>Selecione o desafio para {jogadorParaConvidar?.name}:</Text>
+                <Text style={styles.modalTitle}>ESCOLHA A OPERAÇÃO</Text>
+                <Text style={styles.modalText}>
+                  Modo: {jogoSelecionadoParaDesafio === 'arcade' ? 'Matemática Turbo' : 'Cabo de Guerra'}
+                </Text>
                 
                 <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center'}}>
                     {[
-                        {id: 'misto', nome: 'Jornada', cor: '#FFD700'},
+                        {id: 'misto', nome: 'Misto', cor: '#FFD700'},
                         {id: 'soma', nome: 'Soma', cor: '#32CD32'},
-                        {id: 'subtracao', nome: 'Subtr.', cor: '#FF4444'},
-                        {id: 'multiplicacao', nome: 'Mult.', cor: '#4169E1'},
-                        {id: 'potenciacao', nome: 'Potên.', cor: '#FF8C00'},
+                        {id: 'subtracao', nome: 'Subtração', cor: '#FF4444'},
+                        {id: 'multiplicacao', nome: 'Multiplicação', cor: '#4169E1'},
+                        {id: 'divisao', nome: 'Divisão', cor: '#9b59b6'},
+                        {id: 'potenciacao', nome: 'Potência/Raiz', cor: '#FF8C00'},
                     ].map(m => (
-                        <TouchableOpacity key={m.id} style={{backgroundColor: '#0c0c0c', padding: 15, borderRadius: 10, width: '45%', borderLeftWidth: 4, borderLeftColor: m.cor}} onPress={() => enviarConviteFinal('arcade', m.id)}>
-                            <Text style={{color: '#FFF', fontWeight: 'bold', textAlign: 'center'}}>Arcade: {m.nome}</Text>
-                        </TouchableOpacity>
-                    ))}
-                    
-                    {[
-                        {id: 'soma', nome: 'Cabo de Guerra', cor: '#FF1493'},
-                    ].map(m => (
-                        <TouchableOpacity key={m.id} style={{backgroundColor: '#0c0c0c', padding: 15, borderRadius: 10, width: '92%', borderLeftWidth: 4, borderLeftColor: m.cor, marginTop: 10}} onPress={() => enviarConviteFinal('tugofwar', m.id)}>
-                            <Text style={{color: '#FFF', fontWeight: 'bold', textAlign: 'center'}}>⚔️ {m.nome} (Força e Velocidade)</Text>
+                        <TouchableOpacity key={m.id} style={{backgroundColor: '#0c0c0c', padding: 15, borderRadius: 10, width: '45%', borderLeftWidth: 4, borderLeftColor: m.cor}} onPress={() => enviarConviteFinal(jogoSelecionadoParaDesafio, m.id)}>
+                            <Text style={{color: '#FFF', fontWeight: 'bold', textAlign: 'center'}}>{m.nome}</Text>
                         </TouchableOpacity>
                     ))}
                 </View>
-                <TouchableOpacity style={{marginTop: 25, padding: 10}} onPress={() => setMostrarModosArcade(false)}>
+                <TouchableOpacity style={{marginTop: 25, padding: 10}} onPress={() => setJogoSelecionadoParaDesafio(null)}>
                     <Text style={{color: '#888', textAlign: 'center', fontWeight: 'bold'}}>Voltar</Text>
                 </TouchableOpacity>
               </>
             )}
 
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => {setJogadorParaConvidar(null); setMostrarModosArcade(false);}}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => {setJogadorParaConvidar(null); setJogoSelecionadoParaDesafio(null);}}>
                 <Text style={styles.cancelBtnText}>Cancelar</Text>
             </TouchableOpacity>
           </View>
