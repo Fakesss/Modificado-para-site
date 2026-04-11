@@ -1,64 +1,51 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { enviarPingOnline } from '../services/multiplayerApi';
+import { socket } from '../services/socket';
 
 export default function OnlineHeartbeat() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      if (socket.connected) socket.disconnect();
+      return;
+    }
 
-    let isActive = true;
-    let timeoutId: NodeJS.Timeout;
+    // 1. Liga o motor de tempo real (Socket) se estiver desligado
+    if (!socket.connected) socket.connect();
 
-    const ping = () => {
-      if (isActive) enviarPingOnline(user.nome, user.turmaId, user.equipeId);
+    // 2. Registra o jogador no servidor para ele aparecer nas Lobbies e aba Online
+    const registrarJogador = () => {
+      socket.emit('register_player', {
+        name: user.nome,
+        user_id: user.id
+      });
     };
 
-    // Função que verifica se a tela está acesa E o app está visível na WebView
-    const isScreenVisible = () => {
-      if (Platform.OS === 'web' && typeof document !== 'undefined') {
-        return document.visibilityState === 'visible';
-      }
-      return true; // Fallback se não estiver na web
-    };
+    registrarJogador();
 
-    const loopPing = () => {
-      if (!isActive) return;
-      
-      // SÓ MANDA MENSAGEM SE A TELA ESTIVER ACESA E O APP ABERTO
-      if (isScreenVisible()) {
-        ping();
-      }
-      
-      timeoutId = setTimeout(loopPing, 30000);
-    };
+    // 3. Se a internet cair e voltar, ele se registra automaticamente
+    socket.on('connect', registrarJogador);
 
-    // Primeiro disparo
-    ping();
-    timeoutId = setTimeout(loopPing, 30000);
-
-    // ESCUTA O BLOQUEIO DE TELA DA WEBVIEW
+    // 4. "Acorda" a conexão caso o celular bloqueie a tela e volte (WebView)
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const handleVisibilityChange = () => {
         if (document.visibilityState === 'visible') {
-          // Desbloqueou a tela! Espera 2 segundinhos pro 4G voltar e bate o coração.
-          setTimeout(() => { if (isActive) ping(); }, 2000);
+          if (!socket.connected) socket.connect();
+          setTimeout(registrarJogador, 1000);
         }
       };
       document.addEventListener('visibilitychange', handleVisibilityChange);
-
+      
       return () => {
-        isActive = false;
-        clearTimeout(timeoutId);
+        socket.off('connect', registrarJogador);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
 
     return () => {
-      isActive = false;
-      clearTimeout(timeoutId);
+      socket.off('connect', registrarJogador);
     };
   }, [user]);
 
