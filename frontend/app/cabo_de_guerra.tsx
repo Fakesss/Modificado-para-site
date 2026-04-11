@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Alert, Platform, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Dimensions, Alert, Platform, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -8,6 +8,66 @@ import { useAuth } from '../src/context/AuthContext';
 import * as api from '../src/services/api';
 
 const { width } = Dimensions.get('window');
+
+// =========================================================================
+// EFEITO NEON GIRATÓRIO DO ADMINISTRADOR
+// =========================================================================
+const AuraGiratoria = ({ cores }: { cores: string[] }) => {
+  const spinValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(spinValue, {
+        toValue: 1,
+        duration: 2500, // Tempo para dar uma volta completa (2.5 segundos)
+        easing: Easing.linear, 
+        useNativeDriver: true,
+      })
+    ).start();
+  }, []);
+
+  const spin = spinValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg']
+  });
+
+  const coresSeguras = cores && cores.length > 0 ? cores : ['#00BFFF', '#FFD700', '#32CD32'];
+
+  return (
+    <Animated.View style={{
+      position: 'absolute',
+      width: 60, height: 60,
+      justifyContent: 'center', alignItems: 'center',
+      transform: [{ rotate: spin }],
+      zIndex: -1, // Garante que a aura fique ATRÁS do corpo do personagem
+    }}>
+      {coresSeguras.map((cor, index) => {
+        // Distribui as cores em círculo ao redor do centro
+        const angulo = (index * (360 / coresSeguras.length)) * (Math.PI / 180);
+        const raio = 12; // Distância do centro
+        const x = Math.cos(angulo) * raio;
+        const y = Math.sin(angulo) * raio;
+
+        return (
+          <View
+            key={index}
+            style={{
+              position: 'absolute',
+              width: 34,
+              height: 34,
+              borderRadius: 17,
+              backgroundColor: cor,
+              transform: [{ translateX: x }, { translateY: y }],
+              // Se for Web aplica um blur real, se for Android usa opacidade para simular o neon
+              opacity: Platform.OS === 'web' ? 0.7 : 0.45,
+              ...(Platform.OS === 'web' ? { filter: 'blur(8px)' } as any : { shadowColor: cor, shadowOpacity: 1, shadowRadius: 10, elevation: 5 })
+            }}
+          />
+        );
+      })}
+    </Animated.View>
+  );
+};
 
 // =========================================================================
 // O TIME ANIMADO (3 Personagens)
@@ -54,7 +114,6 @@ const AnimatedTeam = ({ isLeft, config, teamState }: any) => {
   const color = config.isGhost ? '#FFFFFF' : config.core;
   const shadow = config.glow;
 
-  // Usa textShadow no mobile, e drop-shadow do CSS na Web para brilho mais forte
   const glowStyle: any = Platform.OS === 'web' 
     ? { filter: `drop-shadow(0px 0px 8px ${shadow})` }
     : { textShadowColor: shadow, textShadowRadius: 15 };
@@ -66,9 +125,20 @@ const AnimatedTeam = ({ isLeft, config, teamState }: any) => {
           transform: [{ rotate: rotation }, { translateY }, { translateX }],
           marginLeft: isLeft && i > 0 ? -15 : 0, 
           marginRight: !isLeft && i > 0 ? -15 : 0,
-          zIndex: 3 - i
+          zIndex: 3 - i,
+          justifyContent: 'center', alignItems: 'center'
         }}>
-          <Ionicons name="body" size={55} color={color} style={glowStyle} />
+          
+          {/* SE FOR ADMIN: Renderiza a aura neon giratória atrás dele */}
+          {config.isRainbow && <AuraGiratoria cores={config.rainbowColors} />}
+
+          {/* O CORPO DO JOGADOR */}
+          <Ionicons 
+            name="body" 
+            size={55} 
+            color={color} 
+            style={!config.isRainbow ? glowStyle : undefined} // O Admin não usa glow fixo, usa a aura
+          />
         </Animated.View>
       ))}
     </View>
@@ -111,7 +181,6 @@ export default function CaboDeGuerraOnline() {
   const [leftState, setLeftState] = useState('idle');
   const [rightState, setRightState] = useState('idle');
 
-  // Estado para armazenar as equipes reais do banco
   const [equipesDb, setEquipesDb] = useState<any[]>([]);
 
   const roomIdRef = useRef<string>('');
@@ -120,35 +189,22 @@ export default function CaboDeGuerraOnline() {
   const ultimaPosicao = useRef(0);
   const ropeAnim = useRef(new Animated.Value(0)).current;
 
-  // Carrega as equipes dinâmicas da API ao montar a tela
   useEffect(() => {
     api.getEquipes().then(data => setEquipesDb(data)).catch(console.error);
   }, []);
 
-  // =========================================================================
-  // MOTOR DE CORES E ARCO-ÍRIS DO ADMIN
-  // =========================================================================
-  const [adminColor, setAdminColor] = useState('#00BFFF');
-
-  useEffect(() => {
-    const colors = equipesDb.length > 0 ? equipesDb.map(e => e.cor) : ['#00BFFF', '#FFD700', '#32CD32'];
-    let i = 0;
-    const interval = setInterval(() => {
-      i = (i + 1) % colors.length;
-      setAdminColor(colors[i] as string);
-    }, 400); 
-    return () => clearInterval(interval);
-  }, [equipesDb]);
-
-  // Agora compara os IDs (equipeId) e Perfis reais!
   const getTeamConfig = (equipeId: string, perfil: string, email: string, isLocalPlayer: boolean, opponentEquipeId: string) => {
+    // Se for administrador
     if (perfil === 'ADMIN' || perfil?.includes('admin') || email === 'danielprofessormatematica@gmail.com') {
-        return { isRainbow: true, core: '#FFFFFF', glow: adminColor, isGhost: false };
+        const cores = equipesDb.length > 0 ? equipesDb.map(e => e.cor) : ['#00BFFF', '#FFD700', '#32CD32'];
+        return { isRainbow: true, core: '#FFFFFF', rainbowColors: cores, isGhost: false };
     }
   
+    // Lê dinamicamente
     const equipeEncontrada = equipesDb.find(e => e.id === equipeId);
     const teamColor = equipeEncontrada ? equipeEncontrada.cor : '#00BFFF';
   
+    // Se jogar contra um oponente da MESMA equipe, o oponente fica branco com borda da cor
     if (!isLocalPlayer && equipeId && equipeId === opponentEquipeId) {
         return { isRainbow: false, core: '#FFFFFF', glow: teamColor, isGhost: true };
     }
@@ -373,16 +429,13 @@ export default function CaboDeGuerraOnline() {
     };
   }, [tela, isP1]);
 
-  // Pegando IDs reais!
   const meuTimeId = user?.equipeId || '';
   const meuPerfil = user?.perfil || 'ALUNO';
   const meuEmail = user?.email || '';
 
-  // Recebendo dados enviados pelo Python back-end
   const timeOponenteId = activeMatchData?.opponentEquipeId || ''; 
   const roleOponente = activeMatchData?.opponentPerfil || 'ALUNO';
 
-  // Você sempre fica na Direita, o Oponente na Esquerda
   const leftConfig = getTeamConfig(timeOponenteId, roleOponente, '', false, meuTimeId);
   const rightConfig = getTeamConfig(meuTimeId, meuPerfil, meuEmail, true, timeOponenteId);
 
@@ -390,7 +443,9 @@ export default function CaboDeGuerraOnline() {
 
   if (tela === 'resultado') {
     const venci = ganhador === socket.id;
-    const finalColor = venci ? (rightConfig.isRainbow ? adminColor : rightConfig.core) : '#888';
+    // Pega a primeira cor do arco-íris se for admin, ou a cor principal se for aluno (para o troféu final)
+    const finalColor = venci ? (rightConfig.isRainbow ? (rightConfig.rainbowColors && rightConfig.rainbowColors.length > 0 ? rightConfig.rainbowColors[0] : '#FFD700') : rightConfig.core) : '#888';
+    
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.resultadoContainer}>
@@ -417,8 +472,8 @@ export default function CaboDeGuerraOnline() {
 
       <View style={styles.arena}>
         <View style={styles.namesRow}>
-           <Text style={[styles.playerName, { color: leftConfig.isRainbow ? adminColor : leftConfig.core, textShadowColor: leftConfig.glow, textShadowRadius: 10 }]}>{oponenteNome}</Text>
-           <Text style={[styles.playerName, { color: rightConfig.isGhost ? '#FFF' : rightConfig.core, textShadowColor: rightConfig.glow, textShadowRadius: 10 }]}>Você</Text>
+           <Text style={[styles.playerName, { color: leftConfig.isRainbow ? '#FFFFFF' : leftConfig.core, textShadowColor: leftConfig.glow || '#FFFFFF', textShadowRadius: 10 }]}>{oponenteNome}</Text>
+           <Text style={[styles.playerName, { color: rightConfig.isGhost ? '#FFF' : rightConfig.core, textShadowColor: rightConfig.glow || '#FFFFFF', textShadowRadius: 10 }]}>Você</Text>
         </View>
 
         <View style={styles.field}>
