@@ -525,10 +525,21 @@ async def arcade_miss(sid, data):
 # 🪢 SISTEMA DO CABO DE GUERRA (TUG OF WAR)
 # ====================================================
 async def start_tugofwar_match(p1_sid, p2_sid, modo_operacao):
+    from server import db # Importando aqui para garantir acesso ao banco
     room_id = f"tug_{p1_sid[:5]}_{p2_sid[:5]}"
     p1_op = gerar_operacao_simples(modo_operacao)
     p2_op = gerar_operacao_simples(modo_operacao)
     
+    # 🚀 BUSCAR EQUIPES REAIS NO MONGODB
+    user1 = await db.usuarios.find_one({"id": players_online[p1_sid]['user_id']})
+    user2 = await db.usuarios.find_one({"id": players_online[p2_sid]['user_id']})
+
+    p1_eq = user1.get("equipeId") if user1 else None
+    p1_perf = user1.get("perfil", "ALUNO") if user1 else "ALUNO"
+
+    p2_eq = user2.get("equipeId") if user2 else None
+    p2_perf = user2.get("perfil", "ALUNO") if user2 else "ALUNO"
+
     rooms[room_id] = {
         'type': 'tugofwar', 
         'modo_operacao': modo_operacao, 
@@ -543,8 +554,26 @@ async def start_tugofwar_match(p1_sid, p2_sid, modo_operacao):
     players_online[p1_sid]['status'] = players_online[p2_sid]['status'] = 'JOGANDO_ONLINE'
     await broadcast_online_users()
     
-    await sio.emit('match_found', {'room_id': room_id, 'game_type': 'tugofwar', 'is_p1': True, 'opponentName': rooms[room_id]['names'][p2_sid], 'initial_op': p1_op}, room=p1_sid)
-    await sio.emit('match_found', {'room_id': room_id, 'game_type': 'tugofwar', 'is_p1': False, 'opponentName': rooms[room_id]['names'][p1_sid], 'initial_op': p2_op}, room=p2_sid)
+    # 🚀 ENVIANDO AS EQUIPES E PERFIS PARA O FRONT-END DE CADA UM
+    await sio.emit('match_found', {
+        'room_id': room_id, 
+        'game_type': 'tugofwar', 
+        'is_p1': True, 
+        'opponentName': rooms[room_id]['names'][p2_sid], 
+        'opponentEquipeId': p2_eq, 
+        'opponentPerfil': p2_perf, 
+        'initial_op': p1_op
+    }, room=p1_sid)
+    
+    await sio.emit('match_found', {
+        'room_id': room_id, 
+        'game_type': 'tugofwar', 
+        'is_p1': False, 
+        'opponentName': rooms[room_id]['names'][p1_sid], 
+        'opponentEquipeId': p1_eq, 
+        'opponentPerfil': p1_perf, 
+        'initial_op': p2_op
+    }, room=p2_sid)
     
     return room_id
 
