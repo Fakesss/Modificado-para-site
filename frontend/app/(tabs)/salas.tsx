@@ -36,13 +36,26 @@ export default function Salas() {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // =====================================================================
+  // CORREÇÃO DA CONDIÇÃO DE CORRIDA: REGISTRO SEGURO DE EVENTOS
+  // =====================================================================
   useEffect(() => {
-    if (!socket.connected) socket.connect();
+    const initSocket = () => {
+      if (user) {
+        socket.emit('register_player', { name: user.nome, user_id: user.id });
+        socket.emit('get_lobbies', {});
+      }
+    };
 
-    if (user) {
-      socket.emit('register_player', { name: user.nome, user_id: user.id });
-      socket.emit('get_lobbies', {});
+    // Se já estiver conectado, pede a lista agora. Se não, manda conectar.
+    if (!socket.connected) {
+      socket.connect();
+    } else {
+      initSocket();
     }
+
+    // A Mágica: Se a conexão demorar, assim que ela ligar, pedimos a lista automaticamente!
+    socket.on('connect', initSocket);
 
     socket.on('lobbies_list', (data) => { setLobbies(data); setLoading(false); setRefreshing(false); });
     
@@ -103,6 +116,7 @@ export default function Salas() {
     });
 
     return () => {
+      socket.off('connect', initSocket);
       socket.off('lobbies_list'); socket.off('lobby_joined'); socket.off('lobby_update');
       socket.off('lobby_left'); socket.off('lobby_message'); socket.off('lobby_error'); 
       socket.off('lobby_message_updated'); socket.off('lobby_challenge_created');
@@ -110,9 +124,19 @@ export default function Salas() {
     };
   }, [user, isAtBottom]);
 
+  // =====================================================================
+  // LOOP INTELIGENTE (Atualiza as salas sem precisar arrastar a tela)
+  // =====================================================================
   useFocusEffect(
     useCallback(() => {
-      if (socket.connected && !currentLobby) socket.emit('get_lobbies', {});
+      const fetchLobbies = () => {
+        if (socket.connected && !currentLobby) socket.emit('get_lobbies', {});
+      };
+      
+      fetchLobbies();
+      const interval = setInterval(fetchLobbies, 3000);
+      
+      return () => clearInterval(interval);
     }, [currentLobby])
   );
 
@@ -120,7 +144,7 @@ export default function Salas() {
     setRefreshing(true);
     if (!socket.connected) socket.connect();
     socket.emit('get_lobbies', {});
-    setTimeout(() => setRefreshing(false), 3000); 
+    setTimeout(() => setRefreshing(false), 2000); 
   }, []);
 
   const handleScroll = (event: any) => {
@@ -182,11 +206,14 @@ export default function Salas() {
       if (Platform.OS === 'web') return window.alert('O limite deve ser entre 2 e 50 pessoas.');
       return Alert.alert('Erro', 'O limite deve ser entre 2 e 50 pessoas.');
     }
+    
+    if (!socket.connected) socket.connect();
     setLoading(true);
     socket.emit('create_lobby', { nome: newRoomName.trim(), tipo: 'Bate-papo', max_jogadores: limit });
   };
 
   const handleJoinLobby = (lobbyId: string, isGhost: boolean = false) => {
+    if (!socket.connected) socket.connect();
     socket.emit('join_lobby', { lobby_id: lobbyId, is_ghost: isGhost });
   };
 
@@ -479,7 +506,6 @@ export default function Salas() {
 
             if (item.apagada) {
               if (isAdmin) {
-                // VISÃO EXCLUSIVA DO ADMIN: Vê a mensagem original com estilo de alerta (riscada e borda vermelha)
                 return (
                   <TouchableOpacity activeOpacity={0.8} style={[styles.messageBubble, isMe ? styles.messageMe : styles.messageOther, { backgroundColor: '#2a2a3e', borderWidth: 1, borderColor: '#E74C3C' }]}>
                     {!isMe && <Text style={[styles.messageSender, { color: '#E74C3C' }]}>{item.sender} <Text style={{fontSize: 10}}>(Apagada)</Text></Text>}
@@ -488,7 +514,6 @@ export default function Salas() {
                   </TouchableOpacity>
                 );
               } else {
-                // Visão do aluno: Apenas o aviso
                 return (
                   <View style={[styles.messageBubble, { alignSelf: isMe ? 'flex-end' : 'flex-start', backgroundColor: '#333' }]}>
                     <Text style={{ color: '#aaa', fontStyle: 'italic', fontSize: 13 }}>🚫 Esta mensagem foi apagada</Text>
