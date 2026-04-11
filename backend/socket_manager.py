@@ -394,12 +394,31 @@ async def cancel_matchmaking(sid):
     for q_name in matchmaking_queues:
         if sid in matchmaking_queues[q_name]: matchmaking_queues[q_name].remove(sid)
 
-def gerar_operacao_simples():
-    op = random.choice(['+', '-', 'x'])
-    if op == '+': n1, n2, res = random.randint(1, 20), random.randint(1, 20), 0; res = n1 + n2
-    elif op == '-': n1 = random.randint(10, 30); n2 = random.randint(1, n1); res = n1 - n2
-    else: n1, n2 = random.randint(1, 10), random.randint(1, 10); res = n1 * n2
+
+def gerar_operacao_simples(modo='misto'):
+    ops_disponiveis = ['+', '-', 'x']
+    if modo == 'soma': 
+        ops_disponiveis = ['+']
+    elif modo == 'subtracao': 
+        ops_disponiveis = ['-']
+    elif modo == 'multiplicacao': 
+        ops_disponiveis = ['x']
+        
+    op = random.choice(ops_disponiveis)
+    
+    if op == '+': 
+        n1, n2 = random.randint(1, 20), random.randint(1, 20)
+        res = n1 + n2
+    elif op == '-': 
+        n1 = random.randint(10, 30)
+        n2 = random.randint(1, n1)
+        res = n1 - n2
+    else: 
+        n1, n2 = random.randint(1, 10), random.randint(1, 10)
+        res = n1 * n2
+        
     return {"texto": f"{n1} {op} {n2}", "resposta": res, "marcadoPor": None}
+
 
 def check_win(board):
     for a, b, c in [[0,1,2], [3,4,5], [6,7,8], [0,3,6], [1,4,7], [2,5,8], [0,4,8], [2,4,6]]:
@@ -507,8 +526,8 @@ async def arcade_miss(sid, data):
 # ====================================================
 async def start_tugofwar_match(p1_sid, p2_sid, modo_operacao):
     room_id = f"tug_{p1_sid[:5]}_{p2_sid[:5]}"
-    p1_op = gerar_operacao_simples()
-    p2_op = gerar_operacao_simples()
+    p1_op = gerar_operacao_simples(modo_operacao)
+    p2_op = gerar_operacao_simples(modo_operacao)
     
     rooms[room_id] = {
         'type': 'tugofwar', 
@@ -548,7 +567,8 @@ async def tugofwar_answer(sid, data):
                 
             await sio.emit('tugofwar_state_update', {'rope_position': room['rope_position']}, room=room_id)
             
-            room['current_ops'][sid] = gerar_operacao_simples()
+            modo = room.get('modo_operacao', 'misto')
+            room['current_ops'][sid] = gerar_operacao_simples(modo)
             await sio.emit('tugofwar_new_op', {'new_op': room['current_ops'][sid]}, room=sid)
             
             if room['rope_position'] >= 10:
