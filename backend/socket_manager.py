@@ -1,10 +1,12 @@
 import asyncio
+import os
 from typing import Dict, List, Optional
 from datetime import datetime
 import time
 import socketio
 import random
 import uuid 
+from motor.motor_asyncio import AsyncIOMotorClient
 
 sio = socketio.AsyncServer(
     async_mode='asgi',
@@ -12,6 +14,17 @@ sio = socketio.AsyncServer(
     logger=False,
     engineio_logger=False
 )
+
+# ====================================================
+# CONEXÃO INDEPENDENTE COM O BANCO DE DADOS
+# Evita Import Circular e travamentos no Render
+# ====================================================
+mongo_url = os.getenv('MONGO_URL')
+if mongo_url:
+    client = AsyncIOMotorClient(mongo_url)
+    db = client.get_default_database()
+else:
+    db = None
 
 players_online: Dict[str, dict] = {}
 rooms: Dict[str, dict] = {}
@@ -24,25 +37,28 @@ matchmaking_queues = {
 }
 
 # ====================================================
-# 🧹 FAXINEIRO DE DESAFIOS (NOVA FUNÇÃO)
+# 🧹 FAXINEIRO DE DESAFIOS 
 # ====================================================
 async def remover_desafio_por_sala(room_id):
-    for lobby_id, lobby in lobbies.items():
-        desafios_para_remover = []
-        for ch_id, desafio in lobby.get('desafios', {}).items():
-            if desafio.get('room_id') == room_id:
-                desafios_para_remover.append(ch_id)
-        for ch_id in desafios_para_remover:
-            del lobby['desafios'][ch_id]
-            await sio.emit('lobby_challenge_cancelled', {'challenge_id': ch_id}, room=lobby_id)
+    try:
+        for lobby_id, lobby in lobbies.items():
+            desafios_para_remover = []
+            for ch_id, desafio in lobby.get('desafios', {}).items():
+                if desafio.get('room_id') == room_id:
+                    desafios_para_remover.append(ch_id)
+            for ch_id in desafios_para_remover:
+                del lobby['desafios'][ch_id]
+                await sio.emit('lobby_challenge_cancelled', {'challenge_id': ch_id}, room=lobby_id)
+    except Exception as e:
+        print(f"Erro ao remover desafio: {e}")
 
 # ====================================================
 # 🛡️ MOTOR DE HISTÓRICO NO MONGODB
 # ====================================================
 async def save_chat_log(lobby_data):
     if not lobby_data.get('messages'): return
+    if db is None: return
     try:
-        from server import db  
         await db.chat_logs.create_index("criadoEm", expireAfterSeconds=1728000)
         
         log_doc = {
@@ -99,12 +115,15 @@ async def disconnect(sid):
 # 🚀 SISTEMA DE SALAS (LOBBY E CHAT)
 # ====================================================
 async def broadcast_lobbies():
-    safe_lobbies = []
-    for l_id, l_data in lobbies.items():
-        if l_data['status'] == 'ESPERA':
-            players_names = [players_online[p_sid]['name'] for p_sid in l_data['players'] if p_sid in players_online]
-            safe_lobbies.append({'id': l_id, 'nome': l_data['nome'], 'tipo': l_data['tipo'], 'host_name': players_online[l_data['host']]['name'] if l_data['host'] in players_online else 'Desconhecido', 'jogadores_count': len(l_data['players']), 'max_jogadores': l_data['max_jogadores'], 'players_names': players_names})
-    await sio.emit('lobbies_list', safe_lobbies)
+    try:
+        safe_lobbies = []
+        for l_id, l_data in lobbies.items():
+            if l_data['status'] == 'ESPERA':
+                players_names = [players_online[p_sid]['name'] for p_sid in l_data['players'] if p_sid in players_online]
+                safe_lobbies.append({'id': l_id, 'nome': l_data['nome'], 'tipo': l_data['tipo'], 'host_name': players_online[l_data['host']]['name'] if l_data['host'] in players_online else 'Desconhecido', 'jogadores_count': len(l_data['players']), 'max_jogadores': l_data['max_jogadores'], 'players_names': players_names})
+        await sio.emit('lobbies_list', safe_lobbies)
+    except Exception as e:
+        print(f"Erro no broadcast_lobbies: {e}")
 
 @sio.event
 async def get_lobbies(sid, data=None):
@@ -301,8 +320,11 @@ async def register_player(sid, data):
 
 @sio.event
 async def request_sync(sid):
-    safe_list = [{'sid': s, 'name': info['name'], 'user_id': info['user_id'], 'status': info['status'], 'aceita_convites': info['aceita_convites']} for s, info in players_online.items() if info['user_id']]
-    await sio.emit('online_users_list', safe_list, room=sid)
+    try:
+        safe_list = [{'sid': s, 'name': info['name'], 'user_id': info['user_id'], 'status': info['status'], 'aceita_convites': info['aceita_convites']} for s, info in players_online.items() if info['user_id']]
+        await sio.emit('online_users_list', safe_list, room=sid)
+    except Exception as e:
+        print(f"Erro em request_sync: {e}")
 
 @sio.event
 async def update_status(sid, data):
@@ -321,8 +343,11 @@ async def toggle_invites(sid, data):
         await broadcast_online_users()
 
 async def broadcast_online_users():
-    safe_list = [{'sid': s, 'name': info['name'], 'user_id': info['user_id'], 'status': info['status'], 'aceita_convites': info['aceita_convites']} for s, info in players_online.items() if info['user_id']]
-    await sio.emit('online_users_list', safe_list)
+    try:
+        safe_list = [{'sid': s, 'name': info['name'], 'user_id': info['user_id'], 'status': info['status'], 'aceita_convites': info['aceita_convites']} for s, info in players_online.items() if info.get('user_id')]
+        await sio.emit('online_users_list', safe_list)
+    except Exception as e:
+        print(f"Erro no broadcast_online_users: {e}")
 
 @sio.event
 async def send_invite(sid, data):
@@ -525,20 +550,26 @@ async def arcade_miss(sid, data):
 # 🪢 SISTEMA DO CABO DE GUERRA (TUG OF WAR)
 # ====================================================
 async def start_tugofwar_match(p1_sid, p2_sid, modo_operacao):
-    from server import db # Importando aqui para garantir acesso ao banco
     room_id = f"tug_{p1_sid[:5]}_{p2_sid[:5]}"
     p1_op = gerar_operacao_simples(modo_operacao)
     p2_op = gerar_operacao_simples(modo_operacao)
     
-    # 🚀 BUSCAR EQUIPES REAIS NO MONGODB
-    user1 = await db.usuarios.find_one({"id": players_online[p1_sid]['user_id']})
-    user2 = await db.usuarios.find_one({"id": players_online[p2_sid]['user_id']})
-
-    p1_eq = user1.get("equipeId") if user1 else None
-    p1_perf = user1.get("perfil", "ALUNO") if user1 else "ALUNO"
-
-    p2_eq = user2.get("equipeId") if user2 else None
-    p2_perf = user2.get("perfil", "ALUNO") if user2 else "ALUNO"
+    p1_eq, p1_perf = None, "ALUNO"
+    p2_eq, p2_perf = None, "ALUNO"
+    
+    # 🚀 Busca as equipes reais usando o banco seguro inicializado neste arquivo
+    if db is not None:
+        try:
+            user1 = await db.usuarios.find_one({"id": players_online[p1_sid].get('user_id')})
+            user2 = await db.usuarios.find_one({"id": players_online[p2_sid].get('user_id')})
+            if user1:
+                p1_eq = user1.get("equipeId")
+                p1_perf = user1.get("perfil", "ALUNO")
+            if user2:
+                p2_eq = user2.get("equipeId")
+                p2_perf = user2.get("perfil", "ALUNO")
+        except Exception as e:
+            print(f"Erro ao buscar perfis no banco para cabo de guerra: {e}")
 
     rooms[room_id] = {
         'type': 'tugofwar', 
@@ -554,7 +585,6 @@ async def start_tugofwar_match(p1_sid, p2_sid, modo_operacao):
     players_online[p1_sid]['status'] = players_online[p2_sid]['status'] = 'JOGANDO_ONLINE'
     await broadcast_online_users()
     
-    # 🚀 ENVIANDO AS EQUIPES E PERFIS PARA O FRONT-END DE CADA UM
     await sio.emit('match_found', {
         'room_id': room_id, 
         'game_type': 'tugofwar', 
