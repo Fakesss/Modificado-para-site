@@ -36,27 +36,30 @@ try:
         colecao_equipes.insert_many(equipes_padrao)
 
     email_admin = "danielprofessormatematica@gmail.com"
-    # Limpa as minhas "gambiarras" antigas
-    colecao_usuarios.delete_one({"email": email_admin}) 
     
-    print("👤 Criando conta de Administrador oficial...")
+    admin_existente = colecao_usuarios.find_one({"email": email_admin})
     
-    # AGORA SIM! O Python vai calcular a criptografia real da sua senha:
-    senha_plana = "Daniel123*"
-    senha_real_criptografada = bcrypt.hashpw(senha_plana.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    
-    admin_user = {
-        "id": str(uuid.uuid4()),
-        "nome": "Professor Daniel",
-        "email": email_admin,
-        "senha": senha_real_criptografada,
-        "perfil": "ADMIN",
-        "ativo": True,
-        "pontosTotais": 0,
-        "streakDias": 0
-    }
-    colecao_usuarios.insert_one(admin_user)
-    print("✅ Administrador criado com sucesso e senha 100% matemática!")
+    if not admin_existente:
+        print("👤 Criando conta de Administrador oficial...")
+        
+        # AGORA SIM! O Python vai calcular a criptografia real da sua senha:
+        senha_plana = "Daniel123*"
+        senha_real_criptografada = bcrypt.hashpw(senha_plana.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
+        admin_user = {
+            "id": str(uuid.uuid4()),
+            "nome": "Professor Daniel",
+            "email": email_admin,
+            "senha": senha_real_criptografada,
+            "perfil": "ADMIN",
+            "ativo": True,
+            "pontosTotais": 0,
+            "streakDias": 0
+        }
+        colecao_usuarios.insert_one(admin_user)
+        print("✅ Administrador criado com sucesso e senha 100% matemática!")
+    else:
+        print("✅ Administrador já existe. Preservando a conta e a pontuação.")
 
     print("🎉 Banco de dados atualizado e pronto para a Vercel!")
 
