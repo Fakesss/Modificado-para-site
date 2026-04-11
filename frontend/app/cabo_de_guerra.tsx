@@ -5,6 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
 
+// IMPORTAÇÃO DO MOTOR DE SPRITES E DAS IMAGENS QUE VOCÊ SALVOU
+import SpriteAnimado from '../src/components/SpriteAnimado';
+const ImgLulaMolusco = require('../assets/images/PC_Squidward.jpg');
+const ImgLord = require('../assets/images/PC_LordRoyal.jpg');
+
 const { width } = Dimensions.get('window');
 
 // =========================================================================
@@ -40,8 +45,14 @@ export default function CaboDeGuerraOnline() {
   const [ganhador, setGanhador] = useState<string | null>(null);
 
   const roomIdRef = useRef<string>('');
-  // Animação da corda
   const ropeAnim = useRef(new Animated.Value(0)).current;
+
+  // MAPEAMENTO DA ANIMAÇÃO (Ajuste a linha e coluna se cortar a cabeça do personagem)
+  const framesCaboDeGuerra = [
+    { linha: 8, coluna: 0 },
+    { linha: 8, coluna: 1 },
+    { linha: 8, coluna: 2 }
+  ];
 
   // =========================================================================
   // SISTEMA NUCLEAR DE TECLADO (RADAR CARTESIANO)
@@ -108,7 +119,6 @@ export default function CaboDeGuerraOnline() {
     }
   };
 
-  // Permite digitar pelo teclado físico no PC
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const handleKeyDownLocal = (e: any) => {
@@ -146,7 +156,6 @@ export default function CaboDeGuerraOnline() {
     socket.emit('update_status', { status: 'JOGANDO_ONLINE' });
 
     const onStateUpdate = (data: any) => {
-      // A corda vai de -10 a +10. Vamos converter isso para pixels na tela.
       const limiteFisico = (width / 2) - 50; 
       const targetVal = (data.rope_position / 10) * limiteFisico;
       
@@ -158,14 +167,8 @@ export default function CaboDeGuerraOnline() {
       }).start();
     };
 
-    const onNewOp = (data: any) => {
-      setOperacao(data.new_op);
-    };
-
-    const onGameOver = (data: any) => {
-      setGanhador(data.ganhador);
-      setTela('resultado');
-    };
+    const onNewOp = (data: any) => setOperacao(data.new_op);
+    const onGameOver = (data: any) => { setGanhador(data.ganhador); setTela('resultado'); };
 
     const onOpponentDisconnected = () => {
       Alert.alert('Fim de Jogo', 'O oponente fugiu do combate!');
@@ -190,7 +193,7 @@ export default function CaboDeGuerraOnline() {
   }, []);
 
   const abandonarPartida = () => {
-    Alert.alert("Desistir", "Tem certeza que deseja abandonar a corda? Você perderá o jogo.", [
+    Alert.alert("Desistir", "Tem certeza que deseja abandonar a corda?", [
       { text: "Não", style: "cancel" },
       { text: "Sim", style: "destructive", onPress: () => {
         socket.emit('leave_match', { room_id: roomIdRef.current });
@@ -226,29 +229,45 @@ export default function CaboDeGuerraOnline() {
       </View>
 
       <View style={styles.arena}>
-        {/* Avatares nas Pontas */}
         <View style={styles.playersRow}>
-          <View style={[styles.playerAvatar, { borderColor: isP1 ? '#00FFFF' : '#FFA500' }]}>
+          
+          {/* LADO ESQUERDO: LULA MOLUSCO */}
+          <View style={styles.playerWrapper}>
             <Text style={[styles.playerName, { color: isP1 ? '#00FFFF' : '#FFA500' }]}>{isP1 ? 'Você' : oponenteNome}</Text>
+            <SpriteAnimado 
+              imagem={isP1 ? ImgLulaMolusco : ImgLord} 
+              larguraFrame={120} 
+              alturaFrame={120} 
+              frames={framesCaboDeGuerra} 
+              isPuxando={tela === 'jogo'} 
+              viradoParaEsquerda={false}
+            />
           </View>
-          <View style={[styles.playerAvatar, { borderColor: !isP1 ? '#00FFFF' : '#FFA500' }]}>
+
+          {/* LADO DIREITO: LORD ROYAL HIGHNESS */}
+          <View style={styles.playerWrapper}>
             <Text style={[styles.playerName, { color: !isP1 ? '#00FFFF' : '#FFA500' }]}>{!isP1 ? 'Você' : oponenteNome}</Text>
+            <SpriteAnimado 
+              imagem={!isP1 ? ImgLulaMolusco : ImgLord} 
+              larguraFrame={120} 
+              alturaFrame={120} 
+              frames={framesCaboDeGuerra} 
+              isPuxando={tela === 'jogo'} 
+              viradoParaEsquerda={true} 
+            />
           </View>
+
         </View>
 
-        {/* A Corda e a Bandeira */}
         <View style={styles.ropeContainer}>
           <View style={styles.rope} />
-          {/* O centro da corda */}
           <View style={styles.ropeCenterMark} />
-          
           <Animated.View style={[styles.flagContainer, { transform: [{ translateX: ropeAnim }] }]}>
             <Ionicons name="flag" size={44} color="#FF4444" style={{ transform: [{ rotate: '-10deg' }] }} />
           </Animated.View>
         </View>
       </View>
 
-      {/* Painel de Contas */}
       <View style={styles.panel}>
         <Text style={styles.instruction}>Resolva as contas para puxar a corda!</Text>
         
@@ -266,7 +285,6 @@ export default function CaboDeGuerraOnline() {
           <Text style={styles.displayText}>{resposta || ' '}</Text>
         </View>
 
-        {/* O Teclado Radar */}
         <View style={styles.tecladoContainer}>
           <View style={styles.tecladoGrid}>
             {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
@@ -283,7 +301,6 @@ export default function CaboDeGuerraOnline() {
             </View>
           </View>
 
-          {/* O Radar Invisível */}
           {Platform.OS !== 'web' && (
              <View
                 style={StyleSheet.absoluteFillObject}
@@ -295,7 +312,6 @@ export default function CaboDeGuerraOnline() {
              />
           )}
         </View>
-
       </View>
     </SafeAreaView>
   );
@@ -308,11 +324,11 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFD700', fontSize: 22, fontWeight: '900', letterSpacing: 1 },
   
   arena: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
-  playersRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 30 },
-  playerAvatar: { backgroundColor: '#1a1a2e', paddingVertical: 12, paddingHorizontal: 25, borderRadius: 16, borderWidth: 2, elevation: 5 },
-  playerName: { fontWeight: '900', fontSize: 16, textTransform: 'uppercase' },
+  playersRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, alignItems: 'flex-end' },
+  playerWrapper: { alignItems: 'center', zIndex: 2 },
+  playerName: { fontWeight: '900', fontSize: 16, textTransform: 'uppercase', marginBottom: 10 },
   
-  ropeContainer: { height: 80, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  ropeContainer: { height: 80, justifyContent: 'center', alignItems: 'center', position: 'relative', marginTop: -60, zIndex: 1 },
   rope: { position: 'absolute', width: '100%', height: 12, backgroundColor: '#8B4513', borderRadius: 6, elevation: 3 },
   ropeCenterMark: { position: 'absolute', width: 4, height: 24, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2 },
   flagContainer: { position: 'absolute', zIndex: 10, paddingBottom: 35 },
