@@ -37,6 +37,7 @@ export default function AdminUsuarios() {
   const [editTurma, setEditTurma] = useState('');
   const [editEquipe, setEditEquipe] = useState('');
   const [editPontos, setEditPontos] = useState(''); 
+  const [editRecordeArcade, setEditRecordeArcade] = useState(''); // NOVO: Estado para o Arcade
 
   useEffect(() => {
     loadData();
@@ -100,6 +101,7 @@ export default function AdminUsuarios() {
     setEditEquipe(user.equipeId || '');
     setEditSenha(''); 
     setEditPontos(String(user.pontosTotais || 0)); 
+    setEditRecordeArcade(String(user.recordeJogoSingle || 0)); // NOVO: Carrega o recorde atual
     setModalVisible(true);
   };
 
@@ -111,7 +113,8 @@ export default function AdminUsuarios() {
         perfil: editPerfil, 
         turmaId: editTurma || null, 
         equipeId: editEquipe || null,
-        pontosTotais: Number(editPontos) 
+        pontosTotais: Number(editPontos),
+        recordeJogoSingle: Number(editRecordeArcade) // NOVO: Envia o recorde do Arcade para a API
       };
       if (editSenha.trim() !== '') data.senha = editSenha;
       await api.updateUsuario(selectedUser.id, data);
@@ -184,7 +187,6 @@ export default function AdminUsuarios() {
     return 'Aluno';
   };
 
-  // HELPER: Formata a data de último acesso
   const formatarUltimoAcesso = (dataIso?: string) => {
     if (!dataIso) return 'Nunca acessou';
     try {
@@ -254,7 +256,6 @@ export default function AdminUsuarios() {
                   </View>
                 </View>
 
-                {/* BLOCO ATUALIZADO DO ONLINE / ÚLTIMO ACESSO */}
                 <View style={{ marginBottom: 8 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={{ color: isOnline ? '#32CD32' : '#555', fontSize: 12, fontWeight: 'bold' }}>
@@ -280,6 +281,8 @@ export default function AdminUsuarios() {
                 <View style={styles.userStats}>
                   <View style={styles.statItem}><Ionicons name="star" size={14} color="#FFD700" /><Text style={styles.statText}>{user.pontosTotais} pts</Text></View>
                   <View style={styles.statItem}><Ionicons name="flame" size={14} color="#FF6B35" /><Text style={styles.statText}>{user.streakDias} dias</Text></View>
+                  {/* NOVO: Exibe os pontos do Arcade diretamente no card do usuário */}
+                  <View style={styles.statItem}><Ionicons name="game-controller" size={14} color="#9b59b6" /><Text style={styles.statText}>{user.recordeJogoSingle || 0} arcade</Text></View>
                 </View>
               </View>
               <View style={styles.userActions}>
@@ -300,6 +303,10 @@ export default function AdminUsuarios() {
 
               <Text style={[styles.inputLabel, { color: '#FFD700' }]}>🏆 Pontos Atuais</Text>
               <TextInput style={[styles.textInput, { borderColor: '#FFD700' }]} value={editPontos} onChangeText={setEditPontos} keyboardType="numeric" placeholder="Zerar ou Diminuir pontos..." placeholderTextColor="#666" />
+
+              {/* NOVO: Campo de edição para o Recorde do Arcade */}
+              <Text style={[styles.inputLabel, { color: '#9b59b6', marginTop: 16 }]}>🕹️ Recorde Arcade (Hall da Fama)</Text>
+              <TextInput style={[styles.textInput, { borderColor: '#9b59b6' }]} value={editRecordeArcade} onChangeText={setEditRecordeArcade} keyboardType="numeric" placeholder="Definir recorde do Arcade..." placeholderTextColor="#666" />
 
               <Text style={styles.inputLabel}>Nome de Exibição</Text>
               <TextInput style={styles.textInput} value={editNome} onChangeText={setEditNome} placeholder="Ex: João da Silva" placeholderTextColor="#666" />
