@@ -37,7 +37,7 @@ const Particula = ({ char }: { char: string }) => {
 };
 
 // =========================================================================
-// BOTÃO PURAMENTE VISUAL (Controlado pelo Radar Matemático Nuclear)
+// BOTÃO VISUAL WEB/MOBILE (COM RESPOSTA INSTANTÂNEA NA WEB)
 // =========================================================================
 const BotaoVisual = ({ valor, isPressed, children, styleExtra, onPressWeb }: any) => {
   return (
@@ -47,7 +47,8 @@ const BotaoVisual = ({ valor, isPressed, children, styleExtra, onPressWeb }: any
         styleExtra,
         isPressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }
       ]}
-      onPress={Platform.OS === 'web' ? () => onPressWeb(valor) : undefined}
+      // Usar onPressIn melhora absurdamente a velocidade da WEB (mouse down direto)
+      onPressIn={Platform.OS === 'web' ? () => onPressWeb(valor) : undefined}
       disabled={Platform.OS !== 'web'} 
     >
       {children}
@@ -210,7 +211,7 @@ export default function ArcadeMultiplayer() {
   };
 
   // =========================================================================
-  // SISTEMA NUCLEAR DE TECLADO (RADAR CARTESIANO + ANIMAÇÕES)
+  // SISTEMA NUCLEAR DE TECLADO 
   // =========================================================================
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
@@ -291,9 +292,6 @@ export default function ArcadeMultiplayer() {
     setResposta('');
   };
 
-  const verificarResposta = () => verificarRespostaComValor(resposta);
-
-  // 🚨 NASCIMENTO PERFEITO: Desenha as contas na exata posição em que estão para o Host
   const spawnarQuestaoRecuperada = (dados: any) => {
     let numLanes = 3;
     if (rodadaRef.current >= 4) numLanes = 4; if (rodadaRef.current >= 7) numLanes = 5; if (rodadaRef.current >= 10) numLanes = 6;
@@ -418,7 +416,6 @@ export default function ArcadeMultiplayer() {
               n2 = r(maxExp - 1) + 2; res = Math.pow(n1, n2); const s:any = {2:'²',3:'³',4:'⁴',5:'⁵',6:'⁶',7:'⁷'}; txt = `${n1}${s[n2] || '^'+n2}`; break;
             case '√': res=r(multMax+4)+2; n1=res*res; n2=''; txt=`√${n1}`; break;
           }
-          // 🚨 DIFICULDADE ATUALIZADA: Cai 800ms a cada rodada (15 contas) para ficar frenético de verdade
           const speed = Math.max(3500, 10000 - (rodadaRef.current * 800));
           novasOps.push({ id: Math.random().toString(), texto: txt, resposta: res, speed, lane_precalc: i % numLanes });
       }
@@ -428,7 +425,6 @@ export default function ArcadeMultiplayer() {
       rodadaRef.current += 1;
   };
 
-  // 🚨 O METRÔNOMO DE SINCRONIA: Apenas o HOST emite o sinal para todo mundo spawnar junto
   const iniciarLoopSpawner = () => {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     if (modoRef.current === 'espectador') return; 
@@ -440,7 +436,6 @@ export default function ArcadeMultiplayer() {
           if (filaMultiplayerRef.current.length > 0) {
               const maxOps = Math.min(15, 3 + Math.floor(pontos / 150)); 
               if (operacoesListRef.current.length < maxOps) {
-                  // O Host manda o servidor avisar todo mundo na sala (incluindo ele mesmo e os espectadores)
                   socket.emit('arcade_host_spawn', { room_id: roomIdRef.current });
               }
           }
@@ -574,7 +569,6 @@ export default function ArcadeMultiplayer() {
         filaMultiplayerRef.current.push(...data.ops);
     };
 
-    // 🚨 QUANDO O SERVIDOR MANDAR, O JOGADOR CRIA A CONTA NA TELA
     const onArcadeDoSpawn = () => {
         if (jogoAtivoRef.current) {
             spawnarQuestao();
@@ -672,7 +666,8 @@ export default function ArcadeMultiplayer() {
     if (modoRef.current === 'espectador') titulo = 'Partida Encerrada';
 
     return (
-      <SafeAreaView style={styles.container}>
+      // CORREÇÃO APLICADA: edges={['top', 'bottom']}
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.resultadoContainer}>
           <Text style={styles.resultadoTitle}>{titulo}</Text>
           <View style={styles.resultadoCard}>
@@ -689,7 +684,8 @@ export default function ArcadeMultiplayer() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    // CORREÇÃO APLICADA: edges={['top', 'bottom']} respeita a barra do Android perfeitamente
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {modoRef.current === 'espectador' && (
         <View style={styles.badgeEspectador}>
           <Text style={styles.textoBadgeEspectador}>👁 ASSISTINDO AO VIVO</Text>
@@ -862,7 +858,7 @@ const styles = StyleSheet.create({
   
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10, elevation: 5 },
   
-  bottomPanel: { position: 'absolute', bottom: 0, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10 },
+  bottomPanel: { position: 'absolute', bottom: 10, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10 },
   displayContainer: { backgroundColor: 'rgba(26, 26, 46, 0.7)', width: '100%', maxWidth: 370, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
   
