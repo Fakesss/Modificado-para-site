@@ -224,6 +224,41 @@ class EquipeUpdate(BaseModel):
     cor: Optional[str] = None
     ativa: Optional[bool] = None
 
+class MissaoQuestao(BaseModel):
+    id: str
+    texto: str
+    resposta: int
+
+class MissaoCreate(BaseModel):
+    titulo: str
+    alvoTipo: str  
+    alvoNome: str
+    alvoId: str
+    questoes: List[MissaoQuestao] = []
+    recompensa: int = 0
+    vidas: int = 3
+    limiteTentativas: int = 1  
+    criadoEm: Optional[str] = None
+    expiraEm: Optional[str] = None
+
+class Missao(MissaoCreate):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    criadaPor: Optional[str] = None
+
+class ReenviarData(BaseModel):
+    alvoTipo: str
+    alvoNome: str
+    alvoId: str
+
+# NOVOS MODELOS PARA O CHAT PRIVADO
+class MensagemPrivadaCreate(BaseModel):
+    destinatarioId: str
+    texto: str
+
+class BloqueioChatCreate(BaseModel):
+    usuarioId1: str
+    usuarioId2: str
+
 # ============== HELPERS ==============
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
@@ -693,6 +728,89 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
     raise HTTPException(400, "Tipo inválido")
 
 # =====================================================================
+# ROTAS DE CHAT PRIVADO (NOVO)
+# =====================================================================
+@api_router.post("/chat/mensagens")
+async def enviar_mensagem(dados: MensagemPrivadaCreate, current_user: dict = Depends(get_current_user)):
+    bloqueio = await db.bloqueios_chat.find_one({
+        "$or": [
+            {"usuarioId1": current_user["id"], "usuarioId2": dados.destinatarioId},
+            {"usuarioId1": dados.destinatarioId, "usuarioId2": current_user["id"]}
+        ]
+    })
+    if bloqueio and bloqueio.get("bloqueadoPorAdmin"):
+        raise HTTPException(status_code=403, detail="Esta conversa foi bloqueada pela moderação do professor.")
+
+    msg = {
+        "id": str(uuid.uuid4()),
+        "remetenteId": current_user["id"],
+        "destinatarioId": dados.destinatarioId,
+        "texto": dados.texto,
+        "lida": False,
+        "apagadaPorAdmin": False,
+        "criadoEm": datetime.utcnow().isoformat()
+    }
+    await db.mensagens_privadas.insert_one(msg)
+    return {"message": "Mensagem enviada com sucesso", "dados": msg}
+
+@api_router.get("/chat/mensagens/{other_user_id}")
+async def obter_conversa(other_user_id: str, current_user: dict = Depends(get_current_user)):
+    mensagens = await db.mensagens_privadas.find({
+        "$or": [
+            {"remetenteId": current_user["id"], "destinatarioId": other_user_id},
+            {"remetenteId": other_user_id, "destinatarioId": current_user["id"]}
+        ]
+    }).sort("criadoEm", 1).to_list(500)
+
+    ids_nao_lidas = [m["id"] for m in mensagens if m["destinatarioId"] == current_user["id"] and not m.get("lida")]
+    if ids_nao_lidas:
+        await db.mensagens_privadas.update_many({"id": {"$in": ids_nao_lidas}}, {"$set": {"lida": True}})
+
+    return [{k: v for k, v in m.items() if k != '_id'} for m in mensagens if not m.get("apagadaPorAdmin")]
+
+@api_router.get("/admin/chat/mensagens")
+async def admin_obter_todas_mensagens(current_user: dict = Depends(require_admin)):
+    mensagens = await db.mensagens_privadas.find({}).sort("criadoEm", -1).to_list(2000)
+    return [{k: v for k, v in m.items() if k != '_id'} for m in mensagens]
+
+@api_router.delete("/admin/chat/mensagens/{msg_id}")
+async def admin_apagar_mensagem(msg_id: str, current_user: dict = Depends(require_admin)):
+    await db.mensagens_privadas.update_one(
+        {"id": msg_id}, 
+        {"$set": {"apagadaPorAdmin": True, "texto": "[Mensagem removida pela moderação do professor]"}}
+    )
+    return {"message": "Mensagem apagada e substituída por aviso"}
+
+@api_router.post("/admin/chat/bloquear")
+async def admin_bloquear_conversa(dados: BloqueioChatCreate, current_user: dict = Depends(require_admin)):
+    existente = await db.bloqueios_chat.find_one({
+        "$or": [
+            {"usuarioId1": dados.usuarioId1, "usuarioId2": dados.usuarioId2},
+            {"usuarioId1": dados.usuarioId2, "usuarioId2": dados.usuarioId1}
+        ]
+    })
+    if existente:
+        await db.bloqueios_chat.update_one({"_id": existente["_id"]}, {"$set": {"bloqueadoPorAdmin": True}})
+    else:
+        await db.bloqueios_chat.insert_one({
+            "id": str(uuid.uuid4()),
+            "usuarioId1": dados.usuarioId1,
+            "usuarioId2": dados.usuarioId2,
+            "bloqueadoPorAdmin": True
+        })
+    return {"message": "Comunicação entre estes dois alunos bloqueada com sucesso"}
+
+@api_router.post("/admin/chat/desbloquear")
+async def admin_desbloquear_conversa(dados: BloqueioChatCreate, current_user: dict = Depends(require_admin)):
+    await db.bloqueios_chat.update_many({
+        "$or": [
+            {"usuarioId1": dados.usuarioId1, "usuarioId2": dados.usuarioId2},
+            {"usuarioId1": dados.usuarioId2, "usuarioId2": dados.usuarioId1}
+        ]
+    }, {"$set": {"bloqueadoPorAdmin": False}})
+    return {"message": "Comunicação desbloqueada com sucesso"}
+
+# =====================================================================
 # ROTAS DO RANKING (GERAL E ARCADE)
 # =====================================================================
 @api_router.get("/ranking/geral")
@@ -705,7 +823,6 @@ async def get_ranking_geral():
         ativo_val = aluno.get("ativo", True)
         ativo = ativo_val.lower() in ['true', '1', 't', 'y', 'yes'] if isinstance(ativo_val, str) else bool(ativo_val)
         
-        # 🚨 CORREÇÃO: Agora o Radar enxerga ALUNO e ALUNO_LIDER!
         if perfil in ["ALUNO", "ALUNO_LIDER"] and ativo:
             eq_id_clean = str(aluno.get("equipeId") or "").strip().lower()
             try: pts = int(float(aluno.get("pontosTotais", 0)))
@@ -748,7 +865,6 @@ async def get_ranking_turma(turma_id: str):
         ativo_val = aluno.get("ativo", True)
         ativo = ativo_val.lower() in ['true', '1', 't', 'y', 'yes'] if isinstance(ativo_val, str) else bool(ativo_val)
         
-        # 🚨 CORREÇÃO: Agora o Radar enxerga ALUNO e ALUNO_LIDER!
         if perfil in ["ALUNO", "ALUNO_LIDER"] and ativo:
             aluno_turma = str(aluno.get("turmaId") or "").strip().lower()
             if aluno_turma == turma_alvo_limpa or (turma_nome_limpo and aluno_turma == turma_nome_limpo):
@@ -777,45 +893,14 @@ async def submit_arcade_score(data: ArcadeScore, current_user: dict = Depends(ge
     pontos_score = data.pontos
     if pontos_score <= 0: return {"message": "Nenhum ponto recebido"}
     
-    # 1. SALVA O SCORE APENAS NO HALL DA FAMA (Arcade)
     current_record = current_user.get("recordeJogoSingle", 0)
     is_new_record = pontos_score > current_record
     
     if is_new_record:
-        # Usamos $set para apenas atualizar o recorde, sem somar em nada
         await db.usuarios.update_one(
             {"id": current_user["id"]}, 
             {"$set": {"recordeJogoSingle": pontos_score}}
         )
-        
-    # 2. FUNCIONALIDADE DA PONTUAÇÃO DIÁRIA (Ranking Geral)
-    # Aqui o sistema vai ignorar os pontos gigantes do score e dar apenas a
-    # pontuação fixa configurada (ex: 10 pontos) uma vez ao dia.
-    
-    # Deixei o código pronto, mas comentado (inativo). Quando for
-    # ativar no painel do admin, basta tirar as aspas e buscar o valor real.
-    
-    """
-    hoje = datetime.utcnow().date().isoformat()
-    if current_user.get("dataUltimoPontoArcade") != hoje:
-        pontos_diarios = 10 # Futuramente: conf.get("pontosDiariosArcade", 0)
-        
-        if pontos_diarios > 0:
-            await db.usuarios.update_one(
-                {"id": current_user["id"]}, 
-                {
-                    "$inc": {"pontosTotais": pontos_diarios},
-                    "$set": {"dataUltimoPontoArcade": hoje}
-                }
-            )
-            
-            eq_raw = current_user.get("equipeId")
-            if eq_raw:
-                await db.equipes.update_one(
-                    {"id": str(eq_raw).strip()}, 
-                    {"$inc": {"pontosTotais": pontos_diarios}}
-                )
-    """
         
     return {"message": "Score processado com sucesso", "newRecord": is_new_record}
 
@@ -879,32 +964,6 @@ async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
 # =====================================================================
 # ROTAS DE MISSÕES (JOGOS PERSONALIZADOS)
 # =====================================================================
-class MissaoQuestao(BaseModel):
-    id: str
-    texto: str
-    resposta: int
-
-class MissaoCreate(BaseModel):
-    titulo: str
-    alvoTipo: str  
-    alvoNome: str
-    alvoId: str
-    questoes: List[MissaoQuestao] = []
-    recompensa: int = 0
-    vidas: int = 3
-    limiteTentativas: int = 1  
-    criadoEm: Optional[str] = None
-    expiraEm: Optional[str] = None
-
-class Missao(MissaoCreate):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    criadaPor: Optional[str] = None
-
-class ReenviarData(BaseModel):
-    alvoTipo: str
-    alvoNome: str
-    alvoId: str
-
 @api_router.get("/missoes")
 async def get_missoes(current_user: dict = Depends(require_admin)):
     missoes = await db.missoes.find({}).sort("criadoEm", -1).to_list(1000)
