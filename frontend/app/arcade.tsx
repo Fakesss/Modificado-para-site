@@ -103,7 +103,7 @@ const Particula = ({ char }: { char: string }) => {
 };
 
 // =========================================================================
-// BOTÃO PURAMENTE VISUAL (Controlado pelo Radar Matemático)
+// BOTÃO VISUAL WEB/MOBILE (COM RESPOSTA INSTANTÂNEA NA WEB)
 // =========================================================================
 const BotaoVisual = ({ valor, isPressed, children, styleExtra, onPressWeb }: any) => {
   return (
@@ -113,7 +113,9 @@ const BotaoVisual = ({ valor, isPressed, children, styleExtra, onPressWeb }: any
         styleExtra,
         isPressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }
       ]}
-      onPress={Platform.OS === 'web' ? () => onPressWeb(valor) : undefined}
+      // Usar onPressIn garante que na WEB o botão dispare no momento exato do clique (mouse down),
+      // deixando a digitação extremamente rápida, sem esperar o botão do mouse ser solto.
+      onPressIn={Platform.OS === 'web' ? () => onPressWeb(valor) : undefined}
       disabled={Platform.OS !== 'web'} 
     >
       {children}
@@ -126,7 +128,7 @@ export default function Arcade() {
   const { user } = useAuth(); 
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [pontos, setPontos] = useState(0);
-  const pontosRef = useRef(0); // ESPELHO DO SCORE (CORRIGE O BUG DO CLOSURE)
+  const pontosRef = useRef(0);
   
   const [vidas, setVidas] = useState(5); 
   const [resposta, setResposta] = useState('');
@@ -178,11 +180,8 @@ export default function Arcade() {
   useEffect(() => { respostaRef.current = resposta; }, [resposta]);
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
   useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
-  
-  // MANTÉM O PONTOS_REF SEMPRE ATUALIZADO
   useEffect(() => { pontosRef.current = pontos; }, [pontos]);
 
-  // Carrega os dados reais do Ranking e as missões
   const carregarDadosMenu = async () => {
     carregarMissoes();
     try {
@@ -370,7 +369,6 @@ export default function Arcade() {
   };
 
   const sairDoJogo = () => {
-    // SALVA OS PONTOS DO MODO LIVRE USANDO A REFERÊNCIA CORRETA
     if (modoRef.current === 'single' && pontosRef.current > 0) {
         api.submitArcadeScore(pontosRef.current).catch(()=>{});
     }
@@ -390,7 +388,7 @@ export default function Arcade() {
     if (botTimer.current) clearInterval(botTimer.current);
     
     setOperacoes([]); setExplosoes([]); 
-    setPontos(0); pontosRef.current = 0; // Zera as duas contagens
+    setPontos(0); pontosRef.current = 0; 
     
     setResposta(''); setPowerUpDisponivel(false); 
     setPausado(false); setMostrarFase(false); setFaseAtualVisor(1);
@@ -514,7 +512,6 @@ export default function Arcade() {
     jogoAtivoRef.current = false; jogoPausadoRef.current = false; transicaoAtivaRef.current = false; fasePendenteRef.current = false; setPausado(false);
     if (spawnTimer.current) clearTimeout(spawnTimer.current); setOperacoes([]); setExplosoes([]);
     
-    // SALVA OS PONTOS DO MODO LIVRE COM A REFERÊNCIA CORRETA
     if (modoRef.current === 'single' && pontosRef.current > 0) {
         api.submitArcadeScore(pontosRef.current).catch(()=>{});
     }
@@ -594,7 +591,8 @@ export default function Arcade() {
     const meuRank = rankingArcade.find(j => j.id === user?.id);
 
     return (
-      <SafeAreaView style={styles.container}>
+      // CORREÇÃO APLICADA: edges={['top', 'bottom']} respeita a barra do Android
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.menuContainer}>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.menuScrollContent} showsVerticalScrollIndicator={false}>
             
@@ -715,7 +713,8 @@ export default function Arcade() {
   if (tela === 'resultado') {
     const venceu = modoRef.current === 'missao' && vidas > 0;
     return (
-      <SafeAreaView style={styles.container}>
+      // CORREÇÃO APLICADA: edges={['top', 'bottom']}
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.resultadoContainer}>
           <Text style={styles.resultadoTitle}>{venceu ? '🎯 Missão Cumprida!' : 'Fim de Jogo!'}</Text>
           {venceu && <View style={[styles.resultadoCard, {backgroundColor: '#32CD3220'}]}><Text style={[styles.resultadoPontos, {color: '#32CD32', fontSize:32}]}>+{missaoAtualRef.current?.recompensa} Pts Bônus</Text></View>}
@@ -727,7 +726,8 @@ export default function Arcade() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    // CORREÇÃO APLICADA: edges={['top', 'bottom']} respeita a barra do Android perfeitamente
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {mostrarFase && (
         <Animated.View style={[styles.transicaoOverlay, { opacity: fadeFaseAnim }]}>
           <View style={styles.transicaoBox}><Text style={styles.transicaoText}>FASE {faseAtualVisor}</Text></View>
@@ -773,9 +773,6 @@ export default function Arcade() {
         
         <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
         
-        {/* ============================================================== */}
-        {/* TECLADO INVISÍVEL COM RADAR (MANTIDO INTACTO)                  */}
-        {/* ============================================================== */}
         <View style={styles.tecladoContainer}>
           
           <View style={styles.tecladoGrid}>
@@ -812,7 +809,6 @@ export default function Arcade() {
              />
           )}
         </View>
-        {/* ============================================================== */}
 
       </View>
     </SafeAreaView>
@@ -874,7 +870,7 @@ const styles = StyleSheet.create({
 
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
   
-  bottomPanel: { position: 'absolute', bottom: 0, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10 },
+  bottomPanel: { position: 'absolute', bottom: 10, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10 },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
