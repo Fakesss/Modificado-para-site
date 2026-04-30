@@ -13,9 +13,6 @@ export default function AdminHome() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // ==========================================
-  // ESTADOS DO MODAL DE PREMIAÇÃO
-  // ==========================================
   const [modalPremiacaoVisible, setModalPremiacaoVisible] = useState(false);
   const [pts1, setPts1] = useState('500');
   const [pts2, setPts2] = useState('300');
@@ -57,7 +54,6 @@ export default function AdminHome() {
     router.push(route as any);
   };
 
-  // Funções de Premiação
   const handlePremiarManualmente = () => {
     Alert.alert('Sucesso!', `Pontos enviados!\n\n🥇 ${top3[0].nome}: +${pts1} pts\n🥈 ${top3[1].nome}: +${pts2} pts\n🥉 ${top3[2].nome}: +${pts3} pts`);
     setModalPremiacaoVisible(false);
@@ -68,7 +64,6 @@ export default function AdminHome() {
     Alert.alert('Configuração Salva', `O sistema automático de premiação foi ${isAutoAtivo ? 'ATIVADO para rodar ' + freq : 'DESATIVADO'}.`);
   };
 
-  // Botão de perigo - Zerar tudo
   const handleZerarRanking = () => {
     Alert.alert(
       "Aviso de Segurança!",
@@ -94,7 +89,6 @@ export default function AdminHome() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />}>
-        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Painel Administrativo</Text>
@@ -103,7 +97,6 @@ export default function AdminHome() {
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}><Ionicons name="log-out-outline" size={24} color="#888" /></TouchableOpacity>
         </View>
 
-        {/* Stats Grid */}
         <View style={styles.statsGrid}>
           <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/usuarios')}><Ionicons name="people" size={28} color="#4169E1" /><Text style={styles.statValue}>{stats?.totalUsuarios || 0}</Text><Text style={styles.statLabel}>Usuários</Text></TouchableOpacity>
           <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/conteudos')}><Ionicons name="play-circle" size={28} color="#32CD32" /><Text style={styles.statValue}>{stats?.totalVideos || 0}</Text><Text style={styles.statLabel}>Vídeos</Text></TouchableOpacity>
@@ -111,7 +104,6 @@ export default function AdminHome() {
           <View style={styles.statCard}><Ionicons name="checkmark-circle" size={28} color="#9B59B6" /><Text style={styles.statValue}>{stats?.totalSubmissoes || 0}</Text><Text style={styles.statLabel}>Submissões</Text></View>
         </View>
 
-        {/* Average Grade */}
         <View style={styles.averageCard}>
           <Ionicons name="analytics" size={32} color="#FFD700" />
           <View style={styles.averageInfo}>
@@ -120,12 +112,20 @@ export default function AdminHome() {
           </View>
         </View>
 
-        {/* Menu Options */}
         <Text style={styles.sectionTitle}>Gerenciamento</Text>
         
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/usuarios')}>
           <View style={[styles.menuIcon, { backgroundColor: '#4169E130' }]}><Ionicons name="people" size={24} color="#4169E1" /></View>
-          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Usuários</Text><Text style={styles.menuDescription}>Gerenciar alunos, líderes e administradores</Text></View>
+          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Usuários</Text><Text style={styles.menuDescription}>Gerenciar alunos e ocultar contas</Text></View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+
+        {/* ======================================= */}
+        {/* NOVO BOTÃO: MODERAÇÃO DO CHAT AQUI      */}
+        {/* ======================================= */}
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/moderacao_chat')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#E74C3C30' }]}><Ionicons name="shield-checkmark" size={24} color="#E74C3C" /></View>
+          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Moderação de Chat</Text><Text style={styles.menuDescription}>Visualizar mensagens e bloquear conversas</Text></View>
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
@@ -183,9 +183,6 @@ export default function AdminHome() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* ========================================== */}
-      {/* MODAL DE PREMIAÇÃO DO ARCADE               */}
-      {/* ========================================== */}
       <Modal visible={modalPremiacaoVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -278,7 +275,6 @@ export default function AdminHome() {
                  </TouchableOpacity>
               </View>
 
-              {/* SESSÃO 4: ZONA DE PERIGO (ZERAR RANKING) */}
               <View style={[styles.modalSection, { backgroundColor: 'rgba(231, 76, 60, 0.1)', borderColor: '#E74C3C50', borderWidth: 1 }]}>
                  <Text style={[styles.sectionLabelModal, { color: '#E74C3C' }]}>ZONA DE PERIGO</Text>
                  <Text style={styles.sectionDescModal}>Zerar a pontuação de todos os jogadores do Arcade de forma permanente.</Text>
