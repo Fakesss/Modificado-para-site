@@ -1,279 +1,220 @@
-import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-  BackHandler,
-  Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { View, TouchableOpacity, Text, StyleSheet, Platform, Modal, Alert } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
-import RankingHeader from '../../src/components/RankingHeader';
-import StreakBadge from '../../src/components/StreakBadge';
-import { RankingItem, Equipe, Turma } from '../../src/types';
+import { Equipe } from '../../src/types';
+import OnlineHeartbeat from '../../src/components/OnlineHeartbeat';
 
-export default function Home() {
-  const { user, logout, refreshUser } = useAuth();
+import { socket, setActiveMatchData } from '../../src/services/socket';
+
+const TEAM_COLORS: Record<string, string> = {
+  'equipe-alfa': '#FFD700',
+  'equipe-delta': '#4169E1',
+  'equipe-omega': '#32CD32',
+};
+
+function AdminBanner() {
+  const { user, isAdminViewingAsStudent, setAdminViewingAsStudent } = useAuth();
   const router = useRouter();
-  const [ranking, setRanking] = useState<RankingItem[]>([]);
-  const [equipe, setEquipe] = useState<Equipe | null>(null);
-  const [turma, setTurma] = useState<Turma | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  // Pergunta antes de sair do app
-  useFocusEffect(
-    useCallback(() => {
-      const onBackPress = () => {
-        Alert.alert(
-          'Sair do aplicativo',
-          'Você tem certeza que deseja sair?',
-          [
-            { text: 'Ficar', style: 'cancel', onPress: () => null },
-            { text: 'Sair', style: 'destructive', onPress: () => BackHandler.exitApp() },
-          ]
-        );
-        return true;
-      };
-      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-      return () => subscription.remove();
-    }, [])
+  const handleBackToAdmin = () => { setAdminViewingAsStudent(false); router.replace('/admin'); };
+  if (!(isAdminViewingAsStudent || user?.perfil === 'ADMIN')) return null;
+  return (
+    <TouchableOpacity style={styles.adminBanner} onPress={handleBackToAdmin}>
+      <Ionicons name="arrow-back" size={18} color="#FFD700" />
+      <Text style={styles.adminBannerText}>Voltar ao Painel</Text>
+    </TouchableOpacity>
   );
+}
 
-  const loadData = useCallback(async () => {
+function NeonLineSimple({ color }: { color: string }) {
+  return <View style={[styles.neonLine, { backgroundColor: color }]} />;
+}
+
+export default function TabsLayout() {
+  const insets = useSafeAreaInsets(); 
+  const { user, isAdminViewingAsStudent } = useAuth();
+  const router = useRouter();
+  const isLeader = user?.perfil === 'ALUNO_LIDER';
+  const [teamColor, setTeamColor] = useState<string>('#FFD700');
+  
+  const [convite, setConvite] = useState<any>(null);
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+  const [totalNaoLidas, setTotalNaoLidas] = useState(0);
+
+  useEffect(() => { loadTeamColor(); }, [user?.equipeId, isAdminViewingAsStudent]);
+
+  const loadTeamColor = async () => {
     try {
-      const [rankingData, equipesData, turmasData] = await Promise.all([
-        api.getRankingGeral(),
-        api.getEquipes(),
-        api.getTurmas(),
-      ]);
-      setRanking(rankingData);
-      
+      if (isAdminViewingAsStudent || user?.perfil === 'ADMIN') {
+        const savedAdminColor = await AsyncStorage.getItem('adminPreviewColor');
+        if (savedAdminColor) { setTeamColor(savedAdminColor); return; }
+      }
       if (user?.equipeId) {
-        const userEquipe = equipesData.find((e: Equipe) => String(e.id) === String(user.equipeId));
-        setEquipe(userEquipe || null);
+        const equipes = await api.getEquipes();
+        const userEquipe = equipes.find((e: Equipe) => e.id === user?.equipeId);
+        if (userEquipe) setTeamColor(userEquipe.cor);
       }
-      
-      if (user?.turmaId) {
-        const userTurma = turmasData.find((t: Turma) => String(t.id) === String(user.turmaId));
-        setTurma(userTurma || null);
-      }
-    } catch (error) {
-      console.error('Error loading home data:', error);
-    } finally {
-      setLoading(false);
+    } catch (error) { console.error(error); }
+  };
+
+  // Motor para buscar mensagens não lidas
+  useEffect(() => {
+    if (!user) return;
+    const fetchUnread = async () => {
+      const summary = await api.getInboxSummary();
+      let total = 0;
+      Object.values(summary).forEach((val: any) => { total += val.unreadCount; });
+      setTotalNaoLidas(total);
+    };
+    
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 5000);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const registrarJogador = () => socket.emit('register_player', { name: user.nome, user_id: user.id });
+    if (socket.connected) { registrarJogador(); socket.emit('update_status', { status: 'MENU' }); } 
+    else { socket.connect(); }
+
+    const onConnect = () => { registrarJogador(); socket.emit('update_status', { status: 'MENU' }); };
+    socket.on('connect', onConnect);
+
+    const identityInterval = setInterval(() => {
+        if (socket.connected) { registrarJogador(); socket.emit('update_status', { status: 'MENU' }); }
+    }, 10000);
+
+    const onReceiveInvite = (data: any) => setConvite(data);
+    const onInviteFeedback = (data: any) => Alert.alert('Central', data.msg);
+    const onInviteError = (data: any) => Alert.alert('Aviso', data.msg);
+    const onOnlineUsersList = (data: any[]) => setOnlineUsers(data);
+    
+    const onMatchFound = (data: any) => {
+      setActiveMatchData(data);
+      setConvite(null);
+      if (data.game_type === 'arcade') router.push('/arcade_multi');
+      else if (data.game_type === 'tugofwar') router.push('/cabo_de_guerra');
+      else router.push('/tictactoe'); 
+    };
+
+    socket.on('receive_invite', onReceiveInvite);
+    socket.on('invite_feedback', onInviteFeedback);
+    socket.on('invite_error', onInviteError);
+    socket.on('online_users_list', onOnlineUsersList);
+    socket.on('match_found', onMatchFound);
+
+    return () => {
+      clearInterval(identityInterval);
+      socket.off('connect', onConnect);
+      socket.off('receive_invite', onReceiveInvite);
+      socket.off('invite_feedback', onInviteFeedback);
+      socket.off('invite_error', onInviteError);
+      socket.off('online_users_list', onOnlineUsersList);
+      socket.off('match_found', onMatchFound);
+    };
+  }, [user]);
+
+  const aceitarConvite = () => {
+    socket.emit('accept_invite', { from_sid: convite.from_sid, game_type: convite.game_type, modo_operacao: convite.modo_operacao });
+    setConvite(null);
+  };
+  const recusarConvite = () => { socket.emit('decline_invite', { from_sid: convite.from_sid }); setConvite(null); };
+  const bloquearJogador = () => {
+    const target = onlineUsers.find(u => u.sid === convite.from_sid);
+    if (target) {
+      socket.emit('block_player_invites', { user_id_to_block: target.user_id });
+      Alert.alert("Bloqueado", "Este jogador não poderá te convidar por 5 minutos.");
     }
-  }, [user?.equipeId, user?.turmaId]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-      refreshUser(); 
-    }, [loadData])
-  );
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await Promise.all([loadData(), refreshUser()]);
-    setRefreshing(false);
+    setConvite(null);
   };
-
-  const handleLogout = async () => {
-    await logout();
-    router.replace('/login');
-  };
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const finalTeamColor = equipe?.cor || '#333333';
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
-        }
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <OnlineHeartbeat />
+      <AdminBanner />
+      <NeonLineSimple color={teamColor} />
+
+      <Modal visible={!!convite} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="game-controller" size={32} color="#FFF" />
+            </View>
+            <Text style={styles.modalTitle}>DESAFIO RECEBIDO!</Text>
+            <Text style={styles.modalText}>
+              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : convite?.game_type === 'arcade' ? 'Matemática Turbo' : 'Cabo de Guerra'}!
+            </Text>
+            <View style={{ width: '100%', gap: 10, marginTop: 20 }}>
+              <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#32CD32' }]} onPress={aceitarConvite}>
+                <Ionicons name="checkmark-circle" size={20} color="#000" />
+                <Text style={[styles.btnText, { color: '#000' }]}>ACEITAR E JOGAR</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#E74C3C' }]} onPress={recusarConvite}>
+                <Ionicons name="close-circle" size={20} color="#FFF" />
+                <Text style={styles.btnText}>RECUSAR</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#333' }]} onPress={bloquearJogador}>
+                <Ionicons name="shield" size={20} color="#888" />
+                <Text style={[styles.btnText, { color: '#888' }]}>BLOQUEAR POR 5 MINUTOS</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: {
+            backgroundColor: '#1a1a2e',
+            borderTopColor: teamColor + '40',
+            borderTopWidth: 2,
+            paddingBottom: Platform.OS === 'ios' ? 20 : Math.max(12, insets.bottom + 5),
+            paddingTop: 8,
+            height: Platform.OS === 'ios' ? 85 : 60 + insets.bottom,
+          },
+          tabBarActiveTintColor: teamColor,
+          tabBarInactiveTintColor: '#666',
+          tabBarLabelStyle: { fontSize: 12, fontWeight: '600', marginBottom: Platform.OS === 'android' ? 4 : 0 },
+        }}
       >
-        {/* Header Original */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Olá, {user?.nome?.split(' ')[0]}!</Text>
-            
-            {turma && (
-              <View style={styles.turmaBadge}>
-                <Ionicons name="school" size={14} color="#888" />
-                <Text style={styles.turmaText}>{turma.nome}</Text>
-              </View>
-            )}
+        <Tabs.Screen name="index" options={{ title: 'Início', tabBarIcon: ({ color, size }) => (<Ionicons name="home" size={size} color={color} />) }} />
+        <Tabs.Screen name="jogadores" options={{ title: 'Online', tabBarIcon: ({ color, size }) => (<Ionicons name="radio" size={size} color={color} /> ) }} />
+        <Tabs.Screen name="salas" options={{ title: 'Salas', tabBarIcon: ({ color, size }) => (<Ionicons name="chatbubbles" size={size} color={color} /> ) }} />
+        
+        {/* INBOX COM A BOLINHA VERMELHA (tabBarBadge) */}
+        <Tabs.Screen name="chat" options={{ title: 'Inbox', tabBarIcon: ({ color, size }) => (<Ionicons name="mail" size={size} color={color} /> ), tabBarBadge: totalNaoLidas > 0 ? totalNaoLidas : undefined }} />
 
-            <StreakBadge streakDias={user?.streakDias || 0} />
-          </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={24} color="#888" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Ranking Header (O Pódio) Original */}
-        <RankingHeader ranking={ranking} />
-
-        {/* User Stats Card Original */}
-        <View style={styles.statsCard}>
-          <Text style={styles.statsTitle}>Seus Pontos</Text>
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Ionicons name="star" size={28} color="#FFD700" />
-              <Text style={styles.statValue}>{user?.pontosTotais || 0}</Text>
-              <Text style={styles.statLabel}>pontos totais</Text>
-            </View>
-            {equipe && (
-              <View style={styles.statItem}>
-                <View style={[styles.teamDot, { backgroundColor: finalTeamColor }]} />
-                <Text style={[styles.statValue, { color: finalTeamColor }]}>{equipe.nome}</Text>
-                <Text style={styles.statLabel}>sua equipe</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* ==================================================== */}
-        {/* NOVA CENTRAL DE COMANDO: VISUAL MODERNO HARMONIZADO  */}
-        {/* ==================================================== */}
-        <View style={styles.actionGrid}>
-          
-          {/* Fila 1: Vídeos e Atividades */}
-          <View style={styles.actionRow}>
-            <TouchableOpacity 
-              style={[styles.actionCard, { borderColor: 'rgba(65, 105, 225, 0.3)' }]} 
-              onPress={() => router.push('/(tabs)/videos')}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.iconGlow, { backgroundColor: 'rgba(65, 105, 225, 0.15)' }]}>
-                <Ionicons name="play" size={28} color="#4169E1" />
-              </View>
-              <Text style={styles.actionText}>Vídeo-aulas</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.actionCard, { borderColor: 'rgba(50, 205, 50, 0.3)' }]} 
-              onPress={() => router.push('/(tabs)/exercicios')}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.iconGlow, { backgroundColor: 'rgba(50, 205, 50, 0.15)' }]}>
-                <Ionicons name="document-text" size={28} color="#32CD32" />
-              </View>
-              <Text style={styles.actionText}>Atividades</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Fila 2: Conteúdos e Progresso */}
-          <View style={styles.actionRow}>
-            <TouchableOpacity 
-              style={[styles.actionCard, { borderColor: 'rgba(255, 140, 0, 0.3)' }]} 
-              onPress={() => router.push('/(tabs)/conteudos')}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.iconGlow, { backgroundColor: 'rgba(255, 140, 0, 0.15)' }]}>
-                <Ionicons name="book-outline" size={28} color="#FF8C00" />
-              </View>
-              <Text style={styles.actionText}>Conteúdos</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.actionCard, { borderColor: 'rgba(224, 102, 255, 0.3)' }]} 
-              onPress={() => router.push('/(tabs)/progresso')}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.iconGlow, { backgroundColor: 'rgba(224, 102, 255, 0.15)' }]}>
-                <Ionicons name="stats-chart" size={28} color="#E066FF" />
-              </View>
-              <Text style={styles.actionText}>Progresso</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Fila 3: Ranking Geral (Esticado para dar destaque) */}
-          <TouchableOpacity 
-            style={[styles.actionCard, styles.actionCardWide, { borderColor: 'rgba(255, 215, 0, 0.3)' }]} 
-            onPress={() => router.push('/(tabs)/ranking')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.iconGlow, { backgroundColor: 'rgba(255, 215, 0, 0.15)', marginBottom: 0, marginRight: 15 }]}>
-              <Ionicons name="trophy" size={28} color="#FFD700" />
-            </View>
-            <Text style={[styles.actionText, { fontSize: 16 }]}>Ranking Geral</Text>
-          </TouchableOpacity>
-
-        </View>
-      </ScrollView>
+        <Tabs.Screen name="jogo" options={{ title: 'Jogos', tabBarIcon: ({ color, size }) => (<Ionicons name="game-controller" size={size} color={color} />), tabBarBadge: '🧪', tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 } }} />
+        <Tabs.Screen name="equipe" options={{ title: 'Equipe', href: isLeader ? undefined : null, tabBarIcon: ({ color, size }) => (<Ionicons name="people" size={size} color={color} />) }} />
+        
+        <Tabs.Screen name="ranking" options={{ href: null }} />
+        <Tabs.Screen name="conteudos" options={{ href: null }} />
+        <Tabs.Screen name="exercicios" options={{ href: null }} />
+        <Tabs.Screen name="videos" options={{ href: null }} />
+        <Tabs.Screen name="progresso" options={{ href: null }} />
+      </Tabs>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  // Mantive as cores exatas do seu app original
   container: { flex: 1, backgroundColor: '#0c0c0c' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scrollView: { flex: 1 },
-  scrollContent: { padding: 16 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  greeting: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 6 },
+  adminBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a2e', paddingVertical: 12, paddingHorizontal: 16, gap: 8, borderBottomWidth: 1, borderBottomColor: '#FFD70040' },
+  adminBannerText: { color: '#FFD700', fontSize: 14, fontWeight: '600' },
+  neonLine: { height: 2, width: '100%', opacity: 0.6 },
   
-  turmaBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start', marginBottom: 10, borderWidth: 1, borderColor: '#333', gap: 6 },
-  turmaText: { color: '#888', fontSize: 13, fontWeight: '600' },
-
-  logoutButton: { padding: 8 },
-  statsCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#333' },
-  statsTitle: { fontSize: 16, color: '#888', marginBottom: 16 },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
-  statItem: { alignItems: 'center' },
-  statValue: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginTop: 8 },
-  statLabel: { fontSize: 12, color: '#666', marginTop: 4 },
-  teamDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#333' },
-  
-  /* NOVOS ESTILOS DOS BOTÕES (Harmonizados) */
-  actionGrid: { gap: 16, paddingBottom: 20 },
-  actionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 16 },
-  actionCard: { 
-    flex: 1, 
-    backgroundColor: '#1a1a2e', // Mesma cor do seu card de status original
-    borderRadius: 20, 
-    padding: 20, 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    borderWidth: 1,
-  },
-  actionCardWide: {
-    flexDirection: 'row',
-    paddingVertical: 18,
-  },
-  iconGlow: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  actionText: { 
-    color: '#fff', 
-    fontSize: 14, 
-    fontWeight: '600' 
-  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#1a1a2e', width: '100%', borderRadius: 24, padding: 25, alignItems: 'center', borderWidth: 1, borderColor: '#FFD70050' },
+  iconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FFD700', justifyContent: 'center', alignItems: 'center', marginBottom: 15, marginTop: -50, borderWidth: 4, borderColor: '#1a1a2e' },
+  modalTitle: { color: '#FFF', fontSize: 22, fontWeight: '900', marginBottom: 5 },
+  modalText: { color: '#AAA', fontSize: 16, textAlign: 'center', marginBottom: 10 },
+  btnAction: { flexDirection: 'row', width: '100%', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  btnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
 });
