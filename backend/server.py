@@ -65,7 +65,7 @@ class Usuario(BaseModel):
     criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     ultimoAcesso: Optional[str] = None
     dataUltimoPontoArcade: Optional[str] = None
-    ocultoChat: bool = False  # NOVO: Define se a conta é de teste (invisível no chat)
+    ocultoChat: bool = False
 
 class UsuarioCreate(BaseModel):
     nome: str
@@ -94,7 +94,7 @@ class AdminUsuarioUpdate(BaseModel):
     ativo: Optional[bool] = None
     pontosTotais: Optional[int] = None
     recordeJogoSingle: Optional[int] = None
-    ocultoChat: Optional[bool] = None # NOVO: Atualização pelo painel admin
+    ocultoChat: Optional[bool] = None
 
 class ArcadeScore(BaseModel):
     pontos: int
@@ -408,7 +408,6 @@ async def delete_equipe(equipe_id: str, current_user: dict = Depends(require_adm
     await db.equipes.update_one({"id": equipe_id}, {"$set": {"ativa": False}})
     return {"message": "Equipe desativada"}
 
-# 👇 MOTOR INTELIGENTE DE USUÁRIOS
 @api_router.get("/usuarios")
 async def get_usuarios(current_user: dict = Depends(get_current_user)):
     usuarios_brutos = await db.usuarios.find({}).to_list(5000)
@@ -421,10 +420,8 @@ async def get_usuarios(current_user: dict = Depends(get_current_user)):
         oculto = bool(u.get("ocultoChat", False))
         
         if ativo:
-            # Se for uma conta de teste e eu não sou o administrador, pula ela
             if not is_admin and oculto:
                 continue
-                
             usuarios_ativos.append({k: v for k, v in u.items() if k not in ['senha', '_id']})
     return usuarios_ativos
 
@@ -746,6 +743,7 @@ async def enviar_mensagem(dados: MensagemPrivadaCreate, current_user: dict = Dep
         "texto": dados.texto,
         "lida": False,
         "apagadaPorAdmin": False,
+        "editadaPorAdmin": False,
         "criadoEm": datetime.utcnow().isoformat()
     }
     await db.mensagens_privadas.insert_one(msg)
@@ -765,6 +763,47 @@ async def obter_conversa(other_user_id: str, current_user: dict = Depends(get_cu
         await db.mensagens_privadas.update_many({"id": {"$in": ids_nao_lidas}}, {"$set": {"lida": True}})
 
     return [{k: v for k, v in m.items() if k != '_id'} for m in mensagens if not m.get("apagadaPorAdmin")]
+
+# =====================================================================
+# ROTAS DO ADMIN PARA MODERAÇÃO AVANÇADA (NOVO)
+# =====================================================================
+@api_router.get("/admin/chat/inbox/{alvo_id}")
+async def admin_obter_resumo_inbox(alvo_id: str, current_user: dict = Depends(require_admin)):
+    mensagens = await db.mensagens_privadas.find({
+        "$or": [{"remetenteId": alvo_id}, {"destinatarioId": alvo_id}]
+    }).to_list(10000)
+
+    inbox = {}
+    for m in mensagens:
+        other_id = m["destinatarioId"] if m["remetenteId"] == alvo_id else m["remetenteId"]
+        if other_id not in inbox:
+            inbox[other_id] = {"lastMessageTime": m["criadoEm"]}
+        
+        if m["criadoEm"] > inbox[other_id]["lastMessageTime"]:
+            inbox[other_id]["lastMessageTime"] = m["criadoEm"]
+            
+    return inbox
+
+@api_router.get("/admin/chat/mensagens/{user1}/{user2}")
+async def admin_obter_conversa(user1: str, user2: str, current_user: dict = Depends(require_admin)):
+    mensagens = await db.mensagens_privadas.find({
+        "$or": [
+            {"remetenteId": user1, "destinatarioId": user2},
+            {"remetenteId": user2, "destinatarioId": user1}
+        ]
+    }).sort("criadoEm", 1).to_list(1000)
+    return [{k: v for k, v in m.items() if k != '_id'} for m in mensagens]
+
+class MensagemEdit(BaseModel):
+    texto: str
+
+@api_router.put("/admin/chat/mensagens/{msg_id}")
+async def admin_editar_mensagem(msg_id: str, dados: MensagemEdit, current_user: dict = Depends(require_admin)):
+    await db.mensagens_privadas.update_one(
+        {"id": msg_id}, 
+        {"$set": {"texto": dados.texto, "editadaPorAdmin": True}}
+    )
+    return {"message": "Mensagem editada com sucesso"}
 
 @api_router.get("/admin/chat/mensagens")
 async def admin_obter_todas_mensagens(current_user: dict = Depends(require_admin)):
@@ -789,7 +828,7 @@ async def admin_desbloquear_conversa(dados: BloqueioChatCreate, current_user: di
     return {"message": "Desbloqueada com sucesso"}
 
 # =====================================================================
-# ROTAS DO RANKING (GERAL E ARCADE)
+# ROTAS DO RANKING E OUTRAS
 # =====================================================================
 @api_router.get("/ranking/geral")
 async def get_ranking_geral():
@@ -899,9 +938,6 @@ async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
         "submissoes": [{k: v for k, v in s.items() if k != '_id'} for s in submissoes]
     }
 
-# =====================================================================
-# ROTAS DE MISSÕES
-# =====================================================================
 @api_router.get("/missoes")
 async def get_missoes(current_user: dict = Depends(require_admin)):
     missoes = await db.missoes.find({}).sort("criadoEm", -1).to_list(1000)
