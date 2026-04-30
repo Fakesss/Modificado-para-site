@@ -9,12 +9,10 @@ import {
   ActivityIndicator,
   BackHandler,
   Alert,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient'; // Estilo: Importação do Gradiente Adicionada
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 import RankingHeader from '../../src/components/RankingHeader';
@@ -30,6 +28,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Pergunta antes de sair do app
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
@@ -93,274 +92,188 @@ export default function Home() {
 
   if (loading) {
     return (
-      <LinearGradient colors={['#1a103d', '#0d0821']} style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#f6d365" />
-      </LinearGradient>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FFD700" />
+        </View>
+      </SafeAreaView>
     );
   }
 
-  const finalTeamColor = equipe?.cor || '#6b46c1'; // Cor secundária suave se não houver equipe
+  const finalTeamColor = equipe?.cor || '#333333';
 
   return (
-    <LinearGradient colors={['#1a103d', '#0d0821']} style={styles.container}>
-      <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f6d365" />
-          }
-        >
-          {/* Header Superior */}
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.greeting}>Olá, {user?.nome?.split(' ')[0]}!</Text>
-              
-              {/* Etiqueta da Turma com novo Visual */}
-              {turma && (
-                <View style={styles.turmaBadge}>
-                  <Ionicons name="school" size={14} color="#f6d365" />
-                  <Text style={styles.turmaText}>{turma.nome}</Text>
-                </View>
-              )}
+    <SafeAreaView style={styles.container}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
+        }
+      >
+        {/* Header Original */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>Olá, {user?.nome?.split(' ')[0]}!</Text>
+            
+            {turma && (
+              <View style={styles.turmaBadge}>
+                <Ionicons name="school" size={14} color="#888" />
+                <Text style={styles.turmaText}>{turma.nome}</Text>
+              </View>
+            )}
 
-              <StreakBadge streakDias={user?.streakDias || 0} />
+            <StreakBadge streakDias={user?.streakDias || 0} />
+          </View>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={24} color="#888" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Ranking Header (O Pódio) Original */}
+        <RankingHeader ranking={ranking} />
+
+        {/* User Stats Card Original */}
+        <View style={styles.statsCard}>
+          <Text style={styles.statsTitle}>Seus Pontos</Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Ionicons name="star" size={28} color="#FFD700" />
+              <Text style={styles.statValue}>{user?.pontosTotais || 0}</Text>
+              <Text style={styles.statLabel}>pontos totais</Text>
             </View>
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={26} color="#a0aec0" />
+            {equipe && (
+              <View style={styles.statItem}>
+                <View style={[styles.teamDot, { backgroundColor: finalTeamColor }]} />
+                <Text style={[styles.statValue, { color: finalTeamColor }]}>{equipe.nome}</Text>
+                <Text style={styles.statLabel}>sua equipe</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* ==================================================== */}
+        {/* NOVA CENTRAL DE COMANDO: VISUAL MODERNO HARMONIZADO  */}
+        {/* ==================================================== */}
+        <View style={styles.actionGrid}>
+          
+          {/* Fila 1: Vídeos e Atividades */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity 
+              style={[styles.actionCard, { borderColor: 'rgba(65, 105, 225, 0.3)' }]} 
+              onPress={() => router.push('/(tabs)/videos')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.iconGlow, { backgroundColor: 'rgba(65, 105, 225, 0.15)' }]}>
+                <Ionicons name="play" size={28} color="#4169E1" />
+              </View>
+              <Text style={styles.actionText}>Vídeo-aulas</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.actionCard, { borderColor: 'rgba(50, 205, 50, 0.3)' }]} 
+              onPress={() => router.push('/(tabs)/exercicios')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.iconGlow, { backgroundColor: 'rgba(50, 205, 50, 0.15)' }]}>
+                <Ionicons name="document-text" size={28} color="#32CD32" />
+              </View>
+              <Text style={styles.actionText}>Atividades</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Ranking Header (O Pódio) */}
-          <RankingHeader ranking={ranking} />
-
-          {/* User Stats Card com Gradiente Escuro */}
-          <View style={styles.statsCard}>
-            <Text style={styles.statsTitle}>Seu Desempenho</Text>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <View style={styles.iconBackgroundStar}>
-                    <Ionicons name="star" size={26} color="#f6d365" />
-                </View>
-                <Text style={styles.statValue}>{user?.pontosTotais || 0}</Text>
-                <Text style={styles.statLabel}>XP Total</Text>
+          {/* Fila 2: Conteúdos e Progresso */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity 
+              style={[styles.actionCard, { borderColor: 'rgba(255, 140, 0, 0.3)' }]} 
+              onPress={() => router.push('/(tabs)/conteudos')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.iconGlow, { backgroundColor: 'rgba(255, 140, 0, 0.15)' }]}>
+                <Ionicons name="book-outline" size={28} color="#FF8C00" />
               </View>
-              {equipe && (
-                <View style={styles.statItem}>
-                  <View style={[styles.iconBackgroundTeam, { backgroundColor: finalTeamColor + '40' }]}>
-                      <View style={[styles.teamDot, { backgroundColor: finalTeamColor }]} />
-                  </View>
-                  <Text style={[styles.statValue, { color: finalTeamColor }]}>{equipe.nome}</Text>
-                  <Text style={styles.statLabel}>Sua Equipe</Text>
-                </View>
-              )}
-            </View>
+              <Text style={styles.actionText}>Conteúdos</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.actionCard, { borderColor: 'rgba(224, 102, 255, 0.3)' }]} 
+              onPress={() => router.push('/(tabs)/progresso')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.iconGlow, { backgroundColor: 'rgba(224, 102, 255, 0.15)' }]}>
+                <Ionicons name="stats-chart" size={28} color="#E066FF" />
+              </View>
+              <Text style={styles.actionText}>Progresso</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* ==================================================== */}
-          {/* BOTÕES ESTILO NEON/GLASSMORPHISM */}
-          {/* ==================================================== */}
-          <View style={styles.actionGrid}>
-            
-            {/* Fila 1 */}
-            <View style={styles.actionRow}>
-              <TouchableOpacity 
-                 style={styles.actionCardWrapper} 
-                 onPress={() => router.push('/(tabs)/videos')}
-                 activeOpacity={0.8}
-              >
-                  <LinearGradient colors={['rgba(65, 105, 225, 0.15)', 'rgba(65, 105, 225, 0.05)']} style={styles.actionCard}>
-                    <View style={[styles.iconContainer, { backgroundColor: '#4169E1' }]}>
-                        <Ionicons name="play" size={22} color="#fff" />
-                    </View>
-                    <Text style={styles.actionText}>Vídeos</Text>
-                  </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                 style={styles.actionCardWrapper} 
-                 onPress={() => router.push('/(tabs)/exercicios')}
-                 activeOpacity={0.8}
-              >
-                  <LinearGradient colors={['rgba(50, 205, 50, 0.15)', 'rgba(50, 205, 50, 0.05)']} style={styles.actionCard}>
-                    <View style={[styles.iconContainer, { backgroundColor: '#32CD32' }]}>
-                        <Ionicons name="document-text" size={22} color="#fff" />
-                    </View>
-                    <Text style={styles.actionText}>Atividades</Text>
-                  </LinearGradient>
-              </TouchableOpacity>
+          {/* Fila 3: Ranking Geral (Esticado para dar destaque) */}
+          <TouchableOpacity 
+            style={[styles.actionCard, styles.actionCardWide, { borderColor: 'rgba(255, 215, 0, 0.3)' }]} 
+            onPress={() => router.push('/(tabs)/ranking')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.iconGlow, { backgroundColor: 'rgba(255, 215, 0, 0.15)', marginBottom: 0, marginRight: 15 }]}>
+              <Ionicons name="trophy" size={28} color="#FFD700" />
             </View>
+            <Text style={[styles.actionText, { fontSize: 16 }]}>Ranking Geral</Text>
+          </TouchableOpacity>
 
-            {/* Fila 2 (Ranking no meio com destaque Dourado) */}
-            <View style={styles.actionRowCenter}>
-              <TouchableOpacity 
-                 style={[styles.actionCardWrapper, { width: '80%' }]} 
-                 onPress={() => router.push('/(tabs)/ranking')}
-                 activeOpacity={0.8}
-              >
-                 <LinearGradient 
-                    colors={['rgba(246, 211, 101, 0.2)', 'rgba(253, 160, 133, 0.1)']} 
-                    style={[styles.actionCard, { paddingVertical: 20, borderColor: 'rgba(246, 211, 101, 0.3)' }]}
-                 >
-                    <View style={[styles.iconContainer, { backgroundColor: '#f6d365', width: 50, height: 50, borderRadius: 25 }]}>
-                        <Ionicons name="trophy" size={26} color="#1a103d" />
-                    </View>
-                    <Text style={[styles.actionText, { fontSize: 16, color: '#f6d365' }]}>Ranking Geral</Text>
-                  </LinearGradient>
-              </TouchableOpacity>
-            </View>
-
-            {/* Fila 3 */}
-            <View style={styles.actionRow}>
-              <TouchableOpacity 
-                 style={styles.actionCardWrapper} 
-                 onPress={() => router.push('/(tabs)/conteudos')}
-                 activeOpacity={0.8}
-              >
-                  <LinearGradient colors={['rgba(255, 140, 0, 0.15)', 'rgba(255, 140, 0, 0.05)']} style={styles.actionCard}>
-                    <View style={[styles.iconContainer, { backgroundColor: '#FF8C00' }]}>
-                        <Ionicons name="book-outline" size={22} color="#fff" />
-                    </View>
-                    <Text style={styles.actionText}>Conteúdos</Text>
-                  </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                 style={styles.actionCardWrapper} 
-                 onPress={() => router.push('/(tabs)/progresso')}
-                 activeOpacity={0.8}
-              >
-                  <LinearGradient colors={['rgba(107, 70, 193, 0.2)', 'rgba(107, 70, 193, 0.05)']} style={styles.actionCard}>
-                    <View style={[styles.iconContainer, { backgroundColor: '#6b46c1' }]}>
-                        <Ionicons name="stats-chart" size={22} color="#fff" />
-                    </View>
-                    <Text style={styles.actionText}>Progresso</Text>
-                  </LinearGradient>
-              </TouchableOpacity>
-            </View>
-
-            {/* Espaçamento extra no fim para a tab bar flutuante não sobrepor o último botão */}
-            <View style={{ height: 80 }} />
-
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    </LinearGradient>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  // Mantive as cores exatas do seu app original
+  container: { flex: 1, backgroundColor: '#0c0c0c' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollView: { flex: 1 },
-  scrollContent: { padding: 20 },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 25,
-    marginTop: 10
-  },
-  greeting: { 
-    fontSize: 26, 
-    fontWeight: '900', 
-    color: '#fff', 
-    marginBottom: 8,
-    letterSpacing: 0.5,
-  },
+  scrollContent: { padding: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  greeting: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 6 },
   
-  turmaBadge: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: 'rgba(246, 211, 101, 0.1)', 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 20, 
-    alignSelf: 'flex-start', 
-    marginBottom: 12, 
-    borderWidth: 1, 
-    borderColor: 'rgba(246, 211, 101, 0.3)', 
-    gap: 8 
-  },
-  turmaText: { color: '#f6d365', fontSize: 13, fontWeight: '700' },
+  turmaBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start', marginBottom: 10, borderWidth: 1, borderColor: '#333', gap: 6 },
+  turmaText: { color: '#888', fontSize: 13, fontWeight: '600' },
 
-  logoutButton: { 
-    padding: 10,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 50,
-  },
-  
-  statsCard: { 
-    backgroundColor: 'rgba(255, 255, 255, 0.03)', 
-    borderRadius: 20, 
-    padding: 24, 
-    marginBottom: 30, 
-    borderWidth: 1, 
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-  },
-  statsTitle: { fontSize: 14, color: '#a0aec0', marginBottom: 20, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1 },
+  logoutButton: { padding: 8 },
+  statsCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#333' },
+  statsTitle: { fontSize: 16, color: '#888', marginBottom: 16 },
   statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
   statItem: { alignItems: 'center' },
-  iconBackgroundStar: {
-      backgroundColor: 'rgba(246, 211, 101, 0.15)',
-      width: 46,
-      height: 46,
-      borderRadius: 23,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: 8
-  },
-  iconBackgroundTeam: {
-      width: 46,
-      height: 46,
-      borderRadius: 23,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: 8
-  },
-  statValue: { fontSize: 24, fontWeight: '900', color: '#fff' },
-  statLabel: { fontSize: 13, color: '#a0aec0', marginTop: 4, fontWeight: '500' },
-  teamDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#1a103d' },
+  statValue: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginTop: 8 },
+  statLabel: { fontSize: 12, color: '#666', marginTop: 4 },
+  teamDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#333' },
   
-  actionGrid: { gap: 15 },
-  actionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 15 },
-  actionRowCenter: { flexDirection: 'row', justifyContent: 'center', marginVertical: 5 },
-  
-  actionCardWrapper: {
-      flex: 1,
-      borderRadius: 20,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 5 },
-      shadowOpacity: 0.3,
-      shadowRadius: 8,
-      elevation: 5,
-  },
+  /* NOVOS ESTILOS DOS BOTÕES (Harmonizados) */
+  actionGrid: { gap: 16, paddingBottom: 20 },
+  actionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 16 },
   actionCard: { 
-      flex: 1, 
-      borderRadius: 20, 
-      padding: 20, 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      borderWidth: 1, 
-      borderColor: 'rgba(255, 255, 255, 0.08)',
+    flex: 1, 
+    backgroundColor: '#1a1a2e', // Mesma cor do seu card de status original
+    borderRadius: 20, 
+    padding: 20, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    borderWidth: 1,
   },
-  iconContainer: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.3,
-      shadowRadius: 5,
-      elevation: 4,
+  actionCardWide: {
+    flexDirection: 'row',
+    paddingVertical: 18,
   },
-  actionText: { color: '#e2e8f0', fontSize: 14, fontWeight: 'bold', letterSpacing: 0.5 },
+  iconGlow: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  actionText: { 
+    color: '#fff', 
+    fontSize: 14, 
+    fontWeight: '600' 
+  },
 });
