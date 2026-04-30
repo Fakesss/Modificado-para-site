@@ -448,7 +448,6 @@ async def zerar_todos_pontos(current_user: dict = Depends(require_admin)):
     await db.equipes.update_many({}, {"$set": {"pontosTotais": 0}})
     return {"message": "Todos os pontos e recordes foram zerados com sucesso."}
 
-
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     query = {"ativo": True, "is_deleted": {"$ne": True}}
@@ -728,7 +727,7 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
     raise HTTPException(400, "Tipo inválido")
 
 # =====================================================================
-# ROTAS DE CHAT PRIVADO (NOVO)
+# ROTAS DE CHAT PRIVADO (COM CORREÇÃO DO _id)
 # =====================================================================
 @api_router.post("/chat/mensagens")
 async def enviar_mensagem(dados: MensagemPrivadaCreate, current_user: dict = Depends(get_current_user)):
@@ -750,8 +749,13 @@ async def enviar_mensagem(dados: MensagemPrivadaCreate, current_user: dict = Dep
         "apagadaPorAdmin": False,
         "criadoEm": datetime.utcnow().isoformat()
     }
+    
+    # O MongoDB injeta o "_id" aqui dentro de 'msg'
     await db.mensagens_privadas.insert_one(msg)
-    return {"message": "Mensagem enviada com sucesso", "dados": msg}
+    
+    # Removemos o "_id" antes de devolver a mensagem para a API não crashar
+    msg_out = {k: v for k, v in msg.items() if k != '_id'}
+    return {"message": "Mensagem enviada com sucesso", "dados": msg_out}
 
 @api_router.get("/chat/mensagens/{other_user_id}")
 async def obter_conversa(other_user_id: str, current_user: dict = Depends(get_current_user)):
