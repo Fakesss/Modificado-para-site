@@ -136,7 +136,11 @@ export const limparItensExpirados = async () => { try { return (await api.post('
 export const getInboxSummary = async () => { try { return (await api.get('/chat/inbox')).data; } catch { return {}; } };
 export const enviarMensagemPrivada = async (destinatarioId: string, texto: string) => (await api.post('/chat/mensagens', { destinatarioId, texto })).data;
 export const getConversaPrivada = async (otherUserId: string) => { try { return (await api.get(`/chat/mensagens/${otherUserId}`)).data; } catch { return []; } };
-export const adminGetAllMensagens = async () => { try { return (await api.get('/admin/chat/mensagens')).data; } catch { return []; } };
+
+// ======== ADMIN: MODERAÇÃO DO CHAT ========
+export const adminGetInboxUsuario = async (userId: string) => { try { return (await api.get(`/admin/chat/inbox/${userId}`)).data; } catch { return {}; } };
+export const adminGetConversa = async (user1: string, user2: string) => { try { return (await api.get(`/admin/chat/mensagens/${user1}/${user2}`)).data; } catch { return []; } };
+export const adminEditarMensagem = async (msgId: string, texto: string) => (await api.put(`/admin/chat/mensagens/${msgId}`, { texto })).data;
 export const adminApagarMensagem = async (msgId: string) => (await api.delete(`/admin/chat/mensagens/${msgId}`)).data;
 export const adminBloquearConversa = async (user1: string, user2: string) => (await api.post('/admin/chat/bloquear', { usuarioId1: user1, usuarioId2: user2 })).data;
 export const adminDesbloquearConversa = async (user1: string, user2: string) => (await api.post('/admin/chat/desbloquear', { usuarioId1: user1, usuarioId2: user2 })).data;
