@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext'; 
 import * as api from '../src/services/api'; 
 import { useFocusEffect, useRouter } from 'expo-router';
+import { Audio } from 'expo-av';
+import Slider from '@react-native-community/slider';
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.62; 
@@ -64,9 +66,6 @@ const Particula = ({ char }: { char: string }) => {
   );
 };
 
-// =========================================================================
-// NOVO BOTÃO VISUAL WEB: Sem trava de responder, aceita cliques sobrepostos ultrarrápidos
-// =========================================================================
 const BotaoVisual = ({ valor, isPressed, children, styleExtra, onPressWeb }: any) => {
   return (
     <View
@@ -130,6 +129,74 @@ export default function Arcade() {
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
   const respostaRef = useRef('');
 
+  // =========================================================================
+  // SISTEMA DE ÁUDIO E CONTROLE DE VOLUME (SLIDER)
+  // =========================================================================
+  const [volumeUI, setVolumeUI] = useState<number>(0.3);
+  const [mostrarVolume, setMostrarVolume] = useState(false);
+  const volumeRef = useRef<number>(0.3);
+  const sonsRef = useRef<any>({});
+  const bgmRef = useRef<Audio.Sound | null>(null);
+
+  useEffect(() => {
+    const carregarSons = async () => {
+      try {
+        sonsRef.current.shoot = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/laser.mp3' })).sound;
+        sonsRef.current.hit = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/hit.mp3' })).sound;
+        sonsRef.current.miss = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/miss.mp3' })).sound;
+        sonsRef.current.damage = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/explosion.mp3' })).sound;
+
+        // Som de fundo bacaninha/simpático (Pode trocar a URL se preferir depois)
+        const { sound: bgmSound } = await Audio.Sound.createAsync(
+            { uri: 'https://raw.githubusercontent.com/photonstorm/macapaka/master/assets/audio/music.mp3' }, 
+            { isLooping: true, volume: volumeRef.current }
+        );
+        bgmRef.current = bgmSound;
+      } catch (error) {
+        console.log("Erro ao carregar sons", error);
+      }
+    };
+    carregarSons();
+
+    return () => {
+      Object.values(sonsRef.current).forEach((s: any) => s?.unloadAsync());
+      if (bgmRef.current) bgmRef.current.unloadAsync();
+    };
+  }, []);
+
+  const handleVolumeChange = async (valor: number) => {
+    setVolumeUI(valor);
+    volumeRef.current = valor;
+    if (bgmRef.current) {
+        await bgmRef.current.setVolumeAsync(valor);
+    }
+  };
+
+  const iniciarBGM = async () => {
+    try {
+        if (bgmRef.current) {
+            await bgmRef.current.setVolumeAsync(volumeRef.current);
+            await bgmRef.current.playAsync();
+        }
+    } catch(e) {}
+  };
+
+  const pararBGM = async () => {
+    try {
+        if (bgmRef.current) await bgmRef.current.pauseAsync();
+    } catch(e) {}
+  };
+
+  const tocarSom = async (tipo: string) => {
+    try {
+      if (sonsRef.current[tipo] && volumeRef.current > 0) {
+        await sonsRef.current[tipo].setVolumeAsync(volumeRef.current);
+        await sonsRef.current[tipo].replayAsync();
+      }
+    } catch (e) {}
+  };
+  // =========================================================================
+
   useEffect(() => { respostaRef.current = resposta; }, [resposta]);
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
   useEffect(() => { modoMatematicaRef.current = modoMatematica; }, [modoMatematica]);
@@ -137,10 +204,7 @@ export default function Arcade() {
 
   const carregarDadosMenu = async () => {
     carregarMissoes();
-    try {
-      const data = await api.getRankingArcade();
-      setRankingArcade(Array.isArray(data) ? data : []);
-    } catch (e) {}
+    try { const data = await api.getRankingArcade(); setRankingArcade(Array.isArray(data) ? data : []); } catch (e) {}
   };
 
   useEffect(() => { if (tela === 'menu') carregarDadosMenu(); }, [tela]);
@@ -207,9 +271,13 @@ export default function Arcade() {
     const opInfo = operacoesListRef.current.find(o => o.id === opId);
     if (!opInfo) return;
     opInfo.y.stopAnimation();
+    
     const expId = Math.random().toString();
     setExplosoes(prev => [...prev, { id: expId, x: opInfo.posX, y: DROP_LIMIT, texto: opInfo.textoTela, corEspecial: opInfo.tipoEspecial !== 'nenhum' }]);
     setTimeout(() => { setExplosoes(prev => prev.filter(e => e.id !== expId)); }, 800);
+    
+    tocarSom('damage'); // Som de dano do erro
+
     setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
     questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
     setOperacoes(prev => prev.filter(o => o.id !== opId));
@@ -248,6 +316,7 @@ export default function Arcade() {
     if (!jogoAtivoRef.current) return;
     jogoAtivoRef.current = false;
     if(spawnTimer.current) clearTimeout(spawnTimer.current);
+    pararBGM();
     try { if(missaoAtualRef.current?.id) await api.concluirMissao(missaoAtualRef.current.id); } catch(e) {}
     setTimeout(() => setTela('resultado'), 500);
   };
@@ -270,12 +339,14 @@ export default function Arcade() {
   const pausarJogo = useCallback(() => {
     if (!jogoAtivoRef.current || jogoPausadoRef.current) return;
     jogoPausadoRef.current = true; setPausado(true);
+    pararBGM();
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     operacoesListRef.current.forEach(op => op.y.stopAnimation());
   }, []);
 
   const retomarJogo = () => {
     jogoPausadoRef.current = false; setPausado(false);
+    iniciarBGM();
     if (!transicaoAtivaRef.current && !fasePendenteRef.current) iniciarLoopSpawner();
     operacoesListRef.current.forEach(op => {
       const currentY = (op.y as any)._value || 0; const distRestante = (height + 50) - currentY;
@@ -286,11 +357,17 @@ export default function Arcade() {
   const sairDoJogo = () => {
     if (modoRef.current === 'single' && pontosRef.current > 0) api.submitArcadeScore(pontosRef.current).catch(()=>{});
     jogoAtivoRef.current = false; jogoPausadoRef.current = false; transicaoAtivaRef.current = false; fasePendenteRef.current = false;
-    setPausado(false); setMostrarFase(false); if (spawnTimer.current) clearTimeout(spawnTimer.current);
+    setPausado(false); setMostrarFase(false); setMostrarVolume(false); if (spawnTimer.current) clearTimeout(spawnTimer.current);
+    pararBGM();
     setOperacoes([]); setExplosoes([]); setTela('menu');
   };
 
-  useFocusEffect(useCallback(() => { return () => { if (jogoAtivoRef.current && !jogoPausadoRef.current) pausarJogo(); }; }, [pausarJogo]));
+  useFocusEffect(useCallback(() => { 
+      return () => { 
+          if (jogoAtivoRef.current && !jogoPausadoRef.current) pausarJogo(); 
+          pararBGM(); // Para música se sair da tela
+      }; 
+  }, [pausarJogo]));
 
   const iniciarJogo = async (modoEscolhido: 'single' | 'bot' | 'missao', missaoDados?: any) => {
     if (modoEscolhido === 'missao' && missaoDados) {
@@ -300,7 +377,7 @@ export default function Arcade() {
     if (botTimer.current) clearInterval(botTimer.current);
     
     setOperacoes([]); setExplosoes([]); setPontos(0); pontosRef.current = 0; 
-    setResposta(''); setPowerUpDisponivel(false); setPausado(false); setMostrarFase(false); setFaseAtualVisor(1);
+    setResposta(''); setPowerUpDisponivel(false); setPausado(false); setMostrarFase(false); setFaseAtualVisor(1); setMostrarVolume(false);
     
     operacoesAtuaisRef.current = []; ultimasRespostasRef.current = []; desempenhoOcultoRef.current = 0; questoesEmJogoRef.current = 0;
     jogoPausadoRef.current = false; jogoAtivoRef.current = true; rodadaRef.current = 1; transicaoAtivaRef.current = false; fasePendenteRef.current = false; proximaFaseNumRef.current = 1;
@@ -310,7 +387,10 @@ export default function Arcade() {
       missaoAtualRef.current = missaoDados; setVidas(missaoDados.vidas ? Number(missaoDados.vidas) : 5);
       filaQuestoesRef.current = missaoDados.questoes.map((q: any) => ({...q, id: q.id || Math.random().toString()}));
     } else { missaoAtualRef.current = null; filaQuestoesRef.current = []; setVidas(5); }
-    setTela('jogo'); setTimeout(() => { spawnarQuestao(); iniciarLoopSpawner(); }, 100);
+    
+    setTela('jogo'); 
+    iniciarBGM();
+    setTimeout(() => { spawnarQuestao(); iniciarLoopSpawner(); }, 100);
   };
 
   const iniciarLoopSpawner = () => {
@@ -413,9 +493,10 @@ export default function Arcade() {
   const animarQueda = (op: any) => { if (!jogoAtivoRef.current || jogoPausadoRef.current) return; Animated.timing(op.y, { toValue: height + 100, duration: op.speed, useNativeDriver: true }).start(); };
 
   const gameOver = () => { 
-    jogoAtivoRef.current = false; jogoPausadoRef.current = false; transicaoAtivaRef.current = false; fasePendenteRef.current = false; setPausado(false);
+    jogoAtivoRef.current = false; jogoPausadoRef.current = false; transicaoAtivaRef.current = false; fasePendenteRef.current = false; setPausado(false); setMostrarVolume(false);
     if (spawnTimer.current) clearTimeout(spawnTimer.current); setOperacoes([]); setExplosoes([]);
     if (modoRef.current === 'single' && pontosRef.current > 0) api.submitArcadeScore(pontosRef.current).catch(()=>{});
+    pararBGM();
     setTela('resultado'); 
   };
 
@@ -450,10 +531,18 @@ export default function Arcade() {
 
   const dispararLaserUnico = (alvo: any, acertou: boolean) => {
     setLasersAtivos([calcularDadosLaser(alvo, acertou)]); laserAnim.setValue(1);
+    
+    tocarSom('shoot'); // Som do tiro disparado
+
+    const duracaoLaser = acertou ? 300 : 150;
     Animated.parallel([
-      Animated.timing(laserAnim, { toValue: 0, duration: 300, useNativeDriver: true }), 
+      Animated.timing(laserAnim, { toValue: 0, duration: duracaoLaser, useNativeDriver: true }), 
       ...(acertou && alvo ? [ Animated.timing(alvo.scale, { toValue: alvo.baseScale * 1.4, duration: 150, useNativeDriver: true }), Animated.timing(alvo.opacity, { toValue: 0, duration: 150, useNativeDriver: true }) ] : [])
     ]).start(() => setLasersAtivos([]));
+    
+    // Toca o som de acerto ou erro logo antes do laser sumir completamente
+    setTimeout(() => { if (acertou) tocarSom('hit'); else tocarSom('miss'); }, duracaoLaser - 50);
+
     if (!acertou) Animated.sequence([Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }), Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }), Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true })]).start();
   };
 
@@ -465,10 +554,14 @@ export default function Arcade() {
     visiveis.forEach(o => o.y.stopAnimation());
     setLasersAtivos(visiveis.map(alvo => calcularDadosLaser(alvo, true)));
     laserAnim.setValue(1);
+    
+    tocarSom('shoot');
+
     Animated.parallel([
       Animated.timing(laserAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
       ...visiveis.flatMap(alvo => [Animated.timing(alvo.scale, { toValue: alvo.baseScale * 1.5, duration: 200, useNativeDriver: true }), Animated.timing(alvo.opacity, { toValue: 0, duration: 200, useNativeDriver: true })])
     ]).start(() => {
+       tocarSom('hit');
        setLasersAtivos([]); setPontos(p => p + (visiveis.length * 10)); questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - visiveis.length);
        setOperacoes(prev => prev.filter(o => !visiveis.includes(o))); operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => !visiveis.some(v => v.chave === o.chave));
     });
@@ -591,12 +684,36 @@ export default function Arcade() {
 
       <View style={styles.gameHeader}>
         <View style={styles.headerStatsGroup}><Ionicons name="star" size={18} color="#FFD700" /><Text style={styles.statTextScore}>{pontos}</Text>{modoRef.current !== 'missao' && (<View style={styles.faseBadge}><Text style={styles.faseBadgeText}>Fase {faseAtualVisor}</Text></View>)}</View>
-        <TouchableOpacity onPress={pausarJogo} style={styles.btnPausaIcone}><Ionicons name="pause" size={26} color="#fff" /></TouchableOpacity>
+        
+        {/* Adicionado o ícone de volume ao lado do botão de Pause */}
+        <View style={{flexDirection: 'row', alignItems: 'center', gap: 5}}>
+            <TouchableOpacity onPress={() => setMostrarVolume(!mostrarVolume)} style={styles.btnPausaIcone}>
+                <Ionicons name={volumeUI === 0 ? "volume-mute" : "volume-high"} size={26} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={pausarJogo} style={styles.btnPausaIcone}><Ionicons name="pause" size={26} color="#fff" /></TouchableOpacity>
+        </View>
       </View>
+
+      {/* Janela flutuante do Slider de Volume */}
+      {mostrarVolume && (
+        <View style={styles.volumePopover}>
+            <Ionicons name="volume-mute" size={20} color="#fff" />
+            <Slider
+                style={{width: 150, height: 40, marginHorizontal: 5}}
+                minimumValue={0}
+                maximumValue={1}
+                value={volumeUI}
+                onValueChange={handleVolumeChange}
+                minimumTrackTintColor="#00FFFF"
+                maximumTrackTintColor="#FFFFFF"
+                thumbTintColor="#FFD700"
+            />
+            <Ionicons name="volume-high" size={20} color="#fff" />
+        </View>
+      )}
 
       <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />)}</View>
       
-      {/* 🚀 CORREÇÃO APLICADA: flex 1 no gameArea, faz a mágica de empurrar o teclado nativamente */}
       <View style={styles.gameArea}>
         <View style={styles.linhaEletricaContainer}><View style={styles.linhaEletricaCore} /><View style={styles.linhaEletricaGlow} /></View>
 
@@ -613,7 +730,6 @@ export default function Arcade() {
         ))}
       </View>
       
-      {/* 🚀 CORREÇÃO APLICADA: removido o position absolute para que respeite a SafeArea e flua no layout */}
       <View style={styles.bottomPanel}>
         <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
         
@@ -678,12 +794,17 @@ const styles = StyleSheet.create({
   btnIniciarWrapper: { paddingHorizontal: 20, paddingBottom: 20, paddingTop: 10, backgroundColor: '#0c0c0c', borderTopWidth: 1, borderTopColor: '#1a1a2e' },
   iniciarButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', elevation: 4 },
   iniciarButtonText: { color: '#000', fontSize: 18, fontWeight: '900' },
-  gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
+  
+  gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, zIndex: 10 },
   headerStatsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   faseBadge: { backgroundColor: '#4169E1', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginLeft: 10 },
   faseBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
   btnPausaIcone: { padding: 4, marginLeft: 10 },
+  
+  // Menu de Volume Flutuante
+  volumePopover: { position: 'absolute', top: 55, right: 15, backgroundColor: 'rgba(26, 26, 46, 0.95)', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', zIndex: 100, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, height: 30 },
   
   gameArea: { flex: 1, width: '100%', backgroundColor: '#0a0a0a', zIndex: 1 },
@@ -701,7 +822,6 @@ const styles = StyleSheet.create({
 
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
   
-  // Removido o position: 'absolute' para fluir no flexbox perfeitamente
   bottomPanel: { width: '100%', alignItems: 'center', paddingBottom: 15, paddingTop: 5, backgroundColor: '#0c0c0c', zIndex: 10 },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
