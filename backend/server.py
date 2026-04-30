@@ -250,7 +250,6 @@ class ReenviarData(BaseModel):
     alvoNome: str
     alvoId: str
 
-# NOVOS MODELOS PARA O CHAT PRIVADO
 class MensagemPrivadaCreate(BaseModel):
     destinatarioId: str
     texto: str
@@ -261,10 +260,8 @@ class BloqueioChatCreate(BaseModel):
 
 # ============== HELPERS ==============
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    try:
-        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
-    except Exception:
-        return False
+    try: return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    except Exception: return False
 
 def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -281,8 +278,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None: raise HTTPException(status_code=401, detail="Token inválido")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Token inválido")
+    except JWTError: raise HTTPException(status_code=401, detail="Token inválido")
     
     user = await db.usuarios.find_one({"id": user_id})
     if user is None: raise HTTPException(status_code=401, detail="Usuário não encontrado")
@@ -301,8 +297,7 @@ def calculate_streak(last_login: Optional[str], current_streak: int) -> tuple:
         if diff == 0: return current_streak, last_login
         elif diff == 1: return current_streak + 1, today.isoformat()
         else: return 1, today.isoformat()
-    except Exception:
-        return 1, today.isoformat()
+    except Exception: return 1, today.isoformat()
 
 def parse_turma_grade(nome: str) -> int:
     match = re.search(r'(\d+)º', nome)
@@ -347,11 +342,7 @@ async def login(credentials: UsuarioLogin):
     
     new_streak, new_date = calculate_streak(user.get("streakUltimoLoginData"), user.get("streakDias", 0))
     agora = datetime.utcnow().isoformat()
-    
-    await db.usuarios.update_one(
-        {"id": user["id"]}, 
-        {"$set": {"streakDias": new_streak, "streakUltimoLoginData": new_date, "ultimoAcesso": agora}}
-    )
+    await db.usuarios.update_one({"id": user["id"]}, {"$set": {"streakDias": new_streak, "streakUltimoLoginData": new_date, "ultimoAcesso": agora}})
     user["streakDias"] = new_streak
     user["streakUltimoLoginData"] = new_date
     user["ultimoAcesso"] = agora
@@ -408,7 +399,6 @@ async def update_equipe(equipe_id: str, update_data: EquipeUpdate, current_user:
     update_dict = update_data.dict(exclude_unset=True)
     if update_dict: await db.equipes.update_one({"id": equipe_id}, {"$set": update_dict})
     equipe = await db.equipes.find_one({"id": equipe_id})
-    if not equipe: raise HTTPException(status_code=404, detail="Equipe não encontrada")
     return {k: v for k, v in equipe.items() if k != '_id'}
 
 @api_router.delete("/equipes/{equipe_id}")
@@ -416,15 +406,13 @@ async def delete_equipe(equipe_id: str, current_user: dict = Depends(require_adm
     await db.equipes.update_one({"id": equipe_id}, {"$set": {"ativa": False}})
     return {"message": "Equipe desativada"}
 
-# 👇 AQUI ESTÁ A CORREÇÃO: Depends(get_current_user) em vez de require_admin!
 @api_router.get("/usuarios")
 async def get_usuarios(current_user: dict = Depends(get_current_user)):
     usuarios_brutos = await db.usuarios.find({}).to_list(5000)
     usuarios_ativos = []
     for u in usuarios_brutos:
         ativo_val = u.get("ativo", True)
-        if isinstance(ativo_val, str): ativo = ativo_val.lower() in ['true', '1', 't', 'y', 'yes']
-        else: ativo = bool(ativo_val)
+        ativo = ativo_val.lower() in ['true', '1', 't', 'y', 'yes'] if isinstance(ativo_val, str) else bool(ativo_val)
         if ativo: usuarios_ativos.append({k: v for k, v in u.items() if k not in ['senha', '_id']})
     return usuarios_ativos
 
@@ -441,14 +429,13 @@ async def admin_update_usuario(user_id: str, update_data: AdminUsuarioUpdate, cu
 @api_router.delete("/usuarios/{user_id}")
 async def admin_delete_usuario(user_id: str, current_user: dict = Depends(require_admin)):
     await db.usuarios.update_one({"id": user_id}, {"$set": {"ativo": False}})
-    return {"message": "Usuário desativado com sucesso"}
+    return {"message": "Usuário desativado"}
 
 @api_router.post("/usuarios/zerar-pontos")
 async def zerar_todos_pontos(current_user: dict = Depends(require_admin)):
     await db.usuarios.update_many({}, {"$set": {"pontosTotais": 0, "recordeJogoSingle": 0, "recordeJogoMulti": 0}})
     await db.equipes.update_many({}, {"$set": {"pontosTotais": 0}})
     return {"message": "Todos os pontos e recordes foram zerados com sucesso."}
-
 
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
@@ -471,7 +458,6 @@ async def get_exercicio(exercicio_id: str, current_user: dict = Depends(get_curr
 async def create_exercicio(exercicio_data: ExercicioCreate, current_user: dict = Depends(require_admin)):
     exercicio = Exercicio(**exercicio_data.dict(exclude={'questoes'}))
     await db.exercicios.insert_one(exercicio.dict())
-    
     for q_data in exercicio_data.questoes:
         alternativas = [Alternativa(**a) for a in q_data.alternativas]
         questao = Questao(
@@ -486,7 +472,6 @@ async def create_exercicio(exercicio_data: ExercicioCreate, current_user: dict =
 async def update_exercicio(exercicio_id: str, exercicio_data: ExercicioUpdate, current_user: dict = Depends(require_admin)):
     update_data = exercicio_data.dict(exclude={'questoes'})
     await db.exercicios.update_one({"id": exercicio_id}, {"$set": update_data})
-    
     if exercicio_data.questoes is not None:
         await db.questoes.delete_many({"exercicioId": exercicio_id})
         for q_data in exercicio_data.questoes:
@@ -497,7 +482,6 @@ async def update_exercicio(exercicio_id: str, exercicio_data: ExercicioUpdate, c
                 correta=q_data.correta, pontuacaoMax=q_data.pontuacaoMax, habilidadesBNCC=q_data.habilidadesBNCC
             )
             await db.questoes.insert_one(questao.dict())
-
     exercicio = await db.exercicios.find_one({"id": exercicio_id})
     return {k: v for k, v in exercicio.items() if k != '_id'}
 
@@ -522,10 +506,8 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
         correto = resp.resposta.upper().strip() == questao.get("correta", "").upper().strip()
         if correto: acertos += 1
         else: erros += 1
-        
         habs = questao.get("habilidadesBNCC", [])
         if not habs: habs = exercicio.get("habilidadesBNCC", [])
-
         detalhes.append({
             "questaoId": resp.questaoId, "numero": questao.get("numero"),
             "resposta": resp.resposta, "correta": questao.get("correta"),
@@ -543,12 +525,10 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
         detalhesQuestoes=detalhes, ignorarNoRelatorioBNCC=False
     )
     await db.submissoes.insert_one(submissao.dict())
-    
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
     
     eq_raw = current_user.get("equipeId")
-    if eq_raw:
-        await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": pontos}})
+    if eq_raw: await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": pontos}})
     
     return {"submissao": {k: v for k, v in submissao.dict().items() if k != '_id'}, "acertos": acertos, "erros": erros, "totalQuestoes": total, "nota": round(nota, 1), "pontosGerados": pontos}
 
@@ -565,8 +545,7 @@ async def retry_submissao(exercicio_id: str, current_user: dict = Depends(get_cu
         if pontos > 0:
             await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": -pontos}})
             eq_raw = current_user.get("equipeId")
-            if eq_raw:
-                await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": -pontos}})
+            if eq_raw: await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": -pontos}})
         await db.submissoes.delete_one({"_id": sub["_id"]})
     return {"message": "Pronto para tentar novamente"}
 
@@ -610,18 +589,14 @@ async def delete_conteudo(conteudo_id: str, current_user: dict = Depends(require
 async def concluir_conteudo(conteudo_id: str, current_user: dict = Depends(get_current_user)):
     conteudo = await db.conteudos.find_one({"id": conteudo_id})
     if not conteudo: raise HTTPException(status_code=404, detail="Conteúdo não encontrado")
-    
     ja_concluiu = await db.conteudos_concluidos.find_one({"usuarioId": current_user["id"], "conteudoId": conteudo_id})
     if ja_concluiu: return {"message": "Conteúdo já estava concluído", "pontos": 0}
-        
     await db.conteudos_concluidos.insert_one({"usuarioId": current_user["id"], "conteudoId": conteudo_id, "data": datetime.utcnow().isoformat()})
     pontos = conteudo.get("pontos", 0)
-    
     if pontos > 0:
         await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
         eq_raw = current_user.get("equipeId")
         if eq_raw: await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": pontos}})
-            
     return {"message": "Conteúdo concluído com sucesso", "pontos": pontos}
 
 @api_router.get("/relatorios/geral")
@@ -630,25 +605,17 @@ async def get_relatorio_geral(current_user: dict = Depends(require_admin)):
     exercicios_ativos = await db.exercicios.find({"is_deleted": {"$ne": True}}).to_list(10000)
     total_e = len(exercicios_ativos)
     ids_ativos = [e["id"] for e in exercicios_ativos]
-    
-    submissoes_exercicios = await db.submissoes.find({
-        "exercicioId": {"$in": ids_ativos},
-        "ignorarNoRelatorioBNCC": {"$ne": True}
-    }).to_list(10000)
-    
+    submissoes_exercicios = await db.submissoes.find({"exercicioId": {"$in": ids_ativos}, "ignorarNoRelatorioBNCC": {"$ne": True}}).to_list(10000)
     videos_e_docs_concluidos = await db.conteudos_concluidos.count_documents({})
     total_s = len(submissoes_exercicios) + videos_e_docs_concluidos
-    
     notas_por_aluno = {}
     for sub in submissoes_exercicios:
         uid = sub.get("usuarioId")
         nota = float(sub.get("nota", 0.0))
         if uid not in notas_por_aluno: notas_por_aluno[uid] = []
         notas_por_aluno[uid].append(nota)
-        
     medias_alunos = [sum(n) / len(n) for n in notas_por_aluno.values() if len(n) > 0]
     media_geral = sum(medias_alunos) / len(medias_alunos) if len(medias_alunos) > 0 else 0.0
-        
     return { "totalUsuarios": total_u, "totalExercicios": total_e, "totalSubmissoes": total_s, "mediaGeral": round(media_geral, 1) }
 
 @api_router.get("/relatorios/bncc")
@@ -657,39 +624,32 @@ async def get_relatorio_bncc(filtro_tipo: str = "GERAL", turma_id: Optional[str]
     usuarios = {u["id"]: u for u in await db.usuarios.find({}).to_list(5000)}
     turmas = {str(t.get("id", t.get("_id"))): t for t in await db.turmas.find({}).to_list(100)}
     exercicios_dict = {str(e.get("id", e.get("_id"))): e for e in await db.exercicios.find({}).to_list(10000)}
-    
     max_grade = 99
     if filtro_tipo in ["TURMA", "EQUIPE_TURMA"] and turma_id:
         turma = turmas.get(turma_id)
         if turma: max_grade = parse_turma_grade(turma.get("nome", ""))
-            
     bncc_stats = {} 
     for sub in submissoes:
         user = usuarios.get(sub.get("usuarioId"))
         if not user: continue
         u_turma = str(user.get("turmaId", ""))
         u_equipe = str(user.get("equipeId", ""))
-        
         if filtro_tipo == "TURMA" and u_turma != turma_id: continue
         if filtro_tipo == "EQUIPE" and u_equipe != equipe_id: continue
         if filtro_tipo == "EQUIPE_TURMA" and (u_turma != turma_id or u_equipe != equipe_id): continue
-        
         for det in sub.get("detalhesQuestoes", []):
             habilidades = det.get("habilidadesBNCC", [])
             if not habilidades:
                 ex = exercicios_dict.get(sub.get("exercicioId"))
                 if ex: habilidades = ex.get("habilidadesBNCC", [])
-                
             acertou = det.get("acertou", False)
             for hab in habilidades:
                 if not hab: continue
                 if filtro_tipo in ["TURMA", "EQUIPE_TURMA"] and get_bncc_grade(hab) > max_grade: continue
-                
                 if hab not in bncc_stats: bncc_stats[hab] = {"habilidade": hab, "acertos": 0, "erros": 0, "total": 0}
                 if acertou: bncc_stats[hab]["acertos"] += 1
                 else: bncc_stats[hab]["erros"] += 1
                 bncc_stats[hab]["total"] += 1
-                
     return list(bncc_stats.values())
 
 class LimparRelatorioRequest(BaseModel):
@@ -729,8 +689,33 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
     raise HTTPException(400, "Tipo inválido")
 
 # =====================================================================
-# ROTAS DE CHAT PRIVADO
+# ROTAS DO CHAT PRIVADO
 # =====================================================================
+@api_router.get("/chat/inbox")
+async def obter_resumo_inbox(current_user: dict = Depends(get_current_user)):
+    mensagens = await db.mensagens_privadas.find({
+        "$or": [
+            {"remetenteId": current_user["id"]},
+            {"destinatarioId": current_user["id"]}
+        ]
+    }).to_list(10000)
+
+    inbox = {}
+    for m in mensagens:
+        if m.get("apagadaPorAdmin"): continue
+        other_id = m["destinatarioId"] if m["remetenteId"] == current_user["id"] else m["remetenteId"]
+        
+        if other_id not in inbox:
+            inbox[other_id] = {"unreadCount": 0, "lastMessageTime": m["criadoEm"]}
+        
+        if m["criadoEm"] > inbox[other_id]["lastMessageTime"]:
+            inbox[other_id]["lastMessageTime"] = m["criadoEm"]
+        
+        if m["destinatarioId"] == current_user["id"] and not m.get("lida"):
+            inbox[other_id]["unreadCount"] += 1
+            
+    return inbox
+
 @api_router.post("/chat/mensagens")
 async def enviar_mensagem(dados: MensagemPrivadaCreate, current_user: dict = Depends(get_current_user)):
     bloqueio = await db.bloqueios_chat.find_one({
@@ -740,7 +725,7 @@ async def enviar_mensagem(dados: MensagemPrivadaCreate, current_user: dict = Dep
         ]
     })
     if bloqueio and bloqueio.get("bloqueadoPorAdmin"):
-        raise HTTPException(status_code=403, detail="Esta conversa foi bloqueada pela moderação do professor.")
+        raise HTTPException(status_code=403, detail="Esta conversa foi bloqueada pela moderação.")
 
     msg = {
         "id": str(uuid.uuid4()),
@@ -751,11 +736,8 @@ async def enviar_mensagem(dados: MensagemPrivadaCreate, current_user: dict = Dep
         "apagadaPorAdmin": False,
         "criadoEm": datetime.utcnow().isoformat()
     }
-    
     await db.mensagens_privadas.insert_one(msg)
-    
-    msg_out = {k: v for k, v in msg.items() if k != '_id'}
-    return {"message": "Mensagem enviada com sucesso", "dados": msg_out}
+    return {"message": "Mensagem enviada com sucesso", "dados": {k: v for k, v in msg.items() if k != '_id'}}
 
 @api_router.get("/chat/mensagens/{other_user_id}")
 async def obter_conversa(other_user_id: str, current_user: dict = Depends(get_current_user)):
@@ -779,40 +761,20 @@ async def admin_obter_todas_mensagens(current_user: dict = Depends(require_admin
 
 @api_router.delete("/admin/chat/mensagens/{msg_id}")
 async def admin_apagar_mensagem(msg_id: str, current_user: dict = Depends(require_admin)):
-    await db.mensagens_privadas.update_one(
-        {"id": msg_id}, 
-        {"$set": {"apagadaPorAdmin": True, "texto": "[Mensagem removida pela moderação do professor]"}}
-    )
-    return {"message": "Mensagem apagada e substituída por aviso"}
+    await db.mensagens_privadas.update_one({"id": msg_id}, {"$set": {"apagadaPorAdmin": True, "texto": "[Mensagem removida]"}})
+    return {"message": "Mensagem apagada"}
 
 @api_router.post("/admin/chat/bloquear")
 async def admin_bloquear_conversa(dados: BloqueioChatCreate, current_user: dict = Depends(require_admin)):
-    existente = await db.bloqueios_chat.find_one({
-        "$or": [
-            {"usuarioId1": dados.usuarioId1, "usuarioId2": dados.usuarioId2},
-            {"usuarioId1": dados.usuarioId2, "usuarioId2": dados.usuarioId1}
-        ]
-    })
-    if existente:
-        await db.bloqueios_chat.update_one({"_id": existente["_id"]}, {"$set": {"bloqueadoPorAdmin": True}})
-    else:
-        await db.bloqueios_chat.insert_one({
-            "id": str(uuid.uuid4()),
-            "usuarioId1": dados.usuarioId1,
-            "usuarioId2": dados.usuarioId2,
-            "bloqueadoPorAdmin": True
-        })
-    return {"message": "Comunicação entre estes dois alunos bloqueada com sucesso"}
+    existente = await db.bloqueios_chat.find_one({ "$or": [ {"usuarioId1": dados.usuarioId1, "usuarioId2": dados.usuarioId2}, {"usuarioId1": dados.usuarioId2, "usuarioId2": dados.usuarioId1} ] })
+    if existente: await db.bloqueios_chat.update_one({"_id": existente["_id"]}, {"$set": {"bloqueadoPorAdmin": True}})
+    else: await db.bloqueios_chat.insert_one({"id": str(uuid.uuid4()), "usuarioId1": dados.usuarioId1, "usuarioId2": dados.usuarioId2, "bloqueadoPorAdmin": True})
+    return {"message": "Bloqueada com sucesso"}
 
 @api_router.post("/admin/chat/desbloquear")
 async def admin_desbloquear_conversa(dados: BloqueioChatCreate, current_user: dict = Depends(require_admin)):
-    await db.bloqueios_chat.update_many({
-        "$or": [
-            {"usuarioId1": dados.usuarioId1, "usuarioId2": dados.usuarioId2},
-            {"usuarioId1": dados.usuarioId2, "usuarioId2": dados.usuarioId1}
-        ]
-    }, {"$set": {"bloqueadoPorAdmin": False}})
-    return {"message": "Comunicação desbloqueada com sucesso"}
+    await db.bloqueios_chat.update_many({ "$or": [ {"usuarioId1": dados.usuarioId1, "usuarioId2": dados.usuarioId2}, {"usuarioId1": dados.usuarioId2, "usuarioId2": dados.usuarioId1} ] }, {"$set": {"bloqueadoPorAdmin": False}})
+    return {"message": "Desbloqueada com sucesso"}
 
 # =====================================================================
 # ROTAS DO RANKING (GERAL E ARCADE)
@@ -821,12 +783,10 @@ async def admin_desbloquear_conversa(dados: BloqueioChatCreate, current_user: di
 async def get_ranking_geral():
     equipes = await db.equipes.find({}).to_list(100)
     pontos_por_equipe = {str(e.get("id", e.get("_id", ""))).strip().lower(): 0 for e in equipes}
-        
     for aluno in await db.usuarios.find({}).to_list(5000):
         perfil = str(aluno.get("perfil") or "ALUNO").strip().upper()
         ativo_val = aluno.get("ativo", True)
         ativo = ativo_val.lower() in ['true', '1', 't', 'y', 'yes'] if isinstance(ativo_val, str) else bool(ativo_val)
-        
         if perfil in ["ALUNO", "ALUNO_LIDER"] and ativo:
             eq_id_clean = str(aluno.get("equipeId") or "").strip().lower()
             try: pts = int(float(aluno.get("pontosTotais", 0)))
@@ -838,19 +798,15 @@ async def get_ranking_geral():
                         e_id_real = str(e.get("id", e.get("_id", ""))).strip().lower()
                         if e_id_real in pontos_por_equipe: pontos_por_equipe[e_id_real] += pts
                         break
-
     equipes_ranking = []
     for e in equipes:
         e_id_clean = str(e.get("id", e.get("_id", ""))).strip().lower()
         pts_reais = pontos_por_equipe.get(e_id_clean, 0)
-        
         if e.get("pontosTotais", 0) != pts_reais:
             query_id = e.get("id")
             if query_id: await db.equipes.update_one({"id": query_id}, {"$set": {"pontosTotais": pts_reais}})
             else: await db.equipes.update_one({"_id": e["_id"]}, {"$set": {"pontosTotais": pts_reais}})
-                
         equipes_ranking.append({"id": str(e.get("id", "")), "nome": e.get("nome", "Sem Nome"), "cor": e.get("cor", "#333"), "pontosTotais": pts_reais})
-        
     equipes_ranking.sort(key=lambda x: x["pontosTotais"], reverse=True)
     for i, e in enumerate(equipes_ranking): e["posicao"] = i + 1
     return equipes_ranking
@@ -859,16 +815,13 @@ async def get_ranking_geral():
 async def get_ranking_turma(turma_id: str):
     equipes = await db.equipes.find({}).to_list(100)
     pontos_por_equipe = {str(e.get("id", e.get("_id", ""))).strip().lower(): 0 for e in equipes}
-        
     turma_alvo_limpa = str(turma_id).strip().lower()
     turma_obj = await db.turmas.find_one({"id": turma_id})
     turma_nome_limpo = str(turma_obj.get("nome", "")).strip().lower() if turma_obj else ""
-    
     for aluno in await db.usuarios.find({}).to_list(5000):
         perfil = str(aluno.get("perfil") or "ALUNO").strip().upper()
         ativo_val = aluno.get("ativo", True)
         ativo = ativo_val.lower() in ['true', '1', 't', 'y', 'yes'] if isinstance(ativo_val, str) else bool(ativo_val)
-        
         if perfil in ["ALUNO", "ALUNO_LIDER"] and ativo:
             aluno_turma = str(aluno.get("turmaId") or "").strip().lower()
             if aluno_turma == turma_alvo_limpa or (turma_nome_limpo and aluno_turma == turma_nome_limpo):
@@ -882,12 +835,10 @@ async def get_ranking_turma(turma_id: str):
                             e_id_real = str(e.get("id", e.get("_id", ""))).strip().lower()
                             if e_id_real in pontos_por_equipe: pontos_por_equipe[e_id_real] += pts
                             break
-
     equipes_ranking = []
     for e in equipes:
         e_id_clean = str(e.get("id", e.get("_id", ""))).strip().lower()
         equipes_ranking.append({"id": str(e.get("id", "")), "nome": e.get("nome", "Sem Nome"), "cor": e.get("cor", "#333"), "pontosTotais": pontos_por_equipe.get(e_id_clean, 0)})
-        
     equipes_ranking.sort(key=lambda x: x["pontosTotais"], reverse=True)
     for i, e in enumerate(equipes_ranking): e["posicao"] = i + 1
     return equipes_ranking
@@ -896,68 +847,39 @@ async def get_ranking_turma(turma_id: str):
 async def submit_arcade_score(data: ArcadeScore, current_user: dict = Depends(get_current_user)):
     pontos_score = data.pontos
     if pontos_score <= 0: return {"message": "Nenhum ponto recebido"}
-    
     current_record = current_user.get("recordeJogoSingle", 0)
     is_new_record = pontos_score > current_record
-    
-    if is_new_record:
-        await db.usuarios.update_one(
-            {"id": current_user["id"]}, 
-            {"$set": {"recordeJogoSingle": pontos_score}}
-        )
-        
-    return {"message": "Score processado com sucesso", "newRecord": is_new_record}
+    if is_new_record: await db.usuarios.update_one({"id": current_user["id"]}, {"$set": {"recordeJogoSingle": pontos_score}})
+    return {"message": "Score processado", "newRecord": is_new_record}
 
 @api_router.get("/ranking/arcade")
 async def get_ranking_arcade():
     usuarios = await db.usuarios.find({"ativo": True}).to_list(5000)
     equipes = {str(e.get("id", e.get("_id", ""))): e for e in await db.equipes.find({}).to_list(100)}
     turmas = {str(t.get("id", t.get("_id", ""))): t for t in await db.turmas.find({}).to_list(100)}
-    
     ranking = []
     for u in usuarios:
         recorde = u.get("recordeJogoSingle", 0)
         is_admin = u.get("perfil") == "ADMIN"
-        
         if is_admin:
             pontos_finais = recorde if recorde > 0 else 1
-            ranking.append({
-                "id": u["id"],
-                "nome": u.get("nome", "Admin").split(" ")[0],
-                "pontosMaximos": pontos_finais,
-                "equipe": "",
-                "cor": "#FFD700",
-                "turma": "Professor",
-                "isProf": True
-            })
+            ranking.append({"id": u["id"], "nome": u.get("nome", "Admin").split(" ")[0], "pontosMaximos": pontos_finais, "equipe": "", "cor": "#FFD700", "turma": "Professor", "isProf": True})
         elif recorde > 0:
             eq = equipes.get(str(u.get("equipeId", "")))
             turma = turmas.get(str(u.get("turmaId", "")))
-            ranking.append({
-                "id": u["id"],
-                "nome": u.get("nome", "Aluno").split(" ")[0],
-                "pontosMaximos": recorde,
-                "equipe": eq.get("nome", "") if eq else "",
-                "cor": eq.get("cor", "#888") if eq else "#888",
-                "turma": turma.get("nome", "") if turma else "",
-                "isProf": False
-            })
-            
+            ranking.append({"id": u["id"], "nome": u.get("nome", "Aluno").split(" ")[0], "pontosMaximos": recorde, "equipe": eq.get("nome", "") if eq else "", "cor": eq.get("cor", "#888") if eq else "#888", "turma": turma.get("nome", "") if turma else "", "isProf": False})
     ranking.sort(key=lambda x: x["pontosMaximos"], reverse=True)
-    for i, r in enumerate(ranking):
-        r["posicao"] = i + 1
+    for i, r in enumerate(ranking): r["posicao"] = i + 1
     return ranking
 
 @api_router.get("/usuarios/progresso")
 async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
     submissoes = await db.submissoes.find({"usuarioId": current_user["id"]}).sort("data", -1).to_list(100)
     concluidos = await db.conteudos_concluidos.find({"usuarioId": current_user["id"]}).to_list(1000)
-    
     pontos_videos = 0
     if len(concluidos) > 0:
         conteudos_db = await db.conteudos.find({"id": {"$in": [c["conteudoId"] for c in concluidos]}}).to_list(1000)
         pontos_videos = sum(c.get("pontos", 0) for c in conteudos_db)
-        
     return {
         "pontosTotais": current_user.get("pontosTotais", 0), "totalExercicios": len(submissoes),
         "pontosExercicios": sum(s.get("pontosGerados", 0) for s in submissoes),
@@ -966,7 +888,7 @@ async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
     }
 
 # =====================================================================
-# ROTAS DE MISSÕES (JOGOS PERSONALIZADOS)
+# ROTAS DE MISSÕES
 # =====================================================================
 @api_router.get("/missoes")
 async def get_missoes(current_user: dict = Depends(require_admin)):
@@ -1013,11 +935,9 @@ async def get_missoes_disponiveis(current_user: dict = Depends(get_current_user)
 async def registrar_tentativa(missao_id: str, current_user: dict = Depends(get_current_user)):
     missao = await db.missoes.find_one({"id": missao_id})
     if not missao: raise HTTPException(status_code=404, detail="Missão não encontrada")
-    
     tentativas = await db.missoes_tentativas.count_documents({"usuarioId": current_user["id"], "missaoId": missao_id})
     limite = missao.get("limiteTentativas", 1)
     if limite > 0 and tentativas >= limite: raise HTTPException(status_code=400, detail="Limite alcançado")
-        
     await db.missoes_tentativas.insert_one({"usuarioId": current_user["id"], "missaoId": missao_id, "data": datetime.utcnow().isoformat()})
     return {"message": "Tentativa registrada"}
 
@@ -1025,10 +945,8 @@ async def registrar_tentativa(missao_id: str, current_user: dict = Depends(get_c
 async def concluir_missao(missao_id: str, current_user: dict = Depends(get_current_user)):
     missao = await db.missoes.find_one({"id": missao_id})
     if not missao: raise HTTPException(status_code=404, detail="Missão não encontrada")
-    
     pontos = missao.get("recompensa", 0)
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
-    
     eq_raw = current_user.get("equipeId")
     if eq_raw: await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": pontos}})
     return {"message": "Missão concluída", "pontos": pontos}
@@ -1037,14 +955,9 @@ async def concluir_missao(missao_id: str, current_user: dict = Depends(get_curre
 async def reenviar_missao(missao_id: str, dados: ReenviarData, current_user: dict = Depends(require_admin)):
     old = await db.missoes.find_one({"id": missao_id})
     if not old: raise HTTPException(status_code=404, detail="Missão não encontrada")
-    
     new_data = {k: v for k, v in old.items() if k not in ['_id', 'id', 'criadoEm', 'expiraEm', 'alvoTipo', 'alvoNome', 'alvoId', 'tentativasFeitas', 'criadaPor']}
     agora = datetime.utcnow()
-    
-    new_missao = Missao(
-        **new_data, alvoTipo=dados.alvoTipo, alvoNome=dados.alvoNome, alvoId=dados.alvoId,
-        criadaPor=current_user["id"], criadoEm=agora.isoformat(), expiraEm=(agora + timedelta(hours=24)).isoformat()
-    )
+    new_missao = Missao(**new_data, alvoTipo=dados.alvoTipo, alvoNome=dados.alvoNome, alvoId=dados.alvoId, criadaPor=current_user["id"], criadoEm=agora.isoformat(), expiraEm=(agora + timedelta(hours=24)).isoformat())
     await db.missoes.insert_one(new_missao.dict())
     return new_missao.dict()
 
@@ -1059,8 +972,7 @@ async def get_online_users():
         if not active_user_ids: return []
         ativos = await db.usuarios.find({"id": {"$in": list(set(active_user_ids))}}).to_list(1000)
         return [{"id": u["id"], "nome": u.get("nome"), "turmaId": u.get("turmaId"), "equipeId": u.get("equipeId")} for u in ativos]
-    except Exception:
-        return []
+    except Exception: return []
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
