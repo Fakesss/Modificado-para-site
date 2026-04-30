@@ -14,36 +14,51 @@ export default function ChatScreen() {
   const [texto, setTexto] = useState('');
   const [loading, setLoading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  const carregarUsuarios = async () => {
-    setLoading(true);
-    try {
-      const users = await api.getUsuarios();
-      setUsuarios(users.filter((u: any) => u.id !== user?.id));
-    } catch (e) {}
-    setLoading(false);
-  };
-
-  const carregarConversa = async (otherUserId: string) => {
-    try {
-      const msgs = await api.getConversaPrivada(otherUserId);
-      setMensagens(msgs);
-    } catch (e) {}
-  };
+  // Opções de ordenação: 'padrao' (Recentes), 'equipe', 'serie'
+  const [sortMode, setSortMode] = useState<'padrao' | 'equipe' | 'serie'>('padrao');
 
   useEffect(() => {
-    if (view === 'lista') {
-      carregarUsuarios();
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    } else if (view === 'conversa' && contatoAtual) {
-      carregarConversa(contatoAtual.id);
-      pollingRef.current = setInterval(() => {
-        carregarConversa(contatoAtual.id);
-      }, 5000);
-    }
-    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
-  }, [view, contatoAtual]);
+    let isMounted = true;
+    
+    const fetchData = async () => {
+      if (view === 'lista') {
+        if (usuarios.length === 0) setLoading(true);
+        try {
+          const [users, turmas, equipes, summary] = await Promise.all([
+            api.getUsuarios(), api.getTurmas(), api.getEquipes(), api.getInboxSummary()
+          ]);
+          if (!isMounted) return;
+
+          // Mescla todas as informações (Foto escudo, cor, serie, mensagens lidas)
+          const mapped = users.filter((u:any) => u.id !== user?.id).map((u:any) => {
+            const turma = turmas.find((t:any) => t.id === u.turmaId);
+            const equipe = equipes.find((e:any) => e.id === u.equipeId);
+            const inb = summary[u.id] || { unreadCount: 0, lastMessageTime: null };
+            return {
+              ...u,
+              turmaNome: turma ? turma.nome : '',
+              equipeNome: equipe ? equipe.nome : '',
+              equipeCor: equipe ? equipe.cor : '#555',
+              unreadCount: inb.unreadCount,
+              lastMessageTime: inb.lastMessageTime
+            };
+          });
+          setUsuarios(mapped);
+        } catch(e) {}
+        setLoading(false);
+      } else if (view === 'conversa' && contatoAtual) {
+        try {
+          const msgs = await api.getConversaPrivada(contatoAtual.id);
+          if (isMounted) setMensagens(msgs);
+        } catch(e) {}
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 4000); // Atualiza dados em tempo real
+    return () => { isMounted = false; clearInterval(interval); };
+  }, [view, contatoAtual, user?.id]);
 
   const abrirConversa = (contato: any) => {
     setContatoAtual(contato);
@@ -62,11 +77,45 @@ export default function ChatScreen() {
     setTexto('');
     try {
       await api.enviarMensagemPrivada(contatoAtual.id, txt);
-      await carregarConversa(contatoAtual.id);
+      const msgs = await api.getConversaPrivada(contatoAtual.id);
+      setMensagens(msgs);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
     } catch (error: any) {
       Alert.alert("Erro", error.response?.data?.detail || "Não foi possível enviar a mensagem.");
     }
+  };
+
+  // ==========================================
+  // MOTOR DE ORDENAÇÃO E FILTROS DA LISTA
+  // ==========================================
+  const renderSortedUsuarios = () => {
+    let sorted = [...usuarios];
+
+    // 1. Base Alfabética
+    sorted.sort((a, b) => a.nome.localeCompare(b.nome));
+
+    // 2. Aplica modo escolhido pelo usuário
+    if (sortMode === 'equipe') {
+        sorted.sort((a, b) => a.equipeNome.localeCompare(b.equipeNome));
+    } else if (sortMode === 'serie') {
+        sorted.sort((a, b) => a.turmaNome.localeCompare(b.turmaNome));
+    } else {
+        // Padrão: Mais recentes primeiro
+        sorted.sort((a, b) => {
+            const timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
+            const timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;
+            return timeB - timeA;
+        });
+    }
+
+    // 3. REGRA MESTRA: Mensagens Não lidas cravadas no topo sempre!
+    sorted.sort((a, b) => {
+        const aUnread = a.unreadCount > 0 ? 1 : 0;
+        const bUnread = b.unreadCount > 0 ? 1 : 0;
+        return bUnread - aUnread; 
+    });
+
+    return sorted;
   };
 
   if (view === 'lista') {
@@ -76,23 +125,57 @@ export default function ChatScreen() {
           <Ionicons name="chatbubbles" size={32} color="#00FFFF" />
           <Text style={styles.headerTitle}>Mensagens</Text>
         </View>
+
+        {/* BARRA DE FILTROS DE ORGANIZAÇÃO */}
+        <View style={styles.filterRow}>
+            <Text style={{color: '#888', marginRight: 10, fontSize: 12, fontWeight: 'bold'}}>ORDENAR:</Text>
+            <TouchableOpacity onPress={()=>setSortMode('padrao')} style={[styles.filterBtn, sortMode==='padrao' && styles.filterBtnActive]}>
+                <Text style={[styles.filterText, sortMode==='padrao' && styles.filterTextActive]}>Conversas</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={()=>setSortMode('equipe')} style={[styles.filterBtn, sortMode==='equipe' && styles.filterBtnActive]}>
+                <Text style={[styles.filterText, sortMode==='equipe' && styles.filterTextActive]}>Equipe</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={()=>setSortMode('serie')} style={[styles.filterBtn, sortMode==='serie' && styles.filterBtnActive]}>
+                <Text style={[styles.filterText, sortMode==='serie' && styles.filterTextActive]}>Série</Text>
+            </TouchableOpacity>
+        </View>
+
         {loading ? (
           <ActivityIndicator size="large" color="#00FFFF" style={{ marginTop: 50 }} />
         ) : (
           <FlatList
-            data={usuarios}
+            data={renderSortedUsuarios()}
             keyExtractor={item => item.id}
             contentContainerStyle={{ padding: 15 }}
             renderItem={({ item }) => (
               <TouchableOpacity style={styles.userCard} onPress={() => abrirConversa(item)}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{item.nome.charAt(0).toUpperCase()}</Text>
+                
+                {/* AVATAR COM ESCUDO E COR DA EQUIPE */}
+                <View style={[styles.avatar, { backgroundColor: item.equipeCor + '20', borderColor: item.equipeCor }]}>
+                  <Ionicons name="shield" size={20} color={item.equipeCor} />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.userName}>{item.nome} {item.perfil === 'ADMIN' && '👑'}</Text>
-                  <Text style={styles.userStatus}>{item.perfil === 'ADMIN' ? 'Professor' : 'Aluno'}</Text>
+
+                <View style={{ flex: 1, paddingRight: 10 }}>
+                  <Text style={styles.userName} numberOfLines={1}>
+                      {item.nome} {item.perfil === 'ADMIN' && '👑'}
+                      {item.turmaNome ? <Text style={styles.userGrade}> • {item.turmaNome}</Text> : null}
+                  </Text>
+                  
+                  {item.equipeNome ? (
+                     <Text style={[styles.userStatus, { color: item.equipeCor }]}>{item.equipeNome}</Text>
+                  ) : (
+                     <Text style={styles.userStatus}>{item.perfil === 'ADMIN' ? 'Professor' : 'Sem Equipe'}</Text>
+                  )}
                 </View>
-                <Ionicons name="chevron-forward" size={24} color="#555" />
+
+                {/* PONTINHO VERMELHO INDIVIDUAL */}
+                {item.unreadCount > 0 ? (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadText}>{item.unreadCount}</Text>
+                  </View>
+                ) : (
+                  <Ionicons name="chevron-forward" size={24} color="#555" />
+                )}
               </TouchableOpacity>
             )}
             ListEmptyComponent={<Text style={styles.emptyText}>Nenhum usuário encontrado.</Text>}
@@ -109,9 +192,12 @@ export default function ChatScreen() {
           <TouchableOpacity onPress={voltarLista} style={{ padding: 10 }}>
             <Ionicons name="arrow-back" size={24} color="#FFF" />
           </TouchableOpacity>
-          <View style={{ flex: 1, marginLeft: 10 }}>
+          <View style={[styles.avatarSmall, { backgroundColor: contatoAtual?.equipeCor + '20', borderColor: contatoAtual?.equipeCor, marginLeft: 5, marginRight: 12 }]}>
+              <Ionicons name="shield" size={16} color={contatoAtual?.equipeCor || '#fff'} />
+          </View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.chatHeaderName}>{contatoAtual?.nome}</Text>
-            <Text style={styles.chatHeaderSub}>{contatoAtual?.perfil === 'ADMIN' ? 'Professor' : 'Aluno'}</Text>
+            <Text style={styles.chatHeaderSub}>{contatoAtual?.equipeNome || (contatoAtual?.perfil === 'ADMIN' ? 'Professor' : 'Aluno')}</Text>
           </View>
         </View>
 
@@ -129,6 +215,7 @@ export default function ChatScreen() {
                   <Text style={[styles.msgText, item.apagadaPorAdmin && { fontStyle: 'italic', color: '#FF4444' }]}>
                     {item.texto}
                   </Text>
+                  <Text style={styles.msgTime}>{new Date(item.criadoEm).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</Text>
                 </View>
               </View>
             );
@@ -158,11 +245,23 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0c' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#FFF', marginLeft: 10 },
+  
+  filterRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#111' },
+  filterBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#222', marginRight: 8, borderWidth: 1, borderColor: '#333' },
+  filterBtnActive: { backgroundColor: 'rgba(0, 255, 255, 0.1)', borderColor: '#00FFFF' },
+  filterText: { color: '#888', fontSize: 12, fontWeight: 'bold' },
+  filterTextActive: { color: '#00FFFF' },
+
   userCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 15, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#00FFFF', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  avatarText: { color: '#000', fontWeight: '900', fontSize: 18 },
+  avatar: { width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center', marginRight: 15, borderWidth: 1 },
+  avatarSmall: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
   userName: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
-  userStatus: { color: '#888', fontSize: 13, marginTop: 2 },
+  userGrade: { color: '#AAA', fontSize: 13, fontWeight: 'normal' },
+  userStatus: { color: '#888', fontSize: 12, marginTop: 3, fontWeight: 'bold' },
+  
+  unreadBadge: { backgroundColor: '#FF4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, minWidth: 24, alignItems: 'center', justifyContent: 'center' },
+  unreadText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+
   emptyText: { color: '#666', textAlign: 'center', marginTop: 30, fontStyle: 'italic' },
   
   chatHeader: { flexDirection: 'row', alignItems: 'center', padding: 10, backgroundColor: '#1a1a2e', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
@@ -172,10 +271,11 @@ const styles = StyleSheet.create({
   msgWrapper: { width: '100%', marginBottom: 10, flexDirection: 'row' },
   msgWrapperRight: { justifyContent: 'flex-end' },
   msgWrapperLeft: { justifyContent: 'flex-start' },
-  msgBubble: { maxWidth: '80%', padding: 12, borderRadius: 16 },
+  msgBubble: { maxWidth: '80%', padding: 12, borderRadius: 16, position: 'relative' },
   msgBubbleMe: { backgroundColor: '#4169E1', borderBottomRightRadius: 4 },
-  msgBubbleOther: { backgroundColor: '#333', borderBottomLeftRadius: 4 },
-  msgText: { color: '#FFF', fontSize: 15 },
+  msgBubbleOther: { backgroundColor: '#222', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#333' },
+  msgText: { color: '#FFF', fontSize: 15, marginBottom: 12 },
+  msgTime: { color: 'rgba(255,255,255,0.5)', fontSize: 10, position: 'absolute', bottom: 5, right: 10 },
   
   inputContainer: { flexDirection: 'row', padding: 10, backgroundColor: '#1a1a2e', alignItems: 'flex-end' },
   input: { flex: 1, backgroundColor: '#0c0c0c', color: '#FFF', borderRadius: 20, paddingHorizontal: 15, paddingTop: 12, paddingBottom: 12, maxHeight: 100, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
