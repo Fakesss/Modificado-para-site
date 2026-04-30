@@ -124,19 +124,16 @@ export const getBNCCRelatorio = async (tipo: string, turmaId?: string, equipeId?
     return [];
   }
 };
+export const limparRelatorioBNCC = async (tipo: string, alvoId?: string) => { return (await api.post('/relatorios/bncc/limpar', { tipo, alvoId })).data; };
 
-export const limparRelatorioBNCC = async (tipo: string, alvoId?: string) => {
-  return (await api.post('/relatorios/bncc/limpar', { tipo, alvoId })).data;
-};
-
-// ======== ROTAS ADICIONAIS ========
 export const getRankingAlunosEquipe = async (equipeId?: string) => { try { return (await api.get(`/ranking/equipe/${equipeId}`)).data; } catch { return []; } };
 export const getAlunoBNCC = async (alunoId: string) => { try { return (await api.get(`/relatorios/bncc/aluno/${alunoId}`)).data; } catch { return null; } };
 export const getConfiguracaoJogo = async () => { try { return (await api.get('/configuracoes')).data; } catch { return null; } };
 export const salvarConfiguracaoJogo = async (dados: any) => { try { return (await api.post('/configuracoes', dados)).data; } catch { return null; } };
 export const limparItensExpirados = async () => { try { return (await api.post('/admin/limpar-expirados')).data; } catch { return null; } };
 
-// ======== NOVAS ROTAS: CHAT PRIVADO ========
+// ======== CHAT PRIVADO ========
+export const getInboxSummary = async () => { try { return (await api.get('/chat/inbox')).data; } catch { return {}; } };
 export const enviarMensagemPrivada = async (destinatarioId: string, texto: string) => (await api.post('/chat/mensagens', { destinatarioId, texto })).data;
 export const getConversaPrivada = async (otherUserId: string) => { try { return (await api.get(`/chat/mensagens/${otherUserId}`)).data; } catch { return []; } };
 export const adminGetAllMensagens = async () => { try { return (await api.get('/admin/chat/mensagens')).data; } catch { return []; } };
