@@ -416,8 +416,9 @@ async def delete_equipe(equipe_id: str, current_user: dict = Depends(require_adm
     await db.equipes.update_one({"id": equipe_id}, {"$set": {"ativa": False}})
     return {"message": "Equipe desativada"}
 
+# 👇 AQUI ESTÁ A CORREÇÃO: Depends(get_current_user) em vez de require_admin!
 @api_router.get("/usuarios")
-async def get_usuarios(current_user: dict = Depends(require_admin)):
+async def get_usuarios(current_user: dict = Depends(get_current_user)):
     usuarios_brutos = await db.usuarios.find({}).to_list(5000)
     usuarios_ativos = []
     for u in usuarios_brutos:
@@ -447,6 +448,7 @@ async def zerar_todos_pontos(current_user: dict = Depends(require_admin)):
     await db.usuarios.update_many({}, {"$set": {"pontosTotais": 0, "recordeJogoSingle": 0, "recordeJogoMulti": 0}})
     await db.equipes.update_many({}, {"$set": {"pontosTotais": 0}})
     return {"message": "Todos os pontos e recordes foram zerados com sucesso."}
+
 
 @api_router.get("/exercicios")
 async def get_exercicios(turmaId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
@@ -727,7 +729,7 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
     raise HTTPException(400, "Tipo inválido")
 
 # =====================================================================
-# ROTAS DE CHAT PRIVADO (COM CORREÇÃO DO _id)
+# ROTAS DE CHAT PRIVADO
 # =====================================================================
 @api_router.post("/chat/mensagens")
 async def enviar_mensagem(dados: MensagemPrivadaCreate, current_user: dict = Depends(get_current_user)):
@@ -750,10 +752,8 @@ async def enviar_mensagem(dados: MensagemPrivadaCreate, current_user: dict = Dep
         "criadoEm": datetime.utcnow().isoformat()
     }
     
-    # O MongoDB injeta o "_id" aqui dentro de 'msg'
     await db.mensagens_privadas.insert_one(msg)
     
-    # Removemos o "_id" antes de devolver a mensagem para a API não crashar
     msg_out = {k: v for k, v in msg.items() if k != '_id'}
     return {"message": "Mensagem enviada com sucesso", "dados": msg_out}
 
