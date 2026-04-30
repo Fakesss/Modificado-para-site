@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 # ============== MOTOR DE FUSO HORÁRIO (BRASÍLIA UTC-3) ==============
 def get_now_brt() -> datetime:
-    """Garante que qualquer data gerada pelo servidor use o horário de Brasília"""
     return datetime.utcnow() - timedelta(hours=3)
 
 # ============== MODELS ==============
@@ -275,7 +274,6 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    # Expiração continua no formato esperado pela biblioteca JWT
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -296,22 +294,16 @@ async def require_admin(current_user: dict = Depends(get_current_user)):
     if current_user.get("perfil") != "ADMIN": raise HTTPException(status_code=403, detail="Acesso negado")
     return current_user
 
-# ============== NOVA LÓGICA DE OFENSIVA (CUMULATIVA, NUNCA ZERA) ==============
 def calculate_streak(last_login: Optional[str], current_streak: int) -> tuple:
     today = get_now_brt().date()
-    
     if not last_login: 
         return current_streak + 1, today.isoformat()
-        
     try:
         last_date_str = str(last_login)[:10] 
         last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
-        
         if last_date == today:
-            # Se for o mesmo dia, mantém a ofensiva
             return current_streak, last_login
         else:
-            # Se for um dia diferente (qualquer dia), ganha 1 ponto sem zerar
             return current_streak + 1, today.isoformat()
     except Exception: 
         return current_streak + 1, today.isoformat()
@@ -330,6 +322,40 @@ def get_bncc_grade(codigo: str) -> int:
         return int(val)
     return 0
 
+# ============== MOTOR DO PONTO DIÁRIO ==============
+async def registrar_ponto_diario(user: dict):
+    """ Verifica se é um novo dia. Se for, soma 1 ponto de recompensa diária. """
+    hoje_str = get_now_brt().date().isoformat()
+    last_str = str(user.get("streakUltimoLoginData"))[:10] if user.get("streakUltimoLoginData") else None
+    
+    agora = get_now_brt().isoformat()
+    updates = {"ultimoAcesso": agora}
+    pontos_adicionados = 0
+    
+    if hoje_str != last_str:
+        new_streak, new_date = calculate_streak(user.get("streakUltimoLoginData"), user.get("streakDias", 0))
+        updates["streakDias"] = new_streak
+        updates["streakUltimoLoginData"] = new_date
+        pontos_adicionados = 1
+        
+        await db.usuarios.update_one(
+            {"id": user["id"]}, 
+            {"$set": updates, "$inc": {"pontosTotais": 1}}
+        )
+        user["pontosTotais"] = user.get("pontosTotais", 0) + 1
+        
+        # Sobe o ponto da equipe também
+        eq_id = user.get("equipeId")
+        if eq_id:
+            await db.equipes.update_one({"id": eq_id}, {"$inc": {"pontosTotais": 1}})
+    else:
+        await db.usuarios.update_one({"id": user["id"]}, {"$set": updates})
+
+    for k, v in updates.items():
+        user[k] = v
+        
+    return user
+
 # ============== ROUTES ==============
 @api_router.post("/auth/register", response_model=Token)
 async def register(user_data: UsuarioCreate):
@@ -339,9 +365,13 @@ async def register(user_data: UsuarioCreate):
         nome=user_data.nome, email=user_data.email, senha=get_password_hash(user_data.senha),
         turmaId=user_data.turmaId, equipeId=user_data.equipeId, streakDias=1, 
         streakUltimoLoginData=get_now_brt().date().isoformat(),
-        ultimoAcesso=get_now_brt().isoformat()
+        ultimoAcesso=get_now_brt().isoformat(), pontosTotais=1 # 1 ponto de boas vindas
     )
     await db.usuarios.insert_one(usuario.dict())
+    
+    if user_data.equipeId:
+        await db.equipes.update_one({"id": user_data.equipeId}, {"$inc": {"pontosTotais": 1}})
+        
     access_token = create_access_token(data={"sub": usuario.id})
     user_dict = usuario.dict()
     del user_dict['senha']
@@ -358,21 +388,16 @@ async def login(credentials: UsuarioLogin):
         
     if not ativo: raise HTTPException(status_code=401, detail="Usuário desativado")
     
-    new_streak, new_date = calculate_streak(user.get("streakUltimoLoginData"), user.get("streakDias", 0))
-    agora = get_now_brt().isoformat()
-    await db.usuarios.update_one({"id": user["id"]}, {"$set": {"streakDias": new_streak, "streakUltimoLoginData": new_date, "ultimoAcesso": agora}})
-    user["streakDias"] = new_streak
-    user["streakUltimoLoginData"] = new_date
-    user["ultimoAcesso"] = agora
+    # Processa o Ponto Diário de Login
+    user = await registrar_ponto_diario(user)
     
     access_token = create_access_token(data={"sub": user["id"]})
     return Token(access_token=access_token, token_type="bearer", usuario={k: v for k, v in user.items() if k not in ['senha', '_id']})
 
 @api_router.get("/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
-    agora = get_now_brt().isoformat()
-    await db.usuarios.update_one({"id": current_user["id"]}, {"$set": {"ultimoAcesso": agora}})
-    current_user["ultimoAcesso"] = agora
+    # Processa o Ponto Diário via Token Automático
+    current_user = await registrar_ponto_diario(current_user)
     return {k: v for k, v in current_user.items() if k not in ['senha', '_id']}
 
 @api_router.put("/auth/me")
