@@ -12,7 +12,7 @@ export default function ChatScreen() {
   const [contatoAtual, setContatoAtual] = useState<any>(null);
   const [mensagens, setMensagens] = useState<any[]>([]);
   const [texto, setTexto] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const flatListRef = useRef<FlatList>(null);
 
   // Opções de ordenação: 'padrao' (Recentes), 'equipe', 'serie'
@@ -23,20 +23,22 @@ export default function ChatScreen() {
     
     const fetchData = async () => {
       if (view === 'lista') {
-        if (usuarios.length === 0) setLoading(true);
         try {
           const [users, turmas, equipes, summary] = await Promise.all([
             api.getUsuarios(), api.getTurmas(), api.getEquipes(), api.getInboxSummary()
           ]);
           if (!isMounted) return;
 
-          // Mescla todas as informações (Foto escudo, cor, serie, mensagens lidas)
+          // Filtra apenas os dados necessários para a UI, ignorando dados invisíveis que mudam o tempo todo (como o "último acesso")
           const mapped = users.filter((u:any) => u.id !== user?.id).map((u:any) => {
             const turma = turmas.find((t:any) => t.id === u.turmaId);
             const equipe = equipes.find((e:any) => e.id === u.equipeId);
             const inb = summary[u.id] || { unreadCount: 0, lastMessageTime: null };
+            
             return {
-              ...u,
+              id: u.id,
+              nome: u.nome,
+              perfil: u.perfil,
               turmaNome: turma ? turma.nome : '',
               equipeNome: equipe ? equipe.nome : '',
               equipeCor: equipe ? equipe.cor : '#555',
@@ -44,20 +46,33 @@ export default function ChatScreen() {
               lastMessageTime: inb.lastMessageTime
             };
           });
-          setUsuarios(mapped);
+
+          // MÁGICA ANTITRAVAMENTO: Só atualiza a tela se um dado REAL mudar, evitando que o scroll pule
+          setUsuarios(prev => JSON.stringify(prev) !== JSON.stringify(mapped) ? mapped : prev);
         } catch(e) {}
-        setLoading(false);
+        
+        if (isMounted) setLoading(false);
+
       } else if (view === 'conversa' && contatoAtual) {
         try {
           const msgs = await api.getConversaPrivada(contatoAtual.id);
-          if (isMounted) setMensagens(msgs);
+          
+          // MÁGICA ANTITRAVAMENTO: Só atualiza a tela se uma mensagem nova chegar
+          if (isMounted) {
+              setMensagens(prev => JSON.stringify(prev) !== JSON.stringify(msgs) ? msgs : prev);
+          }
         } catch(e) {}
       }
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 4000); // Atualiza dados em tempo real
-    return () => { isMounted = false; clearInterval(interval); };
+    // Robô atualiza em segundo plano a cada 3 segundos suavemente
+    const interval = setInterval(fetchData, 3000); 
+    
+    return () => { 
+        isMounted = false; 
+        clearInterval(interval); 
+    };
   }, [view, contatoAtual, user?.id]);
 
   const abrirConversa = (contato: any) => {
