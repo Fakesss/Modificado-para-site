@@ -65,6 +65,7 @@ class Usuario(BaseModel):
     criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     ultimoAcesso: Optional[str] = None
     dataUltimoPontoArcade: Optional[str] = None
+    ocultoChat: bool = False  # NOVO: Define se a conta é de teste (invisível no chat)
 
 class UsuarioCreate(BaseModel):
     nome: str
@@ -93,6 +94,7 @@ class AdminUsuarioUpdate(BaseModel):
     ativo: Optional[bool] = None
     pontosTotais: Optional[int] = None
     recordeJogoSingle: Optional[int] = None
+    ocultoChat: Optional[bool] = None # NOVO: Atualização pelo painel admin
 
 class ArcadeScore(BaseModel):
     pontos: int
@@ -406,14 +408,24 @@ async def delete_equipe(equipe_id: str, current_user: dict = Depends(require_adm
     await db.equipes.update_one({"id": equipe_id}, {"$set": {"ativa": False}})
     return {"message": "Equipe desativada"}
 
+# 👇 MOTOR INTELIGENTE DE USUÁRIOS
 @api_router.get("/usuarios")
 async def get_usuarios(current_user: dict = Depends(get_current_user)):
     usuarios_brutos = await db.usuarios.find({}).to_list(5000)
     usuarios_ativos = []
+    is_admin = current_user.get("perfil") == "ADMIN"
+    
     for u in usuarios_brutos:
         ativo_val = u.get("ativo", True)
         ativo = ativo_val.lower() in ['true', '1', 't', 'y', 'yes'] if isinstance(ativo_val, str) else bool(ativo_val)
-        if ativo: usuarios_ativos.append({k: v for k, v in u.items() if k not in ['senha', '_id']})
+        oculto = bool(u.get("ocultoChat", False))
+        
+        if ativo:
+            # Se for uma conta de teste e eu não sou o administrador, pula ela
+            if not is_admin and oculto:
+                continue
+                
+            usuarios_ativos.append({k: v for k, v in u.items() if k not in ['senha', '_id']})
     return usuarios_ativos
 
 @api_router.put("/usuarios/{user_id}")
