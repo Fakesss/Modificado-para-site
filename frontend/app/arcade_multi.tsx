@@ -25,6 +25,7 @@ const Particula = ({ char }: { char: string }) => {
   );
 };
 
+// Componente Visual da Tecla
 const BotaoVisual = ({ valor, isPressed, children, styleExtra, onPressWeb }: any) => {
   return (
     <View
@@ -58,7 +59,6 @@ export default function ArcadeMultiplayer() {
   
   const roomIdRef = useRef<string>('');
   const [resposta, setResposta] = useState('');
-  const respostaRef = useRef(''); 
   const [operacoes, setOperacoes] = useState<any[]>([]); 
 
   const filaMultiplayerRef = useRef<any[]>([]); 
@@ -78,56 +78,36 @@ export default function ArcadeMultiplayer() {
   const [lasersAtivos, setLasersAtivos] = useState<any[]>([]);
   const [explosoes, setExplosoes] = useState<any[]>([]); 
 
-  // =========================================================================
-  // SISTEMA DUPLO DE ÁUDIO COM CURVA QUADRÁTICA (BGM vs SFX)
-  // =========================================================================
   const [volumeBGM, setVolumeBGM] = useState<number>(0.8); 
   const [volumeSFX, setVolumeSFX] = useState<number>(0.5); 
   const [mostrarVolume, setMostrarVolume] = useState(false);
-  
   const volumeBGMRef = useRef<number>(0.8);
   const volumeSFXRef = useRef<number>(0.5);
-  
   const sonsRef = useRef<any>({});
   const bgmRef = useRef<Audio.Sound | null>(null);
+
+  // Estados exclusivos para o controle de Multi-Touch
+  const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
+  const triggeredTouchesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const carregarSons = async () => {
       try {
-        await Audio.setAudioModeAsync({
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: true,
-            shouldDuckAndroid: true,
-            playThroughEarpieceAndroid: false, 
-        });
-
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true, shouldDuckAndroid: true, playThroughEarpieceAndroid: false });
         sonsRef.current.shoot = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/laser.mp3' })).sound;
         sonsRef.current.hit = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/hit.mp3' })).sound;
         sonsRef.current.miss = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/miss.mp3' })).sound;
         sonsRef.current.damage = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/explosion.mp3' })).sound;
 
-        const bgmUrlsFallback = [
-            'https://raw.githubusercontent.com/phaserjs/examples/master/public/assets/audio/tech/bgm.mp3', 
-            'https://raw.githubusercontent.com/photonstorm/macapaka/master/assets/audio/music.mp3', 
-            'https://actions.google.com/sounds/v1/loops/looping_synth_melody.ogg'
-        ];
-
+        const bgmUrlsFallback = ['https://raw.githubusercontent.com/phaserjs/examples/master/public/assets/audio/tech/bgm.mp3'];
         let bgmCarregado = null;
         for (let url of bgmUrlsFallback) {
             try {
-                const { sound } = await Audio.Sound.createAsync(
-                    { uri: url }, 
-                    { isLooping: true, volume: Math.pow(volumeBGMRef.current, 2) * 0.5 }
-                );
-                bgmCarregado = sound;
-                break;
-            } catch (error) { console.log(`BGM Falhou: ${url}`); }
+                const { sound } = await Audio.Sound.createAsync({ uri: url }, { isLooping: true, volume: Math.pow(volumeBGMRef.current, 2) * 0.5 });
+                bgmCarregado = sound; break;
+            } catch (error) {}
         }
-        
-        if (bgmCarregado) {
-            bgmRef.current = bgmCarregado;
-            if (jogoAtivoRef.current) await bgmCarregado.playAsync();
-        }
+        if (bgmCarregado) { bgmRef.current = bgmCarregado; if (jogoAtivoRef.current) await bgmCarregado.playAsync(); }
       } catch (error) {}
     };
     carregarSons();
@@ -206,25 +186,40 @@ export default function ArcadeMultiplayer() {
     if (!acertou) Animated.sequence([ Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }), Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }), Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }) ]).start();
   };
 
-  const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
-  const triggeredTouchesRef = useRef<Set<string>>(new Set());
+  // =========================================================================
+  // NOVA LÓGICA DE TECLADO (TOUCH E WEB)
+  // =========================================================================
 
   const executarAcaoTecla = (valor: string) => {
     setResposta(currentResposta => {
         if (valor === 'apagar') return currentResposta.slice(0, -1);
-        else if (valor === 'enviar') { setTimeout(() => verificarRespostaComValor(currentResposta), 0); return currentResposta; }
+        else if (valor === 'enviar') { 
+            verificarRespostaComValor(currentResposta); 
+            return ''; 
+        }
         else return currentResposta.length < 5 ? currentResposta + valor : currentResposta;
     });
   };
 
   const getTeclaFromCoords = (x: number, y: number) => {
+    const KEY_W = (width - 30 - 10) / 3; // Estimativa baseada no gap e padding
+    const KEY_H = 48;
+    const GAP = 5;
+
     let col = -1;
-    if (x >= 0 && x <= 92) col = 0; else if (x > 92 && x <= 187) col = 1; else if (x > 187 && x <= 280) col = 2;
+    if (x >= 0 && x <= KEY_W) col = 0; 
+    else if (x > KEY_W && x <= KEY_W * 2 + GAP) col = 1; 
+    else if (x > KEY_W * 2 + GAP) col = 2;
+
     let row = -1;
-    if (y >= 0 && y <= 50) row = 0; else if (y > 50 && y <= 103) row = 1; else if (y > 103 && y <= 156) row = 2; else if (y > 156 && y <= 210) row = 3;
+    if (y >= 0 && y <= KEY_H) row = 0; 
+    else if (y > KEY_H && y <= KEY_H * 2 + GAP) row = 1; 
+    else if (y > KEY_H * 2 + GAP && y <= KEY_H * 3 + GAP * 2) row = 2; 
+    else if (y > KEY_H * 3 + GAP * 2) row = 3;
+
     if (col === -1 || row === -1) return null;
     const layout = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['apagar', '0', 'enviar']];
-    return layout[row][col];
+    return layout[row]?.[col] || null;
   };
 
   const handleMultiTouch = (evt: any) => {
@@ -236,18 +231,32 @@ export default function ArcadeMultiplayer() {
         const key = getTeclaFromCoords(touches[i].locationX, touches[i].locationY);
         if (key) currentActive.add(key);
     }
+    
     setTeclasPressionadas(Array.from(currentActive));
-    currentActive.forEach(key => { if (!triggeredTouchesRef.current.has(key)) { triggeredTouchesRef.current.add(key); executarAcaoTecla(key); } });
-    triggeredTouchesRef.current.forEach(key => { if (!currentActive.has(key)) triggeredTouchesRef.current.delete(key); });
+
+    currentActive.forEach(key => {
+        if (!triggeredTouchesRef.current.has(key)) {
+            triggeredTouchesRef.current.add(key);
+            executarAcaoTecla(key);
+        }
+    });
+
+    triggeredTouchesRef.current.forEach(key => {
+        if (!currentActive.has(key)) triggeredTouchesRef.current.delete(key);
+    });
   };
 
   const verificarRespostaComValor = (valorStr: string) => {
     if (!jogoAtivoRef.current || isNaN(parseInt(valorStr)) || meuStatusRef.current === 'morto') return;
     const alvo = operacoesListRef.current.find(op => op.resposta === parseInt(valorStr));
-    if (alvo) { alvo.y.stopAnimation(); socket.emit('arcade_answer', { room_id: roomIdRef.current, op_id: alvo.chaveOriginal }); } 
+    if (alvo) { 
+        alvo.y.stopAnimation(); 
+        socket.emit('arcade_answer', { room_id: roomIdRef.current, op_id: alvo.chaveOriginal }); 
+    } 
     else { dispararLaserUnico(null, false, true, false, 0); }
-    setResposta('');
   };
+
+  // =========================================================================
 
   const spawnarQuestaoRecuperada = (dados: any) => {
     let numLanes = 3;
@@ -392,33 +401,26 @@ export default function ArcadeMultiplayer() {
   };
 
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
-  useEffect(() => { respostaRef.current = resposta; }, [resposta]);
 
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const handleKeyDownLocal = (e: any) => {
             if (!jogoAtivoRef.current || meuStatusRef.current === 'morto' || modoRef.current === 'espectador' || mostrarVolume) return;
             let key = '';
-            if (e.key >= '0' && e.key <= '9') key = e.key; else if (e.key === 'Backspace' || e.key === 'Delete') key = 'apagar'; else if (e.key === 'Enter') key = 'enviar';
-            if (key) { executarAcaoTecla(key); setTeclasPressionadas(prev => [...prev, key]); setTimeout(() => setTeclasPressionadas(prev => prev.filter(k => k !== key)), 150); }
+            if (e.key >= '0' && e.key <= '9') key = e.key; 
+            else if (e.key === 'Backspace' || e.key === 'Delete') key = 'apagar'; 
+            else if (e.key === 'Enter') key = 'enviar';
+            
+            if (key) { 
+                executarAcaoTecla(key); 
+                setTeclasPressionadas(prev => [...prev, key]); 
+                setTimeout(() => setTeclasPressionadas(prev => prev.filter(k => k !== key)), 150); 
+            }
         };
         window.addEventListener('keydown', handleKeyDownLocal);
         return () => window.removeEventListener('keydown', handleKeyDownLocal);
     }
   }, [mostrarVolume]);
-
-  useEffect(() => {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      const handleVisibilityChange = () => {
-        if (document.hidden && jogoAtivoRef.current && meuStatusRef.current === 'vivo' && modoRef.current !== 'espectador') {
-          const opsNaTela = [...operacoesAtuaisRef.current];
-          opsNaTela.forEach(op => { if (!op.missed) { op.missed = true; processarErro(op.chave); } });
-        }
-      };
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-    }
-  }, [processarErro]);
 
   useEffect(() => {
     socket.emit('update_status', { status: 'JOGANDO_ONLINE' });
@@ -537,47 +539,27 @@ export default function ArcadeMultiplayer() {
       {mostrarVolume && (
         <View style={styles.volumeOverlay}>
           <View style={styles.volumeModal}>
-            <Text style={styles.volumeTitle}>
-                <Ionicons name="settings" size={22} color="#FFD700" /> Áudio
-            </Text>
-
+            <Text style={styles.volumeTitle}><Ionicons name="settings" size={22} color="#FFD700" /> Áudio</Text>
             <Text style={styles.volumeLabel}>Música de Fundo</Text>
             <View style={styles.sliderRow}>
               <Ionicons name="musical-notes" size={20} color="#00FFFF" />
               <Slider
                 style={{flex: 1, height: 40, marginHorizontal: 10}}
-                minimumValue={0}
-                maximumValue={1}
-                value={volumeBGM}
-                onValueChange={(val) => {
-                    setVolumeBGM(val);
-                    volumeBGMRef.current = val;
-                    if (bgmRef.current) bgmRef.current.setVolumeAsync(Math.pow(val, 2) * 0.5);
-                }}
-                minimumTrackTintColor="#00FFFF"
-                maximumTrackTintColor="#555"
-                thumbTintColor="#00FFFF"
+                minimumValue={0} maximumValue={1} value={volumeBGM}
+                onValueChange={(val) => { setVolumeBGM(val); volumeBGMRef.current = val; if (bgmRef.current) bgmRef.current.setVolumeAsync(Math.pow(val, 2) * 0.5); }}
+                minimumTrackTintColor="#00FFFF" maximumTrackTintColor="#555" thumbTintColor="#00FFFF"
               />
             </View>
-
             <Text style={styles.volumeLabel}>Efeitos Sonoros</Text>
             <View style={styles.sliderRow}>
               <Ionicons name="flash" size={20} color="#FFD700" />
               <Slider
                 style={{flex: 1, height: 40, marginHorizontal: 10}}
-                minimumValue={0}
-                maximumValue={1}
-                value={volumeSFX}
-                onValueChange={(val) => {
-                    setVolumeSFX(val);
-                    volumeSFXRef.current = val;
-                }}
-                minimumTrackTintColor="#FFD700"
-                maximumTrackTintColor="#555"
-                thumbTintColor="#FFD700"
+                minimumValue={0} maximumValue={1} value={volumeSFX}
+                onValueChange={(val) => { setVolumeSFX(val); volumeSFXRef.current = val; }}
+                minimumTrackTintColor="#FFD700" maximumTrackTintColor="#555" thumbTintColor="#FFD700"
               />
             </View>
-
             <TouchableOpacity style={styles.btnCloseVolume} onPress={() => setMostrarVolume(false)}>
               <Text style={styles.btnCloseVolumeText}>FECHAR</Text>
             </TouchableOpacity>
@@ -593,9 +575,7 @@ export default function ArcadeMultiplayer() {
         </View>
         
         <View style={styles.botoesCentro}>
-            <TouchableOpacity onPress={() => setMostrarVolume(true)} style={styles.btnAcao}>
-                <Ionicons name="settings" size={22} color="#FFF" />
-            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setMostrarVolume(true)} style={styles.btnAcao}><Ionicons name="settings" size={22} color="#FFF" /></TouchableOpacity>
             <TouchableOpacity onPress={abandonarPartida} style={styles.btnAcao}><Ionicons name="exit-outline" size={22} color="#FFF" /></TouchableOpacity>
         </View>
         
@@ -643,7 +623,17 @@ export default function ArcadeMultiplayer() {
                 <BotaoVisual valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={executarAcaoTecla} styleExtra={styles.teclaEnviar}><Ionicons name="checkmark" size={28} color="#fff" /></BotaoVisual>
                 </View>
             </View>
-            {Platform.OS !== 'web' && (<View style={StyleSheet.absoluteFillObject} onStartShouldSetResponder={() => true} onResponderGrant={handleMultiTouch} onResponderMove={handleMultiTouch} onResponderRelease={handleMultiTouch} onResponderTerminate={handleMultiTouch} />)}
+            {/* Camada Invisível de Interceptação de Multi-Touch para Mobile */}
+            {Platform.OS !== 'web' && (
+                <View 
+                    style={StyleSheet.absoluteFillObject} 
+                    onStartShouldSetResponder={() => true} 
+                    onResponderGrant={handleMultiTouch} 
+                    onResponderMove={handleMultiTouch} 
+                    onResponderRelease={handleMultiTouch} 
+                    onResponderTerminate={handleMultiTouch} 
+                />
+            )}
           </View>
         </View>
       )}
@@ -678,7 +668,6 @@ const styles = StyleSheet.create({
   vidasContainer: { flexDirection: 'row', alignItems: 'center', height: 16 },
   botoesCentro: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
   btnAcao: { padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, marginHorizontal: 6 }, 
-  
   volumeOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100, justifyContent: 'center', alignItems: 'center' },
   volumeModal: { backgroundColor: '#1a1a2e', borderWidth: 2, borderColor: '#FFD700', borderRadius: 16, padding: 25, width: '85%', maxWidth: 350 },
   volumeTitle: { color: '#FFD700', fontSize: 20, fontWeight: '900', textAlign: 'center', marginBottom: 20, textTransform: 'uppercase' },
@@ -686,7 +675,6 @@ const styles = StyleSheet.create({
   sliderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
   btnCloseVolume: { backgroundColor: '#E74C3C', padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
   btnCloseVolumeText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-
   gameArea: { flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden', position: 'relative', zIndex: 1 },
   syncContainer: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
   syncText: { color: '#00FFFF', marginTop: 15, fontSize: 14, fontWeight: 'bold', fontStyle: 'italic' },
@@ -697,7 +685,6 @@ const styles = StyleSheet.create({
   textoOperacao: { color: '#FFF', fontSize: 16, fontWeight: '900' },
   explosaoContainer: { position: 'absolute', width: CARD_WIDTH, height: 40, alignItems: 'center', justifyContent: 'center', zIndex: 15 },
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10, elevation: 5 },
-  
   bottomPanel: { width: '100%', alignItems: 'center', paddingBottom: 15, paddingTop: 5, backgroundColor: '#0c0c0c', zIndex: 10 },
   displayContainer: { backgroundColor: 'rgba(26, 26, 46, 0.7)', width: '100%', maxWidth: 370, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
@@ -708,7 +695,6 @@ const styles = StyleSheet.create({
   teclaText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
   teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)' },
   teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)' },
-  
   containerMorto: { width: '100%', paddingVertical: 50, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0c0c0c', zIndex: 20 },
   textoMorto: { color: '#FF4444', fontSize: 24, fontWeight: '900', marginBottom: 5 },
   subTextoMorto: { color: '#FFF', fontSize: 14 }
