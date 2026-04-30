@@ -35,7 +35,7 @@ function NeonLineSimple({ color }: { color: string }) {
 }
 
 export default function TabsLayout() {
-  const insets = useSafeAreaInsets(); // Calcula o tamanho seguro da tela (foge dos botões virtuais)
+  const insets = useSafeAreaInsets(); 
   const { user, isAdminViewingAsStudent } = useAuth();
   const router = useRouter();
   const isLeader = user?.perfil === 'ALUNO_LIDER';
@@ -159,7 +159,6 @@ export default function TabsLayout() {
             backgroundColor: '#1a1a2e',
             borderTopColor: teamColor + '40',
             borderTopWidth: 2,
-            // Ajuste dinâmico do padding inferior e altura total com base nos insets
             paddingBottom: Platform.OS === 'ios' ? 20 : Math.max(12, insets.bottom + 5),
             paddingTop: 8,
             height: Platform.OS === 'ios' ? 85 : 60 + insets.bottom,
@@ -172,6 +171,10 @@ export default function TabsLayout() {
         <Tabs.Screen name="index" options={{ title: 'Início', tabBarIcon: ({ color, size }) => (<Ionicons name="home" size={size} color={color} />) }} />
         <Tabs.Screen name="jogadores" options={{ title: 'Online', tabBarIcon: ({ color, size }) => (<Ionicons name="radio" size={size} color={color} /> ) }} />
         <Tabs.Screen name="salas" options={{ title: 'Salas', tabBarIcon: ({ color, size }) => (<Ionicons name="chatbubbles" size={size} color={color} /> ) }} />
+        
+        {/* ABA DO CHAT REGISTRADA CORRETAMENTE AQUI */}
+        <Tabs.Screen name="chat" options={{ title: 'Inbox', tabBarIcon: ({ color, size }) => (<Ionicons name="mail" size={size} color={color} /> ) }} />
+
         <Tabs.Screen name="jogo" options={{ title: 'Jogos', tabBarIcon: ({ color, size }) => (<Ionicons name="game-controller" size={size} color={color} />), tabBarBadge: '🧪', tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 } }} />
         <Tabs.Screen name="equipe" options={{ title: 'Equipe', href: isLeader ? undefined : null, tabBarIcon: ({ color, size }) => (<Ionicons name="people" size={size} color={color} />) }} />
         
