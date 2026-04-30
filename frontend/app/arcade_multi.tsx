@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
 import { Audio } from 'expo-av'; 
+import Slider from '@react-native-community/slider';
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.62; 
@@ -24,9 +25,6 @@ const Particula = ({ char }: { char: string }) => {
   );
 };
 
-// =========================================================================
-// NOVO BOTÃO VISUAL WEB: Aceita sobreposições
-// =========================================================================
 const BotaoVisual = ({ valor, isPressed, children, styleExtra, onPressWeb }: any) => {
   return (
     <View
@@ -80,41 +78,84 @@ export default function ArcadeMultiplayer() {
   const [lasersAtivos, setLasersAtivos] = useState<any[]>([]);
   const [explosoes, setExplosoes] = useState<any[]>([]); 
 
-  const [volumeUI, setVolumeUI] = useState<number>(0.3);
-  const volumeRef = useRef<number>(0.3);
+  // =========================================================================
+  // SISTEMA DUPLO DE ÁUDIO COM CURVA QUADRÁTICA (BGM vs SFX)
+  // =========================================================================
+  const [volumeBGM, setVolumeBGM] = useState<number>(0.8); 
+  const [volumeSFX, setVolumeSFX] = useState<number>(0.5); 
+  const [mostrarVolume, setMostrarVolume] = useState(false);
+  
+  const volumeBGMRef = useRef<number>(0.8);
+  const volumeSFXRef = useRef<number>(0.5);
+  
   const sonsRef = useRef<any>({});
-
-  const alternarVolume = () => {
-    let nextVol = volumeRef.current === 1.0 ? 0.0 : volumeRef.current === 0.0 ? 0.3 : 1.0;
-    setVolumeUI(nextVol); volumeRef.current = nextVol;
-  };
+  const bgmRef = useRef<Audio.Sound | null>(null);
 
   useEffect(() => {
     const carregarSons = async () => {
       try {
+        await Audio.setAudioModeAsync({
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: true,
+            shouldDuckAndroid: true,
+            playThroughEarpieceAndroid: false, 
+        });
+
         sonsRef.current.shoot = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/laser.mp3' })).sound;
         sonsRef.current.hit = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/hit.mp3' })).sound;
         sonsRef.current.miss = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/miss.mp3' })).sound;
         sonsRef.current.damage = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/explosion.mp3' })).sound;
+
+        const bgmUrlsFallback = [
+            'https://raw.githubusercontent.com/phaserjs/examples/master/public/assets/audio/tech/bgm.mp3', 
+            'https://raw.githubusercontent.com/photonstorm/macapaka/master/assets/audio/music.mp3', 
+            'https://actions.google.com/sounds/v1/loops/looping_synth_melody.ogg'
+        ];
+
+        let bgmCarregado = null;
+        for (let url of bgmUrlsFallback) {
+            try {
+                const { sound } = await Audio.Sound.createAsync(
+                    { uri: url }, 
+                    { isLooping: true, volume: Math.pow(volumeBGMRef.current, 2) * 0.5 }
+                );
+                bgmCarregado = sound;
+                break;
+            } catch (error) { console.log(`BGM Falhou: ${url}`); }
+        }
+        
+        if (bgmCarregado) {
+            bgmRef.current = bgmCarregado;
+            if (jogoAtivoRef.current) await bgmCarregado.playAsync();
+        }
       } catch (error) {}
     };
     carregarSons();
-    return () => { Object.values(sonsRef.current).forEach((s: any) => s.unloadAsync()); };
+    return () => {
+      Object.values(sonsRef.current).forEach((s: any) => s?.unloadAsync());
+      if (bgmRef.current) bgmRef.current.unloadAsync();
+    };
   }, []);
 
   const tocarSom = async (tipo: string) => {
     try {
-      if (sonsRef.current[tipo] && volumeRef.current > 0) {
-        await sonsRef.current[tipo].setVolumeAsync(volumeRef.current);
+      if (sonsRef.current[tipo] && volumeSFXRef.current > 0) {
+        const volumeCalculado = Math.pow(volumeSFXRef.current, 2) * 0.4;
+        await sonsRef.current[tipo].setVolumeAsync(volumeCalculado);
         await sonsRef.current[tipo].replayAsync();
       }
     } catch (e) {}
   };
 
+  const pararBGM = async () => {
+    try { if (bgmRef.current) await bgmRef.current.pauseAsync(); } catch(e) {}
+  };
+
   const gameOver = () => { 
     jogoAtivoRef.current = false;
     if (spawnTimer.current) clearTimeout(spawnTimer.current); 
-    setOperacoes([]); setExplosoes([]); setTela('resultado'); 
+    setOperacoes([]); setExplosoes([]); setTela('resultado');
+    pararBGM();
   };
 
   const processarErro = useCallback((opId: string) => {
@@ -314,7 +355,7 @@ export default function ArcadeMultiplayer() {
     if (isHostRef.current) loop();
   };
 
-  const setupMultiplayerMatch = (data: any) => {
+  const setupMultiplayerMatch = async (data: any) => {
       setModo('multi'); modoRef.current = 'multi'; modoMatematicaRef.current = data.modo_operacao || 'misto';
       roomIdRef.current = data.room_id; setOponenteNome(data.opponentName); isHostRef.current = data.is_host; 
       setVidas(5); setVidasOponente(5); setPontos(0); setPontosOponente(0);
@@ -322,21 +363,26 @@ export default function ArcadeMultiplayer() {
       filaMultiplayerRef.current = []; setOperacoes([]); setExplosoes([]); setResposta(''); operacoesAtuaisRef.current = []; rodadaRef.current = 1;
       setTela('jogo'); jogoAtivoRef.current = true;
       if (data.is_host) { gerarEnviarBatchMultiplayer(data.modo_operacao || 'misto'); }
+      
+      try { if (bgmRef.current) await bgmRef.current.playAsync(); } catch(e){}
       setTimeout(() => { iniciarLoopSpawner(); }, 1000);
   };
 
-  const setupSpectatorMode = (roomId: string) => {
+  const setupSpectatorMode = async (roomId: string) => {
       setModo('espectador'); modoRef.current = 'espectador'; roomIdRef.current = roomId;
       setVidas(5); setVidasOponente(5); setPontos(0); setPontosOponente(0);
       filaMultiplayerRef.current = []; setOperacoes([]); setExplosoes([]);
       socket.emit('spectate_match', { room_id: roomId });
       setTela('jogo'); jogoAtivoRef.current = true;
       socket.emit('arcade_sync_batch', { room_id: roomId, ops: [{ type: 'REQUEST_SYNC' }] });
+      
+      try { if (bgmRef.current) await bgmRef.current.playAsync(); } catch(e){}
   };
 
   const abandonarPartida = () => {
       const msg = modoRef.current === 'espectador' ? "Deseja parar de assistir?" : "Deseja abandonar a partida? Você perderá o jogo.";
       const executarSaida = () => {
+          pararBGM();
           if (modoRef.current === 'espectador') socket.emit('leave_spectator', { room_id: roomIdRef.current });
           else if (modoRef.current === 'multi') socket.emit('leave_match', { room_id: roomIdRef.current });
           setActiveMatchData(null); socket.emit('update_status', { status: 'MENU' }); router.back();
@@ -351,7 +397,7 @@ export default function ArcadeMultiplayer() {
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const handleKeyDownLocal = (e: any) => {
-            if (!jogoAtivoRef.current || meuStatusRef.current === 'morto' || modoRef.current === 'espectador') return;
+            if (!jogoAtivoRef.current || meuStatusRef.current === 'morto' || modoRef.current === 'espectador' || mostrarVolume) return;
             let key = '';
             if (e.key >= '0' && e.key <= '9') key = e.key; else if (e.key === 'Backspace' || e.key === 'Delete') key = 'apagar'; else if (e.key === 'Enter') key = 'enviar';
             if (key) { executarAcaoTecla(key); setTeclasPressionadas(prev => [...prev, key]); setTimeout(() => setTeclasPressionadas(prev => prev.filter(k => k !== key)), 150); }
@@ -359,7 +405,7 @@ export default function ArcadeMultiplayer() {
         window.addEventListener('keydown', handleKeyDownLocal);
         return () => window.removeEventListener('keydown', handleKeyDownLocal);
     }
-  }, []);
+  }, [mostrarVolume]);
 
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -488,16 +534,71 @@ export default function ArcadeMultiplayer() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {modoRef.current === 'espectador' && (<View style={styles.badgeEspectador}><Text style={styles.textoBadgeEspectador}>👁 ASSISTINDO AO VIVO</Text></View>)}
 
+      {mostrarVolume && (
+        <View style={styles.volumeOverlay}>
+          <View style={styles.volumeModal}>
+            <Text style={styles.volumeTitle}>
+                <Ionicons name="settings" size={22} color="#FFD700" /> Áudio
+            </Text>
+
+            <Text style={styles.volumeLabel}>Música de Fundo</Text>
+            <View style={styles.sliderRow}>
+              <Ionicons name="musical-notes" size={20} color="#00FFFF" />
+              <Slider
+                style={{flex: 1, height: 40, marginHorizontal: 10}}
+                minimumValue={0}
+                maximumValue={1}
+                value={volumeBGM}
+                onValueChange={(val) => {
+                    setVolumeBGM(val);
+                    volumeBGMRef.current = val;
+                    if (bgmRef.current) bgmRef.current.setVolumeAsync(Math.pow(val, 2) * 0.5);
+                }}
+                minimumTrackTintColor="#00FFFF"
+                maximumTrackTintColor="#555"
+                thumbTintColor="#00FFFF"
+              />
+            </View>
+
+            <Text style={styles.volumeLabel}>Efeitos Sonoros</Text>
+            <View style={styles.sliderRow}>
+              <Ionicons name="flash" size={20} color="#FFD700" />
+              <Slider
+                style={{flex: 1, height: 40, marginHorizontal: 10}}
+                minimumValue={0}
+                maximumValue={1}
+                value={volumeSFX}
+                onValueChange={(val) => {
+                    setVolumeSFX(val);
+                    volumeSFXRef.current = val;
+                }}
+                minimumTrackTintColor="#FFD700"
+                maximumTrackTintColor="#555"
+                thumbTintColor="#FFD700"
+              />
+            </View>
+
+            <TouchableOpacity style={styles.btnCloseVolume} onPress={() => setMostrarVolume(false)}>
+              <Text style={styles.btnCloseVolumeText}>FECHAR</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <View style={styles.gameHeader}>
         <View style={styles.playerInfoBox}>
           <View style={[styles.playerTag, { borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.1)' }]}><Text style={[styles.nomeJogador, { color: '#00FFFF' }]}>{modoRef.current === 'espectador' ? player1Name : 'Você'}</Text></View>
           <Text style={styles.textoPlacar}>Pts: {pontos}</Text>
           <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={14} color="#FF4444" style={{marginHorizontal:1}} />)}</View>
         </View>
+        
         <View style={styles.botoesCentro}>
-            <TouchableOpacity onPress={alternarVolume} style={styles.btnAcao}><Ionicons name={volumeUI === 0.0 ? "volume-mute" : volumeUI === 0.3 ? "volume-low" : "volume-high"} size={22} color="#FFF" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setMostrarVolume(true)} style={styles.btnAcao}>
+                <Ionicons name="settings" size={22} color="#FFF" />
+            </TouchableOpacity>
             <TouchableOpacity onPress={abandonarPartida} style={styles.btnAcao}><Ionicons name="exit-outline" size={22} color="#FFF" /></TouchableOpacity>
         </View>
+        
         <View style={[styles.playerInfoBox, { alignItems: 'flex-end' }]}>
           <View style={[styles.playerTag, { borderColor: '#FFA500', backgroundColor: 'rgba(255, 165, 0, 0.1)' }]}><Text style={[styles.nomeJogador, { color: '#FFA500' }]}>{oponenteNome}</Text></View>
           <Text style={styles.textoPlacar}>Pts: {pontosOponente}</Text>
@@ -505,7 +606,6 @@ export default function ArcadeMultiplayer() {
         </View>
       </View>
 
-      {/* 🚀 CORREÇÃO APLICADA: flex 1 no gameArea */}
       <View style={styles.gameArea}>
         <View style={styles.linhaEletricaContainer}><View style={styles.linhaEletricaCore} /><View style={styles.linhaEletricaGlow} /></View>
         {modoRef.current === 'espectador' && operacoes.length === 0 && (<View style={styles.syncContainer}><ActivityIndicator size="large" color="#00FFFF" /><Text style={styles.syncText}>Sincronizando radar com a partida...</Text></View>)}
@@ -525,7 +625,6 @@ export default function ArcadeMultiplayer() {
         ))}
       </View>
 
-      {/* 🚀 CORREÇÃO APLICADA: removido o position absolute. Flui embaixo da gameArea */}
       {modoRef.current !== 'espectador' && meuStatus === 'vivo' && (
         <View style={styles.bottomPanel}>
           <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
@@ -571,7 +670,7 @@ const styles = StyleSheet.create({
   jogarNovamenteText: { fontSize: 18, fontWeight: '900', color: '#000', marginLeft: 10 },
   badgeEspectador: { backgroundColor: '#E74C3C', padding: 5, alignItems: 'center', borderRadius: 8, marginBottom: 5, marginHorizontal: 15 },
   textoBadgeEspectador: { color: '#FFF', fontWeight: 'bold' },
-  gameHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingVertical: 10, alignItems: 'center', backgroundColor: '#0c0c0c' },
+  gameHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, paddingVertical: 10, alignItems: 'center', backgroundColor: '#0c0c0c', zIndex: 10 },
   playerInfoBox: { flex: 1 },
   playerTag: { borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginBottom: 4, alignSelf: 'flex-start' },
   nomeJogador: { fontWeight: '900', fontSize: 14, textTransform: 'uppercase' },
@@ -580,7 +679,14 @@ const styles = StyleSheet.create({
   botoesCentro: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
   btnAcao: { padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, marginHorizontal: 6 }, 
   
-  // Removido height fixo
+  volumeOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100, justifyContent: 'center', alignItems: 'center' },
+  volumeModal: { backgroundColor: '#1a1a2e', borderWidth: 2, borderColor: '#FFD700', borderRadius: 16, padding: 25, width: '85%', maxWidth: 350 },
+  volumeTitle: { color: '#FFD700', fontSize: 20, fontWeight: '900', textAlign: 'center', marginBottom: 20, textTransform: 'uppercase' },
+  volumeLabel: { color: '#FFF', fontSize: 14, fontWeight: 'bold', marginTop: 10, marginBottom: 5 },
+  sliderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  btnCloseVolume: { backgroundColor: '#E74C3C', padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
+  btnCloseVolumeText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+
   gameArea: { flex: 1, backgroundColor: '#0a0a0a', overflow: 'hidden', position: 'relative', zIndex: 1 },
   syncContainer: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
   syncText: { color: '#00FFFF', marginTop: 15, fontSize: 14, fontWeight: 'bold', fontStyle: 'italic' },
@@ -592,7 +698,6 @@ const styles = StyleSheet.create({
   explosaoContainer: { position: 'absolute', width: CARD_WIDTH, height: 40, alignItems: 'center', justifyContent: 'center', zIndex: 15 },
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10, elevation: 5 },
   
-  // Removido position absolute. Usando padding e flex normal.
   bottomPanel: { width: '100%', alignItems: 'center', paddingBottom: 15, paddingTop: 5, backgroundColor: '#0c0c0c', zIndex: 10 },
   displayContainer: { backgroundColor: 'rgba(26, 26, 46, 0.7)', width: '100%', maxWidth: 370, height: 45, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   displayText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
