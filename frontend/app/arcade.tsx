@@ -120,6 +120,10 @@ export default function Arcade() {
   const botTimer = useRef<any>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
+  
+  // ANIMAÇÃO DE PULSO DO LASER HORIZONTAL
+  const pulsoLaserAnim = useRef(new Animated.Value(0.4)).current;
+  
   const [lasersAtivos, setLasersAtivos] = useState<any[]>([]);
   const [explosoes, setExplosoes] = useState<any[]>([]); 
   const desempenhoOcultoRef = useRef(0); 
@@ -129,9 +133,6 @@ export default function Arcade() {
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
   const respostaRef = useRef('');
 
-  // =========================================================================
-  // SISTEMA DUPLO DE ÁUDIO À PROVA DE FALHAS (BGM vs SFX)
-  // =========================================================================
   const [volumeBGM, setVolumeBGM] = useState<number>(0.8); 
   const [volumeSFX, setVolumeSFX] = useState<number>(0.5); 
   const [mostrarVolume, setMostrarVolume] = useState(false);
@@ -143,9 +144,16 @@ export default function Arcade() {
   const bgmRef = useRef<Audio.Sound | null>(null);
 
   useEffect(() => {
+    // Inicia o pulso neon do laser
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulsoLaserAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulsoLaserAnim, { toValue: 0.4, duration: 600, useNativeDriver: true })
+      ])
+    ).start();
+
     const carregarSons = async () => {
       try {
-        // FORÇA O ÁUDIO A IGNORAR MODO SILENCIOSO E SAIR NO ALTO-FALANTE
         await Audio.setAudioModeAsync({
             playsInSilentModeIOS: true,
             staysActiveInBackground: true,
@@ -153,7 +161,6 @@ export default function Arcade() {
             playThroughEarpieceAndroid: false, 
         });
 
-        // 1. CARREGA OS EFEITOS
         const sonsParaCarregar = {
             shoot: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/laser.mp3',
             hit: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/hit.mp3',
@@ -162,16 +169,13 @@ export default function Arcade() {
         };
 
         for (const [key, url] of Object.entries(sonsParaCarregar)) {
-            try {
-                sonsRef.current[key] = (await Audio.Sound.createAsync({ uri: url })).sound;
-            } catch (e) { console.log(`Falha som: ${key}`); }
+            try { sonsRef.current[key] = (await Audio.Sound.createAsync({ uri: url })).sound; } catch (e) {}
         }
 
-        // 2. SISTEMA DE RESGATE DE MÚSICA (Tenta várias URLs até uma funcionar)
         const bgmUrlsFallback = [
-            'https://raw.githubusercontent.com/phaserjs/examples/master/public/assets/audio/tech/bgm.mp3', // Oficial
-            'https://raw.githubusercontent.com/photonstorm/macapaka/master/assets/audio/music.mp3', // Reserva 1
-            'https://actions.google.com/sounds/v1/loops/looping_synth_melody.ogg' // Reserva Google (Inquebrável)
+            'https://raw.githubusercontent.com/phaserjs/examples/master/public/assets/audio/tech/bgm.mp3',
+            'https://raw.githubusercontent.com/photonstorm/macapaka/master/assets/audio/music.mp3', 
+            'https://actions.google.com/sounds/v1/loops/looping_synth_melody.ogg' 
         ];
 
         let bgmCarregado = null;
@@ -182,23 +186,18 @@ export default function Arcade() {
                     { isLooping: true, volume: Math.pow(volumeBGMRef.current, 2) * 0.5 }
                 );
                 bgmCarregado = sound;
-                break; // Se carregou, para o loop de tentativas
-            } catch (error) {
-                console.log(`BGM Falhou na URL: ${url}`);
-            }
+                break; 
+            } catch (error) {}
         }
         
         if (bgmCarregado) {
             bgmRef.current = bgmCarregado;
-            // Se o jogador iniciou o jogo antes da música baixar, toca agora!
             if (jogoAtivoRef.current && !jogoPausadoRef.current) {
                 await bgmCarregado.playAsync();
             }
         }
 
-      } catch (error) {
-        console.log("Erro geral no sistema de áudio", error);
-      }
+      } catch (error) { }
     };
     carregarSons();
 
@@ -212,16 +211,13 @@ export default function Arcade() {
     try {
         if (bgmRef.current) {
             await bgmRef.current.setVolumeAsync(Math.pow(volumeBGMRef.current, 2) * 0.5);
-            // Ao iniciar, força o play, burlando o bloqueio de navegadores pois é após um "clique" do usuário
             await bgmRef.current.playAsync();
         }
-    } catch(e) { console.log("Erro Play BGM", e) }
+    } catch(e) {}
   };
 
   const pararBGM = async () => {
-    try {
-        if (bgmRef.current) await bgmRef.current.pauseAsync();
-    } catch(e) {}
+    try { if (bgmRef.current) await bgmRef.current.pauseAsync(); } catch(e) {}
   };
 
   const tocarSom = async (tipo: string) => {
@@ -235,12 +231,9 @@ export default function Arcade() {
   };
 
   const abrirMenuVolume = () => {
-      if (jogoAtivoRef.current && !jogoPausadoRef.current) {
-          pausarJogo();
-      }
+      if (jogoAtivoRef.current && !jogoPausadoRef.current) { pausarJogo(); }
       setMostrarVolume(true);
   };
-  // =========================================================================
 
   useEffect(() => { respostaRef.current = resposta; }, [resposta]);
   useEffect(() => { operacoesListRef.current = operacoes; }, [operacoes]);
@@ -434,10 +427,7 @@ export default function Arcade() {
     } else { missaoAtualRef.current = null; filaQuestoesRef.current = []; setVidas(5); }
     
     setTela('jogo'); 
-    
-    // Inicia a música de fundo IMEDIATAMENTE após o clique no botão para burlar o navegador
     iniciarBGM();
-    
     setTimeout(() => { spawnarQuestao(); iniciarLoopSpawner(); }, 100);
   };
 
@@ -793,8 +783,12 @@ export default function Arcade() {
 
       <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />)}</View>
       
+      {/* CORREÇÃO: Fundo Transparente e Flex 1 Restaurado */}
       <View style={styles.gameArea}>
-        <View style={styles.linhaEletricaContainer}><View style={styles.linhaEletricaCore} /><View style={styles.linhaEletricaGlow} /></View>
+        <View style={styles.linhaEletricaContainer}>
+            <Animated.View style={[styles.linhaEletricaCore, { opacity: pulsoLaserAnim }]} />
+            <Animated.View style={[styles.linhaEletricaGlow, { opacity: pulsoLaserAnim, transform: [{ scaleY: pulsoLaserAnim.interpolate({ inputRange: [0.4, 1], outputRange: [0.8, 1.5] }) }] }]} />
+        </View>
 
         {operacoes.map((op) => ( 
           <Animated.View key={op.id} style={[styles.operacaoCard, op.tipoEspecial === 'destruir' && styles.operacaoEspecial, op.tipoEspecial === 'vida' && styles.operacaoVida, { transform: [{ translateY: op.y }, { scale: op.scale }], left: op.posX, opacity: op.opacity, width: CARD_WIDTH }]}> 
@@ -809,6 +803,7 @@ export default function Arcade() {
         ))}
       </View>
       
+      {/* CORREÇÃO: Fundo transparente para o painel de botões não tampar o laser */}
       <View style={styles.bottomPanel}>
         <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
         
@@ -842,8 +837,9 @@ export default function Arcade() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
-  menuContainer: { flex: 1 },
+  // Fundo geral preto mantido aqui, os conteineres internos ficam transparentes
+  container: { flex: 1, backgroundColor: '#0a0a0a' },
+  menuContainer: { flex: 1, backgroundColor: '#0c0c0c' },
   menuScrollContent: { padding: 20, alignItems: 'center', paddingBottom: 20 },
   menuHeader: { alignItems: 'center', marginBottom: 30, marginTop: 20 },
   menuTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginTop: 12 },
@@ -874,14 +870,13 @@ const styles = StyleSheet.create({
   iniciarButton: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', elevation: 4 },
   iniciarButtonText: { color: '#000', fontSize: 18, fontWeight: '900' },
   
-  gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, zIndex: 10 },
+  gameHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, zIndex: 10, backgroundColor: '#0a0a0a' },
   headerStatsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statTextScore: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   faseBadge: { backgroundColor: '#4169E1', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginLeft: 10 },
   faseBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
   btnPausaIcone: { padding: 4, marginLeft: 10 },
   
-  // Menu de Volume Flutuante
   volumeOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100, justifyContent: 'center', alignItems: 'center' },
   volumeModal: { backgroundColor: '#1a1a2e', borderWidth: 2, borderColor: '#FFD700', borderRadius: 16, padding: 25, width: '85%', maxWidth: 350 },
   volumeTitle: { color: '#FFD700', fontSize: 20, fontWeight: '900', textAlign: 'center', marginBottom: 20, textTransform: 'uppercase' },
@@ -892,10 +887,11 @@ const styles = StyleSheet.create({
 
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, height: 30 },
   
-  gameArea: { flex: 1, width: '100%', backgroundColor: '#0a0a0a', zIndex: 1 },
+  // CORREÇÃO: Flex 1 permite preencher a tela, background transparente
+  gameArea: { ...StyleSheet.absoluteFillObject, zIndex: 1, backgroundColor: 'transparent' },
   linhaEletricaContainer: { position: 'absolute', top: DROP_LIMIT, width: '100%', height: 10, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
   linhaEletricaCore: { width: '100%', height: 2, backgroundColor: '#00FFFF', shadowColor: '#00FFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 8, elevation: 8 },
-  linhaEletricaGlow: { position: 'absolute', width: '100%', height: 8, backgroundColor: 'rgba(0, 255, 255, 0.3)' },
+  linhaEletricaGlow: { position: 'absolute', width: '100%', height: 8, backgroundColor: 'rgba(0, 255, 255, 0.5)' },
 
   operacaoCard: { position: 'absolute', top: 0, backgroundColor: '#4169E1', paddingVertical: 10, borderRadius: 8, alignItems: 'center', zIndex: 10 },
   operacaoEspecial: { backgroundColor: '#FFD700' },
@@ -907,7 +903,8 @@ const styles = StyleSheet.create({
 
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
   
-  bottomPanel: { width: '100%', alignItems: 'center', paddingBottom: 15, paddingTop: 5, backgroundColor: '#0c0c0c', zIndex: 10 },
+  // CORREÇÃO: Posição ancorada no fundo com fundo transparente
+  bottomPanel: { position: 'absolute', bottom: 10, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10, backgroundColor: 'transparent' },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
@@ -918,12 +915,12 @@ const styles = StyleSheet.create({
   tecladoContainer: { width: 280, position: 'relative' },
   tecladoGrid: { width: '100%', gap: 5 },
   tecladoRow: { flexDirection: 'row', gap: 5, justifyContent: 'space-between' },
-  tecla: { backgroundColor: 'rgba(26, 26, 46, 0.75)', flex: 1, height: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  tecla: { backgroundColor: 'rgba(26, 26, 46, 0.9)', flex: 1, height: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   teclaText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)' },
-  teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)' },
+  teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.95)' },
+  teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.95)' },
   
-  resultadoContainer: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center' },
+  resultadoContainer: { flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0c0c0c' },
   resultadoTitle: { fontSize: 28, fontWeight: '900', color: '#fff', marginBottom: 15 },
   resultadoCard: { backgroundColor: '#1a1a2e', padding: 30, borderRadius: 16, alignItems: 'center', marginBottom: 10, width: '100%' },
   resultadoPontos: { fontSize: 64, fontWeight: '900', color: '#FFD700' },
