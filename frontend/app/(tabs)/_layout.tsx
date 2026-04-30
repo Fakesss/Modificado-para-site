@@ -172,7 +172,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="jogadores" options={{ title: 'Online', tabBarIcon: ({ color, size }) => (<Ionicons name="radio" size={size} color={color} /> ) }} />
         <Tabs.Screen name="salas" options={{ title: 'Salas', tabBarIcon: ({ color, size }) => (<Ionicons name="chatbubbles" size={size} color={color} /> ) }} />
         
-        {/* ABA DO CHAT REGISTRADA CORRETAMENTE AQUI */}
+        {/* ABA DE CHAT EXPLICITAMENTE DECLARADA AQUI */}
         <Tabs.Screen name="chat" options={{ title: 'Inbox', tabBarIcon: ({ color, size }) => (<Ionicons name="mail" size={size} color={color} /> ) }} />
 
         <Tabs.Screen name="jogo" options={{ title: 'Jogos', tabBarIcon: ({ color, size }) => (<Ionicons name="game-controller" size={size} color={color} />), tabBarBadge: '🧪', tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 } }} />
