@@ -34,6 +34,11 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# ============== MOTOR DE FUSO HORÁRIO (BRASÍLIA UTC-3) ==============
+def get_now_brt() -> datetime:
+    """Garante que qualquer data gerada pelo servidor use o horário de Brasília"""
+    return datetime.utcnow() - timedelta(hours=3)
+
 # ============== MODELS ==============
 class Turma(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -62,7 +67,7 @@ class Usuario(BaseModel):
     pontosTotais: int = 0
     recordeJogoSingle: int = 0
     recordeJogoMulti: int = 0
-    criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    criadoEm: str = Field(default_factory=lambda: get_now_brt().isoformat())
     ultimoAcesso: Optional[str] = None
     dataUltimoPontoArcade: Optional[str] = None
     ocultoChat: bool = False
@@ -113,7 +118,7 @@ class Conteudo(BaseModel):
     turmaId: Optional[str] = None
     pontos: int = 0 
     ativo: bool = True
-    criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    criadoEm: str = Field(default_factory=lambda: get_now_brt().isoformat())
     is_deleted: bool = False
     deleted_at: Optional[str] = None
 
@@ -169,7 +174,7 @@ class Exercicio(BaseModel):
     equipeId: Optional[str] = None
     alunoId: Optional[str] = None
     pontosPorQuestao: float = 1.0
-    criadoEm: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    criadoEm: str = Field(default_factory=lambda: get_now_brt().isoformat())
     is_deleted: bool = False
     deleted_at: Optional[str] = None
 
@@ -203,7 +208,7 @@ class Submissao(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     exercicioId: str
     usuarioId: str
-    data: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    data: str = Field(default_factory=lambda: get_now_brt().isoformat())
     respostas: List[Dict[str, str]] = []
     acertos: int = 0
     erros: int = 0
@@ -270,6 +275,7 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
+    # Expiração continua no formato esperado pela biblioteca JWT
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -290,16 +296,25 @@ async def require_admin(current_user: dict = Depends(get_current_user)):
     if current_user.get("perfil") != "ADMIN": raise HTTPException(status_code=403, detail="Acesso negado")
     return current_user
 
+# ============== NOVA LÓGICA DE OFENSIVA (CUMULATIVA, NUNCA ZERA) ==============
 def calculate_streak(last_login: Optional[str], current_streak: int) -> tuple:
-    today = datetime.utcnow().date()
-    if not last_login: return 1, today.isoformat()
+    today = get_now_brt().date()
+    
+    if not last_login: 
+        return current_streak + 1, today.isoformat()
+        
     try:
-        last_date = datetime.fromisoformat(last_login).date()
-        diff = (today - last_date).days
-        if diff == 0: return current_streak, last_login
-        elif diff == 1: return current_streak + 1, today.isoformat()
-        else: return 1, today.isoformat()
-    except Exception: return 1, today.isoformat()
+        last_date_str = str(last_login)[:10] 
+        last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
+        
+        if last_date == today:
+            # Se for o mesmo dia, mantém a ofensiva
+            return current_streak, last_login
+        else:
+            # Se for um dia diferente (qualquer dia), ganha 1 ponto sem zerar
+            return current_streak + 1, today.isoformat()
+    except Exception: 
+        return current_streak + 1, today.isoformat()
 
 def parse_turma_grade(nome: str) -> int:
     match = re.search(r'(\d+)º', nome)
@@ -322,8 +337,9 @@ async def register(user_data: UsuarioCreate):
     if existing: raise HTTPException(status_code=400, detail="Email já cadastrado")
     usuario = Usuario(
         nome=user_data.nome, email=user_data.email, senha=get_password_hash(user_data.senha),
-        turmaId=user_data.turmaId, equipeId=user_data.equipeId, streakDias=1, streakUltimoLoginData=datetime.utcnow().date().isoformat(),
-        ultimoAcesso=datetime.utcnow().isoformat()
+        turmaId=user_data.turmaId, equipeId=user_data.equipeId, streakDias=1, 
+        streakUltimoLoginData=get_now_brt().date().isoformat(),
+        ultimoAcesso=get_now_brt().isoformat()
     )
     await db.usuarios.insert_one(usuario.dict())
     access_token = create_access_token(data={"sub": usuario.id})
@@ -343,7 +359,7 @@ async def login(credentials: UsuarioLogin):
     if not ativo: raise HTTPException(status_code=401, detail="Usuário desativado")
     
     new_streak, new_date = calculate_streak(user.get("streakUltimoLoginData"), user.get("streakDias", 0))
-    agora = datetime.utcnow().isoformat()
+    agora = get_now_brt().isoformat()
     await db.usuarios.update_one({"id": user["id"]}, {"$set": {"streakDias": new_streak, "streakUltimoLoginData": new_date, "ultimoAcesso": agora}})
     user["streakDias"] = new_streak
     user["streakUltimoLoginData"] = new_date
@@ -354,7 +370,7 @@ async def login(credentials: UsuarioLogin):
 
 @api_router.get("/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
-    agora = datetime.utcnow().isoformat()
+    agora = get_now_brt().isoformat()
     await db.usuarios.update_one({"id": current_user["id"]}, {"$set": {"ultimoAcesso": agora}})
     current_user["ultimoAcesso"] = agora
     return {k: v for k, v in current_user.items() if k not in ['senha', '_id']}
@@ -496,7 +512,7 @@ async def update_exercicio(exercicio_id: str, exercicio_data: ExercicioUpdate, c
 
 @api_router.delete("/exercicios/{exercicio_id}")
 async def delete_exercicio(exercicio_id: str, current_user: dict = Depends(require_admin)):
-    await db.exercicios.update_one({"id": exercicio_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}})
+    await db.exercicios.update_one({"id": exercicio_id}, {"$set": {"is_deleted": True, "deleted_at": get_now_brt().isoformat()}})
     return {"message": "Exercício movido para a lixeira"}
 
 @api_router.post("/submissoes")
@@ -531,7 +547,8 @@ async def create_submissao(submissao_data: SubmissaoCreate, current_user: dict =
         exercicioId=submissao_data.exercicioId, usuarioId=current_user["id"],
         respostas=[{"questaoId": r.questaoId, "resposta": r.resposta} for r in submissao_data.respostas],
         acertos=acertos, erros=erros, nota=round(nota, 1), pontosGerados=pontos,
-        detalhesQuestoes=detalhes, ignorarNoRelatorioBNCC=False
+        detalhesQuestoes=detalhes, ignorarNoRelatorioBNCC=False,
+        data=get_now_brt().isoformat()
     )
     await db.submissoes.insert_one(submissao.dict())
     await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
@@ -591,7 +608,7 @@ async def update_conteudo(conteudo_id: str, conteudo_data: dict, current_user: d
 
 @api_router.delete("/conteudos/{conteudo_id}")
 async def delete_conteudo(conteudo_id: str, current_user: dict = Depends(require_admin)):
-    await db.conteudos.update_one({"id": conteudo_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow().isoformat()}})
+    await db.conteudos.update_one({"id": conteudo_id}, {"$set": {"is_deleted": True, "deleted_at": get_now_brt().isoformat()}})
     return {"message": "Conteúdo movido para a lixeira"}
 
 @api_router.post("/conteudos/{conteudo_id}/concluir")
@@ -600,7 +617,8 @@ async def concluir_conteudo(conteudo_id: str, current_user: dict = Depends(get_c
     if not conteudo: raise HTTPException(status_code=404, detail="Conteúdo não encontrado")
     ja_concluiu = await db.conteudos_concluidos.find_one({"usuarioId": current_user["id"], "conteudoId": conteudo_id})
     if ja_concluiu: return {"message": "Conteúdo já estava concluído", "pontos": 0}
-    await db.conteudos_concluidos.insert_one({"usuarioId": current_user["id"], "conteudoId": conteudo_id, "data": datetime.utcnow().isoformat()})
+    
+    await db.conteudos_concluidos.insert_one({"usuarioId": current_user["id"], "conteudoId": conteudo_id, "data": get_now_brt().isoformat()})
     pontos = conteudo.get("pontos", 0)
     if pontos > 0:
         await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": pontos}})
@@ -744,7 +762,7 @@ async def enviar_mensagem(dados: MensagemPrivadaCreate, current_user: dict = Dep
         "lida": False,
         "apagadaPorAdmin": False,
         "editadaPorAdmin": False,
-        "criadoEm": datetime.utcnow().isoformat()
+        "criadoEm": get_now_brt().isoformat()
     }
     await db.mensagens_privadas.insert_one(msg)
     return {"message": "Mensagem enviada com sucesso", "dados": {k: v for k, v in msg.items() if k != '_id'}}
@@ -765,7 +783,7 @@ async def obter_conversa(other_user_id: str, current_user: dict = Depends(get_cu
     return [{k: v for k, v in m.items() if k != '_id'} for m in mensagens if not m.get("apagadaPorAdmin")]
 
 # =====================================================================
-# ROTAS DO ADMIN PARA MODERAÇÃO AVANÇADA (NOVO)
+# ROTAS DO ADMIN PARA MODERAÇÃO AVANÇADA
 # =====================================================================
 @api_router.get("/admin/chat/inbox/{alvo_id}")
 async def admin_obter_resumo_inbox(alvo_id: str, current_user: dict = Depends(require_admin)):
@@ -947,7 +965,7 @@ async def get_missoes(current_user: dict = Depends(require_admin)):
 async def create_missao(missao_data: MissaoCreate, current_user: dict = Depends(require_admin)):
     missao = Missao(**missao_data.dict())
     missao.criadaPor = current_user["id"]
-    agora = datetime.utcnow()
+    agora = get_now_brt()
     missao.criadoEm = agora.isoformat()
     missao.expiraEm = (agora + timedelta(hours=24)).isoformat() 
     await db.missoes.insert_one(missao.dict())
@@ -960,7 +978,7 @@ async def delete_missao(missao_id: str, current_user: dict = Depends(require_adm
 
 @api_router.get("/missoes/disponiveis")
 async def get_missoes_disponiveis(current_user: dict = Depends(get_current_user)):
-    agora_iso = datetime.utcnow().isoformat()
+    agora_iso = get_now_brt().isoformat()
     query = {
         "$and": [
             {"$or": [{"expiraEm": {"$gt": agora_iso}}, {"expiraEm": {"$exists": False}}]},
@@ -986,7 +1004,7 @@ async def registrar_tentativa(missao_id: str, current_user: dict = Depends(get_c
     tentativas = await db.missoes_tentativas.count_documents({"usuarioId": current_user["id"], "missaoId": missao_id})
     limite = missao.get("limiteTentativas", 1)
     if limite > 0 and tentativas >= limite: raise HTTPException(status_code=400, detail="Limite alcançado")
-    await db.missoes_tentativas.insert_one({"usuarioId": current_user["id"], "missaoId": missao_id, "data": datetime.utcnow().isoformat()})
+    await db.missoes_tentativas.insert_one({"usuarioId": current_user["id"], "missaoId": missao_id, "data": get_now_brt().isoformat()})
     return {"message": "Tentativa registrada"}
 
 @api_router.post("/missoes/{missao_id}/concluir")
@@ -1004,7 +1022,7 @@ async def reenviar_missao(missao_id: str, dados: ReenviarData, current_user: dic
     old = await db.missoes.find_one({"id": missao_id})
     if not old: raise HTTPException(status_code=404, detail="Missão não encontrada")
     new_data = {k: v for k, v in old.items() if k not in ['_id', 'id', 'criadoEm', 'expiraEm', 'alvoTipo', 'alvoNome', 'alvoId', 'tentativasFeitas', 'criadaPor']}
-    agora = datetime.utcnow()
+    agora = get_now_brt()
     new_missao = Missao(**new_data, alvoTipo=dados.alvoTipo, alvoNome=dados.alvoNome, alvoId=dados.alvoId, criadaPor=current_user["id"], criadoEm=agora.isoformat(), expiraEm=(agora + timedelta(hours=24)).isoformat())
     await db.missoes.insert_one(new_missao.dict())
     return new_missao.dict()
