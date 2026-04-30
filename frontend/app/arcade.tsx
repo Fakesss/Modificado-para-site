@@ -130,7 +130,7 @@ export default function Arcade() {
   const respostaRef = useRef('');
 
   // =========================================================================
-  // SISTEMA DUPLO DE ÁUDIO COM CURVA QUADRÁTICA (BGM vs SFX)
+  // SISTEMA DUPLO DE ÁUDIO À PROVA DE FALHAS (BGM vs SFX)
   // =========================================================================
   const [volumeBGM, setVolumeBGM] = useState<number>(0.8); 
   const [volumeSFX, setVolumeSFX] = useState<number>(0.5); 
@@ -145,31 +145,59 @@ export default function Arcade() {
   useEffect(() => {
     const carregarSons = async () => {
       try {
+        // FORÇA O ÁUDIO A IGNORAR MODO SILENCIOSO E SAIR NO ALTO-FALANTE
         await Audio.setAudioModeAsync({
             playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
+            staysActiveInBackground: true,
             shouldDuckAndroid: true,
+            playThroughEarpieceAndroid: false, 
         });
 
-        sonsRef.current.shoot = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/laser.mp3' })).sound;
-        sonsRef.current.hit = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/hit.mp3' })).sound;
-        sonsRef.current.miss = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/miss.mp3' })).sound;
-        sonsRef.current.damage = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/explosion.mp3' })).sound;
+        // 1. CARREGA OS EFEITOS
+        const sonsParaCarregar = {
+            shoot: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/laser.mp3',
+            hit: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/hit.mp3',
+            miss: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/miss.mp3',
+            damage: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/explosion.mp3'
+        };
 
-        // Trilha sonora confiável do repositório oficial do Phaser 3
-        const { sound: bgmSound } = await Audio.Sound.createAsync(
-            { uri: 'https://raw.githubusercontent.com/phaserjs/examples/master/public/assets/audio/tech/bgm.mp3' }, 
-            { isLooping: true, volume: Math.pow(volumeBGMRef.current, 2) * 0.5 }
-        );
-        bgmRef.current = bgmSound;
+        for (const [key, url] of Object.entries(sonsParaCarregar)) {
+            try {
+                sonsRef.current[key] = (await Audio.Sound.createAsync({ uri: url })).sound;
+            } catch (e) { console.log(`Falha som: ${key}`); }
+        }
 
-        // Se o jogo começou antes da música terminar de baixar, toca automaticamente
-        if (jogoAtivoRef.current && !jogoPausadoRef.current) {
-            await bgmSound.playAsync();
+        // 2. SISTEMA DE RESGATE DE MÚSICA (Tenta várias URLs até uma funcionar)
+        const bgmUrlsFallback = [
+            'https://raw.githubusercontent.com/phaserjs/examples/master/public/assets/audio/tech/bgm.mp3', // Oficial
+            'https://raw.githubusercontent.com/photonstorm/macapaka/master/assets/audio/music.mp3', // Reserva 1
+            'https://actions.google.com/sounds/v1/loops/looping_synth_melody.ogg' // Reserva Google (Inquebrável)
+        ];
+
+        let bgmCarregado = null;
+        for (let url of bgmUrlsFallback) {
+            try {
+                const { sound } = await Audio.Sound.createAsync(
+                    { uri: url }, 
+                    { isLooping: true, volume: Math.pow(volumeBGMRef.current, 2) * 0.5 }
+                );
+                bgmCarregado = sound;
+                break; // Se carregou, para o loop de tentativas
+            } catch (error) {
+                console.log(`BGM Falhou na URL: ${url}`);
+            }
+        }
+        
+        if (bgmCarregado) {
+            bgmRef.current = bgmCarregado;
+            // Se o jogador iniciou o jogo antes da música baixar, toca agora!
+            if (jogoAtivoRef.current && !jogoPausadoRef.current) {
+                await bgmCarregado.playAsync();
+            }
         }
 
       } catch (error) {
-        console.log("Erro ao carregar sons", error);
+        console.log("Erro geral no sistema de áudio", error);
       }
     };
     carregarSons();
@@ -184,9 +212,10 @@ export default function Arcade() {
     try {
         if (bgmRef.current) {
             await bgmRef.current.setVolumeAsync(Math.pow(volumeBGMRef.current, 2) * 0.5);
+            // Ao iniciar, força o play, burlando o bloqueio de navegadores pois é após um "clique" do usuário
             await bgmRef.current.playAsync();
         }
-    } catch(e) {}
+    } catch(e) { console.log("Erro Play BGM", e) }
   };
 
   const pararBGM = async () => {
@@ -198,8 +227,6 @@ export default function Arcade() {
   const tocarSom = async (tipo: string) => {
     try {
       if (sonsRef.current[tipo] && volumeSFXRef.current > 0) {
-        // CURVA QUADRÁTICA: Faz com que volumes baixos sejam realmente sussurros
-        // O multiplicador 0.4 também corta o volume estourado original pela metade
         const volumeCalculado = Math.pow(volumeSFXRef.current, 2) * 0.4;
         await sonsRef.current[tipo].setVolumeAsync(volumeCalculado);
         await sonsRef.current[tipo].replayAsync();
@@ -407,7 +434,10 @@ export default function Arcade() {
     } else { missaoAtualRef.current = null; filaQuestoesRef.current = []; setVidas(5); }
     
     setTela('jogo'); 
+    
+    // Inicia a música de fundo IMEDIATAMENTE após o clique no botão para burlar o navegador
     iniciarBGM();
+    
     setTimeout(() => { spawnarQuestao(); iniciarLoopSpawner(); }, 100);
   };
 
@@ -691,7 +721,6 @@ export default function Arcade() {
         <Animated.View style={[styles.transicaoOverlay, { opacity: fadeFaseAnim }]}><View style={styles.transicaoBox}><Text style={styles.transicaoText}>FASE {faseAtualVisor}</Text></View></Animated.View>
       )}
 
-      {/* NOVO MENU DE VOLUME MODAL */}
       {mostrarVolume && (
         <View style={styles.volumeOverlay}>
           <View style={styles.volumeModal}>
