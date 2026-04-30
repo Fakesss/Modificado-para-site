@@ -1,17 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
-  Alert,
-  Modal,
-  TextInput,
-  Platform,
-  AppState,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator, Alert, Modal, TextInput, Platform, AppState, Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -29,7 +18,7 @@ export default function AdminUsuarios() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<Usuario | null>(null);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
   
   const [editNome, setEditNome] = useState('');
   const [editSenha, setEditSenha] = useState('');
@@ -37,7 +26,8 @@ export default function AdminUsuarios() {
   const [editTurma, setEditTurma] = useState('');
   const [editEquipe, setEditEquipe] = useState('');
   const [editPontos, setEditPontos] = useState(''); 
-  const [editRecordeArcade, setEditRecordeArcade] = useState(''); // NOVO: Estado para o Arcade
+  const [editRecordeArcade, setEditRecordeArcade] = useState(''); 
+  const [editOcultoChat, setEditOcultoChat] = useState(false); // NOVO: Controle de Fantasma
 
   useEffect(() => {
     loadData();
@@ -47,53 +37,31 @@ export default function AdminUsuarios() {
 
     const checkOnline = async () => {
       if (!isActive) return;
-      
       if (AppState.currentState === 'active') {
         try {
           const onlineData = await buscarUsuariosOnline();
           if (isActive) setOnlineUsers(onlineData || []);
         } catch (e) {}
       }
-      
-      if (isActive) {
-        timeoutId = setTimeout(checkOnline, 10000);
-      }
+      if (isActive) timeoutId = setTimeout(checkOnline, 10000);
     };
 
     timeoutId = setTimeout(checkOnline, 10000);
-    
-    return () => {
-      isActive = false;
-      clearTimeout(timeoutId);
-    };
+    return () => { isActive = false; clearTimeout(timeoutId); };
   }, []);
 
   const loadData = async () => {
     try {
       const [usuariosData, turmasData, equipesData, onlineData] = await Promise.all([
-        api.getUsuarios(),
-        api.getTurmas(),
-        api.getEquipes(),
-        buscarUsuariosOnline(),
+        api.getUsuarios(), api.getTurmas(), api.getEquipes(), buscarUsuariosOnline()
       ]);
-      setUsuarios(usuariosData);
-      setTurmas(turmasData);
-      setEquipes(equipesData);
-      setOnlineUsers(onlineData || []);
-    } catch (error) {
-      console.error('Error loading users:', error);
-    } finally {
-      setLoading(false);
-    }
+      setUsuarios(usuariosData); setTurmas(turmasData); setEquipes(equipesData); setOnlineUsers(onlineData || []);
+    } catch (error) {} finally { setLoading(false); }
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
+  const onRefresh = async () => { setRefreshing(true); await loadData(); setRefreshing(false); };
 
-  const openEditModal = (user: Usuario) => {
+  const openEditModal = (user: any) => {
     setSelectedUser(user);
     setEditNome(user.nome || '');
     setEditPerfil(user.perfil);
@@ -101,7 +69,8 @@ export default function AdminUsuarios() {
     setEditEquipe(user.equipeId || '');
     setEditSenha(''); 
     setEditPontos(String(user.pontosTotais || 0)); 
-    setEditRecordeArcade(String(user.recordeJogoSingle || 0)); // NOVO: Carrega o recorde atual
+    setEditRecordeArcade(String(user.recordeJogoSingle || 0)); 
+    setEditOcultoChat(user.ocultoChat || false); // Inicia a chave com o valor do banco
     setModalVisible(true);
   };
 
@@ -109,42 +78,29 @@ export default function AdminUsuarios() {
     if (!selectedUser) return;
     try {
       const data: any = { 
-        nome: editNome, 
-        perfil: editPerfil, 
-        turmaId: editTurma || null, 
-        equipeId: editEquipe || null,
-        pontosTotais: Number(editPontos),
-        recordeJogoSingle: Number(editRecordeArcade) // NOVO: Envia o recorde do Arcade para a API
+        nome: editNome, perfil: editPerfil, turmaId: editTurma || null, equipeId: editEquipe || null,
+        pontosTotais: Number(editPontos), recordeJogoSingle: Number(editRecordeArcade),
+        ocultoChat: editOcultoChat // Salva se é fantasma ou não
       };
       if (editSenha.trim() !== '') data.senha = editSenha;
       await api.updateUsuario(selectedUser.id, data);
-      Alert.alert('Sucesso', 'Usuário atualizado com sucesso!');
+      Alert.alert('Sucesso', 'Usuário atualizado!');
       setModalVisible(false);
       loadData();
-    } catch (error: any) {
-      Alert.alert('Erro', error.response?.data?.detail || 'Erro ao salvar. Verifique o backend.');
-    }
+    } catch (error: any) { Alert.alert('Erro', error.response?.data?.detail || 'Erro ao salvar.'); }
   };
 
   const handleDelete = async (userId: string) => {
     if (Platform.OS === 'web') {
       const confirmou = window.confirm('Deseja realmente desativar este usuário? (Ele sairá dos rankings)');
       if (confirmou) {
-        try {
-          await api.deleteUsuario(userId);
-          Alert.alert('Sucesso', 'Usuário desativado com sucesso!');
-          loadData();
-        } catch (error) { Alert.alert('Erro', 'Erro ao desativar usuário'); }
+        try { await api.deleteUsuario(userId); Alert.alert('Sucesso', 'Usuário desativado com sucesso!'); loadData(); } catch (error) {}
       }
     } else {
       Alert.alert('Confirmar exclusão', 'Deseja desativar este usuário?', [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Desativar', style: 'destructive', onPress: async () => {
-            try {
-              await api.deleteUsuario(userId);
-              Alert.alert('Sucesso', 'Usuário desativado!');
-              loadData();
-            } catch (error) { Alert.alert('Erro', 'Erro ao desativar usuário'); }
+            try { await api.deleteUsuario(userId); Alert.alert('Sucesso', 'Usuário desativado!'); loadData(); } catch (error) {}
           }
         },
       ]);
@@ -153,62 +109,30 @@ export default function AdminUsuarios() {
 
   const confirmarZerarTodos = () => {
     const mensagem = 'Isso vai ZERAR a pontuação de TODOS os jogadores do jogo e mudar o ranking. Essa ação não pode ser desfeita. Deseja continuar?';
-    
-    if (Platform.OS === 'web') {
-      const confirmou = window.confirm(mensagem);
-      if (confirmou) executarZerarTodos();
-    } else {
-      Alert.alert('ATENÇÃO EXTREMA ⚠️', mensagem, [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Sim, ZERAR TUDO!', style: 'destructive', onPress: executarZerarTodos }
-      ]);
+    if (Platform.OS === 'web') { if (window.confirm(mensagem)) executarZerarTodos(); } else {
+      Alert.alert('ATENÇÃO EXTREMA ⚠️', mensagem, [{ text: 'Cancelar', style: 'cancel' }, { text: 'Sim, ZERAR TUDO!', style: 'destructive', onPress: executarZerarTodos }]);
     }
   };
 
   const executarZerarTodos = async () => {
-    try {
-      await api.zerarTodosPontos();
-      Alert.alert('Sucesso', 'O ranking foi limpo! Todos os pontos estão zerados.');
-      loadData();
-    } catch (error) {
-      Alert.alert('Aviso', 'A função de zerar precisa ser adicionada no backend primeiro.');
-    }
+    try { await api.zerarTodosPontos(); Alert.alert('Sucesso', 'O ranking foi limpo!'); loadData(); } catch (error) {}
   };
 
-  const getPerfilColor = (perfil: string) => {
-    if (perfil === 'ADMIN') return '#E74C3C';
-    if (perfil === 'ALUNO_LIDER') return '#FFD700';
-    return '#4169E1';
-  };
-
-  const getPerfilLabel = (perfil: string) => {
-    if (perfil === 'ADMIN') return 'Admin';
-    if (perfil === 'ALUNO_LIDER') return 'Líder';
-    return 'Aluno';
-  };
+  const getPerfilColor = (perfil: string) => { if (perfil === 'ADMIN') return '#E74C3C'; if (perfil === 'ALUNO_LIDER') return '#FFD700'; return '#4169E1'; };
+  const getPerfilLabel = (perfil: string) => { if (perfil === 'ADMIN') return 'Admin'; if (perfil === 'ALUNO_LIDER') return 'Líder'; return 'Aluno'; };
 
   const formatarUltimoAcesso = (dataIso?: string) => {
     if (!dataIso) return 'Nunca acessou';
     try {
       const data = new Date(dataIso);
-      return data.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch (error) {
-      return 'Data inválida';
-    }
+      return data.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch (error) { return 'Data inválida'; }
   };
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
-        </View>
+        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View>
       </SafeAreaView>
     );
   }
@@ -238,7 +162,7 @@ export default function AdminUsuarios() {
           <Text style={styles.zerarAllText}>Zerar Pontos de Todos os Jogadores</Text>
         </TouchableOpacity>
 
-        {sortedUsuarios.map((user) => {
+        {sortedUsuarios.map((user: any) => {
           const equipe = equipes.find((e) => e.id === user.equipeId);
           const turma = turmas.find((t) => t.id === user.turmaId);
           const isOnline = onlineUsers.some(ou => ou.id === user.id);
@@ -250,6 +174,7 @@ export default function AdminUsuarios() {
                   <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
                     <View style={[styles.onlineDot, { backgroundColor: isOnline ? '#32CD32' : '#555' }]} />
                     <Text style={styles.userName}>{user.nome}</Text>
+                    {user.ocultoChat && <Ionicons name="eye-off" size={14} color="#888" />}
                   </View>
                   <View style={[styles.perfilBadge, { backgroundColor: getPerfilColor(user.perfil) + '30' }]}>
                     <Text style={[styles.perfilText, { color: getPerfilColor(user.perfil) }]}>{getPerfilLabel(user.perfil)}</Text>
@@ -258,15 +183,11 @@ export default function AdminUsuarios() {
 
                 <View style={{ marginBottom: 8 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={{ color: isOnline ? '#32CD32' : '#555', fontSize: 12, fontWeight: 'bold' }}>
-                      {isOnline ? 'Online agora' : 'Offline'}
-                    </Text>
+                    <Text style={{ color: isOnline ? '#32CD32' : '#555', fontSize: 12, fontWeight: 'bold' }}>{isOnline ? 'Online agora' : 'Offline'}</Text>
                     <Text style={styles.userEmail}> • {user.email}</Text>
                   </View>
                   {!isOnline && (
-                    <Text style={{ color: '#666', fontSize: 11, marginTop: 2, fontStyle: 'italic' }}>
-                      Último acesso: {formatarUltimoAcesso(user.ultimoAcesso)}
-                    </Text>
+                    <Text style={{ color: '#666', fontSize: 11, marginTop: 2, fontStyle: 'italic' }}>Último acesso: {formatarUltimoAcesso(user.ultimoAcesso)}</Text>
                   )}
                 </View>
 
@@ -281,7 +202,6 @@ export default function AdminUsuarios() {
                 <View style={styles.userStats}>
                   <View style={styles.statItem}><Ionicons name="star" size={14} color="#FFD700" /><Text style={styles.statText}>{user.pontosTotais} pts</Text></View>
                   <View style={styles.statItem}><Ionicons name="flame" size={14} color="#FF6B35" /><Text style={styles.statText}>{user.streakDias} dias</Text></View>
-                  {/* NOVO: Exibe os pontos do Arcade diretamente no card do usuário */}
                   <View style={styles.statItem}><Ionicons name="game-controller" size={14} color="#9b59b6" /><Text style={styles.statText}>{user.recordeJogoSingle || 0} arcade</Text></View>
                 </View>
               </View>
@@ -304,7 +224,6 @@ export default function AdminUsuarios() {
               <Text style={[styles.inputLabel, { color: '#FFD700' }]}>🏆 Pontos Atuais</Text>
               <TextInput style={[styles.textInput, { borderColor: '#FFD700' }]} value={editPontos} onChangeText={setEditPontos} keyboardType="numeric" placeholder="Zerar ou Diminuir pontos..." placeholderTextColor="#666" />
 
-              {/* NOVO: Campo de edição para o Recorde do Arcade */}
               <Text style={[styles.inputLabel, { color: '#9b59b6', marginTop: 16 }]}>🕹️ Recorde Arcade (Hall da Fama)</Text>
               <TextInput style={[styles.textInput, { borderColor: '#9b59b6' }]} value={editRecordeArcade} onChangeText={setEditRecordeArcade} keyboardType="numeric" placeholder="Definir recorde do Arcade..." placeholderTextColor="#666" />
 
@@ -313,6 +232,15 @@ export default function AdminUsuarios() {
 
               <Text style={styles.inputLabel}>Redefinir Senha</Text>
               <TextInput style={styles.textInput} value={editSenha} onChangeText={setEditSenha} placeholder="Deixe em branco para manter a atual..." placeholderTextColor="#666" />
+
+              {/* CONTROLE DE CONTA DE TESTE AQUI */}
+              <View style={styles.switchRow}>
+                <View>
+                  <Text style={styles.switchLabel}>Ocultar no Inbox (Conta de Teste)</Text>
+                  <Text style={{color:'#666', fontSize: 11}}>O usuário sumirá do chat dos alunos</Text>
+                </View>
+                <Switch value={editOcultoChat} onValueChange={setEditOcultoChat} trackColor={{ false: '#333', true: '#FFD700' }} thumbColor={editOcultoChat ? '#fff' : '#888'} />
+              </View>
 
               <Text style={styles.inputLabel}>Nível de Permissão (Perfil)</Text>
               <View style={styles.selectContainer}>
@@ -389,6 +317,10 @@ const styles = StyleSheet.create({
   modalSubtitle: { color: '#888', fontSize: 14, marginBottom: 10 },
   inputLabel: { color: '#888', fontSize: 12, marginBottom: 8, marginTop: 16 },
   textInput: { backgroundColor: '#0c0c0c', borderRadius: 12, padding: 14, color: '#fff', borderWidth: 1, borderColor: '#333' },
+  
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 10, padding: 15, backgroundColor: '#0c0c0c', borderRadius: 12, borderWidth: 1, borderColor: '#333' },
+  switchLabel: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
+
   selectContainer: { flexDirection: 'row', gap: 8 },
   selectScroll: { flexDirection: 'row' },
   selectOption: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#333', marginRight: 8 },
