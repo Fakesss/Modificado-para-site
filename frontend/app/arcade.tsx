@@ -130,14 +130,14 @@ export default function Arcade() {
   const respostaRef = useRef('');
 
   // =========================================================================
-  // SISTEMA DUPLO DE ÁUDIO E CONTROLE DE VOLUME (BGM vs SFX)
+  // SISTEMA DUPLO DE ÁUDIO COM CURVA QUADRÁTICA (BGM vs SFX)
   // =========================================================================
-  const [volumeBGM, setVolumeBGM] = useState<number>(0.8); // Fundo começa alto
-  const [volumeSFX, setVolumeSFX] = useState<number>(0.15); // Efeitos começam baixinhos
+  const [volumeBGM, setVolumeBGM] = useState<number>(0.8); 
+  const [volumeSFX, setVolumeSFX] = useState<number>(0.5); 
   const [mostrarVolume, setMostrarVolume] = useState(false);
   
   const volumeBGMRef = useRef<number>(0.8);
-  const volumeSFXRef = useRef<number>(0.15);
+  const volumeSFXRef = useRef<number>(0.5);
   
   const sonsRef = useRef<any>({});
   const bgmRef = useRef<Audio.Sound | null>(null);
@@ -145,16 +145,29 @@ export default function Arcade() {
   useEffect(() => {
     const carregarSons = async () => {
       try {
+        await Audio.setAudioModeAsync({
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+            shouldDuckAndroid: true,
+        });
+
         sonsRef.current.shoot = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/laser.mp3' })).sound;
         sonsRef.current.hit = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/hit.mp3' })).sound;
         sonsRef.current.miss = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/miss.mp3' })).sound;
         sonsRef.current.damage = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/explosion.mp3' })).sound;
 
+        // Trilha sonora confiável do repositório oficial do Phaser 3
         const { sound: bgmSound } = await Audio.Sound.createAsync(
-            { uri: 'https://raw.githubusercontent.com/photonstorm/macapaka/master/assets/audio/music.mp3' }, 
-            { isLooping: true, volume: volumeBGMRef.current }
+            { uri: 'https://raw.githubusercontent.com/phaserjs/examples/master/public/assets/audio/tech/bgm.mp3' }, 
+            { isLooping: true, volume: Math.pow(volumeBGMRef.current, 2) * 0.5 }
         );
         bgmRef.current = bgmSound;
+
+        // Se o jogo começou antes da música terminar de baixar, toca automaticamente
+        if (jogoAtivoRef.current && !jogoPausadoRef.current) {
+            await bgmSound.playAsync();
+        }
+
       } catch (error) {
         console.log("Erro ao carregar sons", error);
       }
@@ -170,7 +183,7 @@ export default function Arcade() {
   const iniciarBGM = async () => {
     try {
         if (bgmRef.current) {
-            await bgmRef.current.setVolumeAsync(volumeBGMRef.current);
+            await bgmRef.current.setVolumeAsync(Math.pow(volumeBGMRef.current, 2) * 0.5);
             await bgmRef.current.playAsync();
         }
     } catch(e) {}
@@ -185,7 +198,10 @@ export default function Arcade() {
   const tocarSom = async (tipo: string) => {
     try {
       if (sonsRef.current[tipo] && volumeSFXRef.current > 0) {
-        await sonsRef.current[tipo].setVolumeAsync(volumeSFXRef.current);
+        // CURVA QUADRÁTICA: Faz com que volumes baixos sejam realmente sussurros
+        // O multiplicador 0.4 também corta o volume estourado original pela metade
+        const volumeCalculado = Math.pow(volumeSFXRef.current, 2) * 0.4;
+        await sonsRef.current[tipo].setVolumeAsync(volumeCalculado);
         await sonsRef.current[tipo].replayAsync();
       }
     } catch (e) {}
@@ -675,7 +691,7 @@ export default function Arcade() {
         <Animated.View style={[styles.transicaoOverlay, { opacity: fadeFaseAnim }]}><View style={styles.transicaoBox}><Text style={styles.transicaoText}>FASE {faseAtualVisor}</Text></View></Animated.View>
       )}
 
-      {/* NOVO MENU DE VOLUME MODAL (Estiloso e Pausa o Jogo) */}
+      {/* NOVO MENU DE VOLUME MODAL */}
       {mostrarVolume && (
         <View style={styles.volumeOverlay}>
           <View style={styles.volumeModal}>
@@ -694,7 +710,7 @@ export default function Arcade() {
                 onValueChange={(val) => {
                     setVolumeBGM(val);
                     volumeBGMRef.current = val;
-                    if (bgmRef.current) bgmRef.current.setVolumeAsync(val);
+                    if (bgmRef.current) bgmRef.current.setVolumeAsync(Math.pow(val, 2) * 0.5);
                 }}
                 minimumTrackTintColor="#00FFFF"
                 maximumTrackTintColor="#555"
