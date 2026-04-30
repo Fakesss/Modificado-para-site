@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Platform, Modal, Alert, AppState } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Platform, Modal, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,9 +40,10 @@ export default function TabsLayout() {
   const router = useRouter();
   const isLeader = user?.perfil === 'ALUNO_LIDER';
   const [teamColor, setTeamColor] = useState<string>('#FFD700');
-
+  
   const [convite, setConvite] = useState<any>(null);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+  const [totalNaoLidas, setTotalNaoLidas] = useState(0);
 
   useEffect(() => { loadTeamColor(); }, [user?.equipeId, isAdminViewingAsStudent]);
 
@@ -59,6 +60,21 @@ export default function TabsLayout() {
       }
     } catch (error) { console.error(error); }
   };
+
+  // Motor para buscar mensagens não lidas
+  useEffect(() => {
+    if (!user) return;
+    const fetchUnread = async () => {
+      const summary = await api.getInboxSummary();
+      let total = 0;
+      Object.values(summary).forEach((val: any) => { total += val.unreadCount; });
+      setTotalNaoLidas(total);
+    };
+    
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 5000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -172,8 +188,8 @@ export default function TabsLayout() {
         <Tabs.Screen name="jogadores" options={{ title: 'Online', tabBarIcon: ({ color, size }) => (<Ionicons name="radio" size={size} color={color} /> ) }} />
         <Tabs.Screen name="salas" options={{ title: 'Salas', tabBarIcon: ({ color, size }) => (<Ionicons name="chatbubbles" size={size} color={color} /> ) }} />
         
-        {/* ABA DE CHAT EXPLICITAMENTE DECLARADA AQUI */}
-        <Tabs.Screen name="chat" options={{ title: 'Inbox', tabBarIcon: ({ color, size }) => (<Ionicons name="mail" size={size} color={color} /> ) }} />
+        {/* INBOX COM A BOLINHA VERMELHA (tabBarBadge) */}
+        <Tabs.Screen name="chat" options={{ title: 'Inbox', tabBarIcon: ({ color, size }) => (<Ionicons name="mail" size={size} color={color} /> ), tabBarBadge: totalNaoLidas > 0 ? totalNaoLidas : undefined }} />
 
         <Tabs.Screen name="jogo" options={{ title: 'Jogos', tabBarIcon: ({ color, size }) => (<Ionicons name="game-controller" size={size} color={color} />), tabBarBadge: '🧪', tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 } }} />
         <Tabs.Screen name="equipe" options={{ title: 'Equipe', href: isLeader ? undefined : null, tabBarIcon: ({ color, size }) => (<Ionicons name="people" size={size} color={color} />) }} />
