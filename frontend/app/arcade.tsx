@@ -130,11 +130,15 @@ export default function Arcade() {
   const respostaRef = useRef('');
 
   // =========================================================================
-  // SISTEMA DE ÁUDIO E CONTROLE DE VOLUME (SLIDER)
+  // SISTEMA DUPLO DE ÁUDIO E CONTROLE DE VOLUME (BGM vs SFX)
   // =========================================================================
-  const [volumeUI, setVolumeUI] = useState<number>(0.3);
+  const [volumeBGM, setVolumeBGM] = useState<number>(0.8); // Fundo começa alto
+  const [volumeSFX, setVolumeSFX] = useState<number>(0.15); // Efeitos começam baixinhos
   const [mostrarVolume, setMostrarVolume] = useState(false);
-  const volumeRef = useRef<number>(0.3);
+  
+  const volumeBGMRef = useRef<number>(0.8);
+  const volumeSFXRef = useRef<number>(0.15);
+  
   const sonsRef = useRef<any>({});
   const bgmRef = useRef<Audio.Sound | null>(null);
 
@@ -146,10 +150,9 @@ export default function Arcade() {
         sonsRef.current.miss = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/miss.mp3' })).sound;
         sonsRef.current.damage = (await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/explosion.mp3' })).sound;
 
-        // Som de fundo bacaninha/simpático (Pode trocar a URL se preferir depois)
         const { sound: bgmSound } = await Audio.Sound.createAsync(
             { uri: 'https://raw.githubusercontent.com/photonstorm/macapaka/master/assets/audio/music.mp3' }, 
-            { isLooping: true, volume: volumeRef.current }
+            { isLooping: true, volume: volumeBGMRef.current }
         );
         bgmRef.current = bgmSound;
       } catch (error) {
@@ -164,18 +167,10 @@ export default function Arcade() {
     };
   }, []);
 
-  const handleVolumeChange = async (valor: number) => {
-    setVolumeUI(valor);
-    volumeRef.current = valor;
-    if (bgmRef.current) {
-        await bgmRef.current.setVolumeAsync(valor);
-    }
-  };
-
   const iniciarBGM = async () => {
     try {
         if (bgmRef.current) {
-            await bgmRef.current.setVolumeAsync(volumeRef.current);
+            await bgmRef.current.setVolumeAsync(volumeBGMRef.current);
             await bgmRef.current.playAsync();
         }
     } catch(e) {}
@@ -189,11 +184,18 @@ export default function Arcade() {
 
   const tocarSom = async (tipo: string) => {
     try {
-      if (sonsRef.current[tipo] && volumeRef.current > 0) {
-        await sonsRef.current[tipo].setVolumeAsync(volumeRef.current);
+      if (sonsRef.current[tipo] && volumeSFXRef.current > 0) {
+        await sonsRef.current[tipo].setVolumeAsync(volumeSFXRef.current);
         await sonsRef.current[tipo].replayAsync();
       }
     } catch (e) {}
+  };
+
+  const abrirMenuVolume = () => {
+      if (jogoAtivoRef.current && !jogoPausadoRef.current) {
+          pausarJogo();
+      }
+      setMostrarVolume(true);
   };
   // =========================================================================
 
@@ -248,7 +250,7 @@ export default function Arcade() {
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const handleKeyDownLocal = (e: any) => {
-            if (tela !== 'jogo' || !jogoAtivoRef.current || jogoPausadoRef.current) return;
+            if (tela !== 'jogo' || !jogoAtivoRef.current || jogoPausadoRef.current || mostrarVolume) return;
             let key = '';
             if (e.key >= '0' && e.key <= '9') key = e.key;
             else if (e.key === 'Backspace' || e.key === 'Delete') key = 'apagar';
@@ -263,7 +265,7 @@ export default function Arcade() {
         window.addEventListener('keydown', handleKeyDownLocal);
         return () => window.removeEventListener('keydown', handleKeyDownLocal);
     }
-  }, [tela]);
+  }, [tela, mostrarVolume]);
 
   const processarErroRef = useRef<any>(null);
   const processarErro = useCallback((opId: string) => {
@@ -276,7 +278,7 @@ export default function Arcade() {
     setExplosoes(prev => [...prev, { id: expId, x: opInfo.posX, y: DROP_LIMIT, texto: opInfo.textoTela, corEspecial: opInfo.tipoEspecial !== 'nenhum' }]);
     setTimeout(() => { setExplosoes(prev => prev.filter(e => e.id !== expId)); }, 800);
     
-    tocarSom('damage'); // Som de dano do erro
+    tocarSom('damage');
 
     setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
     questoesEmJogoRef.current = Math.max(0, questoesEmJogoRef.current - 1);
@@ -365,7 +367,7 @@ export default function Arcade() {
   useFocusEffect(useCallback(() => { 
       return () => { 
           if (jogoAtivoRef.current && !jogoPausadoRef.current) pausarJogo(); 
-          pararBGM(); // Para música se sair da tela
+          pararBGM(); 
       }; 
   }, [pausarJogo]));
 
@@ -532,7 +534,7 @@ export default function Arcade() {
   const dispararLaserUnico = (alvo: any, acertou: boolean) => {
     setLasersAtivos([calcularDadosLaser(alvo, acertou)]); laserAnim.setValue(1);
     
-    tocarSom('shoot'); // Som do tiro disparado
+    tocarSom('shoot');
 
     const duracaoLaser = acertou ? 300 : 150;
     Animated.parallel([
@@ -540,7 +542,6 @@ export default function Arcade() {
       ...(acertou && alvo ? [ Animated.timing(alvo.scale, { toValue: alvo.baseScale * 1.4, duration: 150, useNativeDriver: true }), Animated.timing(alvo.opacity, { toValue: 0, duration: 150, useNativeDriver: true }) ] : [])
     ]).start(() => setLasersAtivos([]));
     
-    // Toca o som de acerto ou erro logo antes do laser sumir completamente
     setTimeout(() => { if (acertou) tocarSom('hit'); else tocarSom('miss'); }, duracaoLaser - 50);
 
     if (!acertou) Animated.sequence([Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }), Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }), Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true })]).start();
@@ -674,7 +675,59 @@ export default function Arcade() {
         <Animated.View style={[styles.transicaoOverlay, { opacity: fadeFaseAnim }]}><View style={styles.transicaoBox}><Text style={styles.transicaoText}>FASE {faseAtualVisor}</Text></View></Animated.View>
       )}
 
-      {pausado && (
+      {/* NOVO MENU DE VOLUME MODAL (Estiloso e Pausa o Jogo) */}
+      {mostrarVolume && (
+        <View style={styles.volumeOverlay}>
+          <View style={styles.volumeModal}>
+            <Text style={styles.volumeTitle}>
+                <Ionicons name="settings" size={22} color="#FFD700" /> Áudio
+            </Text>
+
+            <Text style={styles.volumeLabel}>Música de Fundo</Text>
+            <View style={styles.sliderRow}>
+              <Ionicons name="musical-notes" size={20} color="#00FFFF" />
+              <Slider
+                style={{flex: 1, height: 40, marginHorizontal: 10}}
+                minimumValue={0}
+                maximumValue={1}
+                value={volumeBGM}
+                onValueChange={(val) => {
+                    setVolumeBGM(val);
+                    volumeBGMRef.current = val;
+                    if (bgmRef.current) bgmRef.current.setVolumeAsync(val);
+                }}
+                minimumTrackTintColor="#00FFFF"
+                maximumTrackTintColor="#555"
+                thumbTintColor="#00FFFF"
+              />
+            </View>
+
+            <Text style={styles.volumeLabel}>Efeitos Sonoros</Text>
+            <View style={styles.sliderRow}>
+              <Ionicons name="flash" size={20} color="#FFD700" />
+              <Slider
+                style={{flex: 1, height: 40, marginHorizontal: 10}}
+                minimumValue={0}
+                maximumValue={1}
+                value={volumeSFX}
+                onValueChange={(val) => {
+                    setVolumeSFX(val);
+                    volumeSFXRef.current = val;
+                }}
+                minimumTrackTintColor="#FFD700"
+                maximumTrackTintColor="#555"
+                thumbTintColor="#FFD700"
+              />
+            </View>
+
+            <TouchableOpacity style={styles.btnCloseVolume} onPress={() => setMostrarVolume(false)}>
+              <Text style={styles.btnCloseVolumeText}>FECHAR</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {pausado && !mostrarVolume && (
         <View style={styles.pauseOverlay}>
           <Text style={styles.pauseTitle}>JOGO PAUSADO</Text>
           <TouchableOpacity style={styles.btnContinuar} onPress={retomarJogo}><Ionicons name="play" size={24} color="#000" /><Text style={styles.btnContinuarText}>CONTINUAR</Text></TouchableOpacity>
@@ -685,32 +738,13 @@ export default function Arcade() {
       <View style={styles.gameHeader}>
         <View style={styles.headerStatsGroup}><Ionicons name="star" size={18} color="#FFD700" /><Text style={styles.statTextScore}>{pontos}</Text>{modoRef.current !== 'missao' && (<View style={styles.faseBadge}><Text style={styles.faseBadgeText}>Fase {faseAtualVisor}</Text></View>)}</View>
         
-        {/* Adicionado o ícone de volume ao lado do botão de Pause */}
         <View style={{flexDirection: 'row', alignItems: 'center', gap: 5}}>
-            <TouchableOpacity onPress={() => setMostrarVolume(!mostrarVolume)} style={styles.btnPausaIcone}>
-                <Ionicons name={volumeUI === 0 ? "volume-mute" : "volume-high"} size={26} color="#fff" />
+            <TouchableOpacity onPress={abrirMenuVolume} style={styles.btnPausaIcone}>
+                <Ionicons name="settings" size={26} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity onPress={pausarJogo} style={styles.btnPausaIcone}><Ionicons name="pause" size={26} color="#fff" /></TouchableOpacity>
         </View>
       </View>
-
-      {/* Janela flutuante do Slider de Volume */}
-      {mostrarVolume && (
-        <View style={styles.volumePopover}>
-            <Ionicons name="volume-mute" size={20} color="#fff" />
-            <Slider
-                style={{width: 150, height: 40, marginHorizontal: 5}}
-                minimumValue={0}
-                maximumValue={1}
-                value={volumeUI}
-                onValueChange={handleVolumeChange}
-                minimumTrackTintColor="#00FFFF"
-                maximumTrackTintColor="#FFFFFF"
-                thumbTintColor="#FFD700"
-            />
-            <Ionicons name="volume-high" size={20} color="#fff" />
-        </View>
-      )}
 
       <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />)}</View>
       
@@ -803,7 +837,13 @@ const styles = StyleSheet.create({
   btnPausaIcone: { padding: 4, marginLeft: 10 },
   
   // Menu de Volume Flutuante
-  volumePopover: { position: 'absolute', top: 55, right: 15, backgroundColor: 'rgba(26, 26, 46, 0.95)', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', zIndex: 100, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  volumeOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100, justifyContent: 'center', alignItems: 'center' },
+  volumeModal: { backgroundColor: '#1a1a2e', borderWidth: 2, borderColor: '#FFD700', borderRadius: 16, padding: 25, width: '85%', maxWidth: 350 },
+  volumeTitle: { color: '#FFD700', fontSize: 20, fontWeight: '900', textAlign: 'center', marginBottom: 20, textTransform: 'uppercase' },
+  volumeLabel: { color: '#FFF', fontSize: 14, fontWeight: 'bold', marginTop: 10, marginBottom: 5 },
+  sliderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  btnCloseVolume: { backgroundColor: '#E74C3C', padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
+  btnCloseVolumeText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
 
   vidasContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, height: 30 },
   
