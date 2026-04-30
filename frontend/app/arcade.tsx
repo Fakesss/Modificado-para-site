@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext'; 
@@ -11,9 +11,6 @@ const GAME_AREA_HEIGHT = height * 0.62;
 const CARD_WIDTH = 105;
 const DROP_LIMIT = GAME_AREA_HEIGHT - 30; 
 
-// =========================================================================
-// MOTOR DO CONTADOR DINÂMICO
-// =========================================================================
 const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado: boolean }) => {
   const [tempoRestanteStr, setTempoRestanteStr] = useState('');
 
@@ -25,26 +22,16 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
     const atualizar = () => {
       const now = Date.now();
       const r = targetTime - now;
-
-      if (r <= 0) {
-        setTempoRestanteStr('Expirado');
-        return;
-      }
-
+      if (r <= 0) { setTempoRestanteStr('Expirado'); return; }
       const totalSecs = Math.round(r / 1000);
       const h = Math.floor(totalSecs / 3600);
       const m = Math.floor((totalSecs % 3600) / 60);
       const s = totalSecs % 60;
-
-      if (r > 60 * 1000) {
-         setTempoRestanteStr(h > 0 ? `⏱ ${h}h ${m}m restantes` : `⏱ ${m}m restantes`);
-      } else {
-         setTempoRestanteStr(`⏱ ${s}s restantes`); 
-      }
+      if (r > 60 * 1000) setTempoRestanteStr(h > 0 ? `⏱ ${h}h ${m}m restantes` : `⏱ ${m}m restantes`);
+      else setTempoRestanteStr(`⏱ ${s}s restantes`); 
 
       const MIN = 60 * 1000;
       let delay = 1000;
-
       if (r <= 1 * MIN) delay = 1000;
       else if (r <= 5 * MIN) delay = Math.min(r % (1 * MIN) || (1 * MIN), r - 1 * MIN); 
       else if (r <= 15 * MIN) delay = Math.min(r % (5 * MIN) || (5 * MIN), r - 5 * MIN); 
@@ -53,73 +40,46 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
 
       timeoutId = setTimeout(atualizar, Math.max(delay, 100));
     };
-
     atualizar();
     return () => clearTimeout(timeoutId);
   }, [expiraEm, esgotado]);
 
   if (esgotado || !tempoRestanteStr) return null;
-  
-  return (
-    <Text style={{ color: tempoRestanteStr === 'Expirado' ? '#FF4444' : '#FFD700', fontSize: 12, fontWeight: 'bold', marginTop: 4 }}>
-      {tempoRestanteStr}
-    </Text>
-  );
+  return <Text style={{ color: tempoRestanteStr === 'Expirado' ? '#FF4444' : '#FFD700', fontSize: 12, fontWeight: 'bold', marginTop: 4 }}>{tempoRestanteStr}</Text>;
 };
 
-// =========================================================================
-// O MOTOR DE PARTÍCULAS
-// =========================================================================
 const Particula = ({ char }: { char: string }) => {
   const anim = useRef(new Animated.Value(0)).current;
   const [randomX] = useState((Math.random() - 0.5) * 200); 
   const [randomY] = useState((Math.random() - 0.5) * 250 - 80); 
   const [randomRot] = useState((Math.random() - 0.5) * 720); 
 
-  useEffect(() => {
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: 700,
-      useNativeDriver: true
-    }).start();
-  }, []);
+  useEffect(() => { Animated.timing(anim, { toValue: 1, duration: 700, useNativeDriver: true }).start(); }, []);
 
   return (
-    <Animated.Text style={[
-      styles.particulaTexto,
-      {
-        transform: [
-          { translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [0, randomX] }) },
-          { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [0, randomY] }) },
-          { rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', `${randomRot}deg`] }) },
-          { scale: anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [1, 1.8, 0] }) } 
-        ],
+    <Animated.Text style={[styles.particulaTexto, {
+        transform: [ { translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [0, randomX] }) }, { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [0, randomY] }) }, { rotate: anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', `${randomRot}deg`] }) }, { scale: anim.interpolate({ inputRange: [0, 0.2, 1], outputRange: [1, 1.8, 0] }) } ],
         opacity: anim.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] })
-      }
-    ]}>
-      {char}
-    </Animated.Text>
+      }]}>{char}</Animated.Text>
   );
 };
 
 // =========================================================================
-// BOTÃO VISUAL WEB/MOBILE (COM RESPOSTA INSTANTÂNEA NA WEB)
+// NOVO BOTÃO VISUAL WEB: Sem trava de responder, aceita cliques sobrepostos ultrarrápidos
 // =========================================================================
 const BotaoVisual = ({ valor, isPressed, children, styleExtra, onPressWeb }: any) => {
   return (
-    <Pressable
-      style={[
-        styles.tecla,
-        styleExtra,
-        isPressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }
-      ]}
-      // Usar onPressIn garante que na WEB o botão dispare no momento exato do clique (mouse down),
-      // deixando a digitação extremamente rápida, sem esperar o botão do mouse ser solto.
-      onPressIn={Platform.OS === 'web' ? () => onPressWeb(valor) : undefined}
-      disabled={Platform.OS !== 'web'} 
+    <View
+      style={[styles.tecla, styleExtra, isPressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]}
+      {...(Platform.OS === 'web' ? {
+        onPointerDown: (e: any) => {
+            e.preventDefault(); 
+            onPressWeb(valor);
+        }
+      } : {})}
     >
       {children}
-    </Pressable>
+    </View>
   );
 };
 
@@ -129,23 +89,19 @@ export default function Arcade() {
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [pontos, setPontos] = useState(0);
   const pontosRef = useRef(0);
-  
   const [vidas, setVidas] = useState(5); 
   const [resposta, setResposta] = useState('');
   const [operacoes, setOperacoes] = useState<any[]>([]); 
   const [powerUpDisponivel, setPowerUpDisponivel] = useState(false);
   const [missoesDisponiveis, setMissoesDisponiveis] = useState<any[]>([]);
   const [modoMatematica, setModoMatematica] = useState('misto');
-  
   const [rankingArcade, setRankingArcade] = useState<any[]>([]);
   const [corLaserPersonalizada, setCorLaserPersonalizada] = useState('#32CD32');
   const [pausado, setPausado] = useState(false);
-  
   const [faseAtualVisor, setFaseAtualVisor] = useState(1);
   const [mostrarFase, setMostrarFase] = useState(false);
   const fadeFaseAnim = useRef(new Animated.Value(0)).current;
   const transicaoAtivaRef = useRef(false);
-  
   const fasePendenteRef = useRef(false);
   const proximaFaseNumRef = useRef(1);
 
@@ -163,13 +119,10 @@ export default function Arcade() {
   
   const spawnTimer = useRef<any>(null);
   const botTimer = useRef<any>(null);
-  
   const laserAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const [lasersAtivos, setLasersAtivos] = useState<any[]>([]);
-  
   const [explosoes, setExplosoes] = useState<any[]>([]); 
-
   const desempenhoOcultoRef = useRef(0); 
   const ultimasRespostasRef = useRef<number[]>([]);
 
@@ -192,34 +145,19 @@ export default function Arcade() {
 
   useEffect(() => { if (tela === 'menu') carregarDadosMenu(); }, [tela]);
 
-  // =========================================================================
-  // SISTEMA DE TECLADO 
-  // =========================================================================
   const executarAcaoTecla = (valor: string) => {
     setResposta(currentResposta => {
-        if (valor === 'apagar') {
-            return currentResposta.slice(0, -1);
-        } else if (valor === 'enviar') {
-            setTimeout(() => verificarRespostaComValor(currentResposta), 0);
-            return currentResposta;
-        } else {
-            return currentResposta.length < 5 ? currentResposta + valor : currentResposta;
-        }
+        if (valor === 'apagar') return currentResposta.slice(0, -1);
+        else if (valor === 'enviar') { setTimeout(() => verificarRespostaComValor(currentResposta), 0); return currentResposta; }
+        else return currentResposta.length < 5 ? currentResposta + valor : currentResposta;
     });
   };
 
   const getTeclaFromCoords = (x: number, y: number) => {
     let col = -1;
-    if (x >= 0 && x <= 92) col = 0;
-    else if (x > 92 && x <= 187) col = 1;
-    else if (x > 187 && x <= 280) col = 2;
-
+    if (x >= 0 && x <= 92) col = 0; else if (x > 92 && x <= 187) col = 1; else if (x > 187 && x <= 280) col = 2;
     let row = -1;
-    if (y >= 0 && y <= 50) row = 0;
-    else if (y > 50 && y <= 103) row = 1;
-    else if (y > 103 && y <= 156) row = 2;
-    else if (y > 156 && y <= 210) row = 3;
-
+    if (y >= 0 && y <= 50) row = 0; else if (y > 50 && y <= 103) row = 1; else if (y > 103 && y <= 156) row = 2; else if (y > 156 && y <= 210) row = 3;
     if (col === -1 || row === -1) return null;
     const layout = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['apagar', '0', 'enviar']];
     return layout[row][col];
@@ -236,10 +174,7 @@ export default function Arcade() {
     }
     setTeclasPressionadas(Array.from(currentActive));
     currentActive.forEach(key => {
-        if (!triggeredTouchesRef.current.has(key)) {
-            triggeredTouchesRef.current.add(key);
-            executarAcaoTecla(key);
-        }
+        if (!triggeredTouchesRef.current.has(key)) { triggeredTouchesRef.current.add(key); executarAcaoTecla(key); }
     });
     triggeredTouchesRef.current.forEach(key => {
         if (!currentActive.has(key)) triggeredTouchesRef.current.delete(key);
@@ -267,12 +202,8 @@ export default function Arcade() {
   }, [tela]);
 
   const processarErroRef = useRef<any>(null);
-
   const processarErro = useCallback((opId: string) => {
-    if (opId === 'nenhum') {
-      setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
-      return;
-    }
+    if (opId === 'nenhum') { setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; }); return; }
     const opInfo = operacoesListRef.current.find(o => o.id === opId);
     if (!opInfo) return;
     opInfo.y.stopAnimation();
@@ -288,40 +219,28 @@ export default function Arcade() {
   useEffect(() => { processarErroRef.current = processarErro; }, [processarErro]);
 
   const carregarMissoes = async () => {
-    try {
-      const data = await api.getMissoesDisponiveis();
-      setMissoesDisponiveis(Array.isArray(data) ? data : []);
-    } catch (e) {}
+    try { const data = await api.getMissoesDisponiveis(); setMissoesDisponiveis(Array.isArray(data) ? data : []); } catch (e) {}
   };
 
   const confirmarDelecaoMissao = (id: string) => {
     const mensagem = "Tem certeza que deseja APAGAR este jogo personalizado do sistema?";
     if (Platform.OS === 'web') {
-      const confirmou = window.confirm(mensagem);
-      if (confirmou) executarDelecaoMissao(id);
+      if (window.confirm(mensagem)) executarDelecaoMissao(id);
     } else {
       Alert.alert("Apagar", mensagem, [{ text: "Cancelar", style: "cancel" }, { text: "Apagar", style: "destructive", onPress: () => executarDelecaoMissao(id) }]);
     }
   };
 
   const executarDelecaoMissao = async (id: string) => {
-    try {
-      await api.deletarJogo(id); 
-      Alert.alert("Sucesso", "O jogo foi removido.");
-      carregarMissoes(); 
-    } catch (error) {}
+    try { await api.deletarJogo(id); Alert.alert("Sucesso", "O jogo foi removido."); carregarMissoes(); } catch (error) {}
   };
 
   useEffect(() => {
     if (modoRef.current === 'missao' && jogoAtivoRef.current) {
-      if (filaQuestoesRef.current.length === 0 && questoesEmJogoRef.current === 0 && operacoes.length === 0) {
-        finalizarMissaoComSucesso();
-      }
+      if (filaQuestoesRef.current.length === 0 && questoesEmJogoRef.current === 0 && operacoes.length === 0) finalizarMissaoComSucesso();
     }
     if (jogoAtivoRef.current && fasePendenteRef.current && operacoes.length === 0) {
-      fasePendenteRef.current = false;
-      rodadaRef.current = proximaFaseNumRef.current; 
-      avancarFase(proximaFaseNumRef.current);
+      fasePendenteRef.current = false; rodadaRef.current = proximaFaseNumRef.current; avancarFase(proximaFaseNumRef.current);
     }
   }, [operacoes]);
 
@@ -335,9 +254,7 @@ export default function Arcade() {
 
   const avancarFase = (novaFase: number) => {
     if (transicaoAtivaRef.current || !jogoAtivoRef.current) return;
-    transicaoAtivaRef.current = true;
-    setFaseAtualVisor(novaFase);
-    setMostrarFase(true);
+    transicaoAtivaRef.current = true; setFaseAtualVisor(novaFase); setMostrarFase(true);
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     fadeFaseAnim.setValue(0);
     Animated.sequence([
@@ -345,8 +262,7 @@ export default function Arcade() {
       Animated.delay(1500), 
       Animated.timing(fadeFaseAnim, { toValue: 0, duration: 300, useNativeDriver: true })
     ]).start(() => {
-      setMostrarFase(false);
-      transicaoAtivaRef.current = false;
+      setMostrarFase(false); transicaoAtivaRef.current = false;
       if (jogoAtivoRef.current && !jogoPausadoRef.current) iniciarLoopSpawner();
     });
   };
@@ -362,16 +278,13 @@ export default function Arcade() {
     jogoPausadoRef.current = false; setPausado(false);
     if (!transicaoAtivaRef.current && !fasePendenteRef.current) iniciarLoopSpawner();
     operacoesListRef.current.forEach(op => {
-      const currentY = (op.y as any)._value || 0;
-      const distRestante = (height + 50) - currentY;
+      const currentY = (op.y as any)._value || 0; const distRestante = (height + 50) - currentY;
       Animated.timing(op.y, { toValue: height + 50, duration: Math.max(100, (distRestante / (height + 50)) * op.speed), useNativeDriver: true }).start();
     });
   };
 
   const sairDoJogo = () => {
-    if (modoRef.current === 'single' && pontosRef.current > 0) {
-        api.submitArcadeScore(pontosRef.current).catch(()=>{});
-    }
+    if (modoRef.current === 'single' && pontosRef.current > 0) api.submitArcadeScore(pontosRef.current).catch(()=>{});
     jogoAtivoRef.current = false; jogoPausadoRef.current = false; transicaoAtivaRef.current = false; fasePendenteRef.current = false;
     setPausado(false); setMostrarFase(false); if (spawnTimer.current) clearTimeout(spawnTimer.current);
     setOperacoes([]); setExplosoes([]); setTela('menu');
@@ -381,17 +294,13 @@ export default function Arcade() {
 
   const iniciarJogo = async (modoEscolhido: 'single' | 'bot' | 'missao', missaoDados?: any) => {
     if (modoEscolhido === 'missao' && missaoDados) {
-      try { await api.registrarTentativaMissao(missaoDados.id); } 
-      catch (e) { Alert.alert("Aviso", "Você já atingiu o limite de vezes que pode jogar essa missão!"); return; }
+      try { await api.registrarTentativaMissao(missaoDados.id); } catch (e) { Alert.alert("Aviso", "Você já atingiu o limite de vezes que pode jogar essa missão!"); return; }
     }
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     if (botTimer.current) clearInterval(botTimer.current);
     
-    setOperacoes([]); setExplosoes([]); 
-    setPontos(0); pontosRef.current = 0; 
-    
-    setResposta(''); setPowerUpDisponivel(false); 
-    setPausado(false); setMostrarFase(false); setFaseAtualVisor(1);
+    setOperacoes([]); setExplosoes([]); setPontos(0); pontosRef.current = 0; 
+    setResposta(''); setPowerUpDisponivel(false); setPausado(false); setMostrarFase(false); setFaseAtualVisor(1);
     
     operacoesAtuaisRef.current = []; ultimasRespostasRef.current = []; desempenhoOcultoRef.current = 0; questoesEmJogoRef.current = 0;
     jogoPausadoRef.current = false; jogoAtivoRef.current = true; rodadaRef.current = 1; transicaoAtivaRef.current = false; fasePendenteRef.current = false; proximaFaseNumRef.current = 1;
@@ -400,11 +309,8 @@ export default function Arcade() {
     if (modoEscolhido === 'missao' && missaoDados) {
       missaoAtualRef.current = missaoDados; setVidas(missaoDados.vidas ? Number(missaoDados.vidas) : 5);
       filaQuestoesRef.current = missaoDados.questoes.map((q: any) => ({...q, id: q.id || Math.random().toString()}));
-    } else {
-      missaoAtualRef.current = null; filaQuestoesRef.current = []; setVidas(5);
-    }
-    setTela('jogo');
-    setTimeout(() => { spawnarQuestao(); iniciarLoopSpawner(); }, 100);
+    } else { missaoAtualRef.current = null; filaQuestoesRef.current = []; setVidas(5); }
+    setTela('jogo'); setTimeout(() => { spawnarQuestao(); iniciarLoopSpawner(); }, 100);
   };
 
   const iniciarLoopSpawner = () => {
@@ -433,12 +339,10 @@ export default function Arcade() {
     let dados = null; let isMissao = modoRef.current === 'missao';
     if (isMissao) { if (filaQuestoesRef.current.length === 0) return; dados = filaQuestoesRef.current[0]; } 
     else { dados = gerarDadosArcade(); if (!dados) return; }
-
     const novaOp = criarObjetoAnimado(dados.texto, dados.resposta, dados.chave || dados.id, dados.speed || 10000);
     if (novaOp) { 
       if (isMissao) filaQuestoesRef.current.shift(); 
-      questoesEmJogoRef.current += 1;
-      setOperacoes(prev => [...prev, novaOp]); setTimeout(() => animarQueda(novaOp), 50); 
+      questoesEmJogoRef.current += 1; setOperacoes(prev => [...prev, novaOp]); setTimeout(() => animarQueda(novaOp), 50); 
     }
   };
 
@@ -511,11 +415,7 @@ export default function Arcade() {
   const gameOver = () => { 
     jogoAtivoRef.current = false; jogoPausadoRef.current = false; transicaoAtivaRef.current = false; fasePendenteRef.current = false; setPausado(false);
     if (spawnTimer.current) clearTimeout(spawnTimer.current); setOperacoes([]); setExplosoes([]);
-    
-    if (modoRef.current === 'single' && pontosRef.current > 0) {
-        api.submitArcadeScore(pontosRef.current).catch(()=>{});
-    }
-    
+    if (modoRef.current === 'single' && pontosRef.current > 0) api.submitArcadeScore(pontosRef.current).catch(()=>{});
     setTela('resultado'); 
   };
 
@@ -538,9 +438,7 @@ export default function Arcade() {
       dispararLaserUnico(alvo, true);
       operacoesAtuaisRef.current = operacoesAtuaisRef.current.filter(o => o.chave !== alvo.id);
       setTimeout(() => { setOperacoes(prev => prev.filter(o => o.id !== alvo.id)); setResposta(''); }, 300);
-    } else { 
-      dispararLaserUnico(null, false); processarErro('nenhum'); setResposta('');
-    }
+    } else { dispararLaserUnico(null, false); processarErro('nenhum'); setResposta(''); }
   };
 
   const calcularDadosLaser = (alvo: any, acertou: boolean) => {
@@ -579,84 +477,46 @@ export default function Arcade() {
 
   if (tela === 'menu') {
     const modosArcade = [
-      { id: 'misto', name: 'Jornada', color: '#FFD700', icon: 'infinite' },
-      { id: 'soma', name: 'Soma', color: '#32CD32', icon: 'add' },
-      { id: 'subtracao', name: 'Subtração', color: '#FF4444', icon: 'remove' },
-      { id: 'multiplicacao', name: 'Multiplicação', color: '#4169E1', icon: 'close' },
-      { id: 'divisao', name: 'Divisão', color: '#9B59B6', icon: 'code-slash' },
-      { id: 'potenciacao', name: 'Potências', color: '#FF8C00', icon: 'chevron-up' },
+      { id: 'misto', name: 'Jornada', color: '#FFD700', icon: 'infinite' }, { id: 'soma', name: 'Soma', color: '#32CD32', icon: 'add' }, { id: 'subtracao', name: 'Subtração', color: '#FF4444', icon: 'remove' },
+      { id: 'multiplicacao', name: 'Multiplicação', color: '#4169E1', icon: 'close' }, { id: 'divisao', name: 'Divisão', color: '#9B59B6', icon: 'code-slash' }, { id: 'potenciacao', name: 'Potências', color: '#FF8C00', icon: 'chevron-up' },
       { id: 'radiciacao', name: 'Raízes', color: '#00CED1', icon: 'flash' }
     ];
-
     const meuRank = rankingArcade.find(j => j.id === user?.id);
 
     return (
-      // CORREÇÃO APLICADA: edges={['top', 'bottom']} respeita a barra do Android
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.menuContainer}>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.menuScrollContent} showsVerticalScrollIndicator={false}>
-            
-            <TouchableOpacity style={{ alignSelf: 'flex-start' }} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={28} color="#FFF" />
-            </TouchableOpacity>
-
-            <View style={styles.menuHeader}>
-              <Ionicons name="game-controller" size={64} color="#FFD700" />
-              <Text style={styles.menuTitle}>Matemática Turbo</Text>
-              <Text style={styles.menuSubtitle}>Treinamento Adaptativo</Text>
-            </View>
-
+            <TouchableOpacity style={{ alignSelf: 'flex-start' }} onPress={() => router.back()}><Ionicons name="arrow-back" size={28} color="#FFF" /></TouchableOpacity>
+            <View style={styles.menuHeader}><Ionicons name="game-controller" size={64} color="#FFD700" /><Text style={styles.menuTitle}>Matemática Turbo</Text><Text style={styles.menuSubtitle}>Treinamento Adaptativo</Text></View>
             <View style={styles.rankingContainer}>
-              <View style={styles.rankingHeaderRow}>
-                <Ionicons name="trophy" size={24} color="#FFD700" />
-                <Text style={styles.rankingTitle}>HALL DA FAMA - ARCADE</Text>
-              </View>
+              <View style={styles.rankingHeaderRow}><Ionicons name="trophy" size={24} color="#FFD700" /><Text style={styles.rankingTitle}>HALL DA FAMA - ARCADE</Text></View>
               <View style={styles.rankingScrollWrapper}>
                 <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={true}>
                   {rankingArcade.length > 0 ? (
                     rankingArcade.map((jogador) => {
-                      let corPosicao = '#888'; 
-                      if (jogador.posicao === 1) corPosicao = '#FFD700'; 
-                      else if (jogador.posicao === 2) corPosicao = '#C0C0C0'; 
-                      else if (jogador.posicao === 3) corPosicao = '#CD7F32';
-                      
+                      let corPosicao = '#888'; if (jogador.posicao === 1) corPosicao = '#FFD700'; else if (jogador.posicao === 2) corPosicao = '#C0C0C0'; else if (jogador.posicao === 3) corPosicao = '#CD7F32';
                       const isMe = jogador.id === user?.id;
-
                       return (
                         <View key={jogador.posicao} style={[styles.rankingRow, isMe && styles.rankingRowMe]}>
                           <View style={styles.rankingLeft}>
                             <Text style={[styles.rankingPosText, { color: corPosicao }]}>#{jogador.posicao}</Text>
                             <View>
-                              <Text style={[styles.rankingNameText, isMe && { color: '#00FFFF' }, jogador.isProf && { color: '#E74C3C' }]}>
-                                {jogador.nome} {jogador.isProf ? '👑' : ''}
-                              </Text>
-                              {!jogador.isProf && jogador.equipe ? (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: jogador.cor }} />
-                                  <Text style={{ color: '#AAA', fontSize: 11, fontWeight: 'bold' }}>{jogador.equipe}</Text>
-                                  {jogador.turma ? <Text style={{ color: '#666', fontSize: 11 }}>• {jogador.turma}</Text> : null}
-                                </View>
-                              ) : null}
+                              <Text style={[styles.rankingNameText, isMe && { color: '#00FFFF' }, jogador.isProf && { color: '#E74C3C' }]}>{jogador.nome} {jogador.isProf ? '👑' : ''}</Text>
+                              {!jogador.isProf && jogador.equipe ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}><View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: jogador.cor }} /><Text style={{ color: '#AAA', fontSize: 11, fontWeight: 'bold' }}>{jogador.equipe}</Text>{jogador.turma ? <Text style={{ color: '#666', fontSize: 11 }}>• {jogador.turma}</Text> : null}</View>) : null}
                             </View>
                           </View>
                           <Text style={[styles.rankingScoreText, isMe && { color: '#00FFFF' }]}>{jogador.pontosMaximos} pts</Text>
                         </View>
                       );
                     })
-                  ) : (
-                    <View style={{ padding: 15, alignItems: 'center' }}>
-                      <Text style={{ color: '#888', fontStyle: 'italic' }}>Nenhum jogador pontuou ainda. Seja o primeiro!</Text>
-                    </View>
-                  )}
+                  ) : (<View style={{ padding: 15, alignItems: 'center' }}><Text style={{ color: '#888', fontStyle: 'italic' }}>Nenhum jogador pontuou ainda. Seja o primeiro!</Text></View>)}
                 </ScrollView>
               </View>
               {meuRank && (
                 <View style={styles.myRankingFixed}>
                   <Text style={styles.myRankingLabel}>Sua Posição Atual:</Text>
-                  <View style={styles.rankingLeft}>
-                    <Text style={[styles.rankingPosText, { color: '#00FFFF' }]}>#{meuRank.posicao}</Text>
-                    <Text style={[styles.rankingScoreText, { color: '#00FFFF' }]}>{meuRank.pontosMaximos} pts</Text>
-                  </View>
+                  <View style={styles.rankingLeft}><Text style={[styles.rankingPosText, { color: '#00FFFF' }]}>#{meuRank.posicao}</Text><Text style={[styles.rankingScoreText, { color: '#00FFFF' }]}>{meuRank.pontosMaximos} pts</Text></View>
                 </View>
               )}
             </View>
@@ -665,18 +525,12 @@ export default function Arcade() {
               <View style={{width: '100%', marginBottom: 20}}>
                 <Text style={styles.sectionLabel}>🎯 Missões do Professor:</Text>
                 {missoesDisponiveis.map((missao, index) => {
-                  const limite = missao.limiteTentativas !== undefined ? missao.limiteTentativas : 1;
-                  const feitas = missao.tentativasFeitas || 0;
-                  const esgotado = limite !== 0 && feitas >= limite;
+                  const limite = missao.limiteTentativas !== undefined ? missao.limiteTentativas : 1; const feitas = missao.tentativasFeitas || 0; const esgotado = limite !== 0 && feitas >= limite;
                   return (
                     <View key={missao.id || index} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
                         <TouchableOpacity style={[styles.missaoCard, esgotado && { backgroundColor: '#333' }, { flex: 1, marginBottom: 0 }]} onPress={() => !esgotado && iniciarJogo('missao', missao)} activeOpacity={esgotado ? 1 : 0.7}>
                           <View style={styles.missaoIcon}><Ionicons name={esgotado ? "lock-closed" : "trophy"} size={24} color="#FFF" /></View>
-                          <View style={{flex: 1}}>
-                            <Text style={[styles.missaoTitle, esgotado && {color: '#888'}]}>{missao.titulo}</Text>
-                            <Text style={[styles.missaoSub, esgotado && {color: '#666'}]}>{missao.recompensa} Pts • {limite === 0 ? 'Tents. Ilimitadas' : `Tentativas: ${feitas}/${limite}`}</Text>
-                            {missao.expiraEm && <ContadorExpiracao expiraEm={missao.expiraEm} esgotado={esgotado} />}
-                          </View>
+                          <View style={{flex: 1}}><Text style={[styles.missaoTitle, esgotado && {color: '#888'}]}>{missao.titulo}</Text><Text style={[styles.missaoSub, esgotado && {color: '#666'}]}>{missao.recompensa} Pts • {limite === 0 ? 'Tents. Ilimitadas' : `Tentativas: ${feitas}/${limite}`}</Text>{missao.expiraEm && <ContadorExpiracao expiraEm={missao.expiraEm} esgotado={esgotado} />}</View>
                           <Ionicons name="play-circle" size={32} color={esgotado ? "#555" : "#FFF"} />
                         </TouchableOpacity>
                         {user?.perfil === 'ADMIN' && (<TouchableOpacity style={{ backgroundColor: '#E74C3C', padding: 15, borderRadius: 12, marginLeft: 8, justifyContent: 'center', alignItems: 'center' }} onPress={() => confirmarDelecaoMissao(missao.id)}><Text style={{color: '#FFF', fontWeight: '900', fontSize: 18}}>X</Text></TouchableOpacity>)}
@@ -700,10 +554,7 @@ export default function Arcade() {
             </View>
           </ScrollView>
           <View style={styles.btnIniciarWrapper}>
-            <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}>
-              <Ionicons name="play" size={24} color="#000" />
-              <Text style={styles.iniciarButtonText}>INICIAR MODO LIVRE</Text>
-            </TouchableOpacity>
+            <TouchableOpacity style={styles.iniciarButton} onPress={() => iniciarJogo('single')}><Ionicons name="play" size={24} color="#000" /><Text style={styles.iniciarButtonText}>INICIAR MODO LIVRE</Text></TouchableOpacity>
           </View>
         </View>
       </SafeAreaView>
@@ -713,7 +564,6 @@ export default function Arcade() {
   if (tela === 'resultado') {
     const venceu = modoRef.current === 'missao' && vidas > 0;
     return (
-      // CORREÇÃO APLICADA: edges={['top', 'bottom']}
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.resultadoContainer}>
           <Text style={styles.resultadoTitle}>{venceu ? '🎯 Missão Cumprida!' : 'Fim de Jogo!'}</Text>
@@ -726,12 +576,9 @@ export default function Arcade() {
   }
 
   return (
-    // CORREÇÃO APLICADA: edges={['top', 'bottom']} respeita a barra do Android perfeitamente
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {mostrarFase && (
-        <Animated.View style={[styles.transicaoOverlay, { opacity: fadeFaseAnim }]}>
-          <View style={styles.transicaoBox}><Text style={styles.transicaoText}>FASE {faseAtualVisor}</Text></View>
-        </Animated.View>
+        <Animated.View style={[styles.transicaoOverlay, { opacity: fadeFaseAnim }]}><View style={styles.transicaoBox}><Text style={styles.transicaoText}>FASE {faseAtualVisor}</Text></View></Animated.View>
       )}
 
       {pausado && (
@@ -743,15 +590,13 @@ export default function Arcade() {
       )}
 
       <View style={styles.gameHeader}>
-        <View style={styles.headerStatsGroup}>
-          <Ionicons name="star" size={18} color="#FFD700" /><Text style={styles.statTextScore}>{pontos}</Text>
-          {modoRef.current !== 'missao' && (<View style={styles.faseBadge}><Text style={styles.faseBadgeText}>Fase {faseAtualVisor}</Text></View>)}
-        </View>
+        <View style={styles.headerStatsGroup}><Ionicons name="star" size={18} color="#FFD700" /><Text style={styles.statTextScore}>{pontos}</Text>{modoRef.current !== 'missao' && (<View style={styles.faseBadge}><Text style={styles.faseBadgeText}>Fase {faseAtualVisor}</Text></View>)}</View>
         <TouchableOpacity onPress={pausarJogo} style={styles.btnPausaIcone}><Ionicons name="pause" size={26} color="#fff" /></TouchableOpacity>
       </View>
 
       <View style={styles.vidasContainer}>{Array.from({ length: Math.max(0, vidas) }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF4444" style={{marginHorizontal:2}} />)}</View>
       
+      {/* 🚀 CORREÇÃO APLICADA: flex 1 no gameArea, faz a mágica de empurrar o teclado nativamente */}
       <View style={styles.gameArea}>
         <View style={styles.linhaEletricaContainer}><View style={styles.linhaEletricaCore} /><View style={styles.linhaEletricaGlow} /></View>
 
@@ -761,20 +606,20 @@ export default function Arcade() {
           </Animated.View> 
         ))}
         {explosoes.map(exp => (
-          <View key={exp.id} style={[styles.explosaoContainer, { left: exp.x, top: exp.y }]}>{exp.texto.split('').map((char: string, i: number) => (<Particula key={i} char={char} />))}</View>
+          <View key={exp.id} style={[styles.explosaoContainer, { left: exp.x, top: exp.y }]}><Particula char={exp.texto.charAt(0)} /><Particula char={exp.texto.charAt(1) || '*'} /></View>
         ))}
         {lasersAtivos.map((laserInfo, index) => (
           <Animated.View key={`laser-${index}`} style={[styles.laser, { left: laserInfo.x - 2, top: laserInfo.y - laserInfo.h / 2, height: laserInfo.h, transform: [{ rotate: laserInfo.angle }], backgroundColor: laserInfo.cor, opacity: laserAnim }]} />
         ))}
       </View>
       
+      {/* 🚀 CORREÇÃO APLICADA: removido o position absolute para que respeite a SafeArea e flua no layout */}
       <View style={styles.bottomPanel}>
         <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
         
         <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
         
         <View style={styles.tecladoContainer}>
-          
           <View style={styles.tecladoGrid}>
             {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
               <View key={i} style={styles.tecladoRow}>
@@ -786,30 +631,16 @@ export default function Arcade() {
               </View>
             ))}
             <View style={styles.tecladoRow}>
-              <BotaoVisual valor="apagar" isPressed={teclasPressionadas.includes('apagar')} onPressWeb={executarAcaoTecla} styleExtra={styles.teclaApagar}>
-                <Ionicons name="close" size={24} color="#fff" />
-              </BotaoVisual>
-              <BotaoVisual valor="0" isPressed={teclasPressionadas.includes('0')} onPressWeb={executarAcaoTecla}>
-                <Text style={styles.teclaText}>0</Text>
-              </BotaoVisual>
-              <BotaoVisual valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={executarAcaoTecla} styleExtra={styles.teclaEnviar}>
-                <Ionicons name="checkmark" size={28} color="#fff" />
-              </BotaoVisual>
+              <BotaoVisual valor="apagar" isPressed={teclasPressionadas.includes('apagar')} onPressWeb={executarAcaoTecla} styleExtra={styles.teclaApagar}><Ionicons name="close" size={24} color="#fff" /></BotaoVisual>
+              <BotaoVisual valor="0" isPressed={teclasPressionadas.includes('0')} onPressWeb={executarAcaoTecla}><Text style={styles.teclaText}>0</Text></BotaoVisual>
+              <BotaoVisual valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={executarAcaoTecla} styleExtra={styles.teclaEnviar}><Ionicons name="checkmark" size={28} color="#fff" /></BotaoVisual>
             </View>
           </View>
 
           {Platform.OS !== 'web' && (
-             <View
-                style={StyleSheet.absoluteFillObject}
-                onStartShouldSetResponder={() => true}
-                onResponderGrant={handleMultiTouch}
-                onResponderMove={handleMultiTouch}
-                onResponderRelease={handleMultiTouch}
-                onResponderTerminate={handleMultiTouch}
-             />
+             <View style={StyleSheet.absoluteFillObject} onStartShouldSetResponder={() => true} onResponderGrant={handleMultiTouch} onResponderMove={handleMultiTouch} onResponderRelease={handleMultiTouch} onResponderTerminate={handleMultiTouch} />
           )}
         </View>
-
       </View>
     </SafeAreaView>
   );
@@ -870,7 +701,8 @@ const styles = StyleSheet.create({
 
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
   
-  bottomPanel: { position: 'absolute', bottom: 10, width: '100%', alignItems: 'center', paddingBottom: 15, zIndex: 10 },
+  // Removido o position: 'absolute' para fluir no flexbox perfeitamente
+  bottomPanel: { width: '100%', alignItems: 'center', paddingBottom: 15, paddingTop: 5, backgroundColor: '#0c0c0c', zIndex: 10 },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
