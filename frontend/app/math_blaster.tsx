@@ -6,27 +6,25 @@ import { useRouter } from 'expo-router';
 
 const initialWidth = Dimensions.get('window').width;
 
-// --- COMPONENTE: TECLADO RETRÔ (Toque Bruto e Isolado, sem travar a tela) ---
+// --- COMPONENTE: TECLADO RETRÔ (Sistema Multi-touch Nativo Seguro) ---
 const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
   const anim = useRef(new Animated.Value(1)).current;
   
-  const handleTouchStart = (e: any) => {
-    e.stopPropagation(); // Isola o toque para não afetar a navegação
+  const handlePressIn = () => {
     Animated.spring(anim, { toValue: 0.85, useNativeDriver: true }).start();
     onPressWeb(valor);
   };
-  
-  const handleTouchEnd = (e: any) => {
-    e.stopPropagation();
+  const handlePressOut = () => {
     Animated.spring(anim, { toValue: 1, useNativeDriver: true }).start();
   };
 
   return (
     <Animated.View 
       style={{ flex: 1, transform: [{ scale: anim }] }}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
+      onStartShouldSetResponder={() => true}
+      onResponderGrant={handlePressIn}
+      onResponderRelease={handlePressOut}
+      onResponderTerminate={handlePressOut}
     >
       <View style={[styles.teclaRetro, valor === 'apagar' && styles.teclaApagar, valor === 'enviar' && styles.teclaEnviar]}>
         {valor === 'apagar' ? <Ionicons name="backspace" size={26} color="#FFF" /> : 
@@ -45,7 +43,7 @@ export default function MathBlaster() {
   
   const layoutRef = useRef({ width: initialWidth, height: 500 });
 
-  // ESTADO GLOBAL DO MOTOR
+  // ESTADO GLOBAL DO MOTOR (A variável mathShots que faltava está aqui!)
   const gs = useRef({
     player: { 
       x: initialWidth / 2, y: 300, 
@@ -57,12 +55,13 @@ export default function MathBlaster() {
       }
     },
     lasers: [] as any[], 
-    mathShots: [] as any[], // O novo projétil de magia matemática
+    specialLasers: [] as any[],
+    mathShots: [] as any[], // <-- O causador da tela branca foi consertado
     enemies: [] as any[], enemyLasers: [] as any[],
     powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0,
-    movementTouchId: null as string | null, // Rastreador de dedo esquerdo
+    movementTouchId: null as string | null,
     lastTouchX: 0, lastTouchY: 0
   }).current;
 
@@ -72,33 +71,39 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
-  // --- CONTROLE NATIVO BRUTO (Perfeita Multi-touch Independência) ---
+  // --- CONTROLE DE NAVEGAÇÃO ISOLADO ---
   const handleGameTouchStart = (e: any) => {
-    if (gs.movementTouchId === null && e.nativeEvent.touches.length > 0) {
-      // Pega a digital do primeiro dedo que encostar na área do jogo
-      const touch = e.nativeEvent.touches[0];
-      gs.movementTouchId = touch.identifier;
-      gs.lastTouchX = touch.pageX; 
-      gs.lastTouchY = touch.pageY;
+    const touches = e.nativeEvent.touches;
+    if (gs.movementTouchId === null && touches.length > 0) {
+      gs.movementTouchId = touches[0].identifier;
+      gs.lastTouchX = touches[0].pageX; 
+      gs.lastTouchY = touches[0].pageY;
     }
   };
 
   const handleGameTouchMove = (e: any) => {
     if (gs.movementTouchId !== null) {
-      // Ignora todos os outros dedos, só ouve o dedo do movimento
-      const touch = Array.from(e.nativeEvent.touches).find((t: any) => t.identifier === gs.movementTouchId);
-      if (touch) {
-        const dx = (touch as any).pageX - gs.lastTouchX; 
-        const dy = (touch as any).pageY - gs.lastTouchY;
-        gs.player.x += dx * 1.5; gs.player.y += dy * 1.5; 
-        gs.lastTouchX = (touch as any).pageX; gs.lastTouchY = (touch as any).pageY;
+      const touches = e.nativeEvent.touches;
+      let activeTouch = null;
+      for (let i = 0; i < touches.length; i++) {
+        if (touches[i].identifier === gs.movementTouchId) activeTouch = touches[i];
+      }
+      if (activeTouch) {
+        const dx = activeTouch.pageX - gs.lastTouchX; 
+        const dy = activeTouch.pageY - gs.lastTouchY;
+        gs.player.x += dx * 1.8; gs.player.y += dy * 1.8; 
+        gs.lastTouchX = activeTouch.pageX; gs.lastTouchY = activeTouch.pageY;
       }
     }
   };
 
   const handleGameTouchEnd = (e: any) => {
-    const touchExists = Array.from(e.nativeEvent.touches).some((t: any) => t.identifier === gs.movementTouchId);
-    if (!touchExists) gs.movementTouchId = null; // Soltou a nave
+    const touches = e.nativeEvent.touches;
+    let stillExists = false;
+    for (let i = 0; i < touches.length; i++) {
+      if (touches[i].identifier === gs.movementTouchId) stillExists = true;
+    }
+    if (!stillExists) gs.movementTouchId = null; 
   };
 
   // --- MATEMÁTICA ---
@@ -118,7 +123,7 @@ export default function MathBlaster() {
       x: layoutRef.current.width / 2, y: layoutRef.current.height - 100, hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, 
       weapons: { missile: { active: false, baseCooldown: 8000, lastFire: 0 }, laser: { active: false, baseCooldown: 10000, lastFire: 0 } }
     };
-    gs.lasers = []; gs.mathShots = []; gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
+    gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
     setResposta(''); setJogoAtivo(true);
@@ -179,12 +184,15 @@ export default function MathBlaster() {
     });
     gs.lasers = gs.lasers.filter(l => l.y > -50 && l.x > -20 && l.x < gw + 20);
     
-    // ANIMAÇÃO DOS TIROS DA MATEMÁTICA (Esferas de Energia que voam até o alvo)
+    gs.specialLasers.forEach(sl => sl.life -= 1);
+    gs.specialLasers = gs.specialLasers.filter(sl => sl.life > 0);
+
+    // Esferas Matemáticas Teleguiadas
     gs.mathShots.forEach(ms => {
       ms.x += (ms.tx - ms.x) * 0.25; 
       ms.y += (ms.ty - ms.y) * 0.25;
       ms.life -= 1;
-      criarParticulas(ms.x, ms.y, ms.color, 1); // Rastro de luz
+      criarParticulas(ms.x, ms.y, ms.color, 1); 
     });
     gs.mathShots = gs.mathShots.filter(ms => ms.life > 0);
 
@@ -410,9 +418,8 @@ export default function MathBlaster() {
     }
     gs.powerups.forEach(p => p.y += 1.5); 
 
-    // LIMPEZA CORRIGIDA: e.hp > 0 é a única condição para manter na tela!
     gs.enemies.forEach(e => { if (e.hp <= 0 && e.hp > -90) { gs.score += e.isLeader?50:20; criarParticulas(e.x, e.y, e.type==='SQUAD'?'#FF0055':'#AAA', 10); } });
-    gs.enemies = gs.enemies.filter(e => e.hp > 0 && e.y < gh + 20); // MiniBoss agora SOME!
+    gs.enemies = gs.enemies.filter(e => (e.hp > 0 || e.mathRequired) && e.y < gh + 20);
     gs.powerups = gs.powerups.filter(p => p.y < gh + 50);
 
     if (gs.player.hp <= 0) gameOver();
@@ -423,7 +430,7 @@ export default function MathBlaster() {
     for(let i=0; i<qtd; i++) { gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color }); }
   };
 
-  // --- TECLADO MATEMÁTICO E OS TIROS DE MAGIA ---
+  // --- O NOVO SISTEMA DE MAGIA DA MATEMÁTICA ---
   const lidarComTeclado = (valor: string) => {
     if (!jogoAtivo) return;
     if (valor === 'apagar') setResposta(r => r.slice(0, -1));
@@ -431,15 +438,15 @@ export default function MathBlaster() {
       const num = parseInt(resposta);
       let acertou = false;
 
-      // ATIRA A ESFERA DE ENERGIA (Visual)
+      // Dispara a bola de energia visual
       const dispararMagia = (tx: number, ty: number, color: string) => {
-        gs.mathShots.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, tx, ty, color, life: 12 });
+        gs.mathShots.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, tx, ty, color, life: 15 });
       };
 
       if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
         acertou = true; gs.boss.shield = false; gs.boss.timer = 0; gs.boss.nextShieldAt = Math.random() * 210 + 240; 
-        dispararMagia(gs.boss.x, gs.boss.y, '#FFD700'); // Bola Dourada voa
-        setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50), 300); // Explosão
+        dispararMagia(gs.boss.x, gs.boss.y, '#FFD700');
+        setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50), 350); 
         gs.score += 200;
       } 
       else {
@@ -447,12 +454,12 @@ export default function MathBlaster() {
           let e = gs.enemies[i];
           if (e.mathRequired && e.res === num) {
             acertou = true; e.solvesDone += 1;
-            dispararMagia(e.x, e.y, '#00FFFF'); // Bola Ciano voa
-            setTimeout(() => criarParticulas(e.x, e.y, '#00FFFF', 20), 300);
+            dispararMagia(e.x, e.y, '#00FFFF');
+            setTimeout(() => criarParticulas(e.x, e.y, '#00FFFF', 20), 350);
             
             if (e.solvesDone >= e.solvesNeeded) {
-               e.hp = -100; // MORRE DEFINITIVAMENTE!
-               gs.score += 300; setTimeout(() => criarParticulas(e.x, e.y, '#00FFFF', 80), 300);
+               e.hp = -100; // MORRE DE VERDADE
+               gs.score += 300; setTimeout(() => criarParticulas(e.x, e.y, '#00FFFF', 80), 350);
             } else {
                const eq = gerarEquacao(Math.min(3, gs.fase), e.res); e.txt = eq.txt; e.res = eq.res;
             }
@@ -466,7 +473,7 @@ export default function MathBlaster() {
             if (p.res === num) {
               acertou = true;
               dispararMagia(p.x, p.y, p.color);
-              setTimeout(() => criarParticulas(p.x, p.y, p.color, 30), 300);
+              setTimeout(() => criarParticulas(p.x, p.y, p.color, 30), 350);
               
               if (p.type === 'DAMAGE') gs.player.damage += 1;
               else if (p.type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 40);
@@ -519,12 +526,12 @@ export default function MathBlaster() {
 
   if (!jogoAtivo && gs.score === 0 && gs.player.hp === 100) {
     return (
-      <SafeAreaView style={[styles.container, { touchAction: 'none' } as any]}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.menuContainer}>
           <TouchableOpacity style={{ position: 'absolute', top: 20, left: 20 }} onPress={() => router.back()}><Ionicons name="arrow-back" size={30} color="#00FFFF" /></TouchableOpacity>
           <Ionicons name="rocket" size={100} color="#00FFFF" style={{ marginBottom: 20 }} />
           <Text style={styles.tituloMenu}>SKY</Text><Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Toque num lado da tela para guiar a nave e digite com a outra mão. Os tiros são instantâneos!</Text>
+          <Text style={styles.instrucoes}>Guie a nave tocando no espaço. A independência dos controles foi recriada. Atire magia resolvendo contas!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}><Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -533,7 +540,7 @@ export default function MathBlaster() {
 
   if (!jogoAtivo && gs.player.hp <= 0) {
     return (
-      <SafeAreaView style={[styles.container, { touchAction: 'none' } as any]}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.menuContainer}>
           <Text style={[styles.tituloMenu, { color: '#FF4444' }]}>DESTRUÍDO</Text>
           <Text style={styles.textoScore}>Pontos: {gs.score}</Text>
@@ -546,7 +553,7 @@ export default function MathBlaster() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { touchAction: 'none' } as any]} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       
       <View style={styles.hud}>
         <View style={{ flex: 1, paddingRight: 10 }}>
@@ -561,9 +568,8 @@ export default function MathBlaster() {
         </View>
       </View>
 
-      {/* ÁREA DO JOGO COM O RASTREADOR DE TOQUE NATIVO */}
       <View style={styles.gameArea} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} 
-            onTouchStart={handleGameTouchStart} onTouchMove={handleGameTouchMove} onTouchEnd={handleGameTouchEnd} onTouchCancel={handleGameTouchEnd}>
+            onStartShouldSetResponder={() => true} onResponderGrant={handleGameTouchStart} onResponderMove={handleGameTouchMove} onResponderRelease={handleGameTouchEnd} onResponderTerminate={handleGameTouchEnd}>
         <View style={styles.gridOverlay} />
 
         {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
@@ -611,7 +617,6 @@ export default function MathBlaster() {
           }]} />
         ))}
 
-        {/* BOLAS MÁGICAS DA MATEMÁTICA QUE VOAM ATÉ O ALVO */}
         {gs.mathShots.map(ms => (
           <View key={ms.id} style={{ position: 'absolute', left: ms.x - 8, top: ms.y - 8, width: 16, height: 16, borderRadius: 8, backgroundColor: ms.color, shadowColor: ms.color, shadowRadius: 10, shadowOpacity: 1, zIndex: 10 }} />
         ))}
