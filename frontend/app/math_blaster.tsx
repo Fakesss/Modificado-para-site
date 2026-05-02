@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 
 const initialWidth = Dimensions.get('window').width;
 
-// --- COMPONENTE: TECLADO RETRÔ (Extraído do arquivo txt enviado) ---
+// --- COMPONENTE: TECLADO RETRÔ (Exatamente como no arquivo enviado, sem travar a tela) ---
 const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
   const anim = useRef(new Animated.Value(1)).current;
   
@@ -33,20 +33,20 @@ export default function MathBlaster() {
   
   const layoutRef = useRef({ width: initialWidth, height: 500 });
 
-  // ESTADO GLOBAL DO MOTOR (Mantendo todas as novidades recentes)
+  // ESTADO GLOBAL DO MOTOR COM SISTEMA DE NÍVEIS
   const gs = useRef({
     player: { 
       x: initialWidth / 2, y: 300, 
       hp: 100, maxHp: 100, damage: 1, shotSize: 6,
       fireRate: 300, lastFire: 0, tripleShot: false,
       weapons: {
-        missile: { active: false, baseCooldown: 8000, lastFire: 0 },
-        laser: { active: false, baseCooldown: 10000, lastFire: 0 }
+        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 4, aoeRange: 70, life: 90 },
+        laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 3 }
       }
     },
     lasers: [] as any[], 
     specialLasers: [] as any[],
-    mathShots: [] as any[], // As magias da matemática (evita a tela branca)
+    mathShots: [] as any[], // As magias da matemática
     enemies: [] as any[], enemyLasers: [] as any[],
     powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
@@ -60,7 +60,7 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
-  // --- CONTROLE DE NAVEGAÇÃO (Extraído do arquivo txt enviado) ---
+  // --- CONTROLE DE NAVEGAÇÃO ANTIGO (PanResponder idêntico ao txt enviado) ---
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -88,7 +88,10 @@ export default function MathBlaster() {
   const iniciarJogo = () => {
     gs.player = { 
       x: layoutRef.current.width / 2, y: layoutRef.current.height - 100, hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, 
-      weapons: { missile: { active: false, baseCooldown: 8000, lastFire: 0 }, laser: { active: false, baseCooldown: 10000, lastFire: 0 } }
+      weapons: { 
+        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 4, aoeRange: 70, life: 90 }, 
+        laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 3 } 
+      }
     };
     gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
@@ -119,12 +122,23 @@ export default function MathBlaster() {
       gs.player.lastFire = now;
     }
 
+    // ARMAS SECUNDÁRIAS ESCALANDO COM NÍVEIS!
     if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * 4, size: gs.player.shotSize * 3, type: 'MISSILE', life: 90 }); 
+      gs.lasers.push({ 
+        id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, 
+        damage: gs.player.damage * gs.player.weapons.missile.damageMult, 
+        size: gs.player.shotSize * 3, type: 'MISSILE', 
+        life: gs.player.weapons.missile.life, 
+        aoeRange: gs.player.weapons.missile.aoeRange 
+      }); 
       gs.player.weapons.missile.lastFire = now;
     }
     if (gs.player.weapons.laser.active && now - gs.player.weapons.laser.lastFire > gs.player.weapons.laser.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, vx: 0, vy: -25, damage: gs.player.damage * 3, size: gs.player.shotSize * 2, type: 'LASER' });
+      gs.lasers.push({ 
+        id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, vx: 0, vy: -25, 
+        damage: gs.player.damage * gs.player.weapons.laser.damageMult, 
+        size: gs.player.shotSize * 2, type: 'LASER' 
+      });
       gs.player.weapons.laser.lastFire = now;
     }
 
@@ -152,9 +166,6 @@ export default function MathBlaster() {
     });
     gs.lasers = gs.lasers.filter(l => l.y > -50 && l.x > -20 && l.x < gw + 20);
     
-    gs.specialLasers.forEach(sl => sl.life -= 1);
-    gs.specialLasers = gs.specialLasers.filter(sl => sl.life > 0);
-
     // ANIMAÇÃO DOS TIROS DA MATEMÁTICA
     gs.mathShots.forEach(ms => {
       ms.x += (ms.tx - ms.x) * 0.25; 
@@ -343,8 +354,10 @@ export default function MathBlaster() {
           e.hp -= l.damage;
           if (l.type === 'MISSILE') {
             criarParticulas(e.x, e.y, '#FF4444', 15);
-            gs.enemies.forEach(e2 => { if (!e2.mathRequired && Math.abs(e.x - e2.x) < 70 && Math.abs(e.y - e2.y) < 70) e2.hp -= l.damage; });
-            if (gs.boss.active && Math.abs(gs.boss.x - e.x) < 80 && Math.abs(gs.boss.y - e.y) < 80) gs.boss.hp -= l.damage;
+            gs.enemies.forEach(e2 => { 
+                if (!e2.mathRequired && Math.abs(e.x - e2.x) < l.aoeRange && Math.abs(e.y - e2.y) < l.aoeRange) e2.hp -= l.damage; 
+            });
+            if (gs.boss.active && Math.abs(gs.boss.x - e.x) < l.aoeRange && Math.abs(gs.boss.y - e.y) < l.aoeRange) gs.boss.hp -= l.damage;
             l.y = -100; 
           } else if (l.type !== 'LASER') { l.y = -100; }
           criarParticulas(l.x, l.y, '#FFF', 3);
@@ -372,12 +385,10 @@ export default function MathBlaster() {
     if (now - gs.lastPowerupSpawn > 15000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
       const tipos = [{ type: 'DAMAGE', color: '#FF00FF', nome: 'DANO MAX' }, { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA NORMAL' }];
       if (!gs.player.tripleShot) tipos.push({ type: 'TRIPLE_SHOT', color: '#FFD700', nome: 'TIRO TRIPLO' });
-      if (!gs.player.weapons.missile.active) tipos.push({ type: 'SPECIAL_MISSILE', color: '#FF4444', nome: 'MÍSSIL TELE' });
-      if (!gs.player.weapons.laser.active) tipos.push({ type: 'SPECIAL_LASER', color: '#32CD32', nome: 'RAIO LASER' });
       
-      if (gs.player.weapons.missile.active || gs.player.weapons.laser.active) {
-        tipos.push({ type: 'SPECIAL_RELOAD', color: '#FFFFFF', nome: 'RELOAD RÁPIDO' });
-      }
+      // SISTEMA DE NÍVEIS (SE JÁ TEM, VIRA UPGRADE!)
+      tipos.push({ type: 'SPECIAL_MISSILE', color: '#FF4444', nome: gs.player.weapons.missile.active ? 'UPGRADE MÍSSIL' : 'MÍSSIL TELE' });
+      tipos.push({ type: 'SPECIAL_LASER', color: '#32CD32', nome: gs.player.weapons.laser.active ? 'UPGRADE LASER' : 'RAIO LASER' });
 
       const sel = tipos[Math.floor(Math.random() * tipos.length)];
       const eq = gerarEquacao(Math.min(3, gs.fase));
@@ -387,10 +398,7 @@ export default function MathBlaster() {
     gs.powerups.forEach(p => p.y += 1.5); 
 
     gs.enemies.forEach(e => { if (e.hp <= 0 && e.hp > -90) { gs.score += e.isLeader?50:20; criarParticulas(e.x, e.y, e.type==='SQUAD'?'#FF0055':'#AAA', 10); } });
-    
-    // FILTRO QUE RESOLVE O BUG DO MINIBOSS - Só fica na tela quem tem HP > 0
-    gs.enemies = gs.enemies.filter(e => e.hp > 0 && e.y < gh + 20); 
-    
+    gs.enemies = gs.enemies.filter(e => (e.hp > 0 || e.mathRequired) && e.y < gh + 20);
     gs.powerups = gs.powerups.filter(p => p.y < gh + 50);
 
     if (gs.player.hp <= 0) gameOver();
@@ -409,14 +417,13 @@ export default function MathBlaster() {
       const num = parseInt(resposta);
       let acertou = false;
 
-      // Dispara a Esfera Mágica da Matemática
       const dispararMagia = (tx: number, ty: number, color: string) => {
         gs.mathShots.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, tx, ty, color, life: 15 });
       };
 
       if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
         acertou = true; gs.boss.shield = false; gs.boss.timer = 0; gs.boss.nextShieldAt = Math.random() * 210 + 240; 
-        dispararMagia(gs.boss.x, gs.boss.y, '#FFD700'); // Bola Dourada
+        dispararMagia(gs.boss.x, gs.boss.y, '#FFD700'); 
         setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50), 350); 
         gs.score += 200;
       } 
@@ -425,7 +432,7 @@ export default function MathBlaster() {
           let e = gs.enemies[i];
           if (e.mathRequired && e.res === num) {
             acertou = true; e.solvesDone += 1;
-            dispararMagia(e.x, e.y, '#00FFFF'); // Bola Ciano
+            dispararMagia(e.x, e.y, '#00FFFF');
             setTimeout(() => criarParticulas(e.x, e.y, '#00FFFF', 20), 350);
             
             if (e.solvesDone >= e.solvesNeeded) {
@@ -448,11 +455,28 @@ export default function MathBlaster() {
               if (p.type === 'DAMAGE') gs.player.damage += 1;
               else if (p.type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 40);
               else if (p.type === 'TRIPLE_SHOT') gs.player.tripleShot = true;
-              else if (p.type === 'SPECIAL_MISSILE') gs.player.weapons.missile.active = true;
-              else if (p.type === 'SPECIAL_LASER') gs.player.weapons.laser.active = true;
-              else if (p.type === 'SPECIAL_RELOAD') {
-                 gs.player.weapons.missile.baseCooldown = Math.max(2000, gs.player.weapons.missile.baseCooldown - 1500);
-                 gs.player.weapons.laser.baseCooldown = Math.max(3000, gs.player.weapons.laser.baseCooldown - 1500);
+              
+              // LEVEL UP DO MÍSSIL
+              else if (p.type === 'SPECIAL_MISSILE') {
+                 if (!gs.player.weapons.missile.active) {
+                     gs.player.weapons.missile.active = true;
+                 } else {
+                     gs.player.weapons.missile.level += 1;
+                     gs.player.weapons.missile.baseCooldown = Math.max(2000, gs.player.weapons.missile.baseCooldown - 1000);
+                     gs.player.weapons.missile.damageMult += 2;
+                     gs.player.weapons.missile.aoeRange += 15; // Explosão Maior
+                     gs.player.weapons.missile.life += 30; // Fica mais tempo na tela
+                 }
+              }
+              // LEVEL UP DO LASER
+              else if (p.type === 'SPECIAL_LASER') {
+                 if (!gs.player.weapons.laser.active) {
+                     gs.player.weapons.laser.active = true;
+                 } else {
+                     gs.player.weapons.laser.level += 1;
+                     gs.player.weapons.laser.baseCooldown = Math.max(3000, gs.player.weapons.laser.baseCooldown - 1200);
+                     gs.player.weapons.laser.damageMult += 2;
+                 }
               }
               
               gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); gs.score += 50; p.y = 9999; break; 
@@ -487,9 +511,12 @@ export default function MathBlaster() {
     const greyHeight = 100 - pct;
 
     return (
-      <View key={weaponKey} style={styles.skillBox}>
-        <Ionicons name={icon as any} size={24} color={color} />
-        <View style={[styles.skillOverlay, { height: `${greyHeight}%` }]} />
+      <View key={weaponKey} style={{ alignItems: 'center' }}>
+        <Text style={{color: color, fontSize: 10, fontWeight: 'bold', marginBottom: 2}}>Lv.{w.level}</Text>
+        <View style={styles.skillBox}>
+          <Ionicons name={icon as any} size={24} color={color} />
+          <View style={[styles.skillOverlay, { height: `${greyHeight}%` }]} />
+        </View>
       </View>
     );
   };
@@ -501,7 +528,7 @@ export default function MathBlaster() {
           <TouchableOpacity style={{ position: 'absolute', top: 20, left: 20 }} onPress={() => router.back()}><Ionicons name="arrow-back" size={30} color="#00FFFF" /></TouchableOpacity>
           <Ionicons name="rocket" size={100} color="#00FFFF" style={{ marginBottom: 20 }} />
           <Text style={styles.tituloMenu}>SKY</Text><Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Deslize o dedo para mover. Os controles antigos e estáveis voltaram!</Text>
+          <Text style={styles.instrucoes}>Deslize o dedo para mover a nave. Colete armas e suba o Nível delas!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}><Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -531,8 +558,8 @@ export default function MathBlaster() {
           <View style={styles.hpBarContainer}><View style={[styles.hpBarFill, { width: `${porcentagemHP}%`, backgroundColor: corHP }]} /></View>
           {renderBuffs()}
         </View>
-        <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 8 }}>
-          <Text style={[styles.hudFase, { alignSelf: 'flex-start', marginTop: 2, marginRight: 5 }]}>FASE {gs.fase}</Text>
+        <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 15 }}>
+          <Text style={[styles.hudFase, { alignSelf: 'flex-start', marginTop: 15, marginRight: 5 }]}>FASE {gs.fase}</Text>
           {renderCooldownBox('missile', '#FF4444', 'rocket')}
           {renderCooldownBox('laser', '#32CD32', 'flash')}
         </View>
@@ -586,7 +613,6 @@ export default function MathBlaster() {
           }]} />
         ))}
 
-        {/* BOLAS DE MAGIA MATEMÁTICA */}
         {gs.mathShots.map(ms => (
           <View key={ms.id} style={{ position: 'absolute', left: ms.x - 8, top: ms.y - 8, width: 16, height: 16, borderRadius: 8, backgroundColor: ms.color, shadowColor: ms.color, shadowRadius: 10, shadowOpacity: 1, zIndex: 10 }} />
         ))}
