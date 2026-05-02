@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-// Usamos valores iniciais apenas de base, o tamanho real será pego no onLayout
 const initialWidth = Dimensions.get('window').width;
 
 // --- COMPONENTE: TECLADO RETRÔ ---
@@ -27,34 +26,35 @@ const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: stri
   );
 };
 
-// --- MOTOR DO JOGO ---
 export default function MathBlaster() {
   const router = useRouter();
   const [jogoAtivo, setJogoAtivo] = useState(false);
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
   
-  // Ref para capturar o tamanho real da tela (Resolve o bug do lado direito no Android)
   const layoutRef = useRef({ width: initialWidth, height: 500 });
 
-  // Estado completo do motor
+  // ESTADO GLOBAL DO MOTOR
   const gs = useRef({
-    player: { x: initialWidth / 2, y: 300, vx: 0, vy: 0, speed: 12 /* Velocidade aumentada! */, fireRate: 300, lastFire: 0, damage: 1, shotSize: 6, hp: 100, maxHp: 100 },
+    player: { x: initialWidth / 2, y: 300, vx: 0, vy: 0, speed: 12, fireRate: 300, lastFire: 0, damage: 1, shotSize: 6, hp: 100, maxHp: 100 },
     lasers: [] as any[],
     specialLasers: [] as any[],
     enemies: [] as any[],
+    enemyLasers: [] as any[], // Tiros dos inimigos e do Boss
     powerups: [] as any[],
     particles: [] as any[],
+    boss: { active: false, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0 },
     score: 0,
     fase: 1,
-    lastEnemySpawn: 0,
+    gameState: 'WAVES', // 'WAVES', 'BOSS_WARNING', 'BOSS', 'TRANSITION'
+    stateTimer: 0,
     lastPowerupSpawn: 0,
     joystickAtivo: false
   }).current;
 
   const loopRef = useRef<any>(null);
 
-  // --- JOYSTICK ANALÓGICO (CENTRALIZADO E ÁGIL) ---
+  // --- JOYSTICK ANALÓGICO ---
   const joyAnim = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const panResponder = useRef(
     PanResponder.create({
@@ -65,8 +65,6 @@ export default function MathBlaster() {
         let dx = gesture.dx; let dy = gesture.dy;
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (dist > maxDist) { dx = (dx/dist) * maxDist; dy = (dy/dist) * maxDist; }
-        
-        // Mapeia o movimento direto para a velocidade
         gs.player.vx = dx / maxDist;
         gs.player.vy = dy / maxDist;
         joyAnim.setValue({ x: dx, y: dy });
@@ -79,7 +77,7 @@ export default function MathBlaster() {
     })
   ).current;
 
-  // --- LÓGICA MATEMÁTICA ---
+  // --- MATEMÁTICA ---
   const gerarEquacao = (dificuldade: number) => {
     const r = (m: number) => Math.floor(Math.random() * m);
     let n1, n2, res, txt;
@@ -91,8 +89,10 @@ export default function MathBlaster() {
 
   const iniciarJogo = () => {
     gs.player = { x: layoutRef.current.width / 2, y: layoutRef.current.height - 100, vx: 0, vy: 0, speed: 12, fireRate: 300, lastFire: 0, damage: 1, shotSize: 6, hp: 100, maxHp: 100 };
-    gs.lasers = []; gs.specialLasers = []; gs.enemies = []; gs.powerups = []; gs.particles = [];
-    gs.score = 0; gs.fase = 1; setResposta(''); setJogoAtivo(true);
+    gs.lasers = []; gs.specialLasers = []; gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
+    gs.boss = { active: false, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0 };
+    gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0;
+    setResposta(''); setJogoAtivo(true);
     if (loopRef.current) clearInterval(loopRef.current);
     loopRef.current = setInterval(gameTick, 30); 
   };
@@ -102,102 +102,209 @@ export default function MathBlaster() {
     if (loopRef.current) clearInterval(loopRef.current);
   };
 
-  // --- TICK DO MOTOR (Coração do Jogo) ---
+  // --- MOTOR PRINCIPAL ---
   const gameTick = () => {
     const now = Date.now();
     const gw = layoutRef.current.width;
     const gh = layoutRef.current.height;
 
-    // 1. Movimento do Jogador (Muito mais rápido agora)
+    // 1. Movimento do Jogador
     gs.player.x += gs.player.vx * gs.player.speed;
     gs.player.y += gs.player.vy * gs.player.speed;
-    
-    // Travar nas bordas reais da tela
     if (gs.player.x < 20) gs.player.x = 20;
     if (gs.player.x > gw - 20) gs.player.x = gw - 20;
     if (gs.player.y < 20) gs.player.y = 20;
     if (gs.player.y > gh - 20) gs.player.y = gh - 20;
 
-    // 2. Auto-Fire (Corrigido!)
+    // 2. Auto-Fire do Jogador
     if (now - gs.player.lastFire > gs.player.fireRate) {
       gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, damage: gs.player.damage, size: gs.player.shotSize });
       gs.player.lastFire = now;
     }
 
-    // 3. Mover Tiros Normais
+    // 3. Mover Tiros
     gs.lasers.forEach(l => l.y -= 15);
     gs.lasers = gs.lasers.filter(l => l.y > -20);
 
-    // 4. Mover Tiros Especiais
     gs.specialLasers.forEach(sl => sl.life -= 1);
     gs.specialLasers = gs.specialLasers.filter(sl => sl.life > 0);
 
-    // 5. Mover Partículas
+    // Tiros inimigos (Retos e Teleguiados)
+    gs.enemyLasers.forEach(el => {
+      if (el.homing) {
+        // Lógica Teleguiada (Muda a direção na direção do player suavemente)
+        const dx = gs.player.x - el.x;
+        const dy = gs.player.y - el.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        el.vx += (dx/dist) * 0.4; // Taxa de curva
+        el.vy += (dy/dist) * 0.4;
+        
+        // Limita a velocidade máxima
+        const speed = Math.sqrt(el.vx*el.vx + el.vy*el.vy);
+        const maxSpeed = 6 + (gs.fase * 0.5);
+        if (speed > maxSpeed) {
+          el.vx = (el.vx/speed) * maxSpeed;
+          el.vy = (el.vy/speed) * maxSpeed;
+        }
+      }
+      el.x += el.vx;
+      el.y += el.vy;
+    });
+    gs.enemyLasers = gs.enemyLasers.filter(el => el.y < gh + 20 && el.x > -20 && el.x < gw + 20);
+
+    // 4. Mover Partículas
     gs.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 1; });
     gs.particles = gs.particles.filter(p => p.life > 0);
 
-    // 6. Atualizar Fases
-    gs.fase = 1 + Math.floor(gs.score / 150);
+    // --- MÁQUINA DE ESTADOS (FASES) ---
+    gs.stateTimer += 1;
 
-    // 7. Spawner Inimigos Normais
-    if (now - gs.lastEnemySpawn > Math.max(800, 2000 - (gs.fase * 200))) {
-      gs.enemies.push({ id: Math.random().toString(), x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), speed: Math.random() * 2 + 3 + (gs.fase * 0.3) });
-      gs.lastEnemySpawn = now;
+    if (gs.gameState === 'WAVES') {
+      // Cria Esquadrilhas em Formação a cada 150 ticks
+      if (gs.stateTimer % 150 === 0 && gs.stateTimer < 800) {
+        const centroX = Math.random() * (gw - 100) + 50;
+        const speedY = 2 + gs.fase * 0.5;
+        const baseHp = 2 + gs.fase;
+        // Formação em V (3 naves)
+        gs.enemies.push({ id: Math.random().toString(), x: centroX, y: -30, hp: baseHp, vx: 0, vy: speedY, fireTimer: 0 });
+        gs.enemies.push({ id: Math.random().toString(), x: centroX - 40, y: -70, hp: baseHp, vx: 0, vy: speedY, fireTimer: 0 });
+        gs.enemies.push({ id: Math.random().toString(), x: centroX + 40, y: -70, hp: baseHp, vx: 0, vy: speedY, fireTimer: 0 });
+      }
+
+      // Prepara o Boss
+      if (gs.stateTimer > 900 && gs.enemies.length === 0) {
+        gs.gameState = 'BOSS_WARNING';
+        gs.stateTimer = 0;
+      }
+    } 
+    else if (gs.gameState === 'BOSS_WARNING') {
+      if (gs.stateTimer > 90) { // Mostra aviso por 3 segundos
+        gs.gameState = 'BOSS';
+        gs.stateTimer = 0;
+        const eq = gerarEquacao(Math.min(3, gs.fase));
+        gs.boss = { active: true, x: gw / 2, y: -100, hp: 50 + (gs.fase * 50), maxHp: 50 + (gs.fase * 50), vx: 3 + gs.fase, shield: true, txt: eq.txt, res: eq.res, timer: 0 };
+      }
+    }
+    else if (gs.gameState === 'BOSS') {
+      // Movimento do Boss
+      if (gs.boss.y < 80) gs.boss.y += 2; // Desce até a arena
+      else {
+        gs.boss.x += gs.boss.vx;
+        if (gs.boss.x < 50 || gs.boss.x > gw - 50) gs.boss.vx *= -1; // Bate e volta
+        
+        gs.boss.timer += 1;
+
+        // Boss Atira Bola Teleguiada
+        if (gs.boss.timer % Math.max(40, 100 - (gs.fase * 10)) === 0) {
+          gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: 0, vy: 2, size: 15, damage: 20, homing: true, color: '#FF8C00' });
+        }
+
+        // Ativar Escudo de novo se estiver desligado muito tempo
+        if (!gs.boss.shield && gs.boss.timer % 200 === 0) {
+          const eq = gerarEquacao(Math.min(3, gs.fase));
+          gs.boss.shield = true; gs.boss.txt = eq.txt; gs.boss.res = eq.res;
+        }
+      }
+
+      // Boss Morreu
+      if (gs.boss.hp <= 0) {
+        criarParticulas(gs.boss.x, gs.boss.y, '#FFD700', 50);
+        gs.score += 500 * gs.fase;
+        gs.boss.active = false;
+        gs.gameState = 'TRANSITION';
+        gs.stateTimer = 0;
+        // Limpa a tela
+        gs.enemyLasers = [];
+      }
+    }
+    else if (gs.gameState === 'TRANSITION') {
+      if (gs.stateTimer > 90) {
+        gs.fase += 1;
+        gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 30); // Cura
+        gs.gameState = 'WAVES';
+        gs.stateTimer = 0;
+      }
     }
 
-    // 8. Spawner Power-Ups (Matemática)
-    if (now - gs.lastPowerupSpawn > 12000 && gs.powerups.length < 2) {
-      const tipos = [
-        { type: 'SPEED', color: '#00FFFF', nome: 'VELOCIDADE' },
-        { type: 'FIRE_RATE', color: '#FFD700', nome: 'TIRO RÁPIDO' },
-        { type: 'SIZE', color: '#32CD32', nome: 'TAMANHO' },
-        { type: 'DAMAGE', color: '#FF00FF', nome: 'FORÇA' }
-      ];
-      const selecionado = tipos[Math.floor(Math.random() * tipos.length)];
-      const solvesNeeded = selecionado.type === 'DAMAGE' || gs.fase > 3 ? 2 : 1; 
-      const eq = gerarEquacao(Math.min(3, gs.fase));
-      
-      gs.powerups.push({ id: Math.random().toString(), x: Math.random() * (gw - 80) + 40, y: -40, type: selecionado.type, color: selecionado.color, title: selecionado.nome, txt: eq.txt, res: eq.res, solvesNeeded, solvesDone: 0 });
-      gs.lastPowerupSpawn = now;
-    }
-
-    // 9. Colisões
+    // --- COLISÕES E MÁQUINA DE INIMIGOS ---
+    
+    // Inimigos Comuns
     gs.enemies.forEach(e => {
-      e.y += e.speed;
-      // Laser bate no inimigo
+      e.y += e.vy;
+      e.x += e.vx;
+      
+      // Inimigo Atira
+      e.fireTimer += 1;
+      if (e.fireTimer > 60 && Math.random() < 0.02) {
+        gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 15, vx: 0, vy: 6 + gs.fase, size: 6, damage: 10, homing: false, color: '#FF0055' });
+        e.fireTimer = 0;
+      }
+
+      // Laser -> Inimigo
       gs.lasers.forEach(l => {
         if (Math.abs(l.x - e.x) < 25 && Math.abs(l.y - e.y) < 25) {
           e.hp -= l.damage;
           l.y = -100; 
-          criarParticulas(l.x, l.y, '#FFF', 4);
+          criarParticulas(l.x, l.y, '#FFF', 3);
         }
       });
-      // Nave bate no inimigo
+      // Nave -> Inimigo
       if (Math.abs(gs.player.x - e.x) < 30 && Math.abs(gs.player.y - e.y) < 30) {
         gs.player.hp -= 15;
         e.hp = -100;
-        criarParticulas(gs.player.x, gs.player.y, '#FF0000', 12);
+        criarParticulas(gs.player.x, gs.player.y, '#FF0000', 10);
       }
     });
 
-    // Mover Powerups
+    // Laser -> Boss
+    if (gs.boss.active) {
+      gs.lasers.forEach(l => {
+        if (Math.abs(l.x - gs.boss.x) < 50 && Math.abs(l.y - gs.boss.y) < 40) {
+          l.y = -100; // consome o tiro
+          if (gs.boss.shield) {
+            criarParticulas(l.x, gs.boss.y + 40, '#00FFFF', 2); // Faíscas no escudo
+          } else {
+            gs.boss.hp -= l.damage;
+            criarParticulas(l.x, l.y, '#FFD700', 4); // Dano na fuselagem
+          }
+        }
+      });
+    }
+
+    // Tiros Inimigos -> Jogador
+    gs.enemyLasers.forEach(el => {
+      if (Math.abs(el.x - gs.player.x) < 20 && Math.abs(el.y - gs.player.y) < 20) {
+        gs.player.hp -= el.damage;
+        el.y = gh + 100; // Remove o tiro
+        criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8);
+      }
+    });
+
+    // Spawner de Power-Ups Ocasional
+    if (now - gs.lastPowerupSpawn > 15000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
+      const tipos = [{ type: 'SPEED', color: '#00FFFF', nome: 'VELOCIDADE' }, { type: 'DAMAGE', color: '#FF00FF', nome: 'DANO' }];
+      const selecionado = tipos[Math.floor(Math.random() * tipos.length)];
+      const eq = gerarEquacao(Math.min(3, gs.fase));
+      gs.powerups.push({ id: Math.random().toString(), x: Math.random() * (gw - 80) + 40, y: -40, type: selecionado.type, color: selecionado.color, title: selecionado.nome, txt: eq.txt, res: eq.res });
+      gs.lastPowerupSpawn = now;
+    }
+
+    // Move Powerups
     gs.powerups.forEach(p => p.y += 1.5); 
 
     // Limpezas
-    gs.enemies.forEach(e => { if (e.hp <= 0 && e.hp > -90) { gs.score += 10; criarParticulas(e.x, e.y, '#FF4444', 8); } });
+    gs.enemies.forEach(e => { if (e.hp <= 0 && e.hp > -90) { gs.score += 20; criarParticulas(e.x, e.y, '#FF0055', 10); } });
     gs.enemies = gs.enemies.filter(e => e.hp > 0 && e.y < gh + 20);
     gs.powerups = gs.powerups.filter(p => p.y < gh + 50);
 
     // Fim de jogo
     if (gs.player.hp <= 0) gameOver();
 
-    setFrames(f => f + 1); // Força a tela a desenhar os novos cálculos
+    setFrames(f => f + 1); 
   };
 
   const criarParticulas = (x: number, y: number, color: string, qtd: number) => {
-    for(let i=0; i<qtd; i++) {
-      gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color });
-    }
+    for(let i=0; i<qtd; i++) { gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color }); }
   };
 
   // --- TECLADO MATEMÁTICO ---
@@ -208,28 +315,34 @@ export default function MathBlaster() {
       const num = parseInt(resposta);
       let acertou = false;
 
-      for (let i = 0; i < gs.powerups.length; i++) {
-        let p = gs.powerups[i];
-        if (p.res === num) {
-          acertou = true;
-          // Dispara laser especial
-          gs.specialLasers.push({ id: Math.random().toString(), startX: gs.player.x, startY: gs.player.y, endX: p.x, endY: p.y, color: p.color, life: 10 });
-          criarParticulas(p.x, p.y, p.color, 20);
-          
-          p.solvesDone += 1;
-          if (p.solvesDone >= p.solvesNeeded) {
-            coletarPowerUp(p.type);
+      // Prioridade 1: Escudo do Boss
+      if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
+        acertou = true;
+        gs.boss.shield = false;
+        gs.specialLasers.push({ id: Math.random().toString(), startX: gs.player.x, startY: gs.player.y, endX: gs.boss.x, endY: gs.boss.y, color: '#FFD700', life: 15 });
+        criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 30); // Estilhaça o escudo
+        gs.score += 100;
+      } 
+      // Prioridade 2: PowerUps
+      else {
+        for (let i = 0; i < gs.powerups.length; i++) {
+          let p = gs.powerups[i];
+          if (p.res === num) {
+            acertou = true;
+            gs.specialLasers.push({ id: Math.random().toString(), startX: gs.player.x, startY: gs.player.y, endX: p.x, endY: p.y, color: p.color, life: 10 });
+            criarParticulas(p.x, p.y, p.color, 20);
+            
+            if (p.type === 'SPEED') gs.player.speed = Math.min(18, gs.player.speed + 2);
+            if (p.type === 'DAMAGE') gs.player.damage += 1;
+            gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); 
             gs.score += 50;
             p.y = 9999; 
-          } else {
-            const eq = gerarEquacao(Math.min(3, gs.fase));
-            p.txt = eq.txt; p.res = eq.res;
+            break; 
           }
-          break; 
         }
       }
 
-      if (!acertou && gs.powerups.length > 0 && resposta !== '') {
+      if (!acertou && resposta !== '') {
         gs.player.hp = Math.max(0, gs.player.hp - 8);
         criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8);
       }
@@ -238,18 +351,10 @@ export default function MathBlaster() {
     else setResposta(r => r.length < 4 ? r + valor : r);
   };
 
-  const coletarPowerUp = (type: string) => {
-    if (type === 'SPEED') gs.player.speed = Math.min(18, gs.player.speed + 2);
-    if (type === 'FIRE_RATE') gs.player.fireRate = Math.max(80, gs.player.fireRate - 80);
-    if (type === 'SIZE') gs.player.shotSize = Math.min(15, gs.player.shotSize + 3);
-    if (type === 'DAMAGE') gs.player.damage += 1;
-    gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); // Cura generosa
-  };
-
   const porcentagemHP = Math.max(0, (gs.player.hp / gs.player.maxHp) * 100);
   const corHP = porcentagemHP > 50 ? '#32CD32' : porcentagemHP > 25 ? '#FFD700' : '#FF4444';
 
-  // --- TELAS ---
+  // --- TELAS FORA DO JOGO ---
   if (!jogoAtivo && gs.score === 0 && gs.player.hp === 100) {
     return (
       <SafeAreaView style={styles.container}>
@@ -258,10 +363,10 @@ export default function MathBlaster() {
             <Ionicons name="arrow-back" size={30} color="#00FFFF" />
           </TouchableOpacity>
           <Ionicons name="rocket" size={100} color="#00FFFF" style={{ marginBottom: 20 }} />
-          <Text style={styles.tituloMenu}>NEON</Text>
-          <Text style={styles.subTituloMenu}>BLASTER</Text>
-          <Text style={styles.instrucoes}>Mova com o analógico central. Sua nave atira sozinha nos inimigos vermelhos.</Text>
-          <Text style={[styles.instrucoes, { color: '#FFD700' }]}>Resolva as contas matemáticas para destruir as caixas e ganhar Power-Ups incríveis!</Text>
+          <Text style={styles.tituloMenu}>SKY</Text>
+          <Text style={styles.subTituloMenu}>EQUATIONS</Text>
+          <Text style={styles.instrucoes}>Sua nave atira automaticamente nas esquadrilhas inimigas.</Text>
+          <Text style={[styles.instrucoes, { color: '#FFD700' }]}>Resolva contas para quebrar o Escudo do Boss e capturar Power-Ups!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
           </TouchableOpacity>
@@ -288,7 +393,7 @@ export default function MathBlaster() {
     );
   }
 
-  // --- TELA DO JOGO (Estrutura Flexível) ---
+  // --- TELA DO JOGO ---
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       
@@ -303,55 +408,79 @@ export default function MathBlaster() {
         <Text style={styles.hudFase}>FASE {gs.fase}</Text>
       </View>
 
-      {/* ÁREA DO JOGO (Flex: 1 permite preencher e nunca bugar o teclado) */}
-      <View 
-        style={styles.gameArea} 
-        onLayout={(e) => { 
-            // Captura o tamanho exato da tela quando o app carrega
-            layoutRef.current.width = e.nativeEvent.layout.width; 
-            layoutRef.current.height = e.nativeEvent.layout.height; 
-        }}
-      >
+      <View style={styles.gameArea} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }}>
         <View style={styles.gridOverlay} />
 
-        {/* INIMIGOS NORMAIS (Triângulos Vermelhos) */}
+        {/* ALERTA DE BOSS E TRANSIÇÃO */}
+        {gs.gameState === 'BOSS_WARNING' && (
+          <View style={styles.centerAlert}>
+            <Text style={styles.alertTextDanger}>ATENÇÃO</Text>
+            <Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text>
+          </View>
+        )}
+        {gs.gameState === 'TRANSITION' && (
+          <View style={styles.centerAlert}>
+            <Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text>
+            <Text style={styles.alertSubText}>PREPARANDO SALTO...</Text>
+          </View>
+        )}
+
+        {/* INIMIGOS NORMAIS (Naves de Esquadrilha - Triângulo apontado para baixo) */}
         {gs.enemies.map(e => (
-          <View key={e.id} style={[styles.enemyShape, { left: e.x - 15, top: e.y - 15 }]} />
+          <View key={e.id} style={[styles.squadronShip, { left: e.x - 15, top: e.y - 15 }]} />
         ))}
 
-        {/* POWER-UPS (Caixas Matemáticas) */}
+        {/* O CHEFÃO (BOSS) */}
+        {gs.boss.active && (
+          <View style={[styles.bossContainer, { left: gs.boss.x - 50, top: gs.boss.y - 30 }]}>
+            {/* Barra de Vida do Boss */}
+            <View style={styles.bossHpBar}>
+               <View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]} />
+            </View>
+            
+            {/* Corpo do Boss */}
+            <View style={styles.bossShip} />
+            
+            {/* Escudo Matemático do Boss */}
+            {gs.boss.shield && (
+              <View style={styles.bossShield}>
+                 <Text style={styles.bossMath}>{gs.boss.txt}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* POWER-UPS */}
         {gs.powerups.map(p => (
-          <View key={p.id} style={[styles.powerupBox, { left: p.x - 35, top: p.y - 25, borderColor: p.color, shadowColor: p.color }]}>
+          <View key={p.id} style={[styles.powerupBox, { left: p.x - 35, top: p.y - 20, borderColor: p.color }]}>
             <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
             <Text style={styles.powerupMath}>{p.txt}</Text>
-            {p.solvesNeeded > 1 && (
-               <View style={styles.powerupDots}>
-                 {Array.from({length: p.solvesNeeded}).map((_, i) => (
-                   <View key={i} style={[styles.dot, { backgroundColor: i < p.solvesDone ? p.color : 'transparent', borderColor: p.color }]} />
-                 ))}
-               </View>
-            )}
           </View>
         ))}
 
         {/* TIROS AUTOMÁTICOS */}
         {gs.lasers.map(l => (
-          <View key={l.id} style={[styles.laserNormal, { left: l.x - (l.size/2), top: l.y, width: l.size, height: l.size * 4 }]} />
+          <View key={l.id} style={[styles.laserNormal, { left: l.x - (l.size/2), top: l.y, width: l.size, height: l.size * 3 }]} />
         ))}
 
-        {/* TIROS ESPECIAIS TELEGUIADOS */}
+        {/* TIROS INIMIGOS E DO BOSS */}
+        {gs.enemyLasers.map(el => (
+          <View key={el.id} style={[
+            el.homing ? styles.cannonBall : styles.enemyLaser, 
+            { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color, shadowColor: el.color }
+          ]} />
+        ))}
+
+        {/* TIROS ESPECIAIS TELEGUIADOS (Matemática) */}
         {gs.specialLasers.map(sl => {
           const dx = sl.endX - sl.startX; const dy = sl.endY - sl.startY;
           const dist = Math.sqrt(dx*dx + dy*dy); const angle = Math.atan2(dy, dx);
           return (
-            <View key={sl.id} style={[styles.laserEspecial, {
-              left: sl.startX, top: sl.startY, width: dist, backgroundColor: sl.color, shadowColor: sl.color,
-              transform: [{ rotate: `${angle}rad` }, { translateX: dist / 2 }]
-            }]} />
+            <View key={sl.id} style={[styles.laserEspecial, { left: sl.startX, top: sl.startY, width: dist, backgroundColor: sl.color, transform: [{ rotate: `${angle}rad` }, { translateX: dist / 2 }] }]} />
           );
         })}
 
-        {/* PARTÍCULAS DE EXPLOSÃO */}
+        {/* PARTÍCULAS */}
         {gs.particles.map((p, i) => (
           <View key={i} style={{ position: 'absolute', width: 4, height: 4, backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 2 }} />
         ))}
@@ -360,14 +489,14 @@ export default function MathBlaster() {
         <View style={[styles.playerShape, { left: gs.player.x - 20, top: gs.player.y - 20 }]} />
         <View style={[styles.propulsor, { left: gs.player.x - 6, top: gs.player.y + 18, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
 
-        {/* ANALÓGICO VIRTUAL (CENTRALIZADO) */}
+        {/* ANALÓGICO VIRTUAL */}
         <View style={styles.joystickBase}>
           <Animated.View {...panResponder.panHandlers} style={[styles.joystickKnob, { transform: [{ translateX: joyAnim.x }, { translateY: joyAnim.y }] }]} />
         </View>
 
       </View>
 
-      {/* PAINEL INFERIOR (TECLADO MATEMÁTICO - Altura Dinâmica) */}
+      {/* PAINEL INFERIOR */}
       <View style={styles.painelInferior}>
         <View style={styles.visorRadar}>
           <Text style={styles.visorTexto}>{resposta || '_'}</Text>
@@ -395,11 +524,11 @@ const styles = StyleSheet.create({
   
   // Menu
   menuContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050015' },
-  tituloMenu: { fontSize: 55, fontWeight: '900', color: '#00FFFF', textShadowColor: '#00FFFF', textShadowRadius: 20, fontStyle: 'italic' },
-  subTituloMenu: { fontSize: 35, fontWeight: '900', color: '#FFF', letterSpacing: 8 },
-  instrucoes: { color: '#9D97B5', textAlign: 'center', marginHorizontal: 30, marginTop: 20, fontSize: 16, lineHeight: 24, fontWeight: 'bold' },
-  btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 18, paddingHorizontal: 40, borderRadius: 12, marginTop: 50, shadowColor: '#FF00FF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 15, elevation: 10 },
-  btnIniciarTxt: { color: '#FFF', fontSize: 18, fontWeight: '900', letterSpacing: 1 },
+  tituloMenu: { fontSize: 55, fontWeight: '900', color: '#00FFFF', fontStyle: 'italic' },
+  subTituloMenu: { fontSize: 35, fontWeight: '900', color: '#FFF', letterSpacing: 5 },
+  instrucoes: { color: '#9D97B5', textAlign: 'center', marginHorizontal: 30, marginTop: 20, fontSize: 16, fontWeight: 'bold' },
+  btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 18, paddingHorizontal: 40, borderRadius: 12, marginTop: 50 },
+  btnIniciarTxt: { color: '#FFF', fontSize: 18, fontWeight: '900' },
   textoScore: { color: '#00FFFF', fontSize: 30, fontWeight: 'bold', marginTop: 20 },
   textoFase: { color: '#9D97B5', fontSize: 18, marginTop: 10 },
 
@@ -410,39 +539,54 @@ const styles = StyleSheet.create({
   hpBarFill: { height: '100%', borderRadius: 6 },
   hudFase: { color: '#FF00FF', fontSize: 24, fontWeight: '900', fontStyle: 'italic' },
 
-  // Game Area -> Flex 1 faz o jogo usar todo o espaço sem bugar teclado
+  // Game Area
   gameArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#050015' },
   gridOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.1, backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)', backgroundSize: '40px 40px' },
   
-  // Geometria
-  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 20, borderRightWidth: 20, borderBottomWidth: 40, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF', shadowColor: '#00FFFF', shadowRadius: 10, shadowOpacity: 1 },
+  // Alertas Centrais
+  centerAlert: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
+  alertTextDanger: { color: '#FF0055', fontSize: 40, fontWeight: '900', textShadowColor: '#FF0055', textShadowRadius: 10 },
+  alertTextSuccess: { color: '#32CD32', fontSize: 40, fontWeight: '900', textShadowColor: '#32CD32', textShadowRadius: 10 },
+  alertSubText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 },
+
+  // Geometria Naves
+  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 20, borderRightWidth: 20, borderBottomWidth: 40, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF' },
   propulsor: { position: 'absolute', width: 12, height: 15, backgroundColor: '#FF8C00', borderBottomLeftRadius: 6, borderBottomRightRadius: 6 },
-  enemyShape: { position: 'absolute', width: 30, height: 30, backgroundColor: '#FF0055', transform: [{ rotate: '45deg' }], shadowColor: '#FF0055', shadowRadius: 8, shadowOpacity: 1 },
   
+  // Naves de Esquadrilha (Apontando pra baixo)
+  squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 15, borderRightWidth: 15, borderTopWidth: 30, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FF0055' },
+  
+  // Boss
+  bossContainer: { position: 'absolute', width: 100, height: 80, alignItems: 'center', zIndex: 20 },
+  bossShip: { width: 80, height: 50, backgroundColor: '#8B0000', borderRadius: 20, borderWidth: 3, borderColor: '#FF4444' },
+  bossHpBar: { width: '100%', height: 6, backgroundColor: '#333', marginBottom: 5, borderRadius: 3, overflow: 'hidden' },
+  bossHpFill: { height: '100%', backgroundColor: '#FF0055' },
+  bossShield: { position: 'absolute', top: -10, width: 120, height: 120, borderRadius: 60, borderWidth: 4, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
+  bossMath: { color: '#FFF', fontSize: 22, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 5 },
+
   // Power-Ups
-  powerupBox: { position: 'absolute', width: 75, height: 50, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 8, alignItems: 'center', justifyContent: 'center', shadowRadius: 10, shadowOpacity: 1 },
-  powerupTitle: { fontSize: 9, fontWeight: '900', position: 'absolute', top: -10, backgroundColor: '#050015', paddingHorizontal: 4 },
-  powerupMath: { color: '#FFF', fontSize: 18, fontWeight: '900' },
-  powerupDots: { flexDirection: 'row', gap: 4, position: 'absolute', bottom: -8 },
-  dot: { width: 8, height: 8, borderRadius: 4, borderWidth: 1, backgroundColor: '#050015' },
+  powerupBox: { position: 'absolute', width: 70, height: 40, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  powerupTitle: { fontSize: 8, fontWeight: '900', position: 'absolute', top: -10, backgroundColor: '#050015', paddingHorizontal: 4 },
+  powerupMath: { color: '#FFF', fontSize: 16, fontWeight: '900' },
 
   // Tiros
-  laserNormal: { position: 'absolute', backgroundColor: '#00FFFF', borderRadius: 5, shadowColor: '#00FFFF', shadowRadius: 5, shadowOpacity: 1, zIndex: 1 },
-  laserEspecial: { position: 'absolute', height: 6, borderRadius: 3, shadowRadius: 10, shadowOpacity: 1, zIndex: 5 },
+  laserNormal: { position: 'absolute', backgroundColor: '#00FFFF', borderRadius: 5, zIndex: 1 },
+  enemyLaser: { position: 'absolute', borderRadius: 5 },
+  cannonBall: { position: 'absolute', borderRadius: 10 }, // Tiro teleguiado redondo
+  laserEspecial: { position: 'absolute', height: 6, borderRadius: 3, shadowRadius: 10, zIndex: 5 },
 
   // Joystick (Centralizado)
   joystickBase: { position: 'absolute', bottom: 20, alignSelf: 'center', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(0, 255, 255, 0.08)', borderWidth: 2, borderColor: 'rgba(0, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
-  joystickKnob: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(0, 255, 255, 0.8)', shadowColor: '#00FFFF', shadowRadius: 10, shadowOpacity: 1 },
+  joystickKnob: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(0, 255, 255, 0.8)' },
 
   // Painel Inferior
-  painelInferior: { backgroundColor: '#0A0025', borderTopWidth: 2, borderTopColor: '#FF00FF', paddingHorizontal: 15, paddingTop: 15, paddingBottom: Platform.OS === 'android' ? 20 : 15, alignItems: 'center', justifyContent: 'flex-start' },
+  painelInferior: { backgroundColor: '#0A0025', borderTopWidth: 2, borderTopColor: '#FF00FF', paddingHorizontal: 15, paddingTop: 15, paddingBottom: Platform.OS === 'android' ? 20 : 15, alignItems: 'center' },
   visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 12 },
   visorTexto: { color: '#00FFFF', fontSize: 26, fontWeight: '900', letterSpacing: 3 },
-  
   tecladoContainer: { width: '100%', maxWidth: 350, gap: 8 },
   tecladoRow: { flexDirection: 'row', gap: 8, height: 50 },
   teclaRetro: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
   teclaRetroText: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
   teclaApagar: { backgroundColor: 'rgba(255, 68, 68, 0.15)', borderColor: '#FF4444' },
   teclaEnviar: { backgroundColor: 'rgba(255, 0, 255, 0.15)', borderColor: '#FF00FF' },
-})
+});
