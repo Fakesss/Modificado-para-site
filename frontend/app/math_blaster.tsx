@@ -119,7 +119,7 @@ export default function MathBlaster() {
       if (l.type === 'MISSILE') {
         let closest: any = null; let minDist = 999999;
         gs.enemies.concat(gs.boss.active ? [gs.boss] : []).forEach(e => {
-          if (e.hp > 0 && !e.mathRequired) { // Não foca no spawner matemático
+          if (e.hp > 0 && !e.mathRequired) { 
             let d = Math.pow(e.x - l.x, 2) + Math.pow(e.y - l.y, 2);
             if (d < minDist) { minDist = d; closest = e; }
           }
@@ -167,11 +167,14 @@ export default function MathBlaster() {
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: Math.random() * 2 + 4 + (gs.fase * 0.5), angle: 0 });
       }
 
-      // NAVE MÃE SPAWNER (Inimigo Matemático)
+      // NAVE MÃE SPAWNER (Inimigo Matemático - CORRIGIDO!)
       if (gs.stateTimer === 600 || gs.stateTimer === 1200) {
         const eq = gerarEquacao(Math.min(3, gs.fase));
+        const isLeft = gs.stateTimer === 600; // O primeiro nasce na esquerda, o segundo na direita
         gs.enemies.push({ 
-          id: Math.random().toString(), type: 'SPAWNER', x: gw/2, y: -80, targetY: 100, 
+          id: Math.random().toString(), type: 'SPAWNER', 
+          x: isLeft ? gw * 0.25 : gw * 0.75, // Separação para não sobrepor
+          y: -80, targetY: 90 + Math.random() * 30, 
           hp: 9999, mathRequired: true, solvesNeeded: Math.min(8, 3 + gs.fase), solvesDone: 0, 
           txt: eq.txt, res: eq.res, vy: 2, spawnTimer: 0 
         });
@@ -180,7 +183,7 @@ export default function MathBlaster() {
       // Esquadrões normais
       if (gs.stateTimer % 200 === 0 && gs.stateTimer < 1400) {
         const cx = Math.random() * (gw - 120) + 60;
-        const baseHp = 2 + (gs.fase * 3); // Vida escala mais agressivamente
+        const baseHp = 2 + (gs.fase * 3);
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx, y: -30, targetY: 100, isLeader: true, hp: baseHp * 3, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 45, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 45, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
@@ -195,7 +198,6 @@ export default function MathBlaster() {
       if (gs.stateTimer > 90) { 
         gs.gameState = 'BOSS'; gs.stateTimer = 0;
         const eq = gerarEquacao(Math.min(3, gs.fase));
-        // Sorteia o tipo de Boss (0, 1 ou 2)
         const bossType = Math.floor(Math.random() * 3);
         gs.boss = { active: true, type: bossType, x: gw / 2, y: -100, hp: 150 + (gs.fase * 100), maxHp: 150 + (gs.fase * 100), vx: 3 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
         
@@ -211,27 +213,22 @@ export default function MathBlaster() {
         if (gs.boss.x < 60 || gs.boss.x > gw - 60) gs.boss.vx *= -1;
         gs.boss.timer += 1;
 
-        // COMPORTAMENTOS DIFERENTES POR TIPO DE BOSS
         if (gs.boss.type === 0) {
-          // Boss 1: Bolas Homing
           if (gs.boss.timer % Math.max(30, 80 - (gs.fase * 10)) === 0) {
             gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: 0, vy: 2, size: 18, damage: 20, homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) });
           }
         } else if (gs.boss.type === 1) {
-          // Boss 2: Espalhador (Leque)
           if (gs.boss.timer % 60 === 0) {
             [-2, -1, 0, 1, 2].forEach(dir => {
                gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: dir * 1.5, vy: 6 + gs.fase, size: 8, damage: 15, homing: false, color: '#FF0055', hp: 1 });
             });
           }
         } else {
-          // Boss 3: Raio Laser Central
           if (gs.boss.timer % 120 === 0) {
              gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: 0, vy: 15, size: 25, damage: 30, homing: false, color: '#32CD32', hp: 99 });
           }
         }
 
-        // Escudo Matemático
         if (!gs.boss.shield && gs.boss.timer > gs.boss.nextShieldAt) {
           const eq = gerarEquacao(Math.min(3, gs.fase));
           gs.boss.shield = true; gs.boss.txt = eq.txt; gs.boss.res = eq.res;
@@ -258,11 +255,17 @@ export default function MathBlaster() {
       else if (e.type === 'SPAWNER') {
         if (e.y < e.targetY) e.y += e.vy;
         else {
-           e.x += Math.sin(now / 500) * 0.5; // Flutua levemente
+           e.x += Math.sin(now / 500) * 0.5; 
            e.spawnTimer += 1;
-           // Cuspidor de naves
-           if (e.spawnTimer > Math.max(40, 100 - (gs.fase * 10))) {
-              gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: e.x, y: e.y + 20, hp: 1 + gs.fase, vy: 5, angle: 0 });
+           // Cuspidor de naves (CORRIGIDO: Agora cospe Naves de Esquadrilha vermelhas!)
+           if (e.spawnTimer > Math.max(50, 120 - (gs.fase * 10))) {
+              gs.enemies.push({ 
+                id: Math.random().toString(), type: 'SQUAD', 
+                x: e.x, y: e.y + 40, targetY: e.y + 100 + Math.random() * 50, // Elas descem e param pra atirar
+                isLeader: false, hp: 1 + gs.fase, 
+                vx: (Math.random() - 0.5) * 2, // Espalha pros lados
+                vy: 3, fireTimer: 0, angle: Math.PI 
+              });
               e.spawnTimer = 0;
            }
         }
@@ -295,7 +298,7 @@ export default function MathBlaster() {
       }
     });
 
-    // --- SISTEMA DE COMBATE (TIROS DO JOGADOR) ---
+    // --- SISTEMA DE COMBATE ---
     gs.lasers.forEach(l => {
       gs.enemyLasers.forEach(el => {
         if (el.homing && el.hp > 0 && Math.abs(l.x - el.x) < 25 && Math.abs(l.y - el.y) < 25) {
@@ -313,7 +316,7 @@ export default function MathBlaster() {
           } else if (l.type !== 'LASER') { l.y = -100; }
           criarParticulas(l.x, l.y, '#FFF', 3);
         } else if (e.mathRequired && Math.abs(l.x - e.x) < 40 && Math.abs(l.y - e.y) < 40) {
-           l.y = -100; criarParticulas(l.x, l.y, '#00FFFF', 2); // Bate no escudo da nave mãe
+           l.y = -100; criarParticulas(l.x, l.y, '#00FFFF', 2); 
         }
       });
 
@@ -376,7 +379,7 @@ export default function MathBlaster() {
         criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50); gs.score += 200;
       } 
       else {
-        // 2: Nave Mãe Spawner (Requer múltiplas contas)
+        // 2: Nave Mãe Spawner
         for (let i = 0; i < gs.enemies.length; i++) {
           let e = gs.enemies[i];
           if (e.mathRequired && e.res === num) {
@@ -423,7 +426,6 @@ export default function MathBlaster() {
   const porcentagemHP = Math.max(0, (gs.player.hp / gs.player.maxHp) * 100);
   const corHP = porcentagemHP > 50 ? '#32CD32' : porcentagemHP > 25 ? '#FFD700' : '#FF4444';
 
-  // --- RENDERS DO HUD ---
   const renderBuffs = () => {
     return (
       <View style={styles.buffContainer}>
@@ -448,7 +450,6 @@ export default function MathBlaster() {
     );
   };
 
-  // --- TELAS ---
   if (!jogoAtivo && gs.score === 0 && gs.player.hp === 100) {
     return (
       <SafeAreaView style={styles.container}>
@@ -493,7 +494,6 @@ export default function MathBlaster() {
         </View>
       </View>
 
-      {/* ÁREA DO JOGO */}
       <View style={styles.gameArea} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} {...panResponder.panHandlers}>
         <View style={styles.gridOverlay} />
 
@@ -519,7 +519,6 @@ export default function MathBlaster() {
         {gs.boss.active && (
           <View style={[styles.bossContainer, { left: gs.boss.x - 50, top: gs.boss.y - 30 }]}>
             <View style={styles.bossHpBar}><View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]} /></View>
-            {/* Visual muda conforme o tipo de boss */}
             <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 40, height: 80, backgroundColor: '#006400', borderColor: '#32CD32' }]} />
             {gs.boss.shield && (<View style={styles.bossShield}><Text style={styles.bossMath}>{gs.boss.txt}</Text></View>)}
           </View>
