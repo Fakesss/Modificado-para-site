@@ -34,7 +34,13 @@ export default function MathBlaster() {
 
   // ESTADO GLOBAL DO MOTOR
   const gs = useRef({
-    player: { x: initialWidth / 2, y: 300, fireRate: 300, lastFire: 0, damage: 1, shotSize: 6, hp: 100, maxHp: 100, weaponType: 'NORMAL' },
+    player: { 
+      x: initialWidth / 2, y: 300, 
+      hp: 100, maxHp: 100, damage: 1, shotSize: 6,
+      fireRate: 300, lastFire: 0, tripleShot: false, // Tiro Normal
+      specialWeapon: null as string | null, // 'MISSILE' ou 'LASER'
+      specialFireRate: 2500, lastSpecialFire: 0 // Tempo de recarga da arma secundária
+    },
     lasers: [] as any[],
     specialLasers: [] as any[],
     enemies: [] as any[],
@@ -72,7 +78,7 @@ export default function MathBlaster() {
   };
 
   const iniciarJogo = () => {
-    gs.player = { x: layoutRef.current.width / 2, y: layoutRef.current.height - 100, fireRate: 300, lastFire: 0, damage: 1, shotSize: 6, hp: 100, maxHp: 100, weaponType: 'NORMAL' };
+    gs.player = { x: layoutRef.current.width / 2, y: layoutRef.current.height - 100, hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, specialWeapon: null, specialFireRate: 2500, lastSpecialFire: 0 };
     gs.lasers = []; gs.specialLasers = []; gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0;
@@ -92,25 +98,27 @@ export default function MathBlaster() {
     if (gs.player.x < 20) gs.player.x = 20; if (gs.player.x > gw - 20) gs.player.x = gw - 20;
     if (gs.player.y < 20) gs.player.y = 20; if (gs.player.y > gh - 20) gs.player.y = gh - 20;
 
-    // 2. Armamento Dinâmico (Auto-Fire)
+    // 2. Armamento Dinâmico (Sempre atira o Normal + Especial de tempos em tempos)
     if (now - gs.player.lastFire > gs.player.fireRate) {
-      if (gs.player.weaponType === 'NORMAL') {
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
-      } else if (gs.player.weaponType === 'TRIPLE') {
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+      if (gs.player.tripleShot) {
         gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 10, y: gs.player.y - 15, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
         gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 10, y: gs.player.y - 15, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
-      } else if (gs.player.weaponType === 'LASER') {
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, vx: 0, vy: -25, damage: gs.player.damage * 1.5, size: gs.player.shotSize * 2, type: 'LASER' });
-      } else if (gs.player.weaponType === 'MISSILE') {
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.5, type: 'MISSILE' });
       }
       gs.player.lastFire = now;
     }
 
+    if (gs.player.specialWeapon && now - gs.player.lastSpecialFire > gs.player.specialFireRate) {
+      if (gs.player.specialWeapon === 'MISSILE') {
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * 3, size: gs.player.shotSize * 2.5, type: 'MISSILE' });
+      } else if (gs.player.specialWeapon === 'LASER') {
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, vx: 0, vy: -25, damage: gs.player.damage * 2, size: gs.player.shotSize * 2, type: 'LASER' });
+      }
+      gs.player.lastSpecialFire = now;
+    }
+
     // 3. Mover Tiros do Jogador
     gs.lasers.forEach(l => {
-      // Míssil Teleguiado Caça Inimigos
       if (l.type === 'MISSILE') {
         let closest: any = null; let minDist = 999999;
         gs.enemies.concat(gs.boss.active ? [gs.boss] : []).forEach(e => {
@@ -122,13 +130,11 @@ export default function MathBlaster() {
         if (closest) {
           const dx = closest.x - l.x; const dy = closest.y - l.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
-          l.vx += (dx/dist) * 1.2; l.vy += (dy/dist) * 1.2;
+          l.vx += (dx/dist) * 1.5; l.vy += (dy/dist) * 1.5;
         }
-        // Limita a velocidade do míssil
         const speed = Math.sqrt(l.vx*l.vx + l.vy*l.vy);
-        if (speed > 12) { l.vx = (l.vx/speed)*12; l.vy = (l.vy/speed)*12; }
+        if (speed > 10) { l.vx = (l.vx/speed)*10; l.vy = (l.vy/speed)*10; }
       }
-
       l.x += l.vx; l.y += l.vy;
     });
     gs.lasers = gs.lasers.filter(l => l.y > -50 && l.x > -20 && l.x < gw + 20);
@@ -136,7 +142,7 @@ export default function MathBlaster() {
     gs.specialLasers.forEach(sl => sl.life -= 1);
     gs.specialLasers = gs.specialLasers.filter(sl => sl.life > 0);
 
-    // Tiros Inimigos
+    // Tiros Inimigos (Corrigido bug do Hp invisível)
     gs.enemyLasers.forEach(el => {
       if (el.homing) {
         const dx = gs.player.x - el.x; const dy = gs.player.y - el.y;
@@ -154,7 +160,7 @@ export default function MathBlaster() {
     gs.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 1; });
     gs.particles = gs.particles.filter(p => p.life > 0);
 
-    // --- DIRETOR DE CENA (RITMO DE JOGO) ---
+    // --- DIRETOR DE CENA ---
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
@@ -162,25 +168,22 @@ export default function MathBlaster() {
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: Math.random() * 2 + 4 + (gs.fase * 0.5), angle: 0 });
       }
 
-      // Esquadrões (Diversificados)
       if (gs.stateTimer % 250 === 0 && gs.stateTimer < 1100) {
         const cx = Math.random() * (gw - 120) + 60;
         const baseHp = 2 + (gs.fase * 2);
         const formation = Math.floor(Math.random() * 3);
 
-        // O LÍDER (Sempre spawna primeiro)
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx, y: -30, targetY: 100, isLeader: true, hp: baseHp * 3, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
 
-        if (formation === 0) { // Formação em V
+        if (formation === 0) { 
           gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 45, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
           gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 45, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
-        } else if (formation === 1) { // Linha Horizontal
+        } else if (formation === 1) { 
           gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 60, y: -30, targetY: 100, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
           gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 60, y: -30, targetY: 100, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
-        } else { // Diamante (4 naves extras)
+        } else { 
           gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 40, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
           gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 40, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
-          gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx, y: -90, targetY: 40, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
         }
       }
 
@@ -203,7 +206,6 @@ export default function MathBlaster() {
         gs.boss.timer += 1;
 
         if (gs.boss.timer % Math.max(30, 80 - (gs.fase * 10)) === 0) {
-          // Bala do Boss agora tem HP!
           gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: 0, vy: 2, size: 18, damage: 20, homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 3) });
         }
 
@@ -218,7 +220,7 @@ export default function MathBlaster() {
         gs.score += 500 * gs.fase;
         gs.boss.active = false;
         gs.gameState = 'TRANSITION'; gs.stateTimer = 0;
-        gs.enemyLasers = []; // Limpa os tiros
+        gs.enemyLasers = []; 
       }
     }
     else if (gs.gameState === 'TRANSITION') {
@@ -229,67 +231,60 @@ export default function MathBlaster() {
       }
     }
 
-    // --- INTELIGÊNCIA ARTIFICIAL (INIMIGOS) ---
+    // --- INTELIGÊNCIA ARTIFICIAL ---
     gs.enemies.forEach(e => {
       if (e.type === 'METEOR') {
         e.y += e.vy; 
       } 
       else if (e.type === 'SQUAD') {
         if (e.isLeader) {
-          // LÍDER CAÇADOR (Gira e voa em direção ao player)
           const dx = gs.player.x - e.x; const dy = gs.player.y - e.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
-          e.angle = Math.atan2(dy, dx); // Calcula o ângulo para mirar
+          e.angle = Math.atan2(dy, dx); 
           
-          if (dist > 50) { // Aproxima-se se estiver longe
+          if (dist > 50) { 
              e.x += (dx/dist) * (1.5 + gs.fase * 0.3);
              e.y += (dy/dist) * (1.0 + gs.fase * 0.2);
           }
 
           e.fireTimer += 1;
-          if (e.fireTimer > Math.max(30, 80 - (gs.fase * 8))) { // Líder atira mais rápido
-            gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 15, vx: Math.cos(e.angle)*5, vy: Math.sin(e.angle)*5, size: 8, damage: 15, homing: false, color: '#FF00FF' });
+          if (e.fireTimer > Math.max(30, 80 - (gs.fase * 8))) { 
+            gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 15, vx: Math.cos(e.angle)*5, vy: Math.sin(e.angle)*5, size: 8, damage: 15, homing: false, color: '#FF00FF', hp: 1 });
             e.fireTimer = 0;
           }
         } else {
-          // Asas normais estacionam e atiram reto
           if (e.y < e.targetY) e.y += e.vy; 
           else {
-            e.x += Math.sin(now / 300) * 1.5; // Flutuam
+            e.x += Math.sin(now / 300) * 1.5; 
             e.fireTimer += 1;
             if (e.fireTimer > Math.max(60, 120 - (gs.fase * 5)) && Math.random() < 0.05) {
-              gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 15, vx: 0, vy: 6 + gs.fase, size: 6, damage: 10, homing: false, color: '#FF0055' });
+              gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 15, vx: 0, vy: 6 + gs.fase, size: 6, damage: 10, homing: false, color: '#FF0055', hp: 1 });
               e.fireTimer = 0;
             }
           }
         }
       }
 
-      // Colisão: Player -> Inimigo
       if (Math.abs(gs.player.x - e.x) < 30 && Math.abs(gs.player.y - e.y) < 30) {
         gs.player.hp -= 15; e.hp = -100;
         criarParticulas(gs.player.x, gs.player.y, '#FF0000', 10);
       }
     });
 
-    // --- SISTEMA DE COMBATE (COLISÕES DOS TIROS DO JOGADOR) ---
+    // --- SISTEMA DE COMBATE ---
     gs.lasers.forEach(l => {
-      
-      // 1. Destruir Bolas do Boss com tiros
       gs.enemyLasers.forEach(el => {
-        if (el.homing && el.hp !== undefined && Math.abs(l.x - el.x) < 25 && Math.abs(l.y - el.y) < 25) {
+        if (el.homing && el.hp > 0 && Math.abs(l.x - el.x) < 25 && Math.abs(l.y - el.y) < 25) {
           el.hp -= l.damage;
-          if (l.type !== 'LASER') l.y = -100; // Raio Laser perfura
+          if (l.type !== 'LASER') l.y = -100; 
           criarParticulas(el.x, el.y, '#FF8C00', 2);
         }
       });
 
-      // 2. Acertar Inimigos Normais
       gs.enemies.forEach(e => {
         if (Math.abs(l.x - e.x) < 25 && Math.abs(l.y - e.y) < 25) {
           e.hp -= l.damage;
           if (l.type === 'MISSILE') {
-            // Explosão em Área (AoE)
             criarParticulas(e.x, e.y, '#FF4444', 15);
             gs.enemies.forEach(e2 => { if (Math.abs(e.x - e2.x) < 70 && Math.abs(e.y - e2.y) < 70) e2.hp -= l.damage; });
             if (gs.boss.active && Math.abs(gs.boss.x - e.x) < 80 && Math.abs(gs.boss.y - e.y) < 80) gs.boss.hp -= l.damage;
@@ -300,7 +295,6 @@ export default function MathBlaster() {
         }
       });
 
-      // 3. Acertar Boss
       if (gs.boss.active && Math.abs(l.x - gs.boss.x) < 55 && Math.abs(l.y - gs.boss.y) < 45) {
         if (l.type !== 'LASER') l.y = -100; 
         if (gs.boss.shield) {
@@ -308,29 +302,30 @@ export default function MathBlaster() {
         } else {
           gs.boss.hp -= l.damage;
           criarParticulas(l.x, l.y, '#FFD700', 4); 
-          if (l.type === 'MISSILE') criarParticulas(l.x, l.y, '#FF4444', 15); // Explosão extra
+          if (l.type === 'MISSILE') criarParticulas(l.x, l.y, '#FF4444', 15); 
         }
       }
     });
 
-    // Tiros Inimigos -> Jogador
     gs.enemyLasers.forEach(el => {
       if (Math.abs(el.x - gs.player.x) < 20 && Math.abs(el.y - gs.player.y) < 20) {
-        gs.player.hp -= el.damage;
-        el.hp = 0; // Se mata ao acertar
+        gs.player.hp -= el.damage; el.hp = 0; 
         criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8);
       }
     });
 
-    // Spawner de Power-Ups (Armas Novas)
-    if (now - gs.lastPowerupSpawn > 18000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
+    // Spawner Inteligente de Power-Ups
+    if (now - gs.lastPowerupSpawn > 15000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
       const tipos = [
-        { type: 'SPEED', color: '#00FFFF', nome: 'VELOCIDADE' }, 
         { type: 'DAMAGE', color: '#FF00FF', nome: 'DANO MAX' },
-        { type: 'WEAPON_TRIPLE', color: '#FFD700', nome: 'TIRO TRIPLO' },
-        { type: 'WEAPON_LASER', color: '#32CD32', nome: 'RAIO LASER' },
-        { type: 'WEAPON_MISSILE', color: '#FF4444', nome: 'MÍSSIL TELE' }
+        { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA NORMAL' }
       ];
+      
+      if (!gs.player.tripleShot) tipos.push({ type: 'TRIPLE_SHOT', color: '#FFD700', nome: 'TIRO TRIPLO' });
+      if (gs.player.specialWeapon !== 'MISSILE') tipos.push({ type: 'SPECIAL_MISSILE', color: '#FF4444', nome: 'MÍSSIL TELE' });
+      if (gs.player.specialWeapon !== 'LASER') tipos.push({ type: 'SPECIAL_LASER', color: '#32CD32', nome: 'RAIO LASER' });
+      if (gs.player.specialWeapon) tipos.push({ type: 'SPECIAL_RELOAD', color: '#FFFFFF', nome: 'RELOAD RÁPIDO' });
+
       const selecionado = tipos[Math.floor(Math.random() * tipos.length)];
       const eq = gerarEquacao(Math.min(3, gs.fase));
       gs.powerups.push({ id: Math.random().toString(), x: Math.random() * (gw - 80) + 40, y: -40, type: selecionado.type, color: selecionado.color, title: selecionado.nome, txt: eq.txt, res: eq.res });
@@ -344,7 +339,6 @@ export default function MathBlaster() {
     gs.powerups = gs.powerups.filter(p => p.y < gh + 50);
 
     if (gs.player.hp <= 0) gameOver();
-
     setFrames(f => f + 1); 
   };
 
@@ -360,15 +354,13 @@ export default function MathBlaster() {
       const num = parseInt(resposta);
       let acertou = false;
 
-      // 1: Escudo do Boss
       if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
         acertou = true; gs.boss.shield = false; gs.boss.timer = 0;
-        gs.boss.nextShieldAt = Math.random() * 210 + 240; // Janela variável
+        gs.boss.nextShieldAt = Math.random() * 210 + 240; 
         gs.specialLasers.push({ id: Math.random().toString(), startX: gs.player.x, startY: gs.player.y, endX: gs.boss.x, endY: gs.boss.y, color: '#FFD700', life: 15 });
         criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 40); 
         gs.score += 150;
       } 
-      // 2: PowerUps (Armas)
       else {
         for (let i = 0; i < gs.powerups.length; i++) {
           let p = gs.powerups[i];
@@ -378,8 +370,11 @@ export default function MathBlaster() {
             criarParticulas(p.x, p.y, p.color, 30);
             
             if (p.type === 'DAMAGE') gs.player.damage += 1;
-            else if (p.type === 'SPEED') gs.player.fireRate = Math.max(100, gs.player.fireRate - 40);
-            else if (p.type.startsWith('WEAPON_')) gs.player.weaponType = p.type.split('_')[1]; // Seta a arma
+            else if (p.type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 40);
+            else if (p.type === 'TRIPLE_SHOT') gs.player.tripleShot = true;
+            else if (p.type === 'SPECIAL_MISSILE') gs.player.specialWeapon = 'MISSILE';
+            else if (p.type === 'SPECIAL_LASER') gs.player.specialWeapon = 'LASER';
+            else if (p.type === 'SPECIAL_RELOAD') gs.player.specialFireRate = Math.max(500, gs.player.specialFireRate - 500);
             
             gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); 
             gs.score += 50; p.y = 9999; break; 
@@ -407,7 +402,7 @@ export default function MathBlaster() {
           <Text style={styles.tituloMenu}>SKY</Text>
           <Text style={styles.subTituloMenu}>EQUATIONS</Text>
           <Text style={styles.instrucoes}>Deslize o dedo pela tela para mover a nave.</Text>
-          <Text style={[styles.instrucoes, { color: '#FFD700' }]}>Resolva contas para coletar Armas (Tiro Triplo, Laser, Míssil) e Destruir o Escudo do Boss!</Text>
+          <Text style={[styles.instrucoes, { color: '#FFD700' }]}>Sua nave atira sozinha. Resolva contas no teclado para pegar Armas Secundárias, Upgrades e quebrar o Escudo do Boss!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
           </TouchableOpacity>
@@ -448,7 +443,7 @@ export default function MathBlaster() {
         <Text style={styles.hudFase}>FASE {gs.fase}</Text>
       </View>
 
-      {/* ÁREA DO JOGO (Sky Force Control) */}
+      {/* ÁREA DO JOGO */}
       <View style={styles.gameArea} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} {...panResponder.panHandlers}>
         <View style={styles.gridOverlay} />
 
@@ -464,8 +459,8 @@ export default function MathBlaster() {
           if (e.type === 'METEOR') {
             return <View key={e.id} style={[styles.meteorShape, { left: e.x - 15, top: e.y - 15 }]} />;
           } else {
-            // Rotação dinâmica para o líder apontar para você
-            const rot = (e.angle - Math.PI/2) + 'rad'; 
+            // Apenas o líder rotaciona caçando o player. Os asas apontam para baixo (0rad é para baixo com esse CSS)
+            const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
             return <View key={e.id} style={[styles.squadronShip, { left: e.x - 15, top: e.y - 15, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]} />;
           }
         })}
@@ -481,7 +476,7 @@ export default function MathBlaster() {
           </View>
         )}
 
-        {/* POWER-UPS (Armas/Buffs) */}
+        {/* POWER-UPS */}
         {gs.powerups.map(p => (
           <View key={p.id} style={[styles.powerupBox, { left: p.x - 35, top: p.y - 20, borderColor: p.color }]}>
             <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
@@ -489,27 +484,27 @@ export default function MathBlaster() {
           </View>
         ))}
 
-        {/* TIROS AUTOMÁTICOS DO JOGADOR */}
+        {/* TIROS DO JOGADOR (Normais e Especiais) */}
         {gs.lasers.map(l => (
           <View key={l.id} style={[styles.laserNormal, { 
-            left: l.x - (l.size/2), top: l.y, width: l.size, height: l.type === 'LASER' ? l.size * 5 : l.size * 3, 
+            left: l.x - (l.size/2), top: l.y, width: l.size, 
+            height: l.type === 'MISSILE' ? l.size : (l.type === 'LASER' ? l.size * 6 : l.size * 3), 
             backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : '#00FFFF',
-            borderRadius: l.type === 'MISSILE' ? 10 : 5 // Míssil é redondinho
+            borderRadius: l.type === 'MISSILE' ? l.size / 2 : 5 // Míssil perfeitamente redondo!
           }]} />
         ))}
 
-        {/* TIROS INIMIGOS E BOLAS DE PLASMA DO BOSS */}
+        {/* TIROS INIMIGOS E DO BOSS */}
         {gs.enemyLasers.map(el => (
           <View key={el.id} style={[
             el.homing ? styles.cannonBall : styles.enemyLaser, 
             { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color }
           ]}>
-             {/* Vida oculta da bola do Boss (Feedback visual se for alvejada) */}
              {el.homing && el.hp < 5 && <View style={{width:'100%', height:'100%', backgroundColor:'rgba(255,255,255,0.5)', borderRadius: 20}}/>}
           </View>
         ))}
 
-        {/* TIROS ESPECIAIS TELEGUIADOS (Matemática) */}
+        {/* TIROS MATEMÁTICOS (Laser ao acertar conta) */}
         {gs.specialLasers.map(sl => {
           const dx = sl.endX - sl.startX; const dy = sl.endY - sl.startY;
           const dist = Math.sqrt(dx*dx + dy*dy); const angle = Math.atan2(dy, dx);
@@ -596,7 +591,7 @@ const styles = StyleSheet.create({
 
   laserNormal: { position: 'absolute', zIndex: 1 },
   enemyLaser: { position: 'absolute', borderRadius: 5 },
-  cannonBall: { position: 'absolute', borderRadius: 20, borderWidth: 2, borderColor: '#FFF' }, // Plasma visível
+  cannonBall: { position: 'absolute', borderRadius: 20, borderWidth: 2, borderColor: '#FFF' },
   laserEspecial: { position: 'absolute', height: 6, borderRadius: 3, shadowRadius: 10, zIndex: 5 },
 
   painelInferior: { backgroundColor: '#0A0025', borderTopWidth: 2, borderTopColor: '#FF00FF', paddingHorizontal: 15, paddingTop: 15, paddingBottom: Platform.OS === 'android' ? 20 : 15, alignItems: 'center' },
