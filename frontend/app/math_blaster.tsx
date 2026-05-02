@@ -1,35 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, PanResponder, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 const initialWidth = Dimensions.get('window').width;
 
-// --- COMPONENTE: TECLADO RETRÔ (Multi-touch Nativo com Isolamento) ---
+// --- COMPONENTE: TECLADO RETRÔ (Estável e Nativo) ---
 const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
   const anim = useRef(new Animated.Value(1)).current;
   
-  const handlePressIn = (e: any) => {
-    e.stopPropagation(); // IMPEDE QUE O TOQUE VÁ PARA A TELA DO JOGO
+  const handlePressIn = () => {
     Animated.spring(anim, { toValue: 0.85, useNativeDriver: true }).start();
-    onPressWeb(valor); 
   };
-  const handlePressOut = (e: any) => {
-    e.stopPropagation();
+  const handlePressOut = () => {
     Animated.spring(anim, { toValue: 1, useNativeDriver: true }).start();
+    onPressWeb(valor);
   };
 
   return (
-    <Animated.View style={{ flex: 1, transform: [{ scale: anim }] }} 
-      onTouchStart={handlePressIn} 
-      onTouchEnd={handlePressOut} 
-      onTouchCancel={handlePressOut}>
-      <View style={[styles.teclaRetro, valor === 'apagar' && styles.teclaApagar, valor === 'enviar' && styles.teclaEnviar]}>
+    <Animated.View style={{ flex: 1, transform: [{ scale: anim }] }}>
+      <TouchableOpacity 
+        activeOpacity={0.7} 
+        onPressIn={handlePressIn} 
+        onPressOut={handlePressOut}
+        style={[styles.teclaRetro, valor === 'apagar' && styles.teclaApagar, valor === 'enviar' && styles.teclaEnviar]}
+      >
         {valor === 'apagar' ? <Ionicons name="backspace" size={26} color="#FFF" /> : 
          valor === 'enviar' ? <Ionicons name="flash" size={26} color="#FFF" /> : 
          <Text style={styles.teclaRetroText}>{valor}</Text>}
-      </View>
+      </TouchableOpacity>
     </Animated.View>
   );
 };
@@ -58,7 +58,7 @@ export default function MathBlaster() {
     powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0,
-    movementTouchId: null as string | null, // RASTREAMENTO DA "IMPRESSÃO DIGITAL" DO TOQUE
+    movementTouchId: null as string | null, // RASTREADOR DE IMPRESSÃO DIGITAL
     lastTouchX: 0, lastTouchY: 0
   }).current;
 
@@ -68,31 +68,37 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
-  // --- CONTROLES INTELIGENTES DE MOVIMENTO (Sem Teletransporte) ---
-  const handleTouchStart = (e: any) => {
-    if (gs.movementTouchId === null && e.nativeEvent.touches.length > 0) {
-      const touch = e.nativeEvent.touches[0];
-      gs.movementTouchId = touch.identifier;
-      gs.lastTouchX = touch.pageX; 
-      gs.lastTouchY = touch.pageY;
-    }
-  };
-  const handleTouchMove = (e: any) => {
-    if (gs.movementTouchId !== null) {
-      // Busca apenas o toque que iniciou o movimento da nave
-      const touch = e.nativeEvent.touches.find((t: any) => t.identifier === gs.movementTouchId);
-      if (touch) {
-        const dx = touch.pageX - gs.lastTouchX; 
-        const dy = touch.pageY - gs.lastTouchY;
-        gs.player.x += dx * 1.5; gs.player.y += dy * 1.5; 
-        gs.lastTouchX = touch.pageX; gs.lastTouchY = touch.pageY;
-      }
-    }
-  };
-  const handleTouchEnd = (e: any) => {
-    const touchExists = e.nativeEvent.touches.some((t: any) => t.identifier === gs.movementTouchId);
-    if (!touchExists) gs.movementTouchId = null; // Soltou a nave
-  };
+  // --- CONTROLES INTELIGENTES DE MOVIMENTO (Anti-Teletransporte) ---
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false, // Impede que o teclado roube o foco
+      onPanResponderGrant: (e) => {
+        // Grava o ID exclusivo do primeiro dedo que encostar
+        if (e.nativeEvent.touches.length > 0) {
+          const touch = e.nativeEvent.touches[0];
+          gs.movementTouchId = touch.identifier;
+          gs.lastTouchX = touch.pageX; 
+          gs.lastTouchY = touch.pageY;
+        }
+      },
+      onPanResponderMove: (e) => {
+        // Filtra para ouvir APENAS o dedo registrado
+        if (gs.movementTouchId !== null) {
+          const touch = e.nativeEvent.touches.find(t => t.identifier === gs.movementTouchId);
+          if (touch) {
+            const dx = touch.pageX - gs.lastTouchX; 
+            const dy = touch.pageY - gs.lastTouchY;
+            gs.player.x += dx * 1.6; gs.player.y += dy * 1.6; 
+            gs.lastTouchX = touch.pageX; gs.lastTouchY = touch.pageY;
+          }
+        }
+      },
+      onPanResponderRelease: () => { gs.movementTouchId = null; },
+      onPanResponderTerminate: () => { gs.movementTouchId = null; }
+    })
+  ).current;
 
   // --- MATEMÁTICA ---
   const gerarEquacao = (dificuldade: number, evitarResp?: number) => {
@@ -126,7 +132,6 @@ export default function MathBlaster() {
     const now = Date.now();
     const gw = layoutRef.current.width; const gh = layoutRef.current.height;
 
-    // Bordas seguras
     if (gs.player.x < 20) gs.player.x = 20; if (gs.player.x > gw - 20) gs.player.x = gw - 20;
     if (gs.player.y < 20) gs.player.y = 20; if (gs.player.y > gh - 20) gs.player.y = gh - 20;
 
@@ -141,7 +146,7 @@ export default function MathBlaster() {
     }
 
     if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * 4, size: gs.player.shotSize * 3, type: 'MISSILE', life: 100 }); 
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * 4, size: gs.player.shotSize * 3, type: 'MISSILE', life: 90 }); 
       gs.player.weapons.missile.lastFire = now;
     }
     if (gs.player.weapons.laser.active && now - gs.player.weapons.laser.lastFire > gs.player.weapons.laser.baseCooldown) {
@@ -149,10 +154,9 @@ export default function MathBlaster() {
       gs.player.weapons.laser.lastFire = now;
     }
 
-    // Movimentação dos tiros
     gs.lasers.forEach(l => {
       if (l.type === 'MISSILE') {
-        l.life -= 1; // Perde combustível
+        l.life -= 1;
         let closest: any = null; let minDist = 999999;
         gs.enemies.concat(gs.boss.active ? [gs.boss] : []).forEach(e => {
           if (e.hp > 0 && !e.mathRequired) { 
@@ -167,7 +171,8 @@ export default function MathBlaster() {
         }
         const speed = Math.sqrt(l.vx*l.vx + l.vy*l.vy);
         if (speed > 10) { l.vx = (l.vx/speed)*10; l.vy = (l.vy/speed)*10; }
-        if (l.life <= 0) l.y = -100; // Some sem bater se acabar o combustível
+        
+        if (l.life <= 0) l.y = -100; // Míssil sem combustível some
       }
       l.x += l.vx; l.y += l.vy;
     });
@@ -192,17 +197,15 @@ export default function MathBlaster() {
     gs.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 1; });
     gs.particles = gs.particles.filter(p => p.life > 0);
 
-    // --- DIRETOR DE CENA (DIFICULDADE BASEADA NO TEMPO) ---
+    // --- DIRETOR DE CENA ---
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
       
-      // Meteoros
       if (gs.stateTimer % Math.max(20, 60 - gs.fase * 5) === 0) {
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: Math.random() * 2 + 4 + (gs.fase * 0.5), angle: 0 });
       }
 
-      // FLANQUEADORES
       if (gs.stateTimer % 180 === 0 && gs.fase >= 2) {
         const isLeft = Math.random() > 0.5;
         gs.enemies.push({
@@ -213,7 +216,6 @@ export default function MathBlaster() {
         });
       }
 
-      // NAVE MÃE
       if (gs.stateTimer === 600 || gs.stateTimer === 1200) {
         const eq = gerarEquacao(Math.min(3, gs.fase));
         const isLeft = gs.stateTimer === 600; 
@@ -223,7 +225,6 @@ export default function MathBlaster() {
         });
       }
 
-      // ESQUADRÕES
       if (gs.stateTimer % 200 === 0 && gs.stateTimer < 1400) {
         const cx = Math.random() * (gw - 120) + 60;
         const baseHp = 3 + (gs.fase * 3); 
@@ -292,7 +293,6 @@ export default function MathBlaster() {
       }
     }
 
-    // --- IA INIMIGOS ---
     gs.enemies.forEach(e => {
       if (e.type === 'METEOR') { e.y += e.vy; } 
       else if (e.type === 'FLANKER') { e.x += e.vx; e.y += e.vy; }
@@ -362,7 +362,7 @@ export default function MathBlaster() {
             criarParticulas(e.x, e.y, '#FF4444', 15);
             gs.enemies.forEach(e2 => { if (!e2.mathRequired && Math.abs(e.x - e2.x) < 70 && Math.abs(e.y - e2.y) < 70) e2.hp -= l.damage; });
             if (gs.boss.active && Math.abs(gs.boss.x - e.x) < 80 && Math.abs(gs.boss.y - e.y) < 80) gs.boss.hp -= l.damage;
-            l.y = -100; // EXPLODE O MÍSSIL E SOME IMEDIATAMENTE
+            l.y = -100; // EXPLODE O MÍSSIL E SOME
           } else if (l.type !== 'LASER') { l.y = -100; }
           criarParticulas(l.x, l.y, '#FFF', 3);
         } else if (e.mathRequired && Math.abs(l.x - e.x) < 40 && Math.abs(l.y - e.y) < 40) {
@@ -504,12 +504,12 @@ export default function MathBlaster() {
 
   if (!jogoAtivo && gs.score === 0 && gs.player.hp === 100) {
     return (
-      <SafeAreaView style={[styles.container, { touchAction: 'none' } as any]}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.menuContainer}>
           <TouchableOpacity style={{ position: 'absolute', top: 20, left: 20 }} onPress={() => router.back()}><Ionicons name="arrow-back" size={30} color="#00FFFF" /></TouchableOpacity>
           <Ionicons name="rocket" size={100} color="#00FFFF" style={{ marginBottom: 20 }} />
           <Text style={styles.tituloMenu}>SKY</Text><Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Deslize para mover. O multi-touch isolado permite digitar e atirar perfeitamente sem travar!</Text>
+          <Text style={styles.instrucoes}>Deslize o dedo para mover. O teclado agora não trava e os mísseis explodem ao contato!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}><Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -518,7 +518,7 @@ export default function MathBlaster() {
 
   if (!jogoAtivo && gs.player.hp <= 0) {
     return (
-      <SafeAreaView style={[styles.container, { touchAction: 'none' } as any]}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.menuContainer}>
           <Text style={[styles.tituloMenu, { color: '#FF4444' }]}>DESTRUÍDO</Text>
           <Text style={styles.textoScore}>Pontos: {gs.score}</Text>
@@ -531,7 +531,7 @@ export default function MathBlaster() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { touchAction: 'none' } as any]} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       
       <View style={styles.hud}>
         <View style={{ flex: 1, paddingRight: 10 }}>
@@ -546,8 +546,7 @@ export default function MathBlaster() {
         </View>
       </View>
 
-      <View style={styles.gameArea} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} 
-            onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} onTouchCancel={handleTouchEnd}>
+      <View style={styles.gameArea} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} {...panResponder.panHandlers}>
         <View style={styles.gridOverlay} />
 
         {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
