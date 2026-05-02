@@ -1,19 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Platform, Easing, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, PanResponder } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Audio } from 'expo-av';
 
 const { width, height } = Dimensions.get('window');
-const GAME_AREA_HEIGHT = height * 0.65; // Altura fixa e protegida para evitar bugs do teclado
-const CARD_WIDTH = 90;
-const DROP_LIMIT = GAME_AREA_HEIGHT - 60; // Limite onde a nave do jogador fica
-
-// URLs de Imagens (Sprites do Jogo)
-const SPRITE_PLAYER = 'https://cdn-icons-png.flaticon.com/512/3204/3204121.png';
-const SPRITE_METEOR = 'https://cdn-icons-png.flaticon.com/512/4397/4397355.png';
-const SPRITE_UFO = 'https://cdn-icons-png.flaticon.com/512/3204/3204090.png';
+const GAME_AREA_HEIGHT = height * 0.60; 
 
 // --- COMPONENTE: TECLADO RETRÔ ---
 const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
@@ -21,8 +13,6 @@ const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: stri
   const handlePressIn = () => Animated.spring(anim, { toValue: 0.85, useNativeDriver: true }).start();
   const handlePressOut = () => { Animated.spring(anim, { toValue: 1, useNativeDriver: true }).start(); onPressWeb(valor); };
 
-  const isEspecial = valor === 'apagar' || valor === 'enviar';
-  
   return (
     <Animated.View style={{ flex: 1, transform: [{ scale: anim }] }}>
       <TouchableOpacity 
@@ -30,318 +20,349 @@ const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: stri
         style={[styles.teclaRetro, valor === 'apagar' && styles.teclaApagar, valor === 'enviar' && styles.teclaEnviar]}
       >
         {valor === 'apagar' ? <Ionicons name="backspace" size={26} color="#FFF" /> : 
-         valor === 'enviar' ? <Ionicons name="rocket" size={26} color="#FFF" /> : 
+         valor === 'enviar' ? <Ionicons name="flash" size={26} color="#FFF" /> : 
          <Text style={styles.teclaRetroText}>{valor}</Text>}
       </TouchableOpacity>
     </Animated.View>
   );
 };
 
-// --- COMPONENTE: FUNDO ESTRELADO ANIMADO ---
-const Starfield = ({ velocidadeMult }: { velocidadeMult: number }) => {
-  const estrelas = useRef(Array.from({ length: 40 }).map(() => ({
-    x: Math.random() * width,
-    y: new Animated.Value(Math.random() * GAME_AREA_HEIGHT),
-    size: Math.random() * 3 + 1,
-    speed: (Math.random() * 2000 + 3000)
-  }))).current;
-
-  useEffect(() => {
-    estrelas.forEach(estrela => {
-      const animar = () => {
-        estrela.y.setValue(-10);
-        Animated.timing(estrela.y, {
-          toValue: GAME_AREA_HEIGHT + 10,
-          duration: estrela.speed / velocidadeMult,
-          easing: Easing.linear,
-          useNativeDriver: true
-        }).start(({ finished }) => { if (finished) animar(); });
-      };
-      animar();
-    });
-  }, [velocidadeMult]);
-
-  return (
-    <View style={StyleSheet.absoluteFillObject}>
-      {estrelas.map((e, i) => (
-        <Animated.View key={i} style={{
-          position: 'absolute', width: e.size, height: e.size, backgroundColor: e.size > 2 ? '#00FFFF' : '#FFF',
-          borderRadius: e.size, left: e.x, transform: [{ translateY: e.y }], opacity: e.size > 2 ? 0.8 : 0.4,
-          shadowColor: '#00FFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: e.size * 2
-        }} />
-      ))}
-    </View>
-  );
-};
-
+// --- MOTOR DO JOGO ---
 export default function MathBlaster() {
   const router = useRouter();
   const [jogoAtivo, setJogoAtivo] = useState(false);
-  const [vidas, setVidas] = useState(5);
-  const [pontos, setPontos] = useState(0);
-  const [fase, setFase] = useState(1);
+  const [frames, setFrames] = useState(0); // Gatilho de re-render
   const [resposta, setResposta] = useState('');
-  const [inimigos, setInimigos] = useState<any[]>([]);
-  const [tiros, setTiros] = useState<any[]>([]);
-  const [explosoes, setExplosoes] = useState<any[]>([]);
-  const [alertaFase, setAlertaFase] = useState(false);
+  
+  // Estado completo do motor rodando fora do ciclo do React para máxima performance (60fps)
+  const gs = useRef({
+    player: { x: width / 2, y: GAME_AREA_HEIGHT - 50, vx: 0, vy: 0, speed: 4, fireRate: 400, lastFire: 0, damage: 1, shotSize: 4, hp: 100, maxHp: 100 },
+    lasers: [] as any[],
+    specialLasers: [] as any[], // Laser da matemática
+    enemies: [] as any[],
+    powerups: [] as any[],
+    particles: [] as any[],
+    score: 0,
+    fase: 1,
+    lastEnemySpawn: 0,
+    lastPowerupSpawn: 0,
+    joystickAtivo: false
+  }).current;
 
-  const operacoesRef = useRef<any[]>([]);
-  const pontosRef = useRef(0);
-  const faseRef = useRef(1);
   const loopRef = useRef<any>(null);
 
-  // Áudio Base
-  const somTiro = useRef<Audio.Sound | null>(null);
-  const somExplosao = useRef<Audio.Sound | null>(null);
-  const somDano = useRef<Audio.Sound | null>(null);
-
-  useEffect(() => {
-    async function carregarSons() {
-      try {
-        const t = await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/laser.mp3' });
-        const e = await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/explosion.mp3' });
-        const d = await Audio.Sound.createAsync({ uri: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/miss.mp3' });
-        somTiro.current = t.sound; somExplosao.current = e.sound; somDano.current = d.sound;
-      } catch (err) {}
-    }
-    carregarSons();
-    return () => {
-      somTiro.current?.unloadAsync(); somExplosao.current?.unloadAsync(); somDano.current?.unloadAsync();
-      if(loopRef.current) clearTimeout(loopRef.current);
-    };
-  }, []);
-
-  const tocar = async (som: Audio.Sound | null) => { try { if (som) { await som.setVolumeAsync(0.3); await som.replayAsync(); } } catch(e){} };
-
-  useEffect(() => { operacoesRef.current = inimigos; pontosRef.current = pontos; faseRef.current = fase; }, [inimigos, pontos, fase]);
-
-  // CONTROLE DE NÍVEIS (FASES)
-  useEffect(() => {
-    if (pontos > 0 && pontos % 100 === 0) {
-      const novaFase = (pontos / 100) + 1;
-      if (novaFase > faseRef.current) {
-        setFase(novaFase); faseRef.current = novaFase;
-        setAlertaFase(true);
-        setTimeout(() => setAlertaFase(false), 2500);
+  // --- JOYSTICK ANALÓGICO ---
+  const joyAnim = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => { gs.joystickAtivo = true; },
+      onPanResponderMove: (e, gesture) => {
+        const maxDist = 40;
+        let dx = gesture.dx; let dy = gesture.dy;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > maxDist) { dx = (dx/dist) * maxDist; dy = (dy/dist) * maxDist; }
+        gs.player.vx = dx / maxDist;
+        gs.player.vy = dy / maxDist;
+        joyAnim.setValue({ x: dx, y: dy });
+      },
+      onPanResponderRelease: () => {
+        gs.joystickAtivo = false;
+        gs.player.vx = 0; gs.player.vy = 0;
+        Animated.spring(joyAnim, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
       }
-    }
-  }, [pontos]);
+    })
+  ).current;
 
-  const iniciarJogo = () => {
-    setVidas(5); setPontos(0); setFase(1); setResposta('');
-    setInimigos([]); setTiros([]); setExplosoes([]);
-    pontosRef.current = 0; faseRef.current = 1;
-    setJogoAtivo(true);
-    iniciarInvasao();
-  };
-
-  const iniciarInvasao = () => {
-    if (loopRef.current) clearTimeout(loopRef.current);
-    const rodar = () => {
-      if (!jogoAtivo) return;
-      if (operacoesRef.current.length < 3 + Math.floor(faseRef.current / 2)) {
-        spawnarInimigo();
-      }
-      loopRef.current = setTimeout(rodar, Math.max(1000, 3000 - (faseRef.current * 300)));
-    };
-    rodar();
-  };
-
-  const gerarEquacao = () => {
+  // --- LÓGICA MATEMÁTICA ---
+  const gerarEquacao = (dificuldade: number) => {
     const r = (m: number) => Math.floor(Math.random() * m);
     let n1, n2, res, txt;
-    const f = faseRef.current;
-    
-    // Matemática escala com a Fase
-    if (f === 1) { n1 = r(10)+1; n2 = r(10)+1; res = n1+n2; txt = `${n1} + ${n2}`; }
-    else if (f === 2) { n1 = r(20)+5; n2 = r(n1)+1; res = n1-n2; txt = `${n1} - ${n2}`; }
-    else if (f === 3) { n1 = r(8)+2; n2 = r(8)+2; res = n1*n2; txt = `${n1} × ${n2}`; }
-    else { n2 = r(8)+2; res = r(10)+2; n1 = n2*res; txt = `${n1} ÷ ${n2}`; }
+    if (dificuldade === 1) { n1 = r(10)+1; n2 = r(10)+1; res = n1+n2; txt = `${n1} + ${n2}`; }
+    else if (dificuldade === 2) { n1 = r(15)+5; n2 = r(n1)+1; res = n1-n2; txt = `${n1} - ${n2}`; }
+    else { n1 = r(8)+2; n2 = r(8)+2; res = n1*n2; txt = `${n1} × ${n2}`; }
     return { txt, res };
   };
 
-  const perderVida = (id: string) => {
-    tocar(somDano.current);
-    setVidas(v => { const nv = v - 1; if (nv <= 0) gameOver(); return nv; });
-    setInimigos(prev => prev.filter(i => i.id !== id));
-  };
-
-  const spawnarInimigo = () => {
-    const f = faseRef.current;
-    const pistas = 3; const laneWidth = width / pistas;
-    const lane = Math.floor(Math.random() * pistas);
-    const posX = (lane * laneWidth) + (laneWidth / 2) - (CARD_WIDTH / 2);
-    
-    const id = Math.random().toString();
-    const { txt, res } = gerarEquacao();
-    const isUFO = f >= 3 && Math.random() > 0.5; // UFOs aparecem na fase 3+
-
-    const yValue = new Animated.Value(-50);
-    const speed = Math.max(3500, 8000 - (f * 800)); // Fica mais rápido a cada fase
-
-    yValue.addListener(({ value }) => {
-      if (value >= DROP_LIMIT) {
-        const alvo = operacoesRef.current.find(o => o.id === id);
-        if (alvo && !alvo.hit) { alvo.hit = true; alvo.y.stopAnimation(); perderVida(id); }
-      }
-    });
-
-    const novoInimigo = { id, posX, y: yValue, texto: txt, resposta: res, isUFO, hit: false };
-    setInimigos(prev => [...prev, novoInimigo]);
-
-    Animated.timing(yValue, { toValue: GAME_AREA_HEIGHT + 100, duration: speed, easing: Easing.linear, useNativeDriver: true }).start();
+  const iniciarJogo = () => {
+    gs.player = { x: width / 2, y: GAME_AREA_HEIGHT - 50, vx: 0, vy: 0, speed: 4, fireRate: 400, lastFire: 0, damage: 1, shotSize: 4, hp: 100, maxHp: 100 };
+    gs.lasers = []; gs.specialLasers = []; gs.enemies = []; gs.powerups = []; gs.particles = [];
+    gs.score = 0; gs.fase = 1; setResposta(''); setJogoAtivo(true);
+    if (loopRef.current) clearInterval(loopRef.current);
+    loopRef.current = setInterval(gameTick, 30); // ~33 FPS
   };
 
   const gameOver = () => {
     setJogoAtivo(false);
-    if (loopRef.current) clearTimeout(loopRef.current);
+    if (loopRef.current) clearInterval(loopRef.current);
   };
 
-  const dispararLaser = (alvo: any) => {
-    tocar(somTiro.current);
-    const originX = width / 2;
-    const originY = DROP_LIMIT;
+  // --- TICK DO MOTOR (O CORAÇÃO DO JOGO) ---
+  const gameTick = () => {
+    const now = Date.now();
+
+    // 1. Movimento do Jogador
+    gs.player.x += gs.player.vx * gs.player.speed;
+    gs.player.y += gs.player.vy * gs.player.speed;
     
-    const bulletAnim = new Animated.Value(0);
-    const idTiro = Math.random().toString();
-    
-    // Adiciona o tiro na tela
-    setTiros(prev => [...prev, { id: idTiro, anim: bulletAnim, x: originX, y: originY, targetX: alvo.posX + CARD_WIDTH/2, targetY: (alvo.y as any)._value + 20 }]);
+    // Travar nas bordas
+    if (gs.player.x < 15) gs.player.x = 15;
+    if (gs.player.x > width - 15) gs.player.x = width - 15;
+    if (gs.player.y < 20) gs.player.y = 20;
+    if (gs.player.y > GAME_AREA_HEIGHT - 20) gs.player.y = GAME_AREA_HEIGHT - 20;
 
-    // Anima o projétil do jogador até o alvo
-    Animated.timing(bulletAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start(() => {
-        // Quando o tiro chega, gera explosão
-        setTiros(prev => prev.filter(t => t.id !== idTiro));
-        tocar(somExplosao.current);
-        gerarExplosao(alvo.posX, (alvo.y as any)._value);
-        setPontos(p => p + 10);
-        setInimigos(prev => prev.filter(i => i.id !== alvo.id));
+    // 2. Auto-Fire (Tiro Normal)
+    if (now - gs.lastFire > gs.player.fireRate) {
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 15, damage: gs.player.damage, size: gs.player.shotSize });
+      gs.lastFire = now;
+    }
+
+    // 3. Mover Tiros Normais
+    gs.lasers.forEach(l => l.y -= 12);
+    gs.lasers = gs.lasers.filter(l => l.y > -20);
+
+    // 4. Mover Tiros Especiais (Visuais da Matemática)
+    gs.specialLasers.forEach(sl => sl.life -= 1);
+    gs.specialLasers = gs.specialLasers.filter(sl => sl.life > 0);
+
+    // 5. Mover Partículas (Explosões)
+    gs.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 1; });
+    gs.particles = gs.particles.filter(p => p.life > 0);
+
+    // 6. Atualizar Fases
+    gs.fase = 1 + Math.floor(gs.score / 150);
+
+    // 7. Spawner de Inimigos Normais
+    if (now - gs.lastEnemySpawn > Math.max(800, 2000 - (gs.fase * 200))) {
+      gs.enemies.push({ id: Math.random().toString(), x: Math.random() * (width - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), speed: Math.random() * 2 + 2 + (gs.fase * 0.2) });
+      gs.lastEnemySpawn = now;
+    }
+
+    // 8. Spawner de Power-Ups (Matemática)
+    if (now - gs.lastPowerupSpawn > 10000 && gs.powerups.length < 2) {
+      const tipos = [
+        { type: 'SPEED', color: '#00FFFF', nome: 'VELOCIDADE' },
+        { type: 'FIRE_RATE', color: '#FFD700', nome: 'CADÊNCIA' },
+        { type: 'SIZE', color: '#32CD32', nome: 'TAMANHO' },
+        { type: 'DAMAGE', color: '#FF00FF', nome: 'DANO' }
+      ];
+      const selecionado = tipos[Math.floor(Math.random() * tipos.length)];
+      // PowerUps roxos/fortes exigem 2 contas
+      const solvesNeeded = selecionado.type === 'DAMAGE' || gs.fase > 3 ? 2 : 1; 
+      const eq = gerarEquacao(Math.min(3, gs.fase));
+      
+      gs.powerups.push({ id: Math.random().toString(), x: Math.random() * (width - 60) + 30, y: -40, type: selecionado.type, color: selecionado.color, title: selecionado.nome, txt: eq.txt, res: eq.res, solvesNeeded, solvesDone: 0 });
+      gs.lastPowerupSpawn = now;
+    }
+
+    // 9. Colisões e Movimento: Inimigos Normais
+    gs.enemies.forEach(e => {
+      e.y += e.speed;
+      // Colisão Tiro -> Inimigo
+      gs.lasers.forEach(l => {
+        if (Math.abs(l.x - e.x) < 20 && Math.abs(l.y - e.y) < 20) {
+          e.hp -= l.damage;
+          l.y = -100; // Destrói o tiro
+          criarParticulas(l.x, l.y, '#FFF', 3);
+        }
+      });
+      // Colisão Jogador -> Inimigo
+      if (Math.abs(gs.player.x - e.x) < 25 && Math.abs(gs.player.y - e.y) < 25) {
+        gs.player.hp -= 15;
+        e.hp = -100;
+        criarParticulas(gs.player.x, gs.player.y, '#FF0000', 10);
+      }
     });
+
+    // Mover Powerups
+    gs.powerups.forEach(p => p.y += 1.5); // Caem devagarzinho
+
+    // Limpezas e Pontuação
+    gs.enemies.forEach(e => { if (e.hp <= 0 && e.hp > -90) { gs.score += 10; criarParticulas(e.x, e.y, '#FF4444', 8); } });
+    gs.enemies = gs.enemies.filter(e => e.hp > 0 && e.y < GAME_AREA_HEIGHT + 20);
+    gs.powerups = gs.powerups.filter(p => p.y < GAME_AREA_HEIGHT + 50);
+
+    // Game Over Check
+    if (gs.player.hp <= 0) gameOver();
+
+    // Forçar atualização da tela
+    setFrames(f => f + 1);
   };
 
-  const gerarExplosao = (x: number, y: number) => {
-    const id = Math.random().toString();
-    const anim = new Animated.Value(0);
-    setExplosoes(prev => [...prev, { id, x, y, anim }]);
-    Animated.timing(anim, { toValue: 1, duration: 400, useNativeDriver: true }).start(() => {
-      setExplosoes(prev => prev.filter(e => e.id !== id));
-    });
+  const criarParticulas = (x: number, y: number, color: string, qtd: number) => {
+    for(let i=0; i<qtd; i++) {
+      gs.particles.push({ x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 15, color });
+    }
   };
 
+  // --- INTERAÇÃO COM TECLADO MATEMÁTICO ---
   const lidarComTeclado = (valor: string) => {
     if (!jogoAtivo) return;
     if (valor === 'apagar') setResposta(r => r.slice(0, -1));
     else if (valor === 'enviar') {
       const num = parseInt(resposta);
-      const alvo = inimigos.find(i => i.resposta === num);
-      if (alvo) {
-        alvo.hit = true; alvo.y.stopAnimation(); dispararLaser(alvo);
-      } else { tocar(somDano.current); setVidas(v => Math.max(0, v - 1)); if(vidas <= 1) gameOver(); }
+      let acertou = false;
+
+      // Verifica se a resposta bate com algum PowerUp na tela
+      for (let i = 0; i < gs.powerups.length; i++) {
+        let p = gs.powerups[i];
+        if (p.res === num) {
+          acertou = true;
+          // Dispara laser especial visual
+          gs.specialLasers.push({ id: Math.random().toString(), startX: gs.player.x, startY: gs.player.y, endX: p.x, endY: p.y, color: p.color, life: 8 });
+          criarParticulas(p.x, p.y, p.color, 15);
+          
+          p.solvesDone += 1;
+          if (p.solvesDone >= p.solvesNeeded) {
+            // Pegou o PowerUp!
+            coletarPowerUp(p.type);
+            gs.score += 50;
+            p.y = 9999; // Remove da tela
+          } else {
+            // Precisa de mais contas. Gera uma nova.
+            const eq = gerarEquacao(Math.min(3, gs.fase));
+            p.txt = eq.txt; p.res = eq.res;
+          }
+          break; // Só acerta um powerup por vez
+        }
+      }
+
+      if (!acertou && gs.powerups.length > 0 && resposta !== '') {
+        // Errou a conta: Penalidade!
+        gs.player.hp = Math.max(0, gs.player.hp - 5);
+        criarParticulas(gs.player.x, gs.player.y, '#FF0000', 5);
+      }
       setResposta('');
     }
     else setResposta(r => r.length < 4 ? r + valor : r);
   };
 
-  if (!jogoAtivo && pontos === 0 && vidas === 5) {
+  const coletarPowerUp = (type: string) => {
+    if (type === 'SPEED') gs.player.speed = Math.min(8, gs.player.speed + 1);
+    if (type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 80);
+    if (type === 'SIZE') gs.player.shotSize = Math.min(12, gs.player.shotSize + 2);
+    if (type === 'DAMAGE') gs.player.damage += 1;
+    // Cura um pouquinho sempre que pega powerup
+    gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 10);
+  };
+
+  const porcentagemHP = Math.max(0, (gs.player.hp / gs.player.maxHp) * 100);
+  const corHP = porcentagemHP > 50 ? '#32CD32' : porcentagemHP > 25 ? '#FFD700' : '#FF4444';
+
+  // --- TELAS FORA DO JOGO ---
+  if (!jogoAtivo && gs.score === 0 && gs.player.hp === 100) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.menuContainer}>
           <TouchableOpacity style={{ position: 'absolute', top: 20, left: 20 }} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={30} color="#00FFFF" />
           </TouchableOpacity>
-          <Ionicons name="planet" size={100} color="#FF00FF" style={{ marginBottom: 20 }} />
-          <Text style={styles.tituloMenu}>MATH</Text>
+          <Ionicons name="rocket" size={100} color="#00FFFF" style={{ marginBottom: 20 }} />
+          <Text style={styles.tituloMenu}>NEON</Text>
           <Text style={styles.subTituloMenu}>BLASTER</Text>
-          <Text style={styles.instrucoes}>Destrua os asteróides e naves inimigas digitando a resposta certa. Sobreviva e viaje pelas galáxias!</Text>
+          <Text style={styles.instrucoes}>Use o analógico para mover. Sua nave atira sozinha nos inimigos vermelhos.</Text>
+          <Text style={[styles.instrucoes, { color: '#FFD700' }]}>Resolva as contas para capturar os Power-Ups e ficar invencível!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
-            <Text style={styles.btnIniciarTxt}>START MISSION</Text>
+            <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (!jogoAtivo && vidas <= 0) {
+  if (!jogoAtivo && gs.player.hp <= 0) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.menuContainer}>
-          <Text style={[styles.tituloMenu, { color: '#FF4444' }]}>GAME OVER</Text>
-          <Text style={styles.textoScore}>Score Final: {pontos}</Text>
-          <Text style={styles.textoFase}>Chegou na Fase {fase}</Text>
+          <Text style={[styles.tituloMenu, { color: '#FF4444' }]}>DESTRUÍDO</Text>
+          <Text style={styles.textoScore}>Pontos: {gs.score}</Text>
+          <Text style={styles.textoFase}>Chegou na Fase {gs.fase}</Text>
           <TouchableOpacity style={[styles.btnIniciar, { marginTop: 40 }]} onPress={iniciarJogo}>
-            <Text style={styles.btnIniciarTxt}>TRY AGAIN</Text>
+            <Text style={styles.btnIniciarTxt}>TENTAR NOVAMENTE</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: '#333', marginTop: 15 }]} onPress={() => router.back()}>
-            <Text style={styles.btnIniciarTxt}>EXIT</Text>
+          <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#555', marginTop: 15 }]} onPress={() => router.back()}>
+            <Text style={[styles.btnIniciarTxt, { color: '#888' }]}>VOLTAR AO MENU</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
+  // --- TELA DO JOGO (RENDER RÁPIDO) ---
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* CABEÇALHO DO JOGO (HUD) */}
+      {/* HUD SUPERIOR */}
       <View style={styles.hud}>
-        <View style={styles.hudLeft}>
-          <Text style={styles.hudScore}>SCORE: {pontos}</Text>
-          <View style={styles.hudVidas}>
-            {Array.from({ length: vidas }).map((_, i) => <Ionicons key={i} name="heart" size={16} color="#FF00FF" />)}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.hudScore}>SCORE: {gs.score}</Text>
+          <View style={styles.hpBarContainer}>
+            <View style={[styles.hpBarFill, { width: `${porcentagemHP}%`, backgroundColor: corHP }]} />
           </View>
         </View>
-        <Text style={styles.hudFase}>FASE {fase}</Text>
+        <Text style={styles.hudFase}>FASE {gs.fase}</Text>
       </View>
 
-      {/* ÁREA DO JOGO (Protegida) */}
+      {/* ÁREA DO JOGO */}
       <View style={styles.gameArea}>
-        <Starfield velocidadeMult={fase} />
+        
+        {/* Fundo de Linhas (Grid Retrô) */}
+        <View style={styles.gridOverlay} />
 
-        {/* ALERTA DE FASE */}
-        {alertaFase && (
-          <View style={styles.alertaContainer}>
-            <Text style={styles.alertaTexto}>FASE {fase}</Text>
-            <Text style={styles.alertaSubTexto}>INIMIGOS SE APROXIMANDO...</Text>
-          </View>
-        )}
-
-        {/* INIMIGOS (Asteroides/UFOs) */}
-        {inimigos.map(inimigo => (
-          <Animated.View key={inimigo.id} style={[styles.inimigo, { left: inimigo.posX, transform: [{ translateY: inimigo.y }] }]}>
-            <Image source={{ uri: inimigo.isUFO ? SPRITE_UFO : SPRITE_METEOR }} style={styles.spriteInimigo} />
-            <View style={styles.caixaEquacao}>
-              <Text style={styles.textoEquacao}>{inimigo.texto}</Text>
-            </View>
-          </Animated.View>
+        {/* INIMIGOS NORMAIS (Triângulos Invertidos Vermelhos) */}
+        {gs.enemies.map(e => (
+          <View key={e.id} style={[styles.enemyShape, { left: e.x - 15, top: e.y - 15 }]} />
         ))}
 
-        {/* TIROS (LASERS) */}
-        {tiros.map(tiro => {
-          const transX = tiro.anim.interpolate({ inputRange: [0, 1], outputRange: [0, tiro.targetX - tiro.x] });
-          const transY = tiro.anim.interpolate({ inputRange: [0, 1], outputRange: [0, tiro.targetY - tiro.y] });
+        {/* POWER-UPS (Caixas Matemáticas) */}
+        {gs.powerups.map(p => (
+          <View key={p.id} style={[styles.powerupBox, { left: p.x - 35, top: p.y - 25, borderColor: p.color, shadowColor: p.color }]}>
+            <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
+            <Text style={styles.powerupMath}>{p.txt}</Text>
+            {p.solvesNeeded > 1 && (
+               <View style={styles.powerupDots}>
+                 {Array.from({length: p.solvesNeeded}).map((_, i) => (
+                   <View key={i} style={[styles.dot, { backgroundColor: i < p.solvesDone ? p.color : 'transparent', borderColor: p.color }]} />
+                 ))}
+               </View>
+            )}
+          </View>
+        ))}
+
+        {/* TIROS AUTOMÁTICOS */}
+        {gs.lasers.map(l => (
+          <View key={l.id} style={[styles.laserNormal, { left: l.x - (l.size/2), top: l.y, width: l.size, height: l.size * 4 }]} />
+        ))}
+
+        {/* TIROS ESPECIAIS (Laser Matemático Teleguiado) */}
+        {gs.specialLasers.map(sl => {
+          const dx = sl.endX - sl.startX; const dy = sl.endY - sl.startY;
+          const dist = Math.sqrt(dx*dx + dy*dy); const angle = Math.atan2(dy, dx);
           return (
-            <Animated.View key={tiro.id} style={[styles.laserBolt, { left: tiro.x - 4, top: tiro.y, transform: [{ translateX: transX }, { translateY: transY }] }]} />
+            <View key={sl.id} style={[styles.laserEspecial, {
+              left: sl.startX, top: sl.startY, width: dist, backgroundColor: sl.color, shadowColor: sl.color,
+              transform: [{ rotate: `${angle}rad` }, { translateX: dist / 2 }]
+            }]} />
           );
         })}
 
-        {/* EXPLOSÕES */}
-        {explosoes.map(exp => (
-          <Animated.Image key={exp.id} source={{ uri: 'https://img.icons8.com/color/96/000000/explosion.png' }} 
-            style={[styles.explosaoSprite, { 
-              left: exp.x + 10, top: exp.y + 10, 
-              transform: [{ scale: exp.anim.interpolate({ inputRange: [0,1], outputRange: [0.5, 2] }) }],
-              opacity: exp.anim.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] })
-            }]} 
-          />
+        {/* PARTÍCULAS DE EXPLOSÃO */}
+        {gs.particles.map((p, i) => (
+          <View key={i} style={{ position: 'absolute', width: 4, height: 4, backgroundColor: p.color, left: p.x, top: p.y }} />
         ))}
 
-        {/* NAVE DO JOGADOR */}
-        <View style={styles.playerContainer}>
-          <Image source={{ uri: SPRITE_PLAYER }} style={styles.playerSprite} />
+        {/* NAVE DO JOGADOR (Triângulo Neon Ciano construído em CSS) */}
+        <View style={[styles.playerShape, { left: gs.player.x - 20, top: gs.player.y - 20 }]} />
+        {/* Propulsor da nave */}
+        <View style={[styles.propulsor, { left: gs.player.x - 6, top: gs.player.y + 18, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
+
+        {/* ANALÓGICO VIRTUAL (JOYSTICK) */}
+        <View style={styles.joystickBase}>
+          <Animated.View {...panResponder.panHandlers} style={[styles.joystickKnob, { transform: [{ translateX: joyAnim.x }, { translateY: joyAnim.y }] }]} />
         </View>
+
       </View>
 
-      {/* PAINEL INFERIOR (TECLADO E VISOR) */}
+      {/* PAINEL INFERIOR (TECLADO MATEMÁTICO) */}
       <View style={styles.painelInferior}>
         <View style={styles.visorRadar}>
           <Text style={styles.visorTexto}>{resposta || '_'}</Text>
@@ -365,55 +386,60 @@ export default function MathBlaster() {
 }
 
 const styles = StyleSheet.create({
-  // TEMA RETRÔ ESPACIAL
-  container: { flex: 1, backgroundColor: '#05001A' }, // Roxo super escuro
+  container: { flex: 1, backgroundColor: '#050015' },
   
-  // Menu Incial
-  menuContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#05001A' },
-  tituloMenu: { fontSize: 50, fontWeight: '900', color: '#00FFFF', textShadowColor: '#FF00FF', textShadowOffset: {width: 4, height: 4}, textShadowRadius: 0, fontStyle: 'italic' },
-  subTituloMenu: { fontSize: 40, fontWeight: '900', color: '#FFF', letterSpacing: 5 },
-  instrucoes: { color: '#9D97B5', textAlign: 'center', marginHorizontal: 30, marginTop: 20, fontSize: 16, lineHeight: 24 },
-  btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 15, paddingHorizontal: 40, borderRadius: 30, marginTop: 50, borderWidth: 3, borderColor: '#00FFFF', shadowColor: '#00FFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 15, elevation: 10 },
-  btnIniciarTxt: { color: '#FFF', fontSize: 20, fontWeight: '900', letterSpacing: 2 },
+  // Menu
+  menuContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050015' },
+  tituloMenu: { fontSize: 55, fontWeight: '900', color: '#00FFFF', textShadowColor: '#00FFFF', textShadowRadius: 20, fontStyle: 'italic' },
+  subTituloMenu: { fontSize: 35, fontWeight: '900', color: '#FFF', letterSpacing: 8 },
+  instrucoes: { color: '#9D97B5', textAlign: 'center', marginHorizontal: 30, marginTop: 20, fontSize: 16, lineHeight: 24, fontWeight: 'bold' },
+  btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 18, paddingHorizontal: 40, borderRadius: 12, marginTop: 50, shadowColor: '#FF00FF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 15, elevation: 10 },
+  btnIniciarTxt: { color: '#FFF', fontSize: 18, fontWeight: '900', letterSpacing: 1 },
   textoScore: { color: '#00FFFF', fontSize: 30, fontWeight: 'bold', marginTop: 20 },
   textoFase: { color: '#9D97B5', fontSize: 18, marginTop: 10 },
 
   // HUD
-  hud: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, backgroundColor: '#0A0033', borderBottomWidth: 2, borderBottomColor: '#FF00FF', zIndex: 10 },
-  hudLeft: { gap: 5 },
-  hudScore: { color: '#00FFFF', fontSize: 20, fontWeight: '900', letterSpacing: 1 },
-  hudVidas: { flexDirection: 'row', gap: 5 },
+  hud: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10 },
+  hudScore: { color: '#FFF', fontSize: 18, fontWeight: '900', letterSpacing: 1, marginBottom: 5 },
+  hpBarContainer: { width: '100%', height: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 5, overflow: 'hidden' },
+  hpBarFill: { height: '100%', borderRadius: 5 },
   hudFase: { color: '#FF00FF', fontSize: 24, fontWeight: '900', fontStyle: 'italic' },
 
-  // Game Area
-  gameArea: { height: GAME_AREA_HEIGHT, width: '100%', overflow: 'hidden', position: 'relative', backgroundColor: '#05001A' },
+  // Game Area & Geometria
+  gameArea: { height: GAME_AREA_HEIGHT, width: '100%', overflow: 'hidden', position: 'relative', backgroundColor: '#050015' },
+  gridOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.1, backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)', backgroundSize: '40px 40px' }, // Efeito Grid Retrô (funciona bem na web/emuladores)
   
-  // Alertas
-  alertaContainer: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
-  alertaTexto: { color: '#FFF', fontSize: 48, fontWeight: '900', textShadowColor: '#FF00FF', textShadowOffset: {width: 2, height: 2}, textShadowRadius: 10, letterSpacing: 5 },
-  alertaSubTexto: { color: '#00FFFF', fontSize: 16, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 },
+  // Desenho da Nave (Triângulo CSS)
+  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 20, borderRightWidth: 20, borderBottomWidth: 40, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF', shadowColor: '#00FFFF', shadowRadius: 10, shadowOpacity: 1 },
+  propulsor: { position: 'absolute', width: 12, height: 15, backgroundColor: '#FF8C00', borderBottomLeftRadius: 6, borderBottomRightRadius: 6 },
+  
+  // Desenho Inimigo (Diamante Vermelho)
+  enemyShape: { position: 'absolute', width: 30, height: 30, backgroundColor: '#FF0055', transform: [{ rotate: '45deg' }], shadowColor: '#FF0055', shadowRadius: 8, shadowOpacity: 1 },
+  
+  // Power-Ups
+  powerupBox: { position: 'absolute', width: 70, height: 50, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 8, alignItems: 'center', justifyContent: 'center', shadowRadius: 10, shadowOpacity: 1 },
+  powerupTitle: { fontSize: 8, fontWeight: '900', position: 'absolute', top: -10, backgroundColor: '#050015', paddingHorizontal: 4 },
+  powerupMath: { color: '#FFF', fontSize: 18, fontWeight: '900' },
+  powerupDots: { flexDirection: 'row', gap: 4, position: 'absolute', bottom: -8 },
+  dot: { width: 8, height: 8, borderRadius: 4, borderWidth: 1, backgroundColor: '#050015' },
 
-  // Entidades
-  inimigo: { position: 'absolute', width: CARD_WIDTH, alignItems: 'center', zIndex: 10 },
-  spriteInimigo: { width: 60, height: 60, resizeMode: 'contain' },
-  caixaEquacao: { backgroundColor: 'rgba(0, 255, 255, 0.9)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: -10, borderWidth: 2, borderColor: '#FFF' },
-  textoEquacao: { color: '#05001A', fontSize: 18, fontWeight: '900' },
-  
-  playerContainer: { position: 'absolute', bottom: 10, width: '100%', alignItems: 'center', zIndex: 20 },
-  playerSprite: { width: 70, height: 70, resizeMode: 'contain' },
-  
-  laserBolt: { position: 'absolute', width: 8, height: 25, backgroundColor: '#00FFFF', borderRadius: 4, shadowColor: '#FFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 10, zIndex: 5 },
-  explosaoSprite: { position: 'absolute', width: 80, height: 80, resizeMode: 'contain', zIndex: 15 },
+  // Tiros
+  laserNormal: { position: 'absolute', backgroundColor: '#00FFFF', borderRadius: 5, shadowColor: '#00FFFF', shadowRadius: 5, shadowOpacity: 1 },
+  laserEspecial: { position: 'absolute', height: 6, borderRadius: 3, shadowRadius: 10, shadowOpacity: 1, zIndex: 5 },
 
-  // Painel Inferior (Teclado Neon)
-  painelInferior: { flex: 1, backgroundColor: '#0A0033', borderTopWidth: 3, borderTopColor: '#00FFFF', padding: 15, alignItems: 'center', justifyContent: 'flex-start' },
-  visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#000', paddingVertical: 15, borderRadius: 10, alignItems: 'center', borderWidth: 2, borderColor: '#FF00FF', marginBottom: 15, shadowColor: '#FF00FF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 5 },
-  visorTexto: { color: '#00FFFF', fontSize: 28, fontWeight: '900', letterSpacing: 3 },
+  // Joystick
+  joystickBase: { position: 'absolute', bottom: 20, left: 20, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(0, 255, 255, 0.1)', borderWidth: 2, borderColor: 'rgba(0, 255, 255, 0.3)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
+  joystickKnob: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0, 255, 255, 0.8)', shadowColor: '#00FFFF', shadowRadius: 10, shadowOpacity: 1 },
+
+  // Painel Inferior
+  painelInferior: { flex: 1, backgroundColor: '#0A0025', borderTopWidth: 2, borderTopColor: '#FF00FF', padding: 15, alignItems: 'center', justifyContent: 'flex-start' },
+  visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 12 },
+  visorTexto: { color: '#00FFFF', fontSize: 26, fontWeight: '900', letterSpacing: 3 },
   
-  tecladoContainer: { width: '100%', maxWidth: 350, gap: 10 },
-  tecladoRow: { flexDirection: 'row', gap: 10, height: 55 },
-  teclaRetro: { flex: 1, backgroundColor: 'rgba(0, 255, 255, 0.1)', borderRadius: 12, borderWidth: 2, borderColor: '#00FFFF', justifyContent: 'center', alignItems: 'center' },
-  teclaRetroText: { color: '#FFF', fontSize: 24, fontWeight: '900' },
-  teclaApagar: { backgroundColor: 'rgba(255, 68, 68, 0.2)', borderColor: '#FF4444' },
-  teclaEnviar: { backgroundColor: 'rgba(255, 0, 255, 0.2)', borderColor: '#FF00FF' },
+  tecladoContainer: { width: '100%', maxWidth: 350, gap: 8 },
+  tecladoRow: { flexDirection: 'row', gap: 8, height: 50 },
+  teclaRetro: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
+  teclaRetroText: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
+  teclaApagar: { backgroundColor: 'rgba(255, 68, 68, 0.15)', borderColor: '#FF4444' },
+  teclaEnviar: { backgroundColor: 'rgba(255, 0, 255, 0.15)', borderColor: '#FF00FF' },
 });
