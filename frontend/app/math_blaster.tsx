@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, PanResponder, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,8 +6,8 @@ import { useRouter } from 'expo-router';
 
 const initialWidth = Dimensions.get('window').width;
 
-// --- COMPONENTE: TECLADO RETRÔ (VOLTAMOS AO MODELO ANTIGO E ESTÁVEL) ---
-const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
+// --- COMPONENTE: TECLADO RETRÔ (Otimizado com React.memo para não travar o celular) ---
+const BotaoRetro = React.memo(({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
   const anim = useRef(new Animated.Value(1)).current;
   
   const handlePressIn = () => {
@@ -21,7 +21,7 @@ const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: stri
   return (
     <Animated.View style={{ flex: 1, transform: [{ scale: anim }] }}>
       <TouchableOpacity 
-        activeOpacity={0.7} 
+        activeOpacity={1} 
         onPressIn={handlePressIn} 
         onPressOut={handlePressOut}
         style={[styles.teclaRetro, valor === 'apagar' && styles.teclaApagar, valor === 'enviar' && styles.teclaEnviar]}
@@ -32,7 +32,7 @@ const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: stri
       </TouchableOpacity>
     </Animated.View>
   );
-};
+});
 
 export default function MathBlaster() {
   const router = useRouter();
@@ -69,7 +69,7 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
-  // --- CONTROLE DE NAVEGAÇÃO ANTIGO (PanResponder Clássico) ---
+  // --- CONTROLE DE NAVEGAÇÃO ANTIGO (PanResponder Clássico restaurado!) ---
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -78,9 +78,11 @@ export default function MathBlaster() {
       },
       onPanResponderMove: (e, gestureState) => {
         const dx = gestureState.moveX - gs.lastTouchX; const dy = gestureState.moveY - gs.lastTouchY;
-        gs.player.x += dx * 1.6; gs.player.y += dy * 1.6; 
+        gs.player.x += dx * 1.5; gs.player.y += dy * 1.5; 
         gs.lastTouchX = gestureState.moveX; gs.lastTouchY = gestureState.moveY;
-      }
+      },
+      onPanResponderRelease: () => {},
+      onPanResponderTerminate: () => {}
     })
   ).current;
 
@@ -393,9 +395,8 @@ export default function MathBlaster() {
     }
     gs.powerups.forEach(p => p.y += 1.5); 
 
-    // MINI-BOSS MORRE DE VERDADE AQUI (e.hp > 0 salva a pátria)
     gs.enemies.forEach(e => { if (e.hp <= 0 && e.hp > -90) { gs.score += e.isLeader?50:20; criarParticulas(e.x, e.y, e.type==='SQUAD'?'#FF0055':'#AAA', 10); } });
-    gs.enemies = gs.enemies.filter(e => e.hp > 0 && e.y < gh + 20);
+    gs.enemies = gs.enemies.filter(e => (e.hp > 0 || e.mathRequired) && e.y < gh + 20);
     gs.powerups = gs.powerups.filter(p => p.y < gh + 50);
 
     if (gs.player.hp <= 0) gameOver();
@@ -406,15 +407,14 @@ export default function MathBlaster() {
     for(let i=0; i<qtd; i++) { gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color }); }
   };
 
-  // --- TECLADO MATEMÁTICO ---
-  const lidarComTeclado = (valor: string) => {
+  // --- TECLADO MATEMÁTICO (Otimizado com useCallback) ---
+  const lidarComTeclado = useCallback((valor: string) => {
     if (!jogoAtivo) return;
     if (valor === 'apagar') setResposta(r => r.slice(0, -1));
     else if (valor === 'enviar') {
       const num = parseInt(resposta);
       let acertou = false;
 
-      // Dispara a Magia da Matemática
       const dispararMagia = (tx: number, ty: number, color: string) => {
         gs.mathShots.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, tx, ty, color, life: 15 });
       };
@@ -470,7 +470,7 @@ export default function MathBlaster() {
       setResposta('');
     }
     else setResposta(r => r.length < 4 ? r + valor : r);
-  };
+  }, [jogoAtivo, resposta]);
 
   const porcentagemHP = Math.max(0, (gs.player.hp / gs.player.maxHp) * 100);
   const corHP = porcentagemHP > 50 ? '#32CD32' : porcentagemHP > 25 ? '#FFD700' : '#FF4444';
@@ -506,7 +506,7 @@ export default function MathBlaster() {
           <TouchableOpacity style={{ position: 'absolute', top: 20, left: 20 }} onPress={() => router.back()}><Ionicons name="arrow-back" size={30} color="#00FFFF" /></TouchableOpacity>
           <Ionicons name="rocket" size={100} color="#00FFFF" style={{ marginBottom: 20 }} />
           <Text style={styles.tituloMenu}>SKY</Text><Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Deslize o dedo para mover. Os controles antigos (que não dão tela branca) voltaram!</Text>
+          <Text style={styles.instrucoes}>Deslize o dedo para mover a nave. O teclado e o movimento foram totalmente restaurados e blindados contra travamentos!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}><Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -679,6 +679,7 @@ const styles = StyleSheet.create({
   laserNormal: { position: 'absolute', zIndex: 1 },
   enemyLaser: { position: 'absolute', borderRadius: 5 },
   cannonBall: { position: 'absolute', borderRadius: 20, borderWidth: 2, borderColor: '#FFF' }, 
+  laserEspecial: { position: 'absolute', height: 6, borderRadius: 3, shadowRadius: 10, zIndex: 5 },
 
   painelInferior: { backgroundColor: '#0A0025', borderTopWidth: 2, borderTopColor: '#FF00FF', paddingHorizontal: 15, paddingTop: 15, paddingBottom: Platform.OS === 'android' ? 20 : 15, alignItems: 'center' },
   visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 12 },
