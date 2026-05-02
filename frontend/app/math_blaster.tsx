@@ -37,17 +37,14 @@ export default function MathBlaster() {
     player: { 
       x: initialWidth / 2, y: 300, 
       hp: 100, maxHp: 100, damage: 1, shotSize: 6,
-      fireRate: 300, lastFire: 0, tripleShot: false, // Tiro Normal
-      specialWeapon: null as string | null, // 'MISSILE' ou 'LASER'
-      specialFireRate: 2500, lastSpecialFire: 0 // Tempo de recarga da arma secundária
+      fireRate: 300, lastFire: 0, tripleShot: false,
+      specialWeapon: null as string | null, 
+      specialFireRate: 2500, lastSpecialFire: 0 
     },
-    lasers: [] as any[],
-    specialLasers: [] as any[],
-    enemies: [] as any[],
-    enemyLasers: [] as any[],
-    powerups: [] as any[],
-    particles: [] as any[],
-    boss: { active: false, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
+    lasers: [] as any[], specialLasers: [] as any[],
+    enemies: [] as any[], enemyLasers: [] as any[],
+    powerups: [] as any[], particles: [] as any[],
+    boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0,
     lastTouchX: 0, lastTouchY: 0
   }).current;
@@ -80,7 +77,7 @@ export default function MathBlaster() {
   const iniciarJogo = () => {
     gs.player = { x: layoutRef.current.width / 2, y: layoutRef.current.height - 100, hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, specialWeapon: null, specialFireRate: 2500, lastSpecialFire: 0 };
     gs.lasers = []; gs.specialLasers = []; gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
-    gs.boss = { active: false, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
+    gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0;
     setResposta(''); setJogoAtivo(true);
     if (loopRef.current) clearInterval(loopRef.current);
@@ -98,7 +95,7 @@ export default function MathBlaster() {
     if (gs.player.x < 20) gs.player.x = 20; if (gs.player.x > gw - 20) gs.player.x = gw - 20;
     if (gs.player.y < 20) gs.player.y = 20; if (gs.player.y > gh - 20) gs.player.y = gh - 20;
 
-    // 2. Armamento Dinâmico (Sempre atira o Normal + Especial de tempos em tempos)
+    // 2. Armamento Dinâmico
     if (now - gs.player.lastFire > gs.player.fireRate) {
       gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       if (gs.player.tripleShot) {
@@ -110,9 +107,9 @@ export default function MathBlaster() {
 
     if (gs.player.specialWeapon && now - gs.player.lastSpecialFire > gs.player.specialFireRate) {
       if (gs.player.specialWeapon === 'MISSILE') {
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * 3, size: gs.player.shotSize * 2.5, type: 'MISSILE' });
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * 4, size: gs.player.shotSize * 3, type: 'MISSILE' });
       } else if (gs.player.specialWeapon === 'LASER') {
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, vx: 0, vy: -25, damage: gs.player.damage * 2, size: gs.player.shotSize * 2, type: 'LASER' });
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, vx: 0, vy: -25, damage: gs.player.damage * 3, size: gs.player.shotSize * 2, type: 'LASER' });
       }
       gs.player.lastSpecialFire = now;
     }
@@ -122,7 +119,7 @@ export default function MathBlaster() {
       if (l.type === 'MISSILE') {
         let closest: any = null; let minDist = 999999;
         gs.enemies.concat(gs.boss.active ? [gs.boss] : []).forEach(e => {
-          if (e.hp > 0) {
+          if (e.hp > 0 && !e.mathRequired) { // Não foca no spawner matemático
             let d = Math.pow(e.x - l.x, 2) + Math.pow(e.y - l.y, 2);
             if (d < minDist) { minDist = d; closest = e; }
           }
@@ -133,7 +130,7 @@ export default function MathBlaster() {
           l.vx += (dx/dist) * 1.5; l.vy += (dy/dist) * 1.5;
         }
         const speed = Math.sqrt(l.vx*l.vx + l.vy*l.vy);
-        if (speed > 10) { l.vx = (l.vx/speed)*10; l.vy = (l.vy/speed)*10; }
+        if (speed > 12) { l.vx = (l.vx/speed)*12; l.vy = (l.vy/speed)*12; }
       }
       l.x += l.vx; l.y += l.vy;
     });
@@ -142,7 +139,7 @@ export default function MathBlaster() {
     gs.specialLasers.forEach(sl => sl.life -= 1);
     gs.specialLasers = gs.specialLasers.filter(sl => sl.life > 0);
 
-    // Tiros Inimigos (Corrigido bug do Hp invisível)
+    // Tiros Inimigos
     gs.enemyLasers.forEach(el => {
       if (el.homing) {
         const dx = gs.player.x - el.x; const dy = gs.player.y - el.y;
@@ -156,38 +153,41 @@ export default function MathBlaster() {
     });
     gs.enemyLasers = gs.enemyLasers.filter(el => el.y < gh + 20 && el.x > -20 && el.x < gw + 20 && el.hp > 0);
 
-    // 4. Mover Partículas
+    // Partículas
     gs.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 1; });
     gs.particles = gs.particles.filter(p => p.life > 0);
 
-    // --- DIRETOR DE CENA ---
+    // --- DIRETOR DE CENA (DIFICULDADE BASEADA NO TEMPO) ---
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
-      if (gs.stateTimer % 60 === 0) {
+      
+      // Meteoros
+      if (gs.stateTimer % Math.max(20, 60 - gs.fase * 5) === 0) {
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: Math.random() * 2 + 4 + (gs.fase * 0.5), angle: 0 });
       }
 
-      if (gs.stateTimer % 250 === 0 && gs.stateTimer < 1100) {
-        const cx = Math.random() * (gw - 120) + 60;
-        const baseHp = 2 + (gs.fase * 2);
-        const formation = Math.floor(Math.random() * 3);
-
-        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx, y: -30, targetY: 100, isLeader: true, hp: baseHp * 3, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
-
-        if (formation === 0) { 
-          gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 45, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
-          gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 45, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
-        } else if (formation === 1) { 
-          gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 60, y: -30, targetY: 100, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
-          gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 60, y: -30, targetY: 100, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
-        } else { 
-          gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 40, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
-          gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 40, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
-        }
+      // NAVE MÃE SPAWNER (Inimigo Matemático)
+      if (gs.stateTimer === 600 || gs.stateTimer === 1200) {
+        const eq = gerarEquacao(Math.min(3, gs.fase));
+        gs.enemies.push({ 
+          id: Math.random().toString(), type: 'SPAWNER', x: gw/2, y: -80, targetY: 100, 
+          hp: 9999, mathRequired: true, solvesNeeded: Math.min(8, 3 + gs.fase), solvesDone: 0, 
+          txt: eq.txt, res: eq.res, vy: 2, spawnTimer: 0 
+        });
       }
 
-      if (gs.stateTimer > 1300 && gs.enemies.filter(e => e.type === 'SQUAD').length === 0) {
+      // Esquadrões normais
+      if (gs.stateTimer % 200 === 0 && gs.stateTimer < 1400) {
+        const cx = Math.random() * (gw - 120) + 60;
+        const baseHp = 2 + (gs.fase * 3); // Vida escala mais agressivamente
+        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx, y: -30, targetY: 100, isLeader: true, hp: baseHp * 3, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
+        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 45, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
+        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 45, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
+      }
+
+      // TEMPO ESGOTADO - O BOSS VEM INDEPENDENTE DA TELA LIMPA
+      if (gs.stateTimer > 1500) {
         gs.gameState = 'BOSS_WARNING'; gs.stateTimer = 0;
       }
     } 
@@ -195,20 +195,43 @@ export default function MathBlaster() {
       if (gs.stateTimer > 90) { 
         gs.gameState = 'BOSS'; gs.stateTimer = 0;
         const eq = gerarEquacao(Math.min(3, gs.fase));
-        gs.boss = { active: true, x: gw / 2, y: -100, hp: 120 + (gs.fase * 80), maxHp: 120 + (gs.fase * 80), vx: 3 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
+        // Sorteia o tipo de Boss (0, 1 ou 2)
+        const bossType = Math.floor(Math.random() * 3);
+        gs.boss = { active: true, type: bossType, x: gw / 2, y: -100, hp: 150 + (gs.fase * 100), maxHp: 150 + (gs.fase * 100), vx: 3 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
+        
+        // Escolta do Boss
+        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: gw/4, y: -30, targetY: 80, isLeader: false, hp: 10 + gs.fase, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
+        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: (gw/4)*3, y: -30, targetY: 80, isLeader: false, hp: 10 + gs.fase, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
       }
     }
     else if (gs.gameState === 'BOSS') {
-      if (gs.boss.y < 80) gs.boss.y += 2;
+      if (gs.boss.y < 90) gs.boss.y += 2;
       else {
         gs.boss.x += gs.boss.vx;
         if (gs.boss.x < 60 || gs.boss.x > gw - 60) gs.boss.vx *= -1;
         gs.boss.timer += 1;
 
-        if (gs.boss.timer % Math.max(30, 80 - (gs.fase * 10)) === 0) {
-          gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: 0, vy: 2, size: 18, damage: 20, homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 3) });
+        // COMPORTAMENTOS DIFERENTES POR TIPO DE BOSS
+        if (gs.boss.type === 0) {
+          // Boss 1: Bolas Homing
+          if (gs.boss.timer % Math.max(30, 80 - (gs.fase * 10)) === 0) {
+            gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: 0, vy: 2, size: 18, damage: 20, homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) });
+          }
+        } else if (gs.boss.type === 1) {
+          // Boss 2: Espalhador (Leque)
+          if (gs.boss.timer % 60 === 0) {
+            [-2, -1, 0, 1, 2].forEach(dir => {
+               gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: dir * 1.5, vy: 6 + gs.fase, size: 8, damage: 15, homing: false, color: '#FF0055', hp: 1 });
+            });
+          }
+        } else {
+          // Boss 3: Raio Laser Central
+          if (gs.boss.timer % 120 === 0) {
+             gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: 0, vy: 15, size: 25, damage: 30, homing: false, color: '#32CD32', hp: 99 });
+          }
         }
 
+        // Escudo Matemático
         if (!gs.boss.shield && gs.boss.timer > gs.boss.nextShieldAt) {
           const eq = gerarEquacao(Math.min(3, gs.fase));
           gs.boss.shield = true; gs.boss.txt = eq.txt; gs.boss.res = eq.res;
@@ -216,37 +239,39 @@ export default function MathBlaster() {
       }
 
       if (gs.boss.hp <= 0) {
-        criarParticulas(gs.boss.x, gs.boss.y, '#FFD700', 60);
-        gs.score += 500 * gs.fase;
-        gs.boss.active = false;
+        criarParticulas(gs.boss.x, gs.boss.y, '#FFD700', 80);
+        gs.score += 1000 * gs.fase; gs.boss.active = false;
         gs.gameState = 'TRANSITION'; gs.stateTimer = 0;
-        gs.enemyLasers = []; 
+        gs.enemies = []; gs.enemyLasers = []; 
       }
     }
     else if (gs.gameState === 'TRANSITION') {
       if (gs.stateTimer > 90) {
-        gs.fase += 1;
-        gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 50); 
+        gs.fase += 1; gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 50); 
         gs.gameState = 'WAVES'; gs.stateTimer = 0;
       }
     }
 
     // --- INTELIGÊNCIA ARTIFICIAL ---
     gs.enemies.forEach(e => {
-      if (e.type === 'METEOR') {
-        e.y += e.vy; 
-      } 
+      if (e.type === 'METEOR') { e.y += e.vy; } 
+      else if (e.type === 'SPAWNER') {
+        if (e.y < e.targetY) e.y += e.vy;
+        else {
+           e.x += Math.sin(now / 500) * 0.5; // Flutua levemente
+           e.spawnTimer += 1;
+           // Cuspidor de naves
+           if (e.spawnTimer > Math.max(40, 100 - (gs.fase * 10))) {
+              gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: e.x, y: e.y + 20, hp: 1 + gs.fase, vy: 5, angle: 0 });
+              e.spawnTimer = 0;
+           }
+        }
+      }
       else if (e.type === 'SQUAD') {
         if (e.isLeader) {
           const dx = gs.player.x - e.x; const dy = gs.player.y - e.y;
-          const dist = Math.sqrt(dx*dx + dy*dy);
-          e.angle = Math.atan2(dy, dx); 
-          
-          if (dist > 50) { 
-             e.x += (dx/dist) * (1.5 + gs.fase * 0.3);
-             e.y += (dy/dist) * (1.0 + gs.fase * 0.2);
-          }
-
+          const dist = Math.sqrt(dx*dx + dy*dy); e.angle = Math.atan2(dy, dx); 
+          if (dist > 50) { e.x += (dx/dist) * (1.5 + gs.fase * 0.3); e.y += (dy/dist) * (1.0 + gs.fase * 0.2); }
           e.fireTimer += 1;
           if (e.fireTimer > Math.max(30, 80 - (gs.fase * 8))) { 
             gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 15, vx: Math.cos(e.angle)*5, vy: Math.sin(e.angle)*5, size: 8, damage: 15, homing: false, color: '#FF00FF', hp: 1 });
@@ -255,8 +280,7 @@ export default function MathBlaster() {
         } else {
           if (e.y < e.targetY) e.y += e.vy; 
           else {
-            e.x += Math.sin(now / 300) * 1.5; 
-            e.fireTimer += 1;
+            e.x += Math.sin(now / 300) * 1.5; e.fireTimer += 1;
             if (e.fireTimer > Math.max(60, 120 - (gs.fase * 5)) && Math.random() < 0.05) {
               gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 15, vx: 0, vy: 6 + gs.fase, size: 6, damage: 10, homing: false, color: '#FF0055', hp: 1 });
               e.fireTimer = 0;
@@ -266,42 +290,38 @@ export default function MathBlaster() {
       }
 
       if (Math.abs(gs.player.x - e.x) < 30 && Math.abs(gs.player.y - e.y) < 30) {
-        gs.player.hp -= 15; e.hp = -100;
+        gs.player.hp -= 15; if (!e.mathRequired) e.hp = -100;
         criarParticulas(gs.player.x, gs.player.y, '#FF0000', 10);
       }
     });
 
-    // --- SISTEMA DE COMBATE ---
+    // --- SISTEMA DE COMBATE (TIROS DO JOGADOR) ---
     gs.lasers.forEach(l => {
       gs.enemyLasers.forEach(el => {
         if (el.homing && el.hp > 0 && Math.abs(l.x - el.x) < 25 && Math.abs(l.y - el.y) < 25) {
-          el.hp -= l.damage;
-          if (l.type !== 'LASER') l.y = -100; 
-          criarParticulas(el.x, el.y, '#FF8C00', 2);
+          el.hp -= l.damage; if (l.type !== 'LASER') l.y = -100; criarParticulas(el.x, el.y, '#FF8C00', 3);
         }
       });
 
       gs.enemies.forEach(e => {
-        if (Math.abs(l.x - e.x) < 25 && Math.abs(l.y - e.y) < 25) {
+        if (!e.mathRequired && Math.abs(l.x - e.x) < 25 && Math.abs(l.y - e.y) < 25) {
           e.hp -= l.damage;
           if (l.type === 'MISSILE') {
             criarParticulas(e.x, e.y, '#FF4444', 15);
-            gs.enemies.forEach(e2 => { if (Math.abs(e.x - e2.x) < 70 && Math.abs(e.y - e2.y) < 70) e2.hp -= l.damage; });
+            gs.enemies.forEach(e2 => { if (!e2.mathRequired && Math.abs(e.x - e2.x) < 70 && Math.abs(e.y - e2.y) < 70) e2.hp -= l.damage; });
             if (gs.boss.active && Math.abs(gs.boss.x - e.x) < 80 && Math.abs(gs.boss.y - e.y) < 80) gs.boss.hp -= l.damage;
-          } else if (l.type !== 'LASER') {
-            l.y = -100; 
-          }
+          } else if (l.type !== 'LASER') { l.y = -100; }
           criarParticulas(l.x, l.y, '#FFF', 3);
+        } else if (e.mathRequired && Math.abs(l.x - e.x) < 40 && Math.abs(l.y - e.y) < 40) {
+           l.y = -100; criarParticulas(l.x, l.y, '#00FFFF', 2); // Bate no escudo da nave mãe
         }
       });
 
       if (gs.boss.active && Math.abs(l.x - gs.boss.x) < 55 && Math.abs(l.y - gs.boss.y) < 45) {
         if (l.type !== 'LASER') l.y = -100; 
-        if (gs.boss.shield) {
-          criarParticulas(l.x, gs.boss.y + 45, '#00FFFF', 2); 
-        } else {
-          gs.boss.hp -= l.damage;
-          criarParticulas(l.x, l.y, '#FFD700', 4); 
+        if (gs.boss.shield) { criarParticulas(l.x, gs.boss.y + 45, '#00FFFF', 2); } 
+        else {
+          gs.boss.hp -= l.damage; criarParticulas(l.x, l.y, '#FFD700', 4); 
           if (l.type === 'MISSILE') criarParticulas(l.x, l.y, '#FF4444', 15); 
         }
       }
@@ -309,33 +329,28 @@ export default function MathBlaster() {
 
     gs.enemyLasers.forEach(el => {
       if (Math.abs(el.x - gs.player.x) < 20 && Math.abs(el.y - gs.player.y) < 20) {
-        gs.player.hp -= el.damage; el.hp = 0; 
-        criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8);
+        gs.player.hp -= el.damage; el.hp = 0; criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8);
       }
     });
 
-    // Spawner Inteligente de Power-Ups
+    // Spawner de Power-Ups
     if (now - gs.lastPowerupSpawn > 15000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
-      const tipos = [
-        { type: 'DAMAGE', color: '#FF00FF', nome: 'DANO MAX' },
-        { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA NORMAL' }
-      ];
-      
+      const tipos = [{ type: 'DAMAGE', color: '#FF00FF', nome: 'DANO MAX' }, { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA NORMAL' }];
       if (!gs.player.tripleShot) tipos.push({ type: 'TRIPLE_SHOT', color: '#FFD700', nome: 'TIRO TRIPLO' });
       if (gs.player.specialWeapon !== 'MISSILE') tipos.push({ type: 'SPECIAL_MISSILE', color: '#FF4444', nome: 'MÍSSIL TELE' });
       if (gs.player.specialWeapon !== 'LASER') tipos.push({ type: 'SPECIAL_LASER', color: '#32CD32', nome: 'RAIO LASER' });
       if (gs.player.specialWeapon) tipos.push({ type: 'SPECIAL_RELOAD', color: '#FFFFFF', nome: 'RELOAD RÁPIDO' });
 
-      const selecionado = tipos[Math.floor(Math.random() * tipos.length)];
+      const sel = tipos[Math.floor(Math.random() * tipos.length)];
       const eq = gerarEquacao(Math.min(3, gs.fase));
-      gs.powerups.push({ id: Math.random().toString(), x: Math.random() * (gw - 80) + 40, y: -40, type: selecionado.type, color: selecionado.color, title: selecionado.nome, txt: eq.txt, res: eq.res });
+      gs.powerups.push({ id: Math.random().toString(), x: Math.random() * (gw - 80) + 40, y: -40, type: sel.type, color: sel.color, title: sel.nome, txt: eq.txt, res: eq.res });
       gs.lastPowerupSpawn = now;
     }
     gs.powerups.forEach(p => p.y += 1.5); 
 
     // Limpezas
     gs.enemies.forEach(e => { if (e.hp <= 0 && e.hp > -90) { gs.score += e.isLeader?50:20; criarParticulas(e.x, e.y, e.type==='SQUAD'?'#FF0055':'#AAA', 10); } });
-    gs.enemies = gs.enemies.filter(e => e.hp > 0 && e.y < gh + 20);
+    gs.enemies = gs.enemies.filter(e => (e.hp > 0 || e.mathRequired) && e.y < gh + 20);
     gs.powerups = gs.powerups.filter(p => p.y < gh + 50);
 
     if (gs.player.hp <= 0) gameOver();
@@ -354,30 +369,47 @@ export default function MathBlaster() {
       const num = parseInt(resposta);
       let acertou = false;
 
+      // 1: Escudo do Boss
       if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
-        acertou = true; gs.boss.shield = false; gs.boss.timer = 0;
-        gs.boss.nextShieldAt = Math.random() * 210 + 240; 
+        acertou = true; gs.boss.shield = false; gs.boss.timer = 0; gs.boss.nextShieldAt = Math.random() * 210 + 240; 
         gs.specialLasers.push({ id: Math.random().toString(), startX: gs.player.x, startY: gs.player.y, endX: gs.boss.x, endY: gs.boss.y, color: '#FFD700', life: 15 });
-        criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 40); 
-        gs.score += 150;
+        criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50); gs.score += 200;
       } 
       else {
-        for (let i = 0; i < gs.powerups.length; i++) {
-          let p = gs.powerups[i];
-          if (p.res === num) {
-            acertou = true;
-            gs.specialLasers.push({ id: Math.random().toString(), startX: gs.player.x, startY: gs.player.y, endX: p.x, endY: p.y, color: p.color, life: 10 });
-            criarParticulas(p.x, p.y, p.color, 30);
-            
-            if (p.type === 'DAMAGE') gs.player.damage += 1;
-            else if (p.type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 40);
-            else if (p.type === 'TRIPLE_SHOT') gs.player.tripleShot = true;
-            else if (p.type === 'SPECIAL_MISSILE') gs.player.specialWeapon = 'MISSILE';
-            else if (p.type === 'SPECIAL_LASER') gs.player.specialWeapon = 'LASER';
-            else if (p.type === 'SPECIAL_RELOAD') gs.player.specialFireRate = Math.max(500, gs.player.specialFireRate - 500);
-            
-            gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); 
-            gs.score += 50; p.y = 9999; break; 
+        // 2: Nave Mãe Spawner (Requer múltiplas contas)
+        for (let i = 0; i < gs.enemies.length; i++) {
+          let e = gs.enemies[i];
+          if (e.mathRequired && e.res === num) {
+            acertou = true; e.solvesDone += 1;
+            gs.specialLasers.push({ id: Math.random().toString(), startX: gs.player.x, startY: gs.player.y, endX: e.x, endY: e.y, color: '#00FFFF', life: 10 });
+            criarParticulas(e.x, e.y, '#00FFFF', 20);
+            if (e.solvesDone >= e.solvesNeeded) {
+               e.hp = -100; gs.score += 300; criarParticulas(e.x, e.y, '#00FFFF', 80);
+            } else {
+               const eq = gerarEquacao(Math.min(3, gs.fase)); e.txt = eq.txt; e.res = eq.res;
+            }
+            break;
+          }
+        }
+        
+        // 3: PowerUps
+        if (!acertou) {
+          for (let i = 0; i < gs.powerups.length; i++) {
+            let p = gs.powerups[i];
+            if (p.res === num) {
+              acertou = true;
+              gs.specialLasers.push({ id: Math.random().toString(), startX: gs.player.x, startY: gs.player.y, endX: p.x, endY: p.y, color: p.color, life: 10 });
+              criarParticulas(p.x, p.y, p.color, 30);
+              
+              if (p.type === 'DAMAGE') gs.player.damage += 1;
+              else if (p.type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 40);
+              else if (p.type === 'TRIPLE_SHOT') gs.player.tripleShot = true;
+              else if (p.type === 'SPECIAL_MISSILE') gs.player.specialWeapon = 'MISSILE';
+              else if (p.type === 'SPECIAL_LASER') gs.player.specialWeapon = 'LASER';
+              else if (p.type === 'SPECIAL_RELOAD') gs.player.specialFireRate = Math.max(500, gs.player.specialFireRate - 500);
+              
+              gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); gs.score += 50; p.y = 9999; break; 
+            }
           }
         }
       }
@@ -391,21 +423,41 @@ export default function MathBlaster() {
   const porcentagemHP = Math.max(0, (gs.player.hp / gs.player.maxHp) * 100);
   const corHP = porcentagemHP > 50 ? '#32CD32' : porcentagemHP > 25 ? '#FFD700' : '#FF4444';
 
+  // --- RENDERS DO HUD ---
+  const renderBuffs = () => {
+    return (
+      <View style={styles.buffContainer}>
+        {gs.player.damage > 1 && <Text style={[styles.buffText, { color: '#FF00FF' }]}>DANO Lvl.{gs.player.damage}</Text>}
+        {gs.player.fireRate < 300 && <Text style={[styles.buffText, { color: '#00FFFF' }]}>CADÊNCIA UP</Text>}
+        {gs.player.tripleShot && <Text style={[styles.buffText, { color: '#FFD700' }]}>TRIPLO</Text>}
+      </View>
+    );
+  };
+
+  const renderCooldownBar = () => {
+    if (!gs.player.specialWeapon) return null;
+    const readyPct = Math.min(100, ((Date.now() - gs.player.lastSpecialFire) / gs.player.specialFireRate) * 100);
+    const cor = gs.player.specialWeapon === 'LASER' ? '#32CD32' : '#FF4444';
+    return (
+      <View style={styles.cooldownWrapper}>
+        <Text style={[styles.cooldownLabel, { color: cor }]}>{gs.player.specialWeapon}</Text>
+        <View style={styles.cooldownBar}>
+          <View style={[styles.cooldownFill, { width: `${readyPct}%`, backgroundColor: readyPct === 100 ? cor : '#555' }]} />
+        </View>
+      </View>
+    );
+  };
+
+  // --- TELAS ---
   if (!jogoAtivo && gs.score === 0 && gs.player.hp === 100) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.menuContainer}>
-          <TouchableOpacity style={{ position: 'absolute', top: 20, left: 20 }} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={30} color="#00FFFF" />
-          </TouchableOpacity>
+          <TouchableOpacity style={{ position: 'absolute', top: 20, left: 20 }} onPress={() => router.back()}><Ionicons name="arrow-back" size={30} color="#00FFFF" /></TouchableOpacity>
           <Ionicons name="rocket" size={100} color="#00FFFF" style={{ marginBottom: 20 }} />
-          <Text style={styles.tituloMenu}>SKY</Text>
-          <Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Deslize o dedo pela tela para mover a nave.</Text>
-          <Text style={[styles.instrucoes, { color: '#FFD700' }]}>Sua nave atira sozinha. Resolva contas no teclado para pegar Armas Secundárias, Upgrades e quebrar o Escudo do Boss!</Text>
-          <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
-            <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
-          </TouchableOpacity>
+          <Text style={styles.tituloMenu}>SKY</Text><Text style={styles.subTituloMenu}>EQUATIONS</Text>
+          <Text style={styles.instrucoes}>Deslize o dedo para mover. Destrua a Nave Mãe Azul resolvendo múltiplas contas!</Text>
+          <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}><Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -418,12 +470,8 @@ export default function MathBlaster() {
           <Text style={[styles.tituloMenu, { color: '#FF4444' }]}>DESTRUÍDO</Text>
           <Text style={styles.textoScore}>Pontos: {gs.score}</Text>
           <Text style={styles.textoFase}>Chegou na Fase {gs.fase}</Text>
-          <TouchableOpacity style={[styles.btnIniciar, { marginTop: 40 }]} onPress={iniciarJogo}>
-            <Text style={styles.btnIniciarTxt}>TENTAR NOVAMENTE</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#555', marginTop: 15 }]} onPress={() => router.back()}>
-            <Text style={[styles.btnIniciarTxt, { color: '#888' }]}>VOLTAR AO MENU</Text>
-          </TouchableOpacity>
+          <TouchableOpacity style={[styles.btnIniciar, { marginTop: 40 }]} onPress={iniciarJogo}><Text style={styles.btnIniciarTxt}>TENTAR NOVAMENTE</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#555', marginTop: 15 }]} onPress={() => router.back()}><Text style={[styles.btnIniciarTxt, { color: '#888' }]}>VOLTAR AO MENU</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -434,113 +482,92 @@ export default function MathBlaster() {
       
       {/* HUD SUPERIOR */}
       <View style={styles.hud}>
-        <View style={{ flex: 1, paddingRight: 20 }}>
+        <View style={{ flex: 1, paddingRight: 10 }}>
           <Text style={styles.hudScore}>SCORE: {gs.score}</Text>
-          <View style={styles.hpBarContainer}>
-            <View style={[styles.hpBarFill, { width: `${porcentagemHP}%`, backgroundColor: corHP }]} />
-          </View>
+          <View style={styles.hpBarContainer}><View style={[styles.hpBarFill, { width: `${porcentagemHP}%`, backgroundColor: corHP }]} /></View>
+          {renderBuffs()}
         </View>
-        <Text style={styles.hudFase}>FASE {gs.fase}</Text>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={styles.hudFase}>FASE {gs.fase}</Text>
+          {renderCooldownBar()}
+        </View>
       </View>
 
       {/* ÁREA DO JOGO */}
       <View style={styles.gameArea} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} {...panResponder.panHandlers}>
         <View style={styles.gridOverlay} />
 
-        {gs.gameState === 'BOSS_WARNING' && (
-          <View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>
-        )}
-        {gs.gameState === 'TRANSITION' && (
-          <View style={styles.centerAlert}><Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text><Text style={styles.alertSubText}>PREPARANDO SALTO...</Text></View>
-        )}
+        {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
+        {gs.gameState === 'TRANSITION' && (<View style={styles.centerAlert}><Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text><Text style={styles.alertSubText}>PREPARANDO SALTO...</Text></View>)}
 
         {/* INIMIGOS */}
         {gs.enemies.map(e => {
-          if (e.type === 'METEOR') {
-            return <View key={e.id} style={[styles.meteorShape, { left: e.x - 15, top: e.y - 15 }]} />;
-          } else {
-            // Apenas o líder rotaciona caçando o player. Os asas apontam para baixo (0rad é para baixo com esse CSS)
-            const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
-            return <View key={e.id} style={[styles.squadronShip, { left: e.x - 15, top: e.y - 15, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]} />;
-          }
+          if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 15, top: e.y - 15 }]} />;
+          if (e.type === 'SPAWNER') return (
+             <View key={e.id} style={[styles.spawnerShape, { left: e.x - 40, top: e.y - 30 }]}>
+                <Text style={styles.spawnerMath}>{e.txt}</Text>
+                <View style={styles.powerupDots}>
+                   {Array.from({length: e.solvesNeeded}).map((_, i) => (<View key={i} style={[styles.dot, { backgroundColor: i < e.solvesDone ? '#00FFFF' : 'transparent', borderColor: '#00FFFF' }]} />))}
+                </View>
+             </View>
+          );
+          const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
+          return <View key={e.id} style={[styles.squadronShip, { left: e.x - 15, top: e.y - 15, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]} />;
         })}
 
         {/* O CHEFÃO (BOSS) */}
         {gs.boss.active && (
           <View style={[styles.bossContainer, { left: gs.boss.x - 50, top: gs.boss.y - 30 }]}>
             <View style={styles.bossHpBar}><View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]} /></View>
-            <View style={styles.bossShip} />
-            {gs.boss.shield && (
-              <View style={styles.bossShield}><Text style={styles.bossMath}>{gs.boss.txt}</Text></View>
-            )}
+            {/* Visual muda conforme o tipo de boss */}
+            <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 40, height: 80, backgroundColor: '#006400', borderColor: '#32CD32' }]} />
+            {gs.boss.shield && (<View style={styles.bossShield}><Text style={styles.bossMath}>{gs.boss.txt}</Text></View>)}
           </View>
         )}
 
         {/* POWER-UPS */}
         {gs.powerups.map(p => (
-          <View key={p.id} style={[styles.powerupBox, { left: p.x - 35, top: p.y - 20, borderColor: p.color }]}>
-            <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
-            <Text style={styles.powerupMath}>{p.txt}</Text>
-          </View>
+          <View key={p.id} style={[styles.powerupBox, { left: p.x - 35, top: p.y - 20, borderColor: p.color }]}><Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text><Text style={styles.powerupMath}>{p.txt}</Text></View>
         ))}
 
-        {/* TIROS DO JOGADOR (Normais e Especiais) */}
+        {/* TIROS JOGADOR */}
         {gs.lasers.map(l => (
           <View key={l.id} style={[styles.laserNormal, { 
-            left: l.x - (l.size/2), top: l.y, width: l.size, 
-            height: l.type === 'MISSILE' ? l.size : (l.type === 'LASER' ? l.size * 6 : l.size * 3), 
-            backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : '#00FFFF',
-            borderRadius: l.type === 'MISSILE' ? l.size / 2 : 5 // Míssil perfeitamente redondo!
+            left: l.x - (l.size/2), top: l.y, width: l.size, height: l.type === 'MISSILE' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3), 
+            backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : '#00FFFF', borderRadius: l.type === 'MISSILE' ? l.size / 2 : 5 
           }]} />
         ))}
 
-        {/* TIROS INIMIGOS E DO BOSS */}
+        {/* TIROS INIMIGOS */}
         {gs.enemyLasers.map(el => (
-          <View key={el.id} style={[
-            el.homing ? styles.cannonBall : styles.enemyLaser, 
-            { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color }
-          ]}>
+          <View key={el.id} style={[el.homing ? styles.cannonBall : styles.enemyLaser, { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color }]}>
              {el.homing && el.hp < 5 && <View style={{width:'100%', height:'100%', backgroundColor:'rgba(255,255,255,0.5)', borderRadius: 20}}/>}
           </View>
         ))}
 
-        {/* TIROS MATEMÁTICOS (Laser ao acertar conta) */}
+        {/* TIROS MATEMÁTICOS */}
         {gs.specialLasers.map(sl => {
-          const dx = sl.endX - sl.startX; const dy = sl.endY - sl.startY;
-          const dist = Math.sqrt(dx*dx + dy*dy); const angle = Math.atan2(dy, dx);
-          return (
-            <View key={sl.id} style={[styles.laserEspecial, { left: sl.startX, top: sl.startY, width: dist, backgroundColor: sl.color, transform: [{ rotate: `${angle}rad` }, { translateX: dist / 2 }] }]} />
-          );
+          const dx = sl.endX - sl.startX; const dy = sl.endY - sl.startY; const dist = Math.sqrt(dx*dx + dy*dy); const angle = Math.atan2(dy, dx);
+          return <View key={sl.id} style={[styles.laserEspecial, { left: sl.startX, top: sl.startY, width: dist, backgroundColor: sl.color, transform: [{ rotate: `${angle}rad` }, { translateX: dist / 2 }] }]} />;
         })}
 
         {/* PARTÍCULAS */}
-        {gs.particles.map((p, i) => (
-          <View key={i} style={{ position: 'absolute', width: 4, height: 4, backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 2 }} />
-        ))}
+        {gs.particles.map((p, i) => (<View key={i} style={{ position: 'absolute', width: 4, height: 4, backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 2 }} />))}
 
-        {/* NAVE DO JOGADOR */}
+        {/* NAVE */}
         <View style={[styles.playerShape, { left: gs.player.x - 20, top: gs.player.y - 20 }]} />
         <View style={[styles.propulsor, { left: gs.player.x - 6, top: gs.player.y + 18, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
 
       </View>
 
-      {/* PAINEL INFERIOR */}
+      {/* TECLADO */}
       <View style={styles.painelInferior}>
-        <View style={styles.visorRadar}>
-          <Text style={styles.visorTexto}>{resposta || '_'}</Text>
-        </View>
-
+        <View style={styles.visorRadar}><Text style={styles.visorTexto}>{resposta || '_'}</Text></View>
         <View style={styles.tecladoContainer}>
           {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((linha, i) => (
-            <View key={i} style={styles.tecladoRow}>
-              {linha.map(num => <BotaoRetro key={num} valor={num} onPressWeb={lidarComTeclado} />)}
-            </View>
+            <View key={i} style={styles.tecladoRow}>{linha.map(num => <BotaoRetro key={num} valor={num} onPressWeb={lidarComTeclado} />)}</View>
           ))}
-          <View style={styles.tecladoRow}>
-            <BotaoRetro valor="apagar" onPressWeb={lidarComTeclado} />
-            <BotaoRetro valor="0" onPressWeb={lidarComTeclado} />
-            <BotaoRetro valor="enviar" onPressWeb={lidarComTeclado} />
-          </View>
+          <View style={styles.tecladoRow}><BotaoRetro valor="apagar" onPressWeb={lidarComTeclado} /><BotaoRetro valor="0" onPressWeb={lidarComTeclado} /><BotaoRetro valor="enviar" onPressWeb={lidarComTeclado} /></View>
         </View>
       </View>
     </SafeAreaView>
@@ -558,11 +585,19 @@ const styles = StyleSheet.create({
   textoScore: { color: '#00FFFF', fontSize: 30, fontWeight: 'bold', marginTop: 20 },
   textoFase: { color: '#9D97B5', fontSize: 18, marginTop: 10 },
 
-  hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10 },
+  hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10 },
   hudScore: { color: '#FFF', fontSize: 18, fontWeight: '900', letterSpacing: 1, marginBottom: 5 },
-  hpBarContainer: { width: '100%', height: 12, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 6, overflow: 'hidden' },
-  hpBarFill: { height: '100%', borderRadius: 6 },
+  hpBarContainer: { width: '100%', height: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 5, overflow: 'hidden' },
+  hpBarFill: { height: '100%', borderRadius: 5 },
   hudFase: { color: '#FF00FF', fontSize: 24, fontWeight: '900', fontStyle: 'italic' },
+  
+  buffContainer: { flexDirection: 'row', gap: 5, marginTop: 5 },
+  buffText: { fontSize: 10, fontWeight: 'bold', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 4, borderRadius: 4 },
+  
+  cooldownWrapper: { alignItems: 'flex-end', marginTop: 4 },
+  cooldownLabel: { fontSize: 10, fontWeight: 'bold', marginBottom: 2 },
+  cooldownBar: { width: 60, height: 6, backgroundColor: '#333', borderRadius: 3, overflow: 'hidden' },
+  cooldownFill: { height: '100%' },
 
   gameArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#050015' },
   gridOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.1, backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)', backgroundSize: '40px 40px' },
@@ -578,6 +613,9 @@ const styles = StyleSheet.create({
   meteorShape: { position: 'absolute', width: 30, height: 30, backgroundColor: '#555', borderRadius: 5, borderWidth: 2, borderColor: '#777' },
   squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 15, borderRightWidth: 15, borderTopWidth: 30, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
   
+  spawnerShape: { position: 'absolute', width: 80, height: 60, backgroundColor: 'rgba(0, 255, 255, 0.2)', borderWidth: 3, borderColor: '#00FFFF', borderRadius: 15, justifyContent: 'center', alignItems: 'center', shadowColor: '#00FFFF', shadowRadius: 15, zIndex: 15 },
+  spawnerMath: { color: '#FFF', fontSize: 20, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 5 },
+  
   bossContainer: { position: 'absolute', width: 100, height: 80, alignItems: 'center', zIndex: 20 },
   bossShip: { width: 80, height: 50, backgroundColor: '#8B0000', borderRadius: 20, borderWidth: 3, borderColor: '#FF4444' },
   bossHpBar: { width: '100%', height: 6, backgroundColor: '#333', marginBottom: 5, borderRadius: 3, overflow: 'hidden' },
@@ -588,10 +626,12 @@ const styles = StyleSheet.create({
   powerupBox: { position: 'absolute', width: 75, height: 40, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   powerupTitle: { fontSize: 8, fontWeight: '900', position: 'absolute', top: -10, backgroundColor: '#050015', paddingHorizontal: 4 },
   powerupMath: { color: '#FFF', fontSize: 16, fontWeight: '900' },
+  powerupDots: { flexDirection: 'row', gap: 4, position: 'absolute', bottom: -8 },
+  dot: { width: 8, height: 8, borderRadius: 4, borderWidth: 1, backgroundColor: '#050015' },
 
   laserNormal: { position: 'absolute', zIndex: 1 },
   enemyLaser: { position: 'absolute', borderRadius: 5 },
-  cannonBall: { position: 'absolute', borderRadius: 20, borderWidth: 2, borderColor: '#FFF' },
+  cannonBall: { position: 'absolute', borderRadius: 20, borderWidth: 2, borderColor: '#FFF' }, 
   laserEspecial: { position: 'absolute', height: 6, borderRadius: 3, shadowRadius: 10, zIndex: 5 },
 
   painelInferior: { backgroundColor: '#0A0025', borderTopWidth: 2, borderTopColor: '#FF00FF', paddingHorizontal: 15, paddingTop: 15, paddingBottom: Platform.OS === 'android' ? 20 : 15, alignItems: 'center' },
