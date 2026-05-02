@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, PanResponder, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,11 +6,11 @@ import { useRouter } from 'expo-router';
 
 const initialWidth = Dimensions.get('window').width;
 
-// --- COMPONENTE: TECLADO RETRÔ (Otimizado com React.memo para não travar no MiniBoss) ---
-const BotaoRetro = React.memo(({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
+// --- COMPONENTE: TECLADO RETRÔ (Extraído exatamente do seu arquivo de texto) ---
+const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
   const anim = useRef(new Animated.Value(1)).current;
   
-  const handlePressIn = () => { Animated.spring(anim, { toValue: 0.85, useNativeDriver: true }).start(); };
+  const handlePressIn = () => Animated.spring(anim, { toValue: 0.85, useNativeDriver: true }).start();
   const handlePressOut = () => { Animated.spring(anim, { toValue: 1, useNativeDriver: true }).start(); onPressWeb(valor); };
 
   return (
@@ -23,7 +23,7 @@ const BotaoRetro = React.memo(({ valor, onPressWeb }: { valor: string, onPressWe
       </TouchableOpacity>
     </Animated.View>
   );
-});
+};
 
 export default function MathBlaster() {
   const router = useRouter();
@@ -33,7 +33,7 @@ export default function MathBlaster() {
   
   const layoutRef = useRef({ width: initialWidth, height: 500 });
 
-  // ESTADO GLOBAL DO MOTOR COM UPGRADES GRANULARES (MICRO-PROGRESSÃO)
+  // ESTADO GLOBAL DO MOTOR
   const gs = useRef({
     player: { 
       x: initialWidth / 2, y: 300, 
@@ -45,12 +45,12 @@ export default function MathBlaster() {
       }
     },
     lasers: [] as any[], 
-    mathShots: [] as any[], // O projétil mágico que sai da nave
+    specialLasers: [] as any[],
+    mathShots: [] as any[], 
     enemies: [] as any[], enemyLasers: [] as any[],
     powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0,
-    movementTouchId: null as string | null, // Impressão digital do toque p/ evitar teletransporte
     lastTouchX: 0, lastTouchY: 0
   }).current;
 
@@ -60,34 +60,16 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
-  // --- CONTROLE DE NAVEGAÇÃO NATIVO E BLINDADO (Fim do Teletransporte e Zoom) ---
+  // --- CONTROLE (SKY FORCE) (Extraído exatamente do seu arquivo de texto) ---
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderTerminationRequest: () => false, // Impede que o teclado roube o foco
-      onPanResponderGrant: (e) => { 
-        if (e.nativeEvent.touches.length > 0) {
-          const touch = e.nativeEvent.touches[0]; // Isola apenas o PRIMEIRO dedo
-          gs.movementTouchId = touch.identifier;
-          gs.lastTouchX = touch.pageX; 
-          gs.lastTouchY = touch.pageY; 
-        }
-      },
-      onPanResponderMove: (e) => {
-        if (gs.movementTouchId !== null) {
-          // Procura especificamente o dedo que iniciou o movimento, ignorando o dedo do teclado
-          const touch = Array.from(e.nativeEvent.touches).find((t: any) => t.identifier === gs.movementTouchId);
-          if (touch) {
-            const dx = (touch as any).pageX - gs.lastTouchX; 
-            const dy = (touch as any).pageY - gs.lastTouchY;
-            gs.player.x += dx * 1.5; gs.player.y += dy * 1.5;
-            gs.lastTouchX = (touch as any).pageX; gs.lastTouchY = (touch as any).pageY;
-          }
-        }
-      },
-      onPanResponderRelease: () => { gs.movementTouchId = null; },
-      onPanResponderTerminate: () => { gs.movementTouchId = null; }
+      onPanResponderGrant: (e, gestureState) => { gs.lastTouchX = gestureState.x0; gs.lastTouchY = gestureState.y0; },
+      onPanResponderMove: (e, gestureState) => {
+        const dx = gestureState.moveX - gs.lastTouchX; const dy = gestureState.moveY - gs.lastTouchY;
+        gs.player.x += dx * 1.5; gs.player.y += dy * 1.5;
+        gs.lastTouchX = gestureState.moveX; gs.lastTouchY = gestureState.moveY;
+      }
     })
   ).current;
 
@@ -111,9 +93,9 @@ export default function MathBlaster() {
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 } 
       }
     };
-    gs.lasers = []; gs.mathShots = []; gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
+    gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
-    gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
+    gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0;
     setResposta(''); setJogoAtivo(true);
     if (loopRef.current) clearInterval(loopRef.current);
     loopRef.current = setInterval(gameTick, 30); 
@@ -172,7 +154,7 @@ export default function MathBlaster() {
         if (closest) {
           const dx = closest.x - l.x; const dy = closest.y - l.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
-          l.vx += (dx/dist) * 1.5; l.vy += (dy/dist) * 1.5; 
+          l.vx += (dx/dist) * 2; l.vy += (dy/dist) * 2; 
         }
         const speed = Math.sqrt(l.vx*l.vx + l.vy*l.vy);
         if (speed > 10) { l.vx = (l.vx/speed)*10; l.vy = (l.vy/speed)*10; }
@@ -398,16 +380,14 @@ export default function MathBlaster() {
       }
     });
 
-    // SISTEMA DE MICRO-POWERUPS INTELIGENTE
     if (now - gs.lastPowerupSpawn > 15000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
       const tipos = [
         { type: 'DAMAGE', color: '#FF00FF', nome: 'DANO NAVE' }, 
-        { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA NAVE' }
+        { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA UP' }
       ];
       
       if (!gs.player.tripleShot) tipos.push({ type: 'TRIPLE_SHOT', color: '#FFD700', nome: 'TIRO TRIPLO' });
       
-      // Árvore do Míssil
       if (!gs.player.weapons.missile.active) {
         tipos.push({ type: 'MISSILE_UNLOCK', color: '#FF4444', nome: 'MÍSSIL TELE' });
       } else {
@@ -417,7 +397,6 @@ export default function MathBlaster() {
         tipos.push({ type: 'MISSILE_LIFE', color: '#FF4444', nome: 'MÍSSIL: TEMPO' });
       }
 
-      // Árvore do Laser
       if (!gs.player.weapons.laser.active) {
         tipos.push({ type: 'LASER_UNLOCK', color: '#32CD32', nome: 'RAIO LASER' });
       } else {
@@ -435,8 +414,8 @@ export default function MathBlaster() {
 
     gs.enemies.forEach(e => { if (e.hp <= 0 && e.hp > -90) { gs.score += e.isLeader?50:20; criarParticulas(e.x, e.y, e.type==='SQUAD'?'#FF0055':'#AAA', 10); } });
     
-    // A CORREÇÃO FINAL DO MINIBOSS - Só sobrevive se hp > 0
-    gs.enemies = gs.enemies.filter(e => e.hp > 0 && e.y < gh + 20);
+    // FILTRO QUE RESOLVE O BUG DO MINIBOSS - Só fica na tela se HP > 0
+    gs.enemies = gs.enemies.filter(e => e.hp > 0 && e.y < gh + 20); 
     
     gs.powerups = gs.powerups.filter(p => p.y < gh + 50);
 
@@ -448,23 +427,22 @@ export default function MathBlaster() {
     for(let i=0; i<qtd; i++) { gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color }); }
   };
 
-  // --- TECLADO MATEMÁTICO BLINDADO ---
-  const lidarComTeclado = useCallback((valor: string) => {
+  // --- TECLADO MATEMÁTICO ---
+  const lidarComTeclado = (valor: string) => {
     if (!jogoAtivo) return;
     if (valor === 'apagar') setResposta(r => r.slice(0, -1));
     else if (valor === 'enviar') {
       const num = parseInt(resposta);
       let acertou = false;
 
-      // TIRO MÁGICO DA MATEMÁTICA
       const dispararMagia = (tx: number, ty: number, color: string) => {
-        gs.mathShots.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, tx, ty, color, life: 12 });
+        gs.mathShots.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, tx, ty, color, life: 15 });
       };
 
       if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
         acertou = true; gs.boss.shield = false; gs.boss.timer = 0; gs.boss.nextShieldAt = Math.random() * 210 + 240; 
         dispararMagia(gs.boss.x, gs.boss.y, '#FFD700'); 
-        setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50), 200); 
+        setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50), 350); 
         gs.score += 200;
       } 
       else {
@@ -473,10 +451,10 @@ export default function MathBlaster() {
           if (e.mathRequired && e.res === num) {
             acertou = true; e.solvesDone += 1;
             dispararMagia(e.x, e.y, '#00FFFF');
-            setTimeout(() => criarParticulas(e.x, e.y, '#00FFFF', 20), 200);
+            setTimeout(() => criarParticulas(e.x, e.y, '#00FFFF', 20), 350);
             
             if (e.solvesDone >= e.solvesNeeded) {
-               e.hp = -100; gs.score += 300; setTimeout(() => criarParticulas(e.x, e.y, '#00FFFF', 80), 200);
+               e.hp = -100; gs.score += 300; setTimeout(() => criarParticulas(e.x, e.y, '#00FFFF', 80), 350);
             } else {
                const eq = gerarEquacao(Math.min(3, gs.fase), e.res); e.txt = eq.txt; e.res = eq.res;
             }
@@ -490,18 +468,17 @@ export default function MathBlaster() {
             if (p.res === num) {
               acertou = true;
               dispararMagia(p.x, p.y, p.color);
-              setTimeout(() => criarParticulas(p.x, p.y, p.color, 30), 200);
+              setTimeout(() => criarParticulas(p.x, p.y, p.color, 30), 350);
               
-              // MICRO-PROGRESSÃO: APLICA APENAS O ATRIBUTO SORTEADO
               if (p.type === 'DAMAGE') gs.player.damage += 0.5;
-              else if (p.type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 15);
+              else if (p.type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 20);
               else if (p.type === 'TRIPLE_SHOT') gs.player.tripleShot = true;
               
               else if (p.type === 'MISSILE_UNLOCK') gs.player.weapons.missile.active = true;
               else if (p.type === 'MISSILE_COOLDOWN') { gs.player.weapons.missile.baseCooldown = Math.max(3000, gs.player.weapons.missile.baseCooldown - 500); gs.player.weapons.missile.level += 1; }
               else if (p.type === 'MISSILE_DAMAGE') { gs.player.weapons.missile.damageMult += 0.5; gs.player.weapons.missile.level += 1; }
-              else if (p.type === 'MISSILE_AOE') { gs.player.weapons.missile.aoeRange += 5; gs.player.weapons.missile.level += 1; }
-              else if (p.type === 'MISSILE_LIFE') { gs.player.weapons.missile.life += 10; gs.player.weapons.missile.level += 1; }
+              else if (p.type === 'MISSILE_AOE') { gs.player.weapons.missile.aoeRange += 10; gs.player.weapons.missile.level += 1; }
+              else if (p.type === 'MISSILE_LIFE') { gs.player.weapons.missile.life += 20; gs.player.weapons.missile.level += 1; }
               
               else if (p.type === 'LASER_UNLOCK') gs.player.weapons.laser.active = true;
               else if (p.type === 'LASER_COOLDOWN') { gs.player.weapons.laser.baseCooldown = Math.max(4000, gs.player.weapons.laser.baseCooldown - 500); gs.player.weapons.laser.level += 1; }
@@ -518,7 +495,7 @@ export default function MathBlaster() {
       setResposta('');
     }
     else setResposta(r => r.length < 4 ? r + valor : r);
-  }, [jogoAtivo, resposta]);
+  };
 
   const porcentagemHP = Math.max(0, (gs.player.hp / gs.player.maxHp) * 100);
   const corHP = porcentagemHP > 50 ? '#32CD32' : porcentagemHP > 25 ? '#FFD700' : '#FF4444';
@@ -526,7 +503,7 @@ export default function MathBlaster() {
   const renderBuffs = () => {
     return (
       <View style={styles.buffContainer}>
-        {gs.player.damage > 1 && <Text style={[styles.buffText, { color: '#FF00FF' }]}>DANO NAVE</Text>}
+        {gs.player.damage > 1 && <Text style={[styles.buffText, { color: '#FF00FF' }]}>DANO Lvl.{gs.player.damage}</Text>}
         {gs.player.fireRate < 300 && <Text style={[styles.buffText, { color: '#00FFFF' }]}>CADÊNCIA UP</Text>}
         {gs.player.tripleShot && <Text style={[styles.buffText, { color: '#FFD700' }]}>TRIPLO</Text>}
       </View>
@@ -697,7 +674,7 @@ const styles = StyleSheet.create({
   skillOverlay: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)' },
 
   gameArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#050015' },
-  gridOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#050015' },
+  gridOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.1, backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)', backgroundSize: '40px 40px' },
   
   centerAlert: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
   alertTextDanger: { color: '#FF0055', fontSize: 40, fontWeight: '900', textShadowColor: '#FF0055', textShadowRadius: 10 },
@@ -722,7 +699,7 @@ const styles = StyleSheet.create({
   bossShield: { position: 'absolute', top: -10, width: 130, height: 130, borderRadius: 65, borderWidth: 4, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
   bossMath: { color: '#FFF', fontSize: 24, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 5 },
 
-  powerupBox: { position: 'absolute', width: 95, height: 40, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  powerupBox: { position: 'absolute', width: 105, height: 40, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   powerupTitle: { fontSize: 8, fontWeight: '900', position: 'absolute', top: -10, backgroundColor: '#050015', paddingHorizontal: 4 },
   powerupMath: { color: '#FFF', fontSize: 16, fontWeight: '900' },
   powerupDots: { flexDirection: 'row', gap: 4, position: 'absolute', bottom: -8 },
