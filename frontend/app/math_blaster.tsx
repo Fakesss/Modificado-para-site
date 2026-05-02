@@ -1,35 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, PanResponder, Platform } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 const initialWidth = Dimensions.get('window').width;
 
-// --- COMPONENTE: TECLADO RETRÔ (VOLTAMOS AO MODELO ESTÁVEL) ---
+// --- COMPONENTE: TECLADO RETRÔ (Multi-touch Nativo com Isolamento) ---
 const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
   const anim = useRef(new Animated.Value(1)).current;
   
-  const handlePressIn = () => {
+  const handlePressIn = (e: any) => {
+    e.stopPropagation(); // IMPEDE QUE O TOQUE VÁ PARA A TELA DO JOGO
     Animated.spring(anim, { toValue: 0.85, useNativeDriver: true }).start();
     onPressWeb(valor); 
   };
-  const handlePressOut = () => {
+  const handlePressOut = (e: any) => {
+    e.stopPropagation();
     Animated.spring(anim, { toValue: 1, useNativeDriver: true }).start();
   };
 
   return (
-    <Animated.View style={{ flex: 1, transform: [{ scale: anim }] }}>
-      <TouchableOpacity 
-        activeOpacity={0.7} 
-        onPressIn={handlePressIn} 
-        onPressOut={handlePressOut}
-        style={[styles.teclaRetro, valor === 'apagar' && styles.teclaApagar, valor === 'enviar' && styles.teclaEnviar]}
-      >
+    <Animated.View style={{ flex: 1, transform: [{ scale: anim }] }} 
+      onTouchStart={handlePressIn} 
+      onTouchEnd={handlePressOut} 
+      onTouchCancel={handlePressOut}>
+      <View style={[styles.teclaRetro, valor === 'apagar' && styles.teclaApagar, valor === 'enviar' && styles.teclaEnviar]}>
         {valor === 'apagar' ? <Ionicons name="backspace" size={26} color="#FFF" /> : 
          valor === 'enviar' ? <Ionicons name="flash" size={26} color="#FFF" /> : 
          <Text style={styles.teclaRetroText}>{valor}</Text>}
-      </TouchableOpacity>
+      </View>
     </Animated.View>
   );
 };
@@ -58,6 +58,7 @@ export default function MathBlaster() {
     powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0,
+    movementTouchId: null as string | null, // RASTREAMENTO DA "IMPRESSÃO DIGITAL" DO TOQUE
     lastTouchX: 0, lastTouchY: 0
   }).current;
 
@@ -67,23 +68,31 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
-  // --- CONTROLE DE NAVEGAÇÃO (COM PROTEÇÃO ANTI-CONGELAMENTO) ---
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      // A MÁGICA ESTÁ AQUI: Impede que o toque no teclado cancele o movimento da nave!
-      onPanResponderTerminationRequest: () => false, 
-      onPanResponderGrant: (e, gestureState) => { 
-        gs.lastTouchX = gestureState.x0; gs.lastTouchY = gestureState.y0; 
-      },
-      onPanResponderMove: (e, gestureState) => {
-        const dx = gestureState.moveX - gs.lastTouchX; const dy = gestureState.moveY - gs.lastTouchY;
-        gs.player.x += dx * 1.6; gs.player.y += dy * 1.6; 
-        gs.lastTouchX = gestureState.moveX; gs.lastTouchY = gestureState.moveY;
+  // --- CONTROLES INTELIGENTES DE MOVIMENTO (Sem Teletransporte) ---
+  const handleTouchStart = (e: any) => {
+    if (gs.movementTouchId === null && e.nativeEvent.touches.length > 0) {
+      const touch = e.nativeEvent.touches[0];
+      gs.movementTouchId = touch.identifier;
+      gs.lastTouchX = touch.pageX; 
+      gs.lastTouchY = touch.pageY;
+    }
+  };
+  const handleTouchMove = (e: any) => {
+    if (gs.movementTouchId !== null) {
+      // Busca apenas o toque que iniciou o movimento da nave
+      const touch = e.nativeEvent.touches.find((t: any) => t.identifier === gs.movementTouchId);
+      if (touch) {
+        const dx = touch.pageX - gs.lastTouchX; 
+        const dy = touch.pageY - gs.lastTouchY;
+        gs.player.x += dx * 1.5; gs.player.y += dy * 1.5; 
+        gs.lastTouchX = touch.pageX; gs.lastTouchY = touch.pageY;
       }
-    })
-  ).current;
+    }
+  };
+  const handleTouchEnd = (e: any) => {
+    const touchExists = e.nativeEvent.touches.some((t: any) => t.identifier === gs.movementTouchId);
+    if (!touchExists) gs.movementTouchId = null; // Soltou a nave
+  };
 
   // --- MATEMÁTICA ---
   const gerarEquacao = (dificuldade: number, evitarResp?: number) => {
@@ -104,7 +113,7 @@ export default function MathBlaster() {
     };
     gs.lasers = []; gs.specialLasers = []; gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
-    gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0;
+    gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
     setResposta(''); setJogoAtivo(true);
     if (loopRef.current) clearInterval(loopRef.current);
     loopRef.current = setInterval(gameTick, 30); 
@@ -117,10 +126,11 @@ export default function MathBlaster() {
     const now = Date.now();
     const gw = layoutRef.current.width; const gh = layoutRef.current.height;
 
+    // Bordas seguras
     if (gs.player.x < 20) gs.player.x = 20; if (gs.player.x > gw - 20) gs.player.x = gw - 20;
     if (gs.player.y < 20) gs.player.y = 20; if (gs.player.y > gh - 20) gs.player.y = gh - 20;
 
-    // TIRO NORMAL
+    // 1. DISPAROS DO JOGADOR
     if (now - gs.player.lastFire > gs.player.fireRate) {
       gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       if (gs.player.tripleShot) {
@@ -130,9 +140,8 @@ export default function MathBlaster() {
       gs.player.lastFire = now;
     }
 
-    // ARMAS CUMULATIVAS SECUNDÁRIAS
     if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * 4, size: gs.player.shotSize * 3, type: 'MISSILE', life: 90 }); // Míssil morre em ~3 segs
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * 4, size: gs.player.shotSize * 3, type: 'MISSILE', life: 100 }); 
       gs.player.weapons.missile.lastFire = now;
     }
     if (gs.player.weapons.laser.active && now - gs.player.weapons.laser.lastFire > gs.player.weapons.laser.baseCooldown) {
@@ -140,7 +149,7 @@ export default function MathBlaster() {
       gs.player.weapons.laser.lastFire = now;
     }
 
-    // Mover Tiros do Jogador
+    // Movimentação dos tiros
     gs.lasers.forEach(l => {
       if (l.type === 'MISSILE') {
         l.life -= 1; // Perde combustível
@@ -158,8 +167,7 @@ export default function MathBlaster() {
         }
         const speed = Math.sqrt(l.vx*l.vx + l.vy*l.vy);
         if (speed > 10) { l.vx = (l.vx/speed)*10; l.vy = (l.vy/speed)*10; }
-        
-        if (l.life <= 0) l.y = -100; // Desaparece se acabar o combustível
+        if (l.life <= 0) l.y = -100; // Some sem bater se acabar o combustível
       }
       l.x += l.vx; l.y += l.vy;
     });
@@ -184,15 +192,17 @@ export default function MathBlaster() {
     gs.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 1; });
     gs.particles = gs.particles.filter(p => p.life > 0);
 
-    // --- DIRETOR DE CENA ---
+    // --- DIRETOR DE CENA (DIFICULDADE BASEADA NO TEMPO) ---
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
       
+      // Meteoros
       if (gs.stateTimer % Math.max(20, 60 - gs.fase * 5) === 0) {
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: Math.random() * 2 + 4 + (gs.fase * 0.5), angle: 0 });
       }
 
+      // FLANQUEADORES
       if (gs.stateTimer % 180 === 0 && gs.fase >= 2) {
         const isLeft = Math.random() > 0.5;
         gs.enemies.push({
@@ -203,6 +213,7 @@ export default function MathBlaster() {
         });
       }
 
+      // NAVE MÃE
       if (gs.stateTimer === 600 || gs.stateTimer === 1200) {
         const eq = gerarEquacao(Math.min(3, gs.fase));
         const isLeft = gs.stateTimer === 600; 
@@ -212,6 +223,7 @@ export default function MathBlaster() {
         });
       }
 
+      // ESQUADRÕES
       if (gs.stateTimer % 200 === 0 && gs.stateTimer < 1400) {
         const cx = Math.random() * (gw - 120) + 60;
         const baseHp = 3 + (gs.fase * 3); 
@@ -280,6 +292,7 @@ export default function MathBlaster() {
       }
     }
 
+    // --- IA INIMIGOS ---
     gs.enemies.forEach(e => {
       if (e.type === 'METEOR') { e.y += e.vy; } 
       else if (e.type === 'FLANKER') { e.x += e.vx; e.y += e.vy; }
@@ -349,7 +362,7 @@ export default function MathBlaster() {
             criarParticulas(e.x, e.y, '#FF4444', 15);
             gs.enemies.forEach(e2 => { if (!e2.mathRequired && Math.abs(e.x - e2.x) < 70 && Math.abs(e.y - e2.y) < 70) e2.hp -= l.damage; });
             if (gs.boss.active && Math.abs(gs.boss.x - e.x) < 80 && Math.abs(gs.boss.y - e.y) < 80) gs.boss.hp -= l.damage;
-            l.y = -100; // EXPLODE AO TOCAR!
+            l.y = -100; // EXPLODE O MÍSSIL E SOME IMEDIATAMENTE
           } else if (l.type !== 'LASER') { l.y = -100; }
           criarParticulas(l.x, l.y, '#FFF', 3);
         } else if (e.mathRequired && Math.abs(l.x - e.x) < 40 && Math.abs(l.y - e.y) < 40) {
@@ -378,6 +391,7 @@ export default function MathBlaster() {
       if (!gs.player.tripleShot) tipos.push({ type: 'TRIPLE_SHOT', color: '#FFD700', nome: 'TIRO TRIPLO' });
       if (!gs.player.weapons.missile.active) tipos.push({ type: 'SPECIAL_MISSILE', color: '#FF4444', nome: 'MÍSSIL TELE' });
       if (!gs.player.weapons.laser.active) tipos.push({ type: 'SPECIAL_LASER', color: '#32CD32', nome: 'RAIO LASER' });
+      
       if (gs.player.weapons.missile.active || gs.player.weapons.laser.active) {
         tipos.push({ type: 'SPECIAL_RELOAD', color: '#FFFFFF', nome: 'RELOAD RÁPIDO' });
         tipos.push({ type: 'SPECIAL_RELOAD', color: '#FFFFFF', nome: 'RELOAD RÁPIDO' });
@@ -495,7 +509,7 @@ export default function MathBlaster() {
           <TouchableOpacity style={{ position: 'absolute', top: 20, left: 20 }} onPress={() => router.back()}><Ionicons name="arrow-back" size={30} color="#00FFFF" /></TouchableOpacity>
           <Ionicons name="rocket" size={100} color="#00FFFF" style={{ marginBottom: 20 }} />
           <Text style={styles.tituloMenu}>SKY</Text><Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Deslize para mover. O teclado anti-congelamento permite digitar e atirar simultaneamente sem travar!</Text>
+          <Text style={styles.instrucoes}>Deslize para mover. O multi-touch isolado permite digitar e atirar perfeitamente sem travar!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}><Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -532,7 +546,8 @@ export default function MathBlaster() {
         </View>
       </View>
 
-      <View style={styles.gameArea} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} {...panResponder.panHandlers}>
+      <View style={styles.gameArea} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} 
+            onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} onTouchCancel={handleTouchEnd}>
         <View style={styles.gridOverlay} />
 
         {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
@@ -680,4 +695,4 @@ const styles = StyleSheet.create({
   teclaRetroText: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
   teclaApagar: { backgroundColor: 'rgba(255, 68, 68, 0.15)', borderColor: '#FF4444' },
   teclaEnviar: { backgroundColor: 'rgba(255, 0, 255, 0.15)', borderColor: '#FF00FF' },
-})
+});
