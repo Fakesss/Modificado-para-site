@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, PanResponder, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 const initialWidth = Dimensions.get('window').width;
 
-// --- TECLADO RETRÔ MULTI-TOUCH ---
+// --- COMPONENTE: TECLADO RETRÔ (VOLTAMOS AO MODELO ESTÁVEL) ---
 const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
   const anim = useRef(new Animated.Value(1)).current;
   
@@ -19,12 +19,17 @@ const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: stri
   };
 
   return (
-    <Animated.View style={{ flex: 1, transform: [{ scale: anim }] }} onTouchStart={handlePressIn} onTouchEnd={handlePressOut} onTouchCancel={handlePressOut}>
-      <View style={[styles.teclaRetro, valor === 'apagar' && styles.teclaApagar, valor === 'enviar' && styles.teclaEnviar]}>
+    <Animated.View style={{ flex: 1, transform: [{ scale: anim }] }}>
+      <TouchableOpacity 
+        activeOpacity={0.7} 
+        onPressIn={handlePressIn} 
+        onPressOut={handlePressOut}
+        style={[styles.teclaRetro, valor === 'apagar' && styles.teclaApagar, valor === 'enviar' && styles.teclaEnviar]}
+      >
         {valor === 'apagar' ? <Ionicons name="backspace" size={26} color="#FFF" /> : 
          valor === 'enviar' ? <Ionicons name="flash" size={26} color="#FFF" /> : 
          <Text style={styles.teclaRetroText}>{valor}</Text>}
-      </View>
+      </TouchableOpacity>
     </Animated.View>
   );
 };
@@ -53,7 +58,6 @@ export default function MathBlaster() {
     powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0,
-    movementTouchId: null as string | null, // Corrige o bug do multitoque!
     lastTouchX: 0, lastTouchY: 0
   }).current;
 
@@ -63,30 +67,23 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
-  // --- CONTROLES INTELIGENTES DE MOVIMENTO ---
-  const handleTouchStart = (e: any) => {
-    if (gs.movementTouchId === null && e.nativeEvent.changedTouches.length > 0) {
-      const touch = e.nativeEvent.changedTouches[0];
-      gs.movementTouchId = touch.identifier;
-      gs.lastTouchX = touch.pageX; 
-      gs.lastTouchY = touch.pageY;
-    }
-  };
-  const handleTouchMove = (e: any) => {
-    if (gs.movementTouchId !== null) {
-      const touch = e.nativeEvent.touches.find((t: any) => t.identifier === gs.movementTouchId);
-      if (touch) {
-        const dx = touch.pageX - gs.lastTouchX; 
-        const dy = touch.pageY - gs.lastTouchY;
-        gs.player.x += dx * 1.8; gs.player.y += dy * 1.8; 
-        gs.lastTouchX = touch.pageX; gs.lastTouchY = touch.pageY;
+  // --- CONTROLE DE NAVEGAÇÃO (COM PROTEÇÃO ANTI-CONGELAMENTO) ---
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      // A MÁGICA ESTÁ AQUI: Impede que o toque no teclado cancele o movimento da nave!
+      onPanResponderTerminationRequest: () => false, 
+      onPanResponderGrant: (e, gestureState) => { 
+        gs.lastTouchX = gestureState.x0; gs.lastTouchY = gestureState.y0; 
+      },
+      onPanResponderMove: (e, gestureState) => {
+        const dx = gestureState.moveX - gs.lastTouchX; const dy = gestureState.moveY - gs.lastTouchY;
+        gs.player.x += dx * 1.6; gs.player.y += dy * 1.6; 
+        gs.lastTouchX = gestureState.moveX; gs.lastTouchY = gestureState.moveY;
       }
-    }
-  };
-  const handleTouchEnd = (e: any) => {
-    const touch = e.nativeEvent.changedTouches.find((t: any) => t.identifier === gs.movementTouchId);
-    if (touch) gs.movementTouchId = null; // Libera o controle
-  };
+    })
+  ).current;
 
   // --- MATEMÁTICA ---
   const gerarEquacao = (dificuldade: number, evitarResp?: number) => {
@@ -107,7 +104,7 @@ export default function MathBlaster() {
     };
     gs.lasers = []; gs.specialLasers = []; gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
-    gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
+    gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0;
     setResposta(''); setJogoAtivo(true);
     if (loopRef.current) clearInterval(loopRef.current);
     loopRef.current = setInterval(gameTick, 30); 
@@ -133,9 +130,9 @@ export default function MathBlaster() {
       gs.player.lastFire = now;
     }
 
-    // ARMAS CUMULATIVAS (MÍSSIL E LASER PODEM ATIRAR JUNTOS)
+    // ARMAS CUMULATIVAS SECUNDÁRIAS
     if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -6, damage: gs.player.damage * 4, size: gs.player.shotSize * 3, type: 'MISSILE', life: 100 }); // Life para morrer sozinho
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * 4, size: gs.player.shotSize * 3, type: 'MISSILE', life: 90 }); // Míssil morre em ~3 segs
       gs.player.weapons.missile.lastFire = now;
     }
     if (gs.player.weapons.laser.active && now - gs.player.weapons.laser.lastFire > gs.player.weapons.laser.baseCooldown) {
@@ -146,7 +143,7 @@ export default function MathBlaster() {
     // Mover Tiros do Jogador
     gs.lasers.forEach(l => {
       if (l.type === 'MISSILE') {
-        l.life -= 1; // Míssil gasta combustível
+        l.life -= 1; // Perde combustível
         let closest: any = null; let minDist = 999999;
         gs.enemies.concat(gs.boss.active ? [gs.boss] : []).forEach(e => {
           if (e.hp > 0 && !e.mathRequired) { 
@@ -157,12 +154,12 @@ export default function MathBlaster() {
         if (closest) {
           const dx = closest.x - l.x; const dy = closest.y - l.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
-          l.vx += (dx/dist) * 2; l.vy += (dy/dist) * 2; // Persegue agressivamente
+          l.vx += (dx/dist) * 2; l.vy += (dy/dist) * 2; 
         }
         const speed = Math.sqrt(l.vx*l.vx + l.vy*l.vy);
         if (speed > 10) { l.vx = (l.vx/speed)*10; l.vy = (l.vy/speed)*10; }
         
-        if (l.life <= 0) l.y = -100; // Morre de velhice
+        if (l.life <= 0) l.y = -100; // Desaparece se acabar o combustível
       }
       l.x += l.vx; l.y += l.vy;
     });
@@ -196,14 +193,13 @@ export default function MathBlaster() {
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: Math.random() * 2 + 4 + (gs.fase * 0.5), angle: 0 });
       }
 
-      // FLANQUEADORES (Novos Inimigos Laterais a partir da fase 2)
       if (gs.stateTimer % 180 === 0 && gs.fase >= 2) {
         const isLeft = Math.random() > 0.5;
         gs.enemies.push({
           id: Math.random().toString(), type: 'FLANKER',
           x: isLeft ? -20 : gw + 20, y: Math.random() * (gh/3), targetY: 0,
           hp: 2 + gs.fase * 2, vx: isLeft ? 5 + gs.fase : -5 - gs.fase, vy: 2, angle: 0,
-          shield: Math.random() > 0.7 ? 2 : 0 // 30% de chance de ter escudo
+          shield: Math.random() > 0.7 ? 2 : 0
         });
       }
 
@@ -218,9 +214,9 @@ export default function MathBlaster() {
 
       if (gs.stateTimer % 200 === 0 && gs.stateTimer < 1400) {
         const cx = Math.random() * (gw - 120) + 60;
-        const baseHp = 3 + (gs.fase * 3); // Vida escala muito mais
+        const baseHp = 3 + (gs.fase * 3); 
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx, y: -30, targetY: 100, isLeader: true, hp: baseHp * 3, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI, evasive: true });
-        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 45, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 }); // Escudos nas fases altas
+        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 45, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 }); 
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 45, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 });
       }
 
@@ -259,7 +255,6 @@ export default function MathBlaster() {
           }
         }
 
-        // Boss Spawna ajudantes infinitamente se a tela esvaziar
         if (gs.boss.timer % 300 === 0 && gs.enemies.length < 2) {
           gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: gs.boss.x - 40, y: gs.boss.y, targetY: gs.boss.y + 40, isLeader: false, hp: 10 + gs.fase, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
           gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: gs.boss.x + 40, y: gs.boss.y, targetY: gs.boss.y + 40, isLeader: false, hp: 10 + gs.fase, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
@@ -285,12 +280,9 @@ export default function MathBlaster() {
       }
     }
 
-    // --- INTELIGÊNCIA ARTIFICIAL INIMIGOS ---
     gs.enemies.forEach(e => {
       if (e.type === 'METEOR') { e.y += e.vy; } 
-      else if (e.type === 'FLANKER') {
-        e.x += e.vx; e.y += e.vy;
-      }
+      else if (e.type === 'FLANKER') { e.x += e.vx; e.y += e.vy; }
       else if (e.type === 'SPAWNER') {
         if (e.y < e.targetY) e.y += e.vy;
         else {
@@ -305,14 +297,11 @@ export default function MathBlaster() {
         }
       }
       else if (e.type === 'SQUAD') {
-        
-        // Evasiva (Pula pro lado se um tiro estiver na cara)
         if (e.evasive) {
           gs.lasers.forEach(l => {
             if (l.y > e.y && l.y - e.y < 80 && Math.abs(l.x - e.x) < 20) e.x += e.x > l.x ? 3 : -3;
           });
         }
-
         if (e.isLeader) {
           const dx = gs.player.x - e.x; const dy = gs.player.y - e.y;
           const dist = Math.sqrt(dx*dx + dy*dy); e.angle = Math.atan2(dy, dx); 
@@ -350,20 +339,17 @@ export default function MathBlaster() {
 
       gs.enemies.forEach(e => {
         if (!e.mathRequired && Math.abs(l.x - e.x) < 25 && Math.abs(l.y - e.y) < 25) {
-          
           if (e.shield && e.shield > 0) {
-             e.shield -= l.damage; // Dano no escudo primeiro
+             e.shield -= l.damage; 
              if (l.type !== 'LASER') l.y = -100;
-             criarParticulas(e.x, e.y, '#00FFFF', 5);
-             return;
+             criarParticulas(e.x, e.y, '#00FFFF', 5); return;
           }
-
           e.hp -= l.damage;
           if (l.type === 'MISSILE') {
             criarParticulas(e.x, e.y, '#FF4444', 15);
             gs.enemies.forEach(e2 => { if (!e2.mathRequired && Math.abs(e.x - e2.x) < 70 && Math.abs(e.y - e2.y) < 70) e2.hp -= l.damage; });
             if (gs.boss.active && Math.abs(gs.boss.x - e.x) < 80 && Math.abs(gs.boss.y - e.y) < 80) gs.boss.hp -= l.damage;
-            l.y = -100; // EXPLODE O MÍSSIL AQUI
+            l.y = -100; // EXPLODE AO TOCAR!
           } else if (l.type !== 'LASER') { l.y = -100; }
           criarParticulas(l.x, l.y, '#FFF', 3);
         } else if (e.mathRequired && Math.abs(l.x - e.x) < 40 && Math.abs(l.y - e.y) < 40) {
@@ -387,14 +373,11 @@ export default function MathBlaster() {
       }
     });
 
-    // Spawner de Power-Ups (Frequência ajustada para a quantidade de armas)
-    if (now - gs.lastPowerupSpawn > 18000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
+    if (now - gs.lastPowerupSpawn > 15000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
       const tipos = [{ type: 'DAMAGE', color: '#FF00FF', nome: 'DANO MAX' }, { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA NORMAL' }];
       if (!gs.player.tripleShot) tipos.push({ type: 'TRIPLE_SHOT', color: '#FFD700', nome: 'TIRO TRIPLO' });
       if (!gs.player.weapons.missile.active) tipos.push({ type: 'SPECIAL_MISSILE', color: '#FF4444', nome: 'MÍSSIL TELE' });
       if (!gs.player.weapons.laser.active) tipos.push({ type: 'SPECIAL_LASER', color: '#32CD32', nome: 'RAIO LASER' });
-      
-      // Se tiver arma secundária, powerup de reload aparece com muita frequência
       if (gs.player.weapons.missile.active || gs.player.weapons.laser.active) {
         tipos.push({ type: 'SPECIAL_RELOAD', color: '#FFFFFF', nome: 'RELOAD RÁPIDO' });
         tipos.push({ type: 'SPECIAL_RELOAD', color: '#FFFFFF', nome: 'RELOAD RÁPIDO' });
@@ -439,7 +422,6 @@ export default function MathBlaster() {
             acertou = true; e.solvesDone += 1;
             gs.specialLasers.push({ id: Math.random().toString(), startX: gs.player.x, startY: gs.player.y, endX: e.x, endY: e.y, color: '#00FFFF', life: 10 });
             criarParticulas(e.x, e.y, '#00FFFF', 20);
-            
             if (e.solvesDone >= e.solvesNeeded) {
                e.hp = -100; gs.score += 300; criarParticulas(e.x, e.y, '#00FFFF', 80);
             } else {
@@ -508,12 +490,12 @@ export default function MathBlaster() {
 
   if (!jogoAtivo && gs.score === 0 && gs.player.hp === 100) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { touchAction: 'none' } as any]}>
         <View style={styles.menuContainer}>
           <TouchableOpacity style={{ position: 'absolute', top: 20, left: 20 }} onPress={() => router.back()}><Ionicons name="arrow-back" size={30} color="#00FFFF" /></TouchableOpacity>
           <Ionicons name="rocket" size={100} color="#00FFFF" style={{ marginBottom: 20 }} />
           <Text style={styles.tituloMenu}>SKY</Text><Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Deslize o dedo para mover. O teclado agora suporta digitação rápida sem travar a nave!</Text>
+          <Text style={styles.instrucoes}>Deslize para mover. O teclado anti-congelamento permite digitar e atirar simultaneamente sem travar!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}><Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -522,7 +504,7 @@ export default function MathBlaster() {
 
   if (!jogoAtivo && gs.player.hp <= 0) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { touchAction: 'none' } as any]}>
         <View style={styles.menuContainer}>
           <Text style={[styles.tituloMenu, { color: '#FF4444' }]}>DESTRUÍDO</Text>
           <Text style={styles.textoScore}>Pontos: {gs.score}</Text>
@@ -535,9 +517,8 @@ export default function MathBlaster() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { touchAction: 'none' } as any]} edges={['top', 'bottom']}>
       
-      {/* HUD SUPERIOR */}
       <View style={styles.hud}>
         <View style={{ flex: 1, paddingRight: 10 }}>
           <Text style={styles.hudScore}>SCORE: {gs.score}</Text>
@@ -546,15 +527,12 @@ export default function MathBlaster() {
         </View>
         <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 8 }}>
           <Text style={[styles.hudFase, { alignSelf: 'flex-start', marginTop: 2, marginRight: 5 }]}>FASE {gs.fase}</Text>
-          {/* As caixas de Habilidade das duas armas aparecem juntas se as duas estiverem ativas */}
           {renderCooldownBox('missile', '#FF4444', 'rocket')}
           {renderCooldownBox('laser', '#32CD32', 'flash')}
         </View>
       </View>
 
-      {/* ÁREA DO JOGO COM OS NOVOS CONTROLES NATIVOS (Agora usando IDs para destravar as mãos) */}
-      <View style={styles.gameArea} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} 
-            onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} onTouchCancel={handleTouchEnd}>
+      <View style={styles.gameArea} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} {...panResponder.panHandlers}>
         <View style={styles.gridOverlay} />
 
         {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
@@ -563,7 +541,7 @@ export default function MathBlaster() {
         {gs.enemies.map(e => {
           if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 15, top: e.y - 15 }]} />;
           if (e.type === 'FLANKER') return (
-             <View key={e.id} style={[styles.flankerShape, { left: e.x - 15, top: e.y - 15, transform: [{ rotate: e.vx > 0 ? '90rad' : '-90rad' }] }]}>
+             <View key={e.id} style={[styles.flankerShape, { left: e.x - 15, top: e.y - 15, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>
                {e.shield > 0 && <View style={styles.miniShield} />}
              </View>
           );
@@ -702,4 +680,4 @@ const styles = StyleSheet.create({
   teclaRetroText: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
   teclaApagar: { backgroundColor: 'rgba(255, 68, 68, 0.15)', borderColor: '#FF4444' },
   teclaEnviar: { backgroundColor: 'rgba(255, 0, 255, 0.15)', borderColor: '#FF00FF' },
-});
+})
