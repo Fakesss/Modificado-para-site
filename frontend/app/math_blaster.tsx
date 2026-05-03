@@ -43,7 +43,7 @@ export default function MathBlaster() {
   
   const layoutRef = useRef({ width: initialWidth, height: 500 });
 
-  // ESTADO GLOBAL DO MOTOR (Com Magias, Níveis, Textos Flutuantes e Toque Original)
+  // ESTADO GLOBAL DO MOTOR
   const gs = useRef({
     player: { 
       x: initialWidth / 2, 
@@ -57,12 +57,14 @@ export default function MathBlaster() {
       tripleShot: false,
       weapons: {
         missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
-        laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 }
+        laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 } // NOVO: PULSAR
       }
     },
     lasers: [] as any[], 
     specialLasers: [] as any[],
     mathShots: [] as any[],
+    pulses: [] as any[], // NOVO: VETOR DE PULSOS EM TELA
     floatingTexts: [] as any[], 
     enemies: [] as any[], 
     enemyLasers: [] as any[],
@@ -85,7 +87,7 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
-  // --- CONTROLES DE MOVIMENTO PASSIVOS (Modelo Antigo Restaurado para Multi-touch) ---
+  // --- CONTROLES DE MOVIMENTO PASSIVOS ---
   const handleGameTouchStart = (e: any) => {
     if (gs.movementTouchId === null && e.nativeEvent.touches.length > 0) {
       const touch = e.nativeEvent.touches[0];
@@ -123,20 +125,56 @@ export default function MathBlaster() {
     return resps;
   };
 
-  const gerarEquacao = (dificuldade: number, evitar: number[] = []) => {
-    const r = (m: number) => Math.floor(Math.random() * m);
-    let n1, n2, res, txt;
+  // LÓGICA DE PROGRESSÃO MATEMÁTICA
+  const gerarEquacao = (fase: number, evitar: number[] = []) => {
+    const r = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+    let n1, n2, res, txt, tipo;
+
+    let operacoes = ['soma'];
+    if (fase >= 2) operacoes.push('subtracao', 'soma'); 
+    if (fase >= 3) operacoes.push('multiplicacao', 'subtracao');
+    if (fase >= 7) operacoes.push('divisao');
+    if (fase >= 8) operacoes.push('potencia', 'raiz');
+
     do {
-      if (dificuldade === 1) { 
-        n1 = r(10)+1; n2 = r(10)+1; res = n1+n2; txt = `${n1} + ${n2}`; 
+      tipo = operacoes[Math.floor(Math.random() * operacoes.length)];
+
+      if (tipo === 'soma') {
+        const max = 10 + (fase * 3);
+        n1 = r(1, max); n2 = r(1, max);
+        res = n1 + n2; txt = `${n1} + ${n2}`;
       }
-      else if (dificuldade === 2) { 
-        n1 = r(15)+5; n2 = r(n1)+1; res = n1-n2; txt = `${n1} - ${n2}`; 
+      else if (tipo === 'subtracao') {
+        const max = 15 + (fase * 3);
+        n1 = r(5, max); n2 = r(1, n1 - 1);
+        res = n1 - n2; txt = `${n1} - ${n2}`;
       }
-      else { 
-        n1 = r(8)+2; n2 = r(8)+2; res = n1*n2; txt = `${n1} × ${n2}`; 
+      else if (tipo === 'multiplicacao') {
+        const maxNum = Math.min(15, 4 + Math.floor(fase / 2));
+        n1 = r(2, maxNum); n2 = r(2, maxNum);
+        res = n1 * n2; txt = `${n1} × ${n2}`;
+      }
+      else if (tipo === 'divisao') {
+        const maxDivisor = Math.min(10, 2 + Math.floor((fase - 7) / 2));
+        n2 = r(2, Math.max(5, maxDivisor)); 
+        res = r(2, 9); 
+        n1 = n2 * res; 
+        txt = `${n1} ÷ ${n2}`;
+      }
+      else if (tipo === 'potencia') {
+        n1 = r(2, 5);
+        n2 = n1 === 2 ? r(2, 4) : r(2, 3);
+        res = Math.pow(n1, n2);
+        const superScript: any = { 2: '²', 3: '³', 4: '⁴' };
+        txt = `${n1}${superScript[n2]}`;
+      }
+      else if (tipo === 'raiz') {
+        res = r(2, Math.min(15, 3 + Math.floor((fase - 8)/2))); 
+        n1 = res * res;
+        txt = `√${n1}`;
       }
     } while (evitar.includes(res)); 
+    
     return { txt, res };
   };
 
@@ -146,12 +184,14 @@ export default function MathBlaster() {
       hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, 
       weapons: { 
         missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 }, 
-        laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 } 
+        laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 } 
       }
     };
     gs.lasers = []; 
     gs.specialLasers = []; 
-    gs.mathShots = []; 
+    gs.mathShots = [];
+    gs.pulses = []; 
     gs.floatingTexts = [];
     gs.enemies = []; 
     gs.enemyLasers = []; 
@@ -233,6 +273,53 @@ export default function MathBlaster() {
       gs.player.weapons.laser.lastFire = now;
     }
 
+    // DISPARO E LÓGICA DO NOVO PULSAR ELÉTRICO
+    if (gs.player.weapons.pulsar.active && now - gs.player.weapons.pulsar.lastFire > gs.player.weapons.pulsar.baseCooldown) {
+      gs.pulses.push({ 
+        id: Math.random().toString(), 
+        maxRadius: gs.player.weapons.pulsar.radius, 
+        life: 20, // Duração da explosão visual (20 frames)
+        maxLife: 20 
+      });
+      gs.player.weapons.pulsar.lastFire = now;
+    }
+
+    gs.pulses.forEach(p => {
+      // O pulsar acompanha a nave enquanto se expande
+      p.x = gs.player.x;
+      p.y = gs.player.y;
+      p.life -= 1;
+      const currentRadius = p.maxRadius * (1 - (p.life / p.maxLife));
+
+      // Destrói tiros inimigos pegos no raio
+      gs.enemyLasers.forEach(el => {
+        if (Math.pow(el.x - p.x, 2) + Math.pow(el.y - p.y, 2) < currentRadius * currentRadius) {
+          el.hp = 0;
+          criarParticulas(el.x, el.y, '#00BFFF', 3);
+        }
+      });
+
+      // Aniquila meteoros e inimigos normais pegos no raio
+      gs.enemies.forEach(e => {
+        if (!e.mathRequired) {
+          if (Math.pow(e.x - p.x, 2) + Math.pow(e.y - p.y, 2) < currentRadius * currentRadius) {
+            e.hp = -100;
+            gs.score += 10;
+            criarParticulas(e.x, e.y, '#00BFFF', 10);
+          }
+        }
+      });
+      
+      // Causa dano no boss
+      if (gs.boss.active && !gs.boss.shield) {
+         if (Math.pow(gs.boss.x - p.x, 2) + Math.pow(gs.boss.y - p.y, 2) < Math.pow(currentRadius + 30, 2)) {
+            gs.boss.hp -= 2; // Dano massivo e contínuo enquanto o raio encosta
+            criarParticulas(p.x, gs.boss.y + 30, '#00BFFF', 1);
+         }
+      }
+    });
+    gs.pulses = gs.pulses.filter(p => p.life > 0);
+
     // FÍSICA DOS TIROS DA NAVE
     gs.lasers.forEach(l => {
       if (l.type === 'MISSILE') {
@@ -251,7 +338,6 @@ export default function MathBlaster() {
           const dx = closest.x - l.x; 
           const dy = closest.y - l.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
-          // PROTEÇÃO ANTI-CRASH MATEMÁTICO
           if (dist > 0.1) { 
             l.vx += (dx/dist) * 2; 
             l.vy += (dy/dist) * 2; 
@@ -335,7 +421,7 @@ export default function MathBlaster() {
       }
 
       if (gs.stateTimer === 600 || gs.stateTimer === 1200) {
-        const eq = gerarEquacao(Math.min(3, gs.fase), getRespostasAtivas());
+        const eq = gerarEquacao(gs.fase, getRespostasAtivas());
         const isLeft = gs.stateTimer === 600; 
         gs.enemies.push({ 
           id: Math.random().toString(), type: 'SPAWNER', 
@@ -361,7 +447,7 @@ export default function MathBlaster() {
       if (gs.stateTimer > 90) { 
         gs.gameState = 'BOSS'; 
         gs.stateTimer = 0;
-        const eq = gerarEquacao(Math.min(3, gs.fase), getRespostasAtivas());
+        const eq = gerarEquacao(gs.fase, getRespostasAtivas());
         gs.boss = { active: true, type: Math.floor(Math.random() * 3), x: gw / 2, y: -100, hp: 200 + (gs.fase * 120), maxHp: 200 + (gs.fase * 120), vx: 3 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
       }
     }
@@ -395,7 +481,7 @@ export default function MathBlaster() {
         }
 
         if (!gs.boss.shield && gs.boss.timer > gs.boss.nextShieldAt) {
-          const eq = gerarEquacao(Math.min(3, gs.fase), getRespostasAtivas()); 
+          const eq = gerarEquacao(gs.fase, getRespostasAtivas()); 
           gs.boss.shield = true; 
           gs.boss.txt = eq.txt; 
           gs.boss.res = eq.res;
@@ -571,29 +657,33 @@ export default function MathBlaster() {
         { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA UP' } 
       ];
       
-      if (!gs.player.tripleShot) {
-        tipos.push({ type: 'TRIPLE_SHOT', color: '#FFD700', nome: 'TIRO TRIPLO' });
-      }
+      if (!gs.player.tripleShot) tipos.push({ type: 'TRIPLE_SHOT', color: '#FFD700', nome: 'TIRO TRIPLO' });
       
-      if (!gs.player.weapons.missile.active) {
-        tipos.push({ type: 'MISSILE_UNLOCK', color: '#FF4444', nome: 'MÍSSIL TELE' });
-      } else { 
+      if (!gs.player.weapons.missile.active) tipos.push({ type: 'MISSILE_UNLOCK', color: '#FF4444', nome: 'MÍSSIL TELE' });
+      else { 
         tipos.push({ type: 'MISSILE_COOLDOWN', color: '#FF4444', nome: 'MÍSSIL: RECARGA' }); 
         tipos.push({ type: 'MISSILE_DAMAGE', color: '#FF4444', nome: 'MÍSSIL: DANO' }); 
         tipos.push({ type: 'MISSILE_AOE', color: '#FF4444', nome: 'MÍSSIL: ÁREA' }); 
         tipos.push({ type: 'MISSILE_LIFE', color: '#FF4444', nome: 'MÍSSIL: TEMPO' }); 
       }
 
-      if (!gs.player.weapons.laser.active) {
-        tipos.push({ type: 'LASER_UNLOCK', color: '#32CD32', nome: 'RAIO LASER' });
-      } else { 
+      if (!gs.player.weapons.laser.active) tipos.push({ type: 'LASER_UNLOCK', color: '#32CD32', nome: 'RAIO LASER' });
+      else { 
         tipos.push({ type: 'LASER_COOLDOWN', color: '#32CD32', nome: 'LASER: RECARGA' }); 
         tipos.push({ type: 'LASER_DAMAGE', color: '#32CD32', nome: 'LASER: DANO' }); 
         tipos.push({ type: 'LASER_SIZE', color: '#32CD32', nome: 'LASER: TAMANHO' }); 
       }
 
+      // NOVO POWER-UP: PULSAR ELÉTRICO AURA
+      if (!gs.player.weapons.pulsar.active) {
+        tipos.push({ type: 'PULSAR_UNLOCK', color: '#00BFFF', nome: 'AURA PULSAR' });
+      } else { 
+        tipos.push({ type: 'PULSAR_COOLDOWN', color: '#00BFFF', nome: 'PULSAR: RAPIDEZ' }); 
+        tipos.push({ type: 'PULSAR_RADIUS', color: '#00BFFF', nome: 'PULSAR: RAIO' }); 
+      }
+
       const sel = tipos[Math.floor(Math.random() * tipos.length)];
-      const eq = gerarEquacao(Math.min(3, gs.fase), getRespostasAtivas());
+      const eq = gerarEquacao(gs.fase, getRespostasAtivas());
       
       gs.powerups.push({ 
         id: Math.random().toString(), x: Math.random() * (gw - 80) + 40, y: -40, 
@@ -661,7 +751,7 @@ export default function MathBlaster() {
                  criarParticulas(e.x, e.y, '#00FFFF', 80);
                }, 350);
             } else {
-               const eq = gerarEquacao(Math.min(3, gs.fase), getRespostasAtivas()); 
+               const eq = gerarEquacao(gs.fase, getRespostasAtivas()); 
                e.txt = eq.txt; 
                e.res = eq.res;
             }
@@ -688,13 +778,7 @@ export default function MathBlaster() {
             setTimeout(() => {
               criarParticulas(px, py, color, 30);
               
-              gs.floatingTexts.push({ 
-                id: Math.random().toString(), 
-                x: px, y: py, 
-                text: `+ ${title}`, 
-                color: color, 
-                life: 60 
-              });
+              gs.floatingTexts.push({ id: Math.random().toString(), x: px, y: py, text: `+ ${title}`, color: color, life: 60 });
               
               if (type === 'DAMAGE') gs.player.damage += 0.5;
               else if (type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 20);
@@ -708,6 +792,10 @@ export default function MathBlaster() {
               else if (type === 'LASER_COOLDOWN') { gs.player.weapons.laser.baseCooldown = Math.max(4000, gs.player.weapons.laser.baseCooldown - 500); gs.player.weapons.laser.level += 1; }
               else if (type === 'LASER_DAMAGE') { gs.player.weapons.laser.damageMult += 0.5; gs.player.weapons.laser.level += 1; }
               else if (type === 'LASER_SIZE') { gs.player.weapons.laser.sizeMult += 0.2; gs.player.weapons.laser.level += 1; }
+              // NOVO: APLICANDO BUFFS DO PULSAR
+              else if (type === 'PULSAR_UNLOCK') gs.player.weapons.pulsar.active = true;
+              else if (type === 'PULSAR_COOLDOWN') { gs.player.weapons.pulsar.baseCooldown = Math.max(4000, gs.player.weapons.pulsar.baseCooldown - 1000); gs.player.weapons.pulsar.level += 1; }
+              else if (type === 'PULSAR_RADIUS') { gs.player.weapons.pulsar.radius += 20; gs.player.weapons.pulsar.level += 1; }
               
               gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); 
               gs.score += 50; 
@@ -739,12 +827,12 @@ export default function MathBlaster() {
     </View>
   );
 
-  const renderCooldownBox = (weaponKey: 'missile' | 'laser', color: string, icon: string) => {
+  const renderCooldownBox = (weaponKey: 'missile' | 'laser' | 'pulsar', color: string, icon: string) => {
     const w = gs.player.weapons[weaponKey];
     if (!w.active) return null;
     const pct = Math.max(0, Math.min(100, ((Date.now() - w.lastFire) / w.baseCooldown) * 100));
     
-    const totalDamage = (gs.player.damage * w.damageMult).toFixed(1);
+    const totalDamage = weaponKey === 'pulsar' ? 'MAX' : (gs.player.damage * w.damageMult).toFixed(1);
     const cooldownSecs = (w.baseCooldown / 1000).toFixed(1);
 
     return (
@@ -770,7 +858,7 @@ export default function MathBlaster() {
           <Ionicons name="rocket" size={100} color="#00FFFF" style={{ marginBottom: 20 }} />
           <Text style={styles.tituloMenu}>SKY</Text>
           <Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Deslize o dedo pela tela de jogo. Painel de Status visual e Textos Flutuantes restaurados!</Text>
+          <Text style={styles.instrucoes}>Deslize o dedo pela tela. Novo escudo elétrico "Pulsar" liberado!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
           </TouchableOpacity>
@@ -812,6 +900,7 @@ export default function MathBlaster() {
           <Text style={[styles.hudFase, { alignSelf: 'flex-start', marginTop: 15, marginRight: 5 }]}>FASE {gs.fase}</Text>
           {renderCooldownBox('missile', '#FF4444', 'rocket')}
           {renderCooldownBox('laser', '#32CD32', 'flash')}
+          {renderCooldownBox('pulsar', '#00BFFF', 'shield')} 
         </View>
       </View>
 
@@ -874,6 +963,25 @@ export default function MathBlaster() {
             borderRadius: l.type === 'MISSILE' ? l.size / 2 : 5 
           }]} />
         ))}
+
+        {/* RENDERIZAÇÃO DO PULSO ELÉTRICO */}
+        {gs.pulses.map(p => {
+          const currentRadius = p.maxRadius * (1 - (p.life / p.maxLife));
+          return (
+            <View key={p.id} style={{
+              position: 'absolute',
+              left: p.x - currentRadius,
+              top: p.y - currentRadius,
+              width: currentRadius * 2,
+              height: currentRadius * 2,
+              borderRadius: currentRadius,
+              borderWidth: 4,
+              borderColor: `rgba(0, 191, 255, ${p.life / p.maxLife})`,
+              backgroundColor: `rgba(0, 191, 255, ${(p.life / p.maxLife) * 0.2})`,
+              zIndex: 5
+            }} />
+          )
+        })}
 
         {gs.mathShots.map(ms => (
           <View key={ms.id} style={{ 
