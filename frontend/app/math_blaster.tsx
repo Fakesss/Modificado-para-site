@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Platform, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -7,13 +7,13 @@ import { useRouter } from 'expo-router';
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
 
-// --- CONFIGURAÇÃO DE ZOOM OUT (0.7 = 30% mais longe) ---
-const ZOOM = 0.70;
-const INV_ZOOM = 1 / ZOOM; 
-
-// --- COMPONENTE: TECLADO RETRÔ (Otimizado para Multi-Touch Nativo) ---
+// --- COMPONENTE: TECLADO RETRÔ ---
+// O comportamento visual agora mescla a leitura nativa do controlador invisível com os cliques da Web
 const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed: boolean, onPressWeb: (v: string) => void }) => {
   const isWeb = Platform.OS === 'web';
+  const [localPress, setLocalPress] = useState(false);
+  
+  const currentlyPressed = isWeb ? localPress : isPressed;
   
   let customStyle = styles.teclaRetro;
   if (valor === 'apagar') customStyle = { ...styles.teclaRetro, ...styles.teclaApagar } as any;
@@ -21,16 +21,19 @@ const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed
 
   return (
     <View 
-      style={[customStyle, isPressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
+      style={[customStyle, currentlyPressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
       {...(isWeb ? {
         onPointerDown: (e: any) => {
             e.preventDefault();
+            setLocalPress(true);
             onPressWeb(valor);
-        }
+        },
+        onPointerUp: () => setLocalPress(false),
+        onPointerLeave: () => setLocalPress(false)
       } : {})}
     >
-      {valor === 'apagar' && <Ionicons name="backspace" size={26} color="#FFF"/>}
-      {valor === 'enviar' && <Ionicons name="flash" size={26} color="#FFF"/>}
+      {valor === 'apagar' && <Ionicons name="backspace" size={24} color="#FFF"/>}
+      {valor === 'enviar' && <Ionicons name="flash" size={24} color="#FFF"/>}
       {valor !== 'apagar' && valor !== 'enviar' && <Text style={styles.teclaRetroText}>{valor}</Text>}
     </View>
   );
@@ -45,35 +48,31 @@ export default function MathBlaster() {
   // ESTADOS DO MULTI-TOUCH DO TECLADO
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
-  const tecladoLayoutRef = useRef({ width: 350 }); 
-  const kbTouchIds = useRef<Set<string>>(new Set());
+  const tecladoLayoutRef = useRef({ width: Math.min(initialWidth, 350) }); 
 
   const respostaRef = useRef('');
   useEffect(() => { 
     respostaRef.current = resposta; 
   }, [resposta]);
   
-  // Referência principal das dimensões do jogo escaladas
-  const layoutRef = useRef({ 
-    width: initialWidth * INV_ZOOM, 
-    height: initialHeight * INV_ZOOM 
-  });
+  // Referência das dimensões da tela do jogo
+  const layoutRef = useRef({ width: initialWidth, height: initialHeight });
 
   const gs = useRef({
     player: { 
-      x: (initialWidth * INV_ZOOM) / 2, 
-      y: (initialHeight * INV_ZOOM) - 100, 
+      x: initialWidth / 2, 
+      y: initialHeight - 100, 
       hp: 100, 
       maxHp: 100, 
       damage: 1, 
-      shotSize: 6,
+      shotSize: 4, // Tamanho base reduzido para o efeito "Zoom Out"
       fireRate: 300, 
       lastFire: 0, 
       tripleShot: false,
       weapons: {
-        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
+        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 45, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
-        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 }
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 35, damageMult: 1 }
       }
     },
     lasers: [] as any[], 
@@ -85,7 +84,7 @@ export default function MathBlaster() {
     enemyLasers: [] as any[],
     powerups: [] as any[], 
     particles: [] as any[],
-    boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
+    boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 3, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, 
     fase: 1, 
     gameState: 'WAVES', 
@@ -114,130 +113,115 @@ export default function MathBlaster() {
     };
   }, []);
 
-  // ==========================================
-  // LÓGICA DE MOVIMENTAÇÃO NAVE (MULTI-TOUCH)
-  // ==========================================
-  const handleGameTouchStart = (e: any) => {
-    const changed = e.nativeEvent?.changedTouches || [];
-    for (let i = 0; i < changed.length; i++) {
-      const touch = changed[i];
-      if (gs.movementTouchId === null) {
-        gs.movementTouchId = touch.identifier;
-        gs.lastTouchX = touch.pageX;
-        gs.lastTouchY = touch.pageY;
-        break;
-      }
-    }
-  };
+  // =========================================================================
+  // CONTROLADOR UNIVERSAL DE MULTI-TOUCH (ANDROID/IOS)
+  // Lida simultaneamente com a Nave e com o Teclado sem bloqueios do sistema!
+  // =========================================================================
+  const handleUnifiedTouch = (e: any) => {
+    if (Platform.OS === 'web') return; // Web usa eventos nativos do DOM
 
-  const handleGameTouchMove = (e: any) => {
-    if (gs.movementTouchId !== null) {
-      const touches = e.nativeEvent?.touches || [];
-      const touch = Array.from(touches).find((t: any) => t.identifier === gs.movementTouchId);
-      if (touch) {
-        const dx = (touch as any).pageX - gs.lastTouchX;
-        const dy = (touch as any).pageY - gs.lastTouchY;
-        
-        // Multiplicado pelo INV_ZOOM para compensar a escala da tela visualmente
-        gs.player.x += dx * 1.5 * INV_ZOOM;
-        gs.player.y += dy * 1.5 * INV_ZOOM;
-        
-        gs.lastTouchX = (touch as any).pageX;
-        gs.lastTouchY = (touch as any).pageY;
-      }
-    }
-  };
-
-  const handleGameTouchEnd = (e: any) => {
     const touches = e.nativeEvent?.touches || [];
-    const touchExists = Array.from(touches).some((t: any) => t.identifier === gs.movementTouchId);
-    if (!touchExists) gs.movementTouchId = null;
-  };
+    let shipTouchFound = false;
+    const keysPressedNow = new Set<string>();
 
-  // ==========================================
-  // LÓGICA DO TECLADO QUADRADO (MULTI-TOUCH)
-  // ==========================================
-  const getTeclaFromCoords = (x: number, y: number, layoutWidth: number) => {
-    if (!layoutWidth) return null;
-    
-    const GAP = 8; 
-    const KEY_W = (layoutWidth - (GAP * 2)) / 3; 
-    const KEY_H = 65; // Altura aumentada para deixar a tecla mais quadrada
-    
-    let col = -1;
-    if (x >= 0 && x <= KEY_W) col = 0; 
-    else if (x > KEY_W && x <= KEY_W * 2 + GAP) col = 1; 
-    else if (x > KEY_W * 2 + GAP) col = 2;
+    const screenH = Dimensions.get('window').height;
+    const screenW = Dimensions.get('window').width;
 
-    let row = -1;
-    if (y >= 0 && y <= KEY_H) row = 0; 
-    else if (y > KEY_H && y <= KEY_H * 2 + GAP) row = 1; 
-    else if (y > KEY_H * 2 + GAP && y <= KEY_H * 3 + GAP * 2) row = 2; 
-    else if (y > KEY_H * 3 + GAP * 2) row = 3;
-
-    if (col === -1 || row === -1) return null;
-    const layout = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['apagar', '0', 'enviar']];
-    return layout[row]?.[col] || null;
-  };
-
-  const processKeyboardTouches = (evt: any) => {
-    if (Platform.OS === 'web') return;
-    
-    const touches = evt.nativeEvent?.touches || [];
-    const currentActive = new Set<string>();
-
-    const safeKbWidth = tecladoLayoutRef.current?.width || 350;
+    // A área do teclado ocupa os últimos 295px da tela inferior
+    const keysTopY = screenH - 295; 
+    const kbWidth = Math.min(screenW, 350);
+    const kbLeft = (screenW - kbWidth) / 2;
 
     for (let i = 0; i < touches.length; i++) {
-        const touch = touches[i];
-        
-        // Processa APENAS toques que COMEÇARAM na área do teclado (ignora o dedo que move a nave)
-        if (kbTouchIds.current.has(touch.identifier)) {
-            const x = touch.locationX;
-            const y = touch.locationY;
-            
-            if (x >= -20 && x <= safeKbWidth + 20 && y >= -20 && y <= 300) {
-                const key = getTeclaFromCoords(x, y, safeKbWidth);
-                if (key) currentActive.add(key);
+        const t = touches[i];
+
+        // 1. Dedo que movimenta a nave (Parte superior da tela)
+        if (t.pageY < keysTopY - 20) {
+            if (gs.movementTouchId === null) {
+                gs.movementTouchId = t.identifier;
+                gs.lastTouchX = t.pageX;
+                gs.lastTouchY = t.pageY;
+            } else if (gs.movementTouchId === t.identifier) {
+                const dx = t.pageX - gs.lastTouchX;
+                const dy = t.pageY - gs.lastTouchY;
+                
+                // Multiplicador levemente maior para navegação ágil
+                gs.player.x += dx * 1.5;
+                gs.player.y += dy * 1.5;
+                
+                gs.lastTouchX = t.pageX;
+                gs.lastTouchY = t.pageY;
+            }
+            shipTouchFound = true;
+        } 
+        // 2. Dedo digitando no teclado (Parte inferior da tela)
+        else {
+            const localX = t.pageX - kbLeft;
+            const localY = t.pageY - keysTopY;
+
+            if (localX >= 0 && localX <= kbWidth && localY >= 0) {
+                const col = Math.floor(localX / (kbWidth / 3));
+                const row = Math.floor(localY / 73); // Altura de 65 + 8 de Gap
+
+                if (col >= 0 && col <= 2 && row >= 0 && row <= 3) {
+                    const layout = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['apagar', '0', 'enviar']];
+                    const key = layout[row]?.[col];
+                    if (key) keysPressedNow.add(key);
+                }
             }
         }
     }
-    
-    setTeclasPressionadas(Array.from(currentActive));
 
-    currentActive.forEach(key => {
-        if (!triggeredTouchesRef.current.has(key)) {
-            triggeredTouchesRef.current.add(key);
-            lidarComTeclado(key);
+    // Se o dedo da nave for levantado
+    if (!shipTouchFound) {
+      gs.movementTouchId = null;
+    }
+
+    // Gerenciador de cliques de botão do teclado
+    setTeclasPressionadas(Array.from(keysPressedNow));
+
+    keysPressedNow.forEach(k => {
+        if (!triggeredTouchesRef.current.has(k)) {
+            triggeredTouchesRef.current.add(k);
+            lidarComTeclado(k);
         }
     });
 
-    triggeredTouchesRef.current.forEach(key => {
-        if (!currentActive.has(key)) triggeredTouchesRef.current.delete(key);
+    triggeredTouchesRef.current.forEach(k => {
+        if (!keysPressedNow.has(k)) triggeredTouchesRef.current.delete(k);
     });
   };
 
-  const handleKbTouchStart = (evt: any) => {
-    if (Platform.OS === 'web') return;
-    const changed = evt.nativeEvent?.changedTouches || [];
-    for (let i = 0; i < changed.length; i++) {
-        kbTouchIds.current.add(changed[i].identifier);
+  // --- Lógica de Touch Exclusiva para a Web ---
+  const handleWebGameTouchStart = (e: any) => {
+    if (Platform.OS !== 'web') return;
+    const touch = e.nativeEvent?.changedTouches?.[0];
+    if (touch && gs.movementTouchId === null) {
+      gs.movementTouchId = touch.identifier;
+      gs.lastTouchX = touch.pageX;
+      gs.lastTouchY = touch.pageY;
     }
-    processKeyboardTouches(evt);
   };
 
-  const handleKbTouchMove = (evt: any) => {
-    if (Platform.OS === 'web') return;
-    processKeyboardTouches(evt);
+  const handleWebGameTouchMove = (e: any) => {
+    if (Platform.OS !== 'web' || gs.movementTouchId === null) return;
+    const touch = Array.from(e.nativeEvent?.touches || []).find((t: any) => t.identifier === gs.movementTouchId) as any;
+    if (touch) {
+      const dx = touch.pageX - gs.lastTouchX;
+      const dy = touch.pageY - gs.lastTouchY;
+      gs.player.x += dx * 1.5;
+      gs.player.y += dy * 1.5;
+      gs.lastTouchX = touch.pageX;
+      gs.lastTouchY = touch.pageY;
+    }
   };
 
-  const handleKbTouchEnd = (evt: any) => {
-    if (Platform.OS === 'web') return;
-    const changed = evt.nativeEvent?.changedTouches || [];
-    for (let i = 0; i < changed.length; i++) {
-        kbTouchIds.current.delete(changed[i].identifier);
+  const handleWebGameTouchEnd = (e: any) => {
+    if (Platform.OS !== 'web') return;
+    const touches = Array.from(e.nativeEvent?.touches || []);
+    if (!touches.some((t: any) => t.identifier === gs.movementTouchId)) {
+      gs.movementTouchId = null;
     }
-    processKeyboardTouches(evt);
   };
 
   // --- MATEMÁTICA ---
@@ -303,9 +287,9 @@ export default function MathBlaster() {
   };
 
   const iniciarJogo = () => {
-    // Uso defensivo do Fallback na hora de iniciar o layout para impedir erro de undefined na renderização rápida
-    const safeWidth = layoutRef.current?.width || (initialWidth * INV_ZOOM);
-    const safeHeight = layoutRef.current?.height || (initialHeight * INV_ZOOM);
+    // Uso de segurança (Fallback) para evitar quebras se a tela carregar rápido demais
+    const safeWidth = layoutRef.current?.width || initialWidth;
+    const safeHeight = layoutRef.current?.height || initialHeight;
     
     gs.player = { 
       x: safeWidth / 2, 
@@ -313,20 +297,20 @@ export default function MathBlaster() {
       hp: 100, 
       maxHp: 100, 
       damage: 1, 
-      shotSize: 6,
+      shotSize: 4, 
       fireRate: 300, 
       lastFire: 0, 
       tripleShot: false,
       weapons: {
-        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
+        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 45, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
-        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 }
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 35, damageMult: 1 }
       }
     };
     
     gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.pulses = []; gs.floatingTexts = [];
     gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
-    gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
+    gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 3, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
     gs.lastTouchX = 0; gs.lastTouchY = 0;
     
@@ -355,7 +339,7 @@ export default function MathBlaster() {
 
   const criarParticulas = (x: number, y: number, color: string, qtd: number) => {
     for(let i=0; i<qtd; i++) { 
-      gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color }); 
+      gs.particles.push({ x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 15, color }); 
     }
   };
 
@@ -450,9 +434,10 @@ export default function MathBlaster() {
 
   const gameTick = () => {
     const now = Date.now();
-    // Proteção de leitura do Layout no tick
-    const gw = layoutRef.current?.width || (initialWidth * INV_ZOOM); 
-    const gh = layoutRef.current?.height || (initialHeight * INV_ZOOM);
+    
+    // Fallback de segurança para as Dimensões na hora do loop
+    const gw = layoutRef.current?.width || initialWidth; 
+    const gh = layoutRef.current?.height || initialHeight;
     
     gs.timeAlive += 30;
     if (gs.timeFreezeTimer > 0) gs.timeFreezeTimer -= 30;
@@ -469,37 +454,39 @@ export default function MathBlaster() {
       }
     };
 
-    if (gs.player.x < 20) gs.player.x = 20; 
-    if (gs.player.x > gw - 20) gs.player.x = gw - 20;
-    if (gs.player.y < 20) gs.player.y = 20; 
-    if (gs.player.y > gh - 20) gs.player.y = gh - 20;
+    if (gs.player.x < 15) gs.player.x = 15; 
+    if (gs.player.x > gw - 15) gs.player.x = gw - 15;
+    if (gs.player.y < 15) gs.player.y = 15; 
+    
+    // Fator resolvido para a nave descer livremente sem sumir da tela
+    if (gs.player.y > gh - 35) gs.player.y = gh - 35;
 
     if (now - gs.player.lastFire > gs.player.fireRate) {
       gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       if (gs.player.tripleShot) {
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 10, y: gs.player.y - 15, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 10, y: gs.player.y - 15, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 8, y: gs.player.y - 12, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 8, y: gs.player.y - 12, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       }
       gs.player.lastFire = now;
     }
 
     if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 3, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 2.5, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
       gs.player.weapons.missile.lastFire = now;
     }
     
     if (gs.player.weapons.laser.active && now - gs.player.weapons.laser.lastFire > gs.player.weapons.laser.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, vx: 0, vy: -25, damage: gs.player.damage * gs.player.weapons.laser.damageMult, size: gs.player.shotSize * 2 * gs.player.weapons.laser.sizeMult, type: 'LASER' });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 30, vx: 0, vy: -25, damage: gs.player.damage * gs.player.weapons.laser.damageMult, size: gs.player.shotSize * 1.5 * gs.player.weapons.laser.sizeMult, type: 'LASER' });
       gs.player.weapons.laser.lastFire = now;
     }
 
     if (gs.drones.normal.active && now - gs.drones.normal.lastFire > gs.drones.normal.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 40, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 30, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       gs.drones.normal.lastFire = now;
     }
 
     if (gs.drones.advanced.active && now - gs.drones.advanced.lastFire > gs.drones.advanced.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 30, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.5, type: 'MISSILE_HOMING', life: 9999, aoeRange: 40 });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 25, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.2, type: 'MISSILE_HOMING', life: 9999, aoeRange: 35 });
       gs.drones.advanced.lastFire = now;
     }
 
@@ -600,7 +587,7 @@ export default function MathBlaster() {
           el.vy += (dy/dist) * 0.4; 
         }
         const speed = Math.sqrt(el.vx*el.vx + el.vy*el.vy);
-        const maxSpeed = gs.fase === 1 ? 3 : 3 + (gs.fase * 0.6); 
+        const maxSpeed = gs.fase === 1 ? 2.5 : 2.5 + (gs.fase * 0.5); 
         if (speed > maxSpeed) { 
           el.vx = (el.vx/speed) * maxSpeed; 
           el.vy = (el.vy/speed) * maxSpeed; 
@@ -609,7 +596,7 @@ export default function MathBlaster() {
       el.x += el.vx * speedMult; 
       el.y += el.vy * speedMult;
 
-      if (Math.abs(gs.player.x - el.x) < 25 && Math.abs(gs.player.y - el.y) < 25) {
+      if (Math.abs(gs.player.x - el.x) < 20 && Math.abs(gs.player.y - el.y) < 20) {
         aplicarDano(el.damage);
         el.hp = 0; 
       }
@@ -624,27 +611,28 @@ export default function MathBlaster() {
     if (gs.gameState === 'WAVES') {
       
       if (gs.stateTimer % Math.max(20, 60 - gs.fase * 5) === 0) {
-        const meteorVy = gs.fase === 1 ? Math.random() * 1.5 + 2 : Math.random() * 2 + 3 + (gs.fase * 0.6);
+        // Velocidade base do meteoro reduzida para o efeito de Zoom Out
+        const meteorVy = gs.fase === 1 ? Math.random() * 1.5 + 1.5 : Math.random() * 2 + 2 + (gs.fase * 0.4);
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: meteorVy, angle: 0 });
       }
 
       if (gs.stateTimer % 180 === 0 && gs.fase >= 2) {
         const isLeft = Math.random() > 0.5;
-        gs.enemies.push({ id: Math.random().toString(), type: 'FLANKER', x: isLeft ? -20 : gw + 20, y: Math.random() * (gh/3), targetY: 0, hp: 2 + gs.fase * 2, vx: isLeft ? 3 + gs.fase * 1.2 : -3 - gs.fase * 1.2, vy: 1.5, angle: 0, shield: Math.random() > 0.7 ? 2 : 0 });
+        gs.enemies.push({ id: Math.random().toString(), type: 'FLANKER', x: isLeft ? -20 : gw + 20, y: Math.random() * (gh/3), targetY: 0, hp: 2 + gs.fase * 2, vx: isLeft ? 2.5 + gs.fase * 0.8 : -2.5 - gs.fase * 0.8, vy: 1.2, angle: 0, shield: Math.random() > 0.7 ? 2 : 0 });
       }
 
       if (gs.stateTimer === 600 || gs.stateTimer === 1200) {
         const eq = gerarEquacao(gs.fase, getRespostasAtivas());
         const isLeft = gs.stateTimer === 600; 
-        gs.enemies.push({ id: Math.random().toString(), type: 'SPAWNER', x: isLeft ? gw * 0.25 : gw * 0.75, y: -80, targetY: 90 + Math.random() * 30, hp: 9999, mathRequired: true, solvesNeeded: Math.min(8, 3 + gs.fase), solvesDone: 0, txt: eq.txt, res: eq.res, vy: 1.5, spawnTimer: 0 });
+        gs.enemies.push({ id: Math.random().toString(), type: 'SPAWNER', x: isLeft ? gw * 0.25 : gw * 0.75, y: -80, targetY: 90 + Math.random() * 30, hp: 9999, mathRequired: true, solvesNeeded: Math.min(8, 3 + gs.fase), solvesDone: 0, txt: eq.txt, res: eq.res, vy: 1.2, spawnTimer: 0 });
       }
 
       if (gs.stateTimer % 200 === 0 && gs.stateTimer < 1400) {
         const cx = Math.random() * (gw - 120) + 60; 
         const baseHp = 3 + (gs.fase * 3); 
-        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx, y: -30, targetY: 100, isLeader: true, hp: baseHp * 3, vx: 0, vy: 2, fireTimer: 0, angle: Math.PI, evasive: true });
-        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 40, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 2, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 }); 
-        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 40, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 2, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 });
+        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx, y: -30, targetY: 100, isLeader: true, hp: baseHp * 3, vx: 0, vy: 1.5, fireTimer: 0, angle: Math.PI, evasive: true });
+        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 35, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 1.5, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 }); 
+        gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 35, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 1.5, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 });
       }
 
       if (gs.stateTimer > 1500) { 
@@ -658,7 +646,7 @@ export default function MathBlaster() {
         gs.gameState = 'BOSS'; 
         gs.stateTimer = 0;
         const eq = gerarEquacao(gs.fase, getRespostasAtivas());
-        gs.boss = { active: true, type: Math.floor(Math.random() * 3), x: gw / 2, y: -100, hp: 200 + (gs.fase * 120), maxHp: 200 + (gs.fase * 120), vx: 3 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
+        gs.boss = { active: true, type: Math.floor(Math.random() * 3), x: gw / 2, y: -100, hp: 200 + (gs.fase * 120), maxHp: 200 + (gs.fase * 120), vx: 2.5 + (gs.fase * 0.5), shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
       }
     }
     else if (gs.gameState === 'BOSS') {
@@ -666,7 +654,7 @@ export default function MathBlaster() {
         gs.boss.y += 1.5 * speedMult;
       } else {
         gs.boss.x += gs.boss.vx * speedMult;
-        if (gs.boss.x < 50 || gs.boss.x > gw - 50) gs.boss.vx *= -1;
+        if (gs.boss.x < 40 || gs.boss.x > gw - 40) gs.boss.vx *= -1;
         gs.boss.timer += 1 * speedMult;
 
         if (gs.boss.type === 0) {
@@ -733,7 +721,7 @@ export default function MathBlaster() {
           if (dist > 50) { e.x += (dx/dist) * (1.5 + gs.fase * 0.3) * speedMult; e.y += (dy/dist) * (1.0 + gs.fase * 0.2) * speedMult; }
           e.fireTimer += 1 * speedMult;
           if (e.fireTimer > Math.max(30, 80 - (gs.fase * 8))) { 
-            gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: Math.cos(e.angle)*(3 + gs.fase*0.8), vy: Math.sin(e.angle)*(3 + gs.fase*0.8), size: 6, damage: 15, homing: false, color: '#FF00FF', hp: 1 }); 
+            gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: Math.cos(e.angle)*(2.5 + gs.fase*0.5), vy: Math.sin(e.angle)*(2.5 + gs.fase*0.5), size: 6, damage: 15, homing: false, color: '#FF00FF', hp: 1 }); 
             e.fireTimer = 0; 
           }
         } else {
@@ -741,7 +729,7 @@ export default function MathBlaster() {
           else {
             e.x += Math.sin(now / 300) * 1.5 * speedMult; e.fireTimer += 1 * speedMult;
             if (e.fireTimer > Math.max(60, 120 - (gs.fase * 5)) && Math.random() < 0.05) { 
-              gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: 0, vy: 3 + gs.fase, size: 5, damage: 10, homing: false, color: '#FF0055', hp: 1 }); 
+              gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: 0, vy: 2.5 + gs.fase*0.5, size: 5, damage: 10, homing: false, color: '#FF0055', hp: 1 }); 
               e.fireTimer = 0; 
             }
           }
@@ -785,7 +773,7 @@ export default function MathBlaster() {
         }
       });
 
-      if (gs.boss.active && Math.abs(l.x - gs.boss.x) < 45 && Math.abs(l.y - gs.boss.y) < 35) {
+      if (gs.boss.active && Math.abs(l.x - gs.boss.x) < 40 && Math.abs(l.y - gs.boss.y) < 35) {
         if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; }
         
         if (gs.boss.shield) { 
@@ -896,7 +884,7 @@ export default function MathBlaster() {
       <View key={weaponKey} style={{ alignItems: 'center' }}>
         <Text style={{color: color, fontSize: 10, fontWeight: 'bold', marginBottom: 2}}>Lv.{w.level}</Text>
         <View style={styles.skillBox}>
-          <Ionicons name={icon as any} size={20} color={color}/>
+          <Ionicons name={icon as any} size={18} color={color}/>
           <View style={[styles.skillOverlay, { height: `${100 - pct}%` }]}/>
         </View>
         <Text style={{color: '#FFF', fontSize: 8, marginTop: 2, fontWeight: 'bold'}}>ATK: {totalDamage}</Text>
@@ -915,7 +903,7 @@ export default function MathBlaster() {
           <Ionicons name="rocket" size={80} color="#00FFFF" style={{ marginBottom: 20 }}/>
           <Text style={styles.tituloMenu}>SKY</Text>
           <Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Deslize na nave para voar e use o teclado para atirar e destruir os asteróides!</Text>
+          <Text style={styles.instrucoes}>Câmera Afastada (Zoom Out) e Multi-Toque Absoluto Ativados!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
           </TouchableOpacity>
@@ -962,18 +950,22 @@ export default function MathBlaster() {
           </View>
         </View>
 
-        {/* CAMADA SEGURA PARA NÃO QUEBRAR O ONLAYOUT COM O ZOOM */}
-        <View style={styles.gameAreaWrapperContainer} onLayout={(e) => { 
-            if (layoutRef.current && e.nativeEvent?.layout) {
-                layoutRef.current.width = e.nativeEvent.layout.width * INV_ZOOM; 
-                layoutRef.current.height = e.nativeEvent.layout.height * INV_ZOOM; 
-            }
-        }}>
-          <View style={[styles.gameAreaScaled, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} 
-            onTouchStart={handleGameTouchStart} 
-            onTouchMove={handleGameTouchMove} 
-            onTouchEnd={handleGameTouchEnd} 
-            onTouchCancel={handleGameTouchEnd}
+        <View 
+            style={styles.gameAreaWrapperContainer} 
+            onLayout={(e) => { 
+                if (layoutRef.current && e.nativeEvent?.layout) {
+                    layoutRef.current.width = e.nativeEvent.layout.width; 
+                    layoutRef.current.height = e.nativeEvent.layout.height; 
+                }
+            }}
+        >
+          {/* CAMADA DE TOQUE DA WEB (Só ativada no navegador) */}
+          <View 
+            style={[styles.gameAreaFull, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} 
+            onTouchStart={handleWebGameTouchStart} 
+            onTouchMove={handleWebGameTouchMove} 
+            onTouchEnd={handleWebGameTouchEnd} 
+            onTouchCancel={handleWebGameTouchEnd}
           >
             <View style={styles.gridOverlay}/>
             
@@ -981,11 +973,11 @@ export default function MathBlaster() {
             {gs.gameState === 'TRANSITION' && (<View style={styles.centerAlert}><Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text><Text style={styles.alertSubText}>PREPARANDO SALTO...</Text></View>)}
 
             {gs.enemies.map(e => {
-              if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 12, top: e.y - 12 }]}/>;
-              if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 10, top: e.y - 8, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
+              if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 9, top: e.y - 9 }]}/>;
+              if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 6, top: e.y - 6, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
               if (e.type === 'SPAWNER') {
                 return (
-                   <View key={e.id} style={[styles.spawnerShape, { left: e.x - 30, top: e.y - 22 }]}>
+                   <View key={e.id} style={[styles.spawnerShape, { left: e.x - 22, top: e.y - 17 }]}>
                       <Text style={styles.spawnerMath}>{e.txt}</Text>
                       {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{e.res}</Text>}
                       <View style={styles.powerupDots}>
@@ -995,13 +987,13 @@ export default function MathBlaster() {
                 );
               }
               const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
-              return (<View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
+              return (<View key={e.id} style={[styles.squadronShip, { left: e.x - 10, top: e.y - 10, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
             })}
 
             {gs.boss.active && (
-              <View style={[styles.bossContainer, { left: gs.boss.x - 40, top: gs.boss.y - 30 }]}>
+              <View style={[styles.bossContainer, { left: gs.boss.x - 25, top: gs.boss.y - 17 }]}>
                 <View style={styles.bossHpBar}><View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]}/></View>
-                <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 30, height: 60, backgroundColor: '#006400', borderColor: '#32CD32' }]}/>
+                <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 25, height: 45, backgroundColor: '#006400', borderColor: '#32CD32' }]}/>
                 {gs.boss.shield && (
                   <View style={styles.bossShield}>
                     <Text style={styles.bossMath}>{gs.boss.txt}</Text>
@@ -1012,7 +1004,7 @@ export default function MathBlaster() {
             )}
 
             {gs.powerups.map(p => (
-              <View key={p.id} style={[styles.powerupBox, { left: p.x - 40, top: p.y - 18, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
+              <View key={p.id} style={[styles.powerupBox, { left: p.x - 30, top: p.y - 15, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
                 <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
                 <Text style={styles.powerupMath}>{p.txt}</Text>
               </View>
@@ -1023,7 +1015,7 @@ export default function MathBlaster() {
                 left: l.x - (l.size/2), 
                 top: l.y, 
                 width: l.size, 
-                height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3)), 
+                height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 5 : l.size * 2.5)), 
                 backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : '#00FFFF', 
                 borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') ? l.size / 2 : 5 
               }]}/>
@@ -1037,7 +1029,7 @@ export default function MathBlaster() {
             })}
 
             {gs.mathShots.map(ms => (
-              <View key={ms.id} style={{ position: 'absolute', left: ms.x - 6, top: ms.y - 6, width: 12, height: 12, borderRadius: 6, backgroundColor: ms.color, shadowColor: ms.color, shadowRadius: 8, shadowOpacity: 1, zIndex: 10 }}/>
+              <View key={ms.id} style={{ position: 'absolute', left: ms.x - 4, top: ms.y - 4, width: 8, height: 8, borderRadius: 4, backgroundColor: ms.color, shadowColor: ms.color, shadowRadius: 5, shadowOpacity: 1, zIndex: 10 }}/>
             ))}
 
             {gs.enemyLasers.map(el => (
@@ -1047,21 +1039,21 @@ export default function MathBlaster() {
             ))}
 
             {gs.particles.map((p, i) => (
-              <View key={i} style={{ position: 'absolute', width: 4, height: 4, backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 2 }}/>
+              <View key={i} style={{ position: 'absolute', width: 3, height: 3, backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 1.5 }}/>
             ))}
 
             {gs.floatingTexts.map(ft => (
-              <Text key={ft.id} style={[styles.floatingText, { left: ft.x - 30, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text>
+              <Text key={ft.id} style={[styles.floatingText, { left: ft.x - 20, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text>
             ))}
 
-            <View style={[styles.playerShape, { left: gs.player.x - 15, top: gs.player.y - 15 }]}/>
-            <View style={[styles.propulsor, { left: gs.player.x - 5, top: gs.player.y + 15, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
+            <View style={[styles.playerShape, { left: gs.player.x - 11, top: gs.player.y - 11 }]}/>
+            <View style={[styles.propulsor, { left: gs.player.x - 4, top: gs.player.y + 11, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
             
             {gs.forceShieldHits > 0 && (
-              <View style={{ position: 'absolute', left: gs.player.x - 25, top: gs.player.y - 25, width: 50, height: 50, borderRadius: 25, borderWidth: 3, borderColor: '#00FA9A', backgroundColor: 'rgba(0,250,154,0.1)', zIndex: 10 }}/>
+              <View style={{ position: 'absolute', left: gs.player.x - 20, top: gs.player.y - 20, width: 40, height: 40, borderRadius: 20, borderWidth: 3, borderColor: '#00FA9A', backgroundColor: 'rgba(0,250,154,0.1)', zIndex: 10 }}/>
             )}
-            {gs.drones.normal.active && <View style={[styles.droneNormal, { left: gs.player.x - 30, top: gs.player.y + 5 }]}/>}
-            {gs.drones.advanced.active && <View style={[styles.droneAdvanced, { left: gs.player.x + 20, top: gs.player.y - 5 }]}/>}
+            {gs.drones.normal.active && <View style={[styles.droneNormal, { left: gs.player.x - 22, top: gs.player.y + 3 }]}/>}
+            {gs.drones.advanced.active && <View style={[styles.droneAdvanced, { left: gs.player.x + 15, top: gs.player.y - 3 }]}/>}
           </View>
         </View>
 
@@ -1083,14 +1075,15 @@ export default function MathBlaster() {
               <BotaoRetro valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={lidarComTeclado}/>
             </View>
 
-            {/* A INTERCEPTAÇÃO MULTI-TOUCH INVISÍVEL NO ANDROID */}
+            {/* CONTROLADOR MULTI-TOUCH INVISÍVEL (APENAS ANDROID/IOS) */}
             {Platform.OS !== 'web' && (
                 <View 
                     style={StyleSheet.absoluteFillObject} 
-                    onTouchStart={handleKbTouchStart} 
-                    onTouchMove={processKeyboardTouches} 
-                    onTouchEnd={handleKbTouchEnd} 
-                    onTouchCancel={handleKbTouchEnd} 
+                    onStartShouldSetResponder={() => true}
+                    onResponderGrant={handleUnifiedTouch} 
+                    onResponderMove={handleUnifiedTouch} 
+                    onResponderRelease={handleUnifiedTouch} 
+                    onResponderTerminate={handleUnifiedTouch} 
                 />
             )}
           </View>
@@ -1138,10 +1131,10 @@ const styles = StyleSheet.create({
 
   gameAreaWrapperContainer: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#050015', touchAction: 'none' as any, width: '100%', alignItems: 'center', justifyContent: 'center' },
   
-  gameAreaScaled: { 
-    width: initialWidth * INV_ZOOM, 
-    height: initialHeight * INV_ZOOM,
-    transform: [{ scale: ZOOM }],
+  // O Efeito Zoom Out Perfeito (Ajuste de tamanho em % ao invés de Scale)
+  gameAreaFull: { 
+    width: '100%', 
+    height: '100%',
     position: 'relative' 
   },
   
@@ -1149,45 +1142,46 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     opacity: 0.1, 
     backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)' as any, 
-    backgroundSize: '30px 30px' as any 
+    backgroundSize: '25px 25px' as any 
   } : { display: 'none' },
   
   centerAlert: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
-  alertTextDanger: { color: '#FF0055', fontSize: 35, fontWeight: '900', textShadowColor: '#FF0055', textShadowRadius: 8, textShadowOffset: { width: 1, height: 1 } },
-  alertTextSuccess: { color: '#32CD32', fontSize: 35, fontWeight: '900', textShadowColor: '#32CD32', textShadowRadius: 8, textShadowOffset: { width: 1, height: 1 } },
-  alertSubText: { color: '#FFF', fontSize: 14, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 },
+  alertTextDanger: { color: '#FF0055', fontSize: 30, fontWeight: '900', textShadowColor: '#FF0055', textShadowRadius: 6, textShadowOffset: { width: 1, height: 1 } },
+  alertTextSuccess: { color: '#32CD32', fontSize: 30, fontWeight: '900', textShadowColor: '#32CD32', textShadowRadius: 6, textShadowOffset: { width: 1, height: 1 } },
+  alertSubText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 },
 
-  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 15, borderRightWidth: 15, borderBottomWidth: 30, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF' },
-  propulsor: { position: 'absolute', width: 10, height: 12, backgroundColor: '#FF8C00', borderBottomLeftRadius: 5, borderBottomRightRadius: 5 },
-  droneNormal: { position: 'absolute', width: 10, height: 10, backgroundColor: '#1E90FF', borderRadius: 5, borderWidth: 1, borderColor: '#FFF', zIndex: 5 },
-  droneAdvanced: { position: 'absolute', width: 12, height: 12, backgroundColor: '#FFD700', borderRadius: 3, borderWidth: 1, borderColor: '#FF4444', zIndex: 5 },
+  // As formas menores simulam a tela maior
+  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 11, borderRightWidth: 11, borderBottomWidth: 22, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF' },
+  propulsor: { position: 'absolute', width: 8, height: 10, backgroundColor: '#FF8C00', borderBottomLeftRadius: 4, borderBottomRightRadius: 4 },
+  droneNormal: { position: 'absolute', width: 8, height: 8, backgroundColor: '#1E90FF', borderRadius: 4, borderWidth: 1, borderColor: '#FFF', zIndex: 5 },
+  droneAdvanced: { position: 'absolute', width: 10, height: 10, backgroundColor: '#FFD700', borderRadius: 3, borderWidth: 1, borderColor: '#FF4444', zIndex: 5 },
   
-  meteorShape: { position: 'absolute', width: 24, height: 24, backgroundColor: '#555', borderRadius: 4, borderWidth: 2, borderColor: '#777' },
-  squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
-  flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 16, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500' },
-  miniShield: { position: 'absolute', top: -8, left: -16, width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)' },
+  meteorShape: { position: 'absolute', width: 18, height: 18, backgroundColor: '#555', borderRadius: 4, borderWidth: 2, borderColor: '#777' },
+  squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 9, borderRightWidth: 9, borderTopWidth: 18, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
+  flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 12, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500' },
+  miniShield: { position: 'absolute', top: -6, left: -12, width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)' },
   
-  spawnerShape: { position: 'absolute', width: 60, height: 45, backgroundColor: 'rgba(0, 255, 255, 0.2)', borderWidth: 2, borderColor: '#00FFFF', borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: '#00FFFF', shadowRadius: 10, zIndex: 15 },
-  spawnerMath: { color: '#FFF', fontSize: 15, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 1, height: 1 } },
-  xrayText: { position: 'absolute', top: -20, color: '#FF1493', fontSize: 14, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 } },
+  spawnerShape: { position: 'absolute', width: 45, height: 35, backgroundColor: 'rgba(0, 255, 255, 0.2)', borderWidth: 2, borderColor: '#00FFFF', borderRadius: 8, justifyContent: 'center', alignItems: 'center', shadowColor: '#00FFFF', shadowRadius: 8, zIndex: 15 },
+  spawnerMath: { color: '#FFF', fontSize: 12, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 1, height: 1 } },
+  xrayText: { position: 'absolute', top: -16, color: '#FF1493', fontSize: 12, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 } },
   
-  bossContainer: { position: 'absolute', width: 80, height: 60, alignItems: 'center', zIndex: 20 },
-  bossShip: { width: 60, height: 40, backgroundColor: '#8B0000', borderRadius: 15, borderWidth: 2, borderColor: '#FF4444' },
-  bossHpBar: { width: '100%', height: 5, backgroundColor: '#333', marginBottom: 4, borderRadius: 2, overflow: 'hidden' },
+  bossContainer: { position: 'absolute', width: 60, height: 45, alignItems: 'center', zIndex: 20 },
+  bossShip: { width: 45, height: 30, backgroundColor: '#8B0000', borderRadius: 12, borderWidth: 2, borderColor: '#FF4444' },
+  bossHpBar: { width: '100%', height: 4, backgroundColor: '#333', marginBottom: 3, borderRadius: 2, overflow: 'hidden' },
   bossHpFill: { height: '100%', backgroundColor: '#FF0055' },
-  bossShield: { position: 'absolute', top: -10, width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
-  bossMath: { color: '#FFF', fontSize: 20, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 4, textShadowOffset: { width: 1, height: 1 } },
+  bossShield: { position: 'absolute', top: -8, width: 75, height: 75, borderRadius: 37.5, borderWidth: 3, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
+  bossMath: { color: '#FFF', fontSize: 16, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 4, textShadowOffset: { width: 1, height: 1 } },
 
-  powerupBox: { position: 'absolute', width: 80, height: 35, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  powerupTitle: { fontSize: 7, fontWeight: '900', position: 'absolute', top: -8, backgroundColor: '#050015', paddingHorizontal: 3 },
-  powerupMath: { color: '#FFF', fontSize: 14, fontWeight: '900' },
-  powerupDots: { flexDirection: 'row', gap: 3, position: 'absolute', bottom: -6 },
-  dot: { width: 6, height: 6, borderRadius: 3, borderWidth: 1, backgroundColor: '#050015' },
+  powerupBox: { position: 'absolute', width: 60, height: 28, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  powerupTitle: { fontSize: 6, fontWeight: '900', position: 'absolute', top: -6, backgroundColor: '#050015', paddingHorizontal: 2 },
+  powerupMath: { color: '#FFF', fontSize: 12, fontWeight: '900' },
+  powerupDots: { flexDirection: 'row', gap: 2, position: 'absolute', bottom: -5 },
+  dot: { width: 5, height: 5, borderRadius: 2.5, borderWidth: 1, backgroundColor: '#050015' },
 
   laserNormal: { position: 'absolute', zIndex: 1 },
-  enemyLaser: { position: 'absolute', borderRadius: 5 },
-  cannonBall: { position: 'absolute', borderRadius: 16, borderWidth: 2, borderColor: '#FFF' }, 
-  floatingText: { position: 'absolute', fontSize: 12, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 }, zIndex: 100, textAlign: 'center', width: 80 },
+  enemyLaser: { position: 'absolute', borderRadius: 4 },
+  cannonBall: { position: 'absolute', borderRadius: 12, borderWidth: 2, borderColor: '#FFF' }, 
+  floatingText: { position: 'absolute', fontSize: 10, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 }, zIndex: 100, textAlign: 'center', width: 60 },
 
   painelInferior: { 
     backgroundColor: '#0A0025', 
