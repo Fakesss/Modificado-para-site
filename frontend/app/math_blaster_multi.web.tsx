@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/context/AuthContext';
-import { socket } from '../src/services/socket'; // CORRIGIDO: importação nomeada
+import { socket } from '../src/services/socket'; // Correção: importação nomeada
 import * as apiRoutes from '../src/services/api';
 
 const initialWidth = Dimensions.get('window').width;
@@ -39,12 +39,15 @@ export default function MathBlasterMulti() {
   const isHost = params.isHost === 'true';
   const opponentName = params.opponentName as string || 'Aliado';
 
+  // CORREÇÃO: Captura o userId pela URL caso o jogo esteja rodando dentro do WebView (que não possui o useAuth)
+  const myUserId = user?.id || (params.userId as string);
+
   const [tela, setTela] = useState<'jogo' | 'resultado'>('jogo');
   const [jogoAtivo, setJogoAtivo] = useState(true);
   const [resposta, setResposta] = useState('');
   
-  // CORREÇÕES DE ESTADOS E REFS FALTANTES
-  const [frames, setFrames] = useState(0); 
+  // CORREÇÕES: Estados e Refs faltantes
+  const [frames, setFrames] = useState(0);
   const gameOverFired = useRef(false);
   const tecladoLayoutRef = useRef({ width: 0 });
   const goBack = () => { router.back(); };
@@ -60,14 +63,14 @@ export default function MathBlasterMulti() {
 
   // Cores dinâmicas baseadas na equipe
   const minhaCor = user?.equipe?.cor || '#00FFFF';
-  let corAliado = params.opponentColor as string || '#FF00FF';
-  if (minhaCor === corAliado) corAliado = minhaCor === '#00FFFF' ? '#FFD700' : '#00FFFF'; // Impede cores iguais
+  let corAliado = (params.opponentColor as string) || '#FF00FF';
+  if (minhaCor === corAliado) corAliado = minhaCor === '#00FFFF' ? '#FFD700' : '#00FFFF'; 
 
   const gs = useRef({
     currentZoom: BASE_ZOOM,
     keys: { up: false, down: false, left: false, right: false },
     player: { x: initialWidth / 2 - 30, y: initialHeight - 60, hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, weapons: { electric: { active: false, level: 1, baseCooldown: 7000, lastFire: 0, damageMult: 2, chainCount: 3 } } },
-    aliado: { x: initialWidth / 2 + 30, y: initialHeight - 60, hp: 100, maxHp: 100 }, // DADOS DO SEU AMIGO
+    aliado: { x: initialWidth / 2 + 30, y: initialHeight - 60, hp: 100, maxHp: 100 },
     lasers: [] as any[], mathShots: [] as any[], pulses: [] as any[], floatingTexts: [] as any[], 
     enemies: [] as any[], enemyLasers: [] as any[], powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
@@ -77,14 +80,13 @@ export default function MathBlasterMulti() {
 
   const loopRef = useRef<any>(null);
 
-  // INICIALIZAÇÃO E COMUNICAÇÃO VIA SOCKET
   useEffect(() => {
     if (!roomId) { Alert.alert('Erro', 'Sala não encontrada.'); router.back(); return; }
 
     const handleSocketAcao = (payload: any) => {
-      if (!payload || payload.userId === user?.id) return; // Ignora as próprias mensagens
+      // CORREÇÃO: Utiliza o myUserId para saber de quem é a mensagem
+      if (!payload || payload.userId === myUserId) return; 
 
-      // 1. Sincroniza a posição e a vida do seu amigo
       if (payload.action === 'SYNC_PLAYER') {
          gs.aliado.x = payload.data.x;
          gs.aliado.y = payload.data.y;
@@ -92,12 +94,10 @@ export default function MathBlasterMulti() {
          gs.scoreAliado = payload.data.score;
       }
       
-      // 2. Se o aliado atirou e acertou a resposta, o inimigo morre aqui também!
       if (payload.action === 'SOLVED_MATH') {
          verificarRespostaRemota(payload.data.respostaNum, payload.data.x, payload.data.y);
       }
 
-      // 3. Se o host avançar de fase, o convidado acompanha
       if (payload.action === 'SYNC_FASE' && !isHost) {
           gs.fase = payload.data.fase;
           gs.gameState = payload.data.gameState;
@@ -105,8 +105,6 @@ export default function MathBlasterMulti() {
     };
 
     socket.on('game_action', handleSocketAcao);
-
-    // Inicia o Jogo
     loopRef.current = setInterval(gameTick, 30); 
 
     return () => { 
@@ -116,9 +114,9 @@ export default function MathBlasterMulti() {
   }, []);
 
   const enviarPosicaoSocket = () => {
-     if (gs.stateTimer % 3 === 0) { // Envia 10 vezes por segundo para não travar o servidor
+     if (gs.stateTimer % 3 === 0) {
          socket.emit('game_action', {
-             roomId, userId: user?.id, action: 'SYNC_PLAYER',
+             roomId, userId: myUserId, action: 'SYNC_PLAYER',
              data: { x: gs.player.x, y: gs.player.y, hp: gs.player.hp, score: gs.score }
          });
      }
@@ -126,7 +124,7 @@ export default function MathBlasterMulti() {
 
   const enviarAcertoSocket = (respostaNum: number, alvoX: number, alvoY: number) => {
       socket.emit('game_action', {
-          roomId, userId: user?.id, action: 'SOLVED_MATH',
+          roomId, userId: myUserId, action: 'SOLVED_MATH',
           data: { respostaNum, x: gs.player.x, y: gs.player.y }
       });
   };
@@ -139,7 +137,6 @@ export default function MathBlasterMulti() {
     gs.mathShots.push({ id: Math.random().toString(), x: origemX, y: origemY, tx, ty, color, life: 15 }); 
   };
 
-  // QUANDO O ALIADO ACERTA UMA CONTA
   const verificarRespostaRemota = (num: number, aliadoX: number, aliadoY: number) => {
       let acertou = false;
       if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
@@ -164,9 +161,8 @@ export default function MathBlasterMulti() {
       }
   };
 
-  // QUANDO VOCÊ DIGITA UMA RESPOSTA
   const lidarComTeclado = useCallback((valor: string) => {
-    if (!jogoAtivo || gs.player.hp <= 0) return; // Se você morreu, não atira
+    if (!jogoAtivo || gs.player.hp <= 0) return; 
     if (valor === 'apagar') { setResposta(r => r.slice(0, -1)); } 
     else if (valor === 'enviar') {
       const num = parseInt(respostaRef.current);
@@ -217,7 +213,7 @@ export default function MathBlasterMulti() {
 
               gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); gs.score += 5; p.y = 9999;
             }, 350);
-            enviarAcertoSocket(num, gs.player.x, gs.player.y); // O aliado também precisa apagar o powerup da tela dele
+            enviarAcertoSocket(num, gs.player.x, gs.player.y); 
             break; 
           }
         }
@@ -233,7 +229,6 @@ export default function MathBlasterMulti() {
     }
   }, [jogoAtivo]);
 
-  // CONTROLE DO TECLADO
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const handleKeyDownLocal = (e: any) => {
@@ -276,7 +271,7 @@ export default function MathBlasterMulti() {
     }
   }, [jogoAtivo, lidarComTeclado]);
 
-  // CORREÇÃO: Implementação das funções de Touch para Mobile Web
+  // CORREÇÃO: Implementação das funções de Touch para controles via celular no navegador
   const handleGameTouchStart = (e: any) => {
     if (!jogoAtivo) return;
     const touch = e.nativeEvent.touches[0];
@@ -301,7 +296,6 @@ export default function MathBlasterMulti() {
   const handleGameTouchEnd = () => {
       gs.movementTouchId = null;
   };
-
 
   const getRespostasAtivas = () => {
     const resps: number[] = [];
@@ -342,7 +336,7 @@ export default function MathBlasterMulti() {
     const gw = layoutRef.current.width; const gh = layoutRef.current.height;
     
     gs.timeAlive += 30; gs.stateTimer += 1;
-    enviarPosicaoSocket(); // Manda a sua posição pro amigo
+    enviarPosicaoSocket(); 
     
     if (gs.player.hp > 0) {
         const movSpeed = 6 / gs.currentZoom;
@@ -363,14 +357,12 @@ export default function MathBlasterMulti() {
           gs.player.lastFire = now;
         }
 
-        // TIRO ELÉTRICO
         if (gs.player.weapons.electric.active && now - gs.player.weapons.electric.lastFire > gs.player.weapons.electric.baseCooldown) {
           gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 30, vx: 0, vy: -6, damage: gs.player.damage * gs.player.weapons.electric.damageMult, size: gs.player.shotSize * 2.5, type: 'ELECTRIC', chainCount: gs.player.weapons.electric.chainCount, isMine: true });
           gs.player.weapons.electric.lastFire = now;
         }
     }
 
-    // A vida de ambos acabou = Fim de jogo
     if (gs.player.hp <= 0 && gs.aliado.hp <= 0 && !gameOverFired.current) {
         gameOverFired.current = true;
         setJogoAtivo(false);
@@ -387,7 +379,6 @@ export default function MathBlasterMulti() {
       gs.player.y += 20; 
     };
 
-    // MOVIMENTAÇÃO DE INIMIGOS (Se for Host, controla e avança as ondas. Se for convidado, apenas simula localmente no mesmo tempo)
     const speedMult = 1;
     gs.enemies.forEach(e => {
       if (e.type === 'METEOR') { e.y += e.vy * speedMult; } 
@@ -418,7 +409,6 @@ export default function MathBlasterMulti() {
       }
       else if (e.type === 'SQUAD') {
         if (e.isLeader) {
-          // No co-op, o líder persegue quem tiver mais perto (você ou o aliado)
           const dMe = Math.hypot(gs.player.x - e.x, gs.player.y - e.y);
           const dAliado = Math.hypot(gs.aliado.x - e.x, gs.aliado.y - e.y);
           const alvoX = (dMe < dAliado && gs.player.hp > 0) ? gs.player.x : gs.aliado.x;
@@ -444,7 +434,6 @@ export default function MathBlasterMulti() {
         }
       }
       
-      // Colisão Física SOMENTE com você (O Aliado cuida da colisão dele lá na máquina dele)
       if (gs.player.hp > 0 && Math.abs(gs.player.x - e.x) < 25 && Math.abs(gs.player.y - e.y) < 25 && !e.invisible) { 
         aplicarDano(5 + (gs.fase * 5)); 
         if (!e.mathRequired) e.hp = -100; 
@@ -452,7 +441,7 @@ export default function MathBlasterMulti() {
     });
 
     gs.lasers.forEach(l => {
-      if (!l.isMine) return; // FOGO AMIGO OFF: O Laser do seu amigo é desenhado mas não causa dano duplo aqui.
+      if (!l.isMine) return; 
       
       gs.enemyLasers.forEach(el => {
         if (el.homing && el.hp > 0 && Math.abs(l.x - el.x) < 20 && Math.abs(l.y - el.y) < 20) { 
@@ -519,7 +508,6 @@ export default function MathBlasterMulti() {
     gs.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 1; });
     gs.particles = gs.particles.filter(p => p.life > 0);
 
-    // SISTEMA DE ONDAS SINCRONIZADAS (SÓ O HOST GERA E O VISITANTE ACOMPANHA NO TEMPO)
     if (gs.gameState === 'WAVES') {
       if (isHost) {
           if (gs.stateTimer % Math.max(20, 100 - gs.fase * 10) === 0) {
@@ -750,7 +738,6 @@ export default function MathBlasterMulti() {
             {gs.particles.map((p, i) => ( <View key={i} style={{ position: 'absolute', width: 4, height: 4, backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 2 }}/> ))}
             {gs.floatingTexts.map(ft => ( <Text key={ft.id} style={[styles.floatingText, { left: ft.x - 30, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text> ))}
 
-            {/* SUA NAVE */}
             {gs.player.hp > 0 && (
                 <>
                     <View style={[styles.playerShape, { left: gs.player.x - 15, top: gs.player.y - 15, borderBottomColor: minhaCor }]}/>
@@ -759,7 +746,6 @@ export default function MathBlasterMulti() {
                 </>
             )}
 
-            {/* NAVE DO ALIADO */}
             {gs.aliado.hp > 0 && (
                 <>
                     <View style={[styles.playerShape, { left: gs.aliado.x - 15, top: gs.aliado.y - 15, borderBottomColor: corAliado, opacity: 0.8 }]}/>
