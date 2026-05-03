@@ -15,6 +15,10 @@ sio = socketio.AsyncServer(
     engineio_logger=False
 )
 
+# ====================================================
+# CONEXÃO INDEPENDENTE COM O BANCO DE DADOS
+# Evita Import Circular e travamentos no Render
+# ====================================================
 mongo_url = os.getenv('MONGO_URL')
 if mongo_url:
     client = AsyncIOMotorClient(mongo_url)
@@ -26,13 +30,17 @@ players_online: Dict[str, dict] = {}
 rooms: Dict[str, dict] = {}
 lobbies: Dict[str, dict] = {}
 
+# CORREÇÃO: Adicionada a fila do Math Blaster
 matchmaking_queues = {
     'tictactoe': [],
     'arcade': [],
     'tugofwar': [],
-    'math_blaster': [] # CORREÇÃO: Fila do Math Blaster
+    'math_blaster': [] 
 }
 
+# ====================================================
+# 🧹 FAXINEIRO DE DESAFIOS 
+# ====================================================
 async def remover_desafio_por_sala(room_id):
     try:
         for lobby_id, lobby in lobbies.items():
@@ -46,6 +54,9 @@ async def remover_desafio_por_sala(room_id):
     except Exception as e:
         print(f"Erro ao remover desafio: {e}")
 
+# ====================================================
+# 🛡️ MOTOR DE HISTÓRICO NO MONGODB
+# ====================================================
 async def save_chat_log(lobby_data):
     if not lobby_data.get('messages'): return
     if db is None: return
@@ -63,6 +74,9 @@ async def save_chat_log(lobby_data):
     except Exception as e:
         print(f"Erro ao salvar log do chat: {e}")
 
+# ====================================================
+# ROTINAS DE CONEXÃO E LIMPEZA
+# ====================================================
 @sio.event
 async def connect(sid, environ):
     players_online[sid] = {'sid': sid, 'name': 'Visitante', 'user_id': None, 'status': 'MENU', 'aceita_convites': True, 'bloqueados_temp': {}, 'convites_pendentes': []}
@@ -99,6 +113,9 @@ async def disconnect(sid):
             break
     await broadcast_online_users()
 
+# ====================================================
+# 🚀 SISTEMA DE SALAS (LOBBY E CHAT)
+# ====================================================
 async def broadcast_lobbies():
     try:
         safe_lobbies = []
@@ -214,6 +231,9 @@ async def delete_lobby_message(sid, data):
                     await sio.emit('lobby_message_updated', msg, room=lobby_id)
                 break
 
+# ====================================================
+# ⚔️ SISTEMA DE DESAFIOS DA SALA (ARENA)
+# ====================================================
 @sio.event
 async def create_lobby_challenge(sid, data):
     lobby_id = data.get('lobby_id')
@@ -268,6 +288,7 @@ async def accept_lobby_challenge(sid, data):
             room_id = await start_arcade_match(p1_sid, sid, desafio['modo_operacao'])
         elif desafio['game_type'] == 'tugofwar': 
             room_id = await start_tugofwar_match(p1_sid, sid, desafio['modo_operacao'])
+        # CORREÇÃO: Redireciona corretamente desafios do lobby
         elif desafio['game_type'] == 'math_blaster': 
             room_id = await start_math_blaster_match(p1_sid, sid, desafio['modo_operacao'])
 
@@ -292,6 +313,9 @@ async def cancel_lobby_challenge(sid, data):
             desafio['status'] = 'CANCELADO'
             await sio.emit('lobby_challenge_cancelled', {'challenge_id': challenge_id}, room=lobby_id)
 
+# ====================================================
+# OUTROS
+# ====================================================
 @sio.event
 async def register_player(sid, data):
     user_id = data.get('user_id')
@@ -372,6 +396,7 @@ async def accept_invite(sid, data):
         if data.get('game_type') == 'tictactoe': await start_tictactoe_match(data.get('from_sid'), sid)
         elif data.get('game_type') == 'arcade': await start_arcade_match(data.get('from_sid'), sid, data.get('modo_operacao', 'misto'))
         elif data.get('game_type') == 'tugofwar': await start_tugofwar_match(data.get('from_sid'), sid, data.get('modo_operacao', 'misto')) 
+        # CORREÇÃO: Permite aceitar convite do Math Blaster
         elif data.get('game_type') == 'math_blaster': await start_math_blaster_match(data.get('from_sid'), sid, data.get('modo_operacao', 'misto'))
 
 @sio.event
@@ -405,6 +430,7 @@ async def find_match(sid, data):
         if game_type == 'tictactoe': await start_tictactoe_match(p1, p2)
         elif game_type == 'arcade': await start_arcade_match(p1, p2, 'misto')
         elif game_type == 'tugofwar': await start_tugofwar_match(p1, p2, 'misto') 
+        # CORREÇÃO: Matchmaking aleatório do Math Blaster
         elif game_type == 'math_blaster': await start_math_blaster_match(p1, p2, 'misto')
 
 @sio.event
@@ -655,6 +681,12 @@ async def tugofwar_answer(sid, data):
     except Exception as e:
         print(f"Erro em tugofwar_answer: {e}")
 
+
+# ====================================================
+# 🚀 SISTEMA MATH BLASTER
+# ====================================================
+
+# CORREÇÃO: Função de criação da sala
 async def start_math_blaster_match(p1_sid, p2_sid, modo_operacao):
     room_id = f"mb_{p1_sid[:5]}_{p2_sid[:5]}"
     rooms[room_id] = {
@@ -689,19 +721,20 @@ async def start_math_blaster_match(p1_sid, p2_sid, modo_operacao):
 
     return room_id
 
-# CORREÇÃO: Força qualquer tela isolada/webview a entrar na sala para receber mensagens
+# CORREÇÃO: Função que permite o Celular e o Navegador entrarem na sala do Servidor
 @sio.event
 async def join_game_room(sid, data):
     room_id = data.get('roomId')
     if room_id in rooms:
         await sio.enter_room(sid, room_id)
 
-# CORREÇÃO: Listener genérico para retransmitir os dados entre Host e Guest
+# CORREÇÃO: O canal de comunicação que estava faltando para enviar as posições
 @sio.event
 async def game_action(sid, data):
     room_id = data.get('roomId')
     if room_id in rooms:
         await sio.emit('game_action', data, room=room_id, skip_sid=sid)
+
 
 @sio.event
 async def leave_match(sid, data):
