@@ -9,7 +9,7 @@ export default function MathBlasterNative() {
   const router = useRouter();
   
   // A URL oficial da sua branch main na Vercel
-  const VERCEL_URL = 'https://modificado-para-site-git-main-fakesss-projects.vercel.app'; 
+  const VERCEL_URL = 'https://modificado-para-site.vercel.app/math_blaster'; 
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
