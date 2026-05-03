@@ -1,41 +1,46 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 const initialWidth = Dimensions.get('window').width;
-const initialHeight = Dimensions.get('window').height * 0.7; // Altura inicial mais realista
+const initialHeight = Dimensions.get('window').height * 0.7;
 
-// --- COMPONENTE: TECLADO RETRÔ ---
+// --- COMPONENTE: TECLADO RETRÔ (MULTITOQUE NATIVO) ---
 const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
   const anim = useRef(new Animated.Value(1)).current;
   
-  const handlePressIn = () => {
+  const handlePressIn = (e: any) => {
+    e.stopPropagation(); // Impede que o toque vaze para a tela de jogo
     Animated.spring(anim, { toValue: 0.85, useNativeDriver: true }).start();
+    onPressWeb(valor);
   };
   
-  const handlePressOut = () => {
+  const handlePressOut = (e: any) => {
+    e.stopPropagation();
     Animated.spring(anim, { toValue: 1, useNativeDriver: true }).start();
-    onPressWeb(valor);
   };
 
   return (
-    <Animated.View style={{ flex: 1, transform: [{ scale: anim }] }}>
-      <TouchableOpacity 
-        activeOpacity={1} 
-        onPressIn={handlePressIn} 
-        onPressOut={handlePressOut}
-        style={[
-          styles.teclaRetro, 
-          valor === 'apagar' && styles.teclaApagar, 
-          valor === 'enviar' && styles.teclaEnviar
-        ]}
-      >
-        {valor === 'apagar' ? <Ionicons name="backspace" size={26} color="#FFF" /> : 
-         valor === 'enviar' ? <Ionicons name="flash" size={26} color="#FFF" /> : 
-         <Text style={styles.teclaRetroText}>{valor}</Text>}
-      </TouchableOpacity>
+    <Animated.View 
+      style={[
+        styles.teclaRetro, 
+        valor === 'apagar' && styles.teclaApagar, 
+        valor === 'enviar' && styles.teclaEnviar
+      ]}
+      // Usamos eventos nativos para permitir multitoque real no celular
+      onTouchStart={handlePressIn}
+      onTouchEnd={handlePressOut}
+      onTouchCancel={handlePressOut}
+      // Fallback para Web (Mouse)
+      onMouseDown={Platform.OS === 'web' ? handlePressIn : undefined}
+      onMouseUp={Platform.OS === 'web' ? handlePressOut : undefined}
+      onMouseLeave={Platform.OS === 'web' ? handlePressOut : undefined}
+    >
+      {valor === 'apagar' ? <Ionicons name="backspace" size={22} color="#FFF" /> : 
+       valor === 'enviar' ? <Ionicons name="flash" size={22} color="#FFF" /> : 
+       <Text style={styles.teclaRetroText}>{valor}</Text>}
     </Animated.View>
   );
 };
@@ -55,18 +60,18 @@ export default function MathBlaster() {
   const gs = useRef({
     player: { 
       x: initialWidth / 2, 
-      y: initialHeight - 100, 
+      y: initialHeight - 80, 
       hp: 100, 
       maxHp: 100, 
       damage: 1, 
-      shotSize: 6,
+      shotSize: 5,
       fireRate: 300, 
       lastFire: 0, 
       tripleShot: false,
       weapons: {
-        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
+        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 50, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
-        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 }
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 40, damageMult: 1 }
       }
     },
     lasers: [] as any[], 
@@ -89,7 +94,6 @@ export default function MathBlaster() {
     lastTouchY: 0,
     keys: { up: false, down: false, left: false, right: false },
     
-    // SISTEMAS DE RECOMPENSA E NOVOS PODERES
     timeAlive: 0,
     flawlessBossesCount: 0,
     tookDamageThisBoss: false,
@@ -108,13 +112,18 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
-  // --- CONTROLES DE MOVIMENTO PASSIVOS ---
+  // --- CONTROLES DE MOVIMENTO MULTITOQUE ---
   const handleGameTouchStart = (e: any) => {
-    if (gs.movementTouchId === null && e.nativeEvent.touches.length > 0) {
-      const touch = e.nativeEvent.touches[0];
-      gs.movementTouchId = touch.identifier;
-      gs.lastTouchX = touch.pageX;
-      gs.lastTouchY = touch.pageY;
+    const touches = e.nativeEvent.touches;
+    for (let i = 0; i < touches.length; i++) {
+      const touch = touches[i];
+      // Aceita toque apenas se for na metade de cima da tela (evita conflito com teclado)
+      if (gs.movementTouchId === null && touch.pageY < layoutRef.current.height + 100) {
+        gs.movementTouchId = touch.identifier;
+        gs.lastTouchX = touch.pageX;
+        gs.lastTouchY = touch.pageY;
+        break;
+      }
     }
   };
 
@@ -201,12 +210,12 @@ export default function MathBlaster() {
 
   const iniciarJogo = () => {
     gs.player = { 
-      x: layoutRef.current.width / 2, y: layoutRef.current.height - 100, 
-      hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, 
+      x: layoutRef.current.width / 2, y: layoutRef.current.height - 80, 
+      hp: 100, maxHp: 100, damage: 1, shotSize: 5, fireRate: 300, lastFire: 0, tripleShot: false, 
       weapons: { 
-        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 }, 
+        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 50, life: 80 }, 
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
-        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 } 
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 40, damageMult: 1 } 
       }
     };
     gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.pulses = []; gs.floatingTexts = [];
@@ -387,7 +396,6 @@ export default function MathBlaster() {
     if (gs.timeFreezeTimer > 0) gs.timeFreezeTimer -= 30;
     if (gs.xRayTimer > 0) gs.xRayTimer -= 30;
 
-    // PROCESSA MOVIMENTAÇÃO PELO TECLADO FÍSICO
     const keyboardSpeed = 6;
     if (gs.keys.up) gs.player.y -= keyboardSpeed;
     if (gs.keys.down) gs.player.y += keyboardSpeed;
@@ -405,38 +413,38 @@ export default function MathBlaster() {
       }
     };
 
-    if (gs.player.x < 20) gs.player.x = 20; 
-    if (gs.player.x > gw - 20) gs.player.x = gw - 20;
-    if (gs.player.y < 20) gs.player.y = 20; 
-    if (gs.player.y > gh - 20) gs.player.y = gh - 20;
+    if (gs.player.x < 15) gs.player.x = 15; 
+    if (gs.player.x > gw - 15) gs.player.x = gw - 15;
+    if (gs.player.y < 15) gs.player.y = 15; 
+    if (gs.player.y > gh - 15) gs.player.y = gh - 15;
 
     // DISPAROS DA NAVE
     if (now - gs.player.lastFire > gs.player.fireRate) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 15, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       if (gs.player.tripleShot) {
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 10, y: gs.player.y - 15, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 10, y: gs.player.y - 15, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 8, y: gs.player.y - 10, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 8, y: gs.player.y - 10, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       }
       gs.player.lastFire = now;
     }
 
     if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 3, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 15, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 2.5, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
       gs.player.weapons.missile.lastFire = now;
     }
     
     if (gs.player.weapons.laser.active && now - gs.player.weapons.laser.lastFire > gs.player.weapons.laser.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, vx: 0, vy: -25, damage: gs.player.damage * gs.player.weapons.laser.damageMult, size: gs.player.shotSize * 2 * gs.player.weapons.laser.sizeMult, type: 'LASER' });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 30, vx: 0, vy: -25, damage: gs.player.damage * gs.player.weapons.laser.damageMult, size: gs.player.shotSize * 1.5 * gs.player.weapons.laser.sizeMult, type: 'LASER' });
       gs.player.weapons.laser.lastFire = now;
     }
 
     if (gs.drones.normal.active && now - gs.drones.normal.lastFire > gs.drones.normal.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 40, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 30, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       gs.drones.normal.lastFire = now;
     }
 
     if (gs.drones.advanced.active && now - gs.drones.advanced.lastFire > gs.drones.advanced.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 30, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.5, type: 'MISSILE_HOMING', life: 9999, aoeRange: 40 });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 25, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.2, type: 'MISSILE_HOMING', life: 9999, aoeRange: 35 });
       gs.drones.advanced.lastFire = now;
     }
 
@@ -604,16 +612,16 @@ export default function MathBlaster() {
         gs.boss.timer += 1 * speedMult;
 
         if (gs.boss.type === 0) {
-          if (gs.boss.timer % Math.max(30, 80 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: 0, vy: 2, size: 18, damage: 20, homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) });
+          if (gs.boss.timer % Math.max(30, 80 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: 0, vy: 2, size: 14, damage: 20, homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) });
         } else if (gs.boss.type === 1) {
-          if (gs.boss.timer % 60 === 0) [-2, -1, 0, 1, 2].forEach(dir => gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: dir * 1.5, vy: 6 + gs.fase, size: 8, damage: 15, homing: false, color: '#FF0055', hp: 1 }));
+          if (gs.boss.timer % 60 === 0) [-2, -1, 0, 1, 2].forEach(dir => gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: dir * 1.5, vy: 6 + gs.fase, size: 6, damage: 15, homing: false, color: '#FF0055', hp: 1 }));
         } else {
-          if (gs.boss.timer % 120 === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: 0, vy: 15, size: 25, damage: 30, homing: false, color: '#32CD32', hp: 99 });
+          if (gs.boss.timer % 120 === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 30, vx: 0, vy: 15, size: 20, damage: 30, homing: false, color: '#32CD32', hp: 99 });
         }
 
         if (gs.boss.timer % 300 === 0 && gs.enemies.length < 2) {
-          gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: gs.boss.x - 40, y: gs.boss.y, targetY: gs.boss.y + 40, isLeader: false, hp: 10 + gs.fase, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
-          gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: gs.boss.x + 40, y: gs.boss.y, targetY: gs.boss.y + 40, isLeader: false, hp: 10 + gs.fase, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
+          gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: gs.boss.x - 35, y: gs.boss.y, targetY: gs.boss.y + 40, isLeader: false, hp: 10 + gs.fase, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
+          gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: gs.boss.x + 35, y: gs.boss.y, targetY: gs.boss.y + 40, isLeader: false, hp: 10 + gs.fase, vx: 0, vy: 3, fireTimer: 0, angle: Math.PI });
         }
 
         if (!gs.boss.shield && gs.boss.timer > gs.boss.nextShieldAt) {
@@ -650,7 +658,7 @@ export default function MathBlaster() {
            e.x += Math.sin(now / 500) * 0.5 * speedMult; 
            e.spawnTimer += 1 * speedMult;
            if (e.spawnTimer > Math.max(50, 120 - (gs.fase * 10))) {
-              gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: e.x, y: e.y + 40, targetY: e.y + 100 + Math.random() * 50, isLeader: false, hp: 1 + gs.fase, vx: (Math.random() - 0.5) * 3, vy: 4, fireTimer: 0, angle: Math.PI });
+              gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: e.x, y: e.y + 30, targetY: e.y + 80 + Math.random() * 50, isLeader: false, hp: 1 + gs.fase, vx: (Math.random() - 0.5) * 3, vy: 4, fireTimer: 0, angle: Math.PI });
               e.spawnTimer = 0;
            }
         }
@@ -667,7 +675,7 @@ export default function MathBlaster() {
           if (dist > 50) { e.x += (dx/dist) * (1.5 + gs.fase * 0.3) * speedMult; e.y += (dy/dist) * (1.0 + gs.fase * 0.2) * speedMult; }
           e.fireTimer += 1 * speedMult;
           if (e.fireTimer > Math.max(30, 80 - (gs.fase * 8))) { 
-            gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 15, vx: Math.cos(e.angle)*5, vy: Math.sin(e.angle)*5, size: 8, damage: 15, homing: false, color: '#FF00FF', hp: 1 }); 
+            gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: Math.cos(e.angle)*5, vy: Math.sin(e.angle)*5, size: 6, damage: 15, homing: false, color: '#FF00FF', hp: 1 }); 
             e.fireTimer = 0; 
           }
         } else {
@@ -675,14 +683,14 @@ export default function MathBlaster() {
           else {
             e.x += Math.sin(now / 300) * 1.5 * speedMult; e.fireTimer += 1 * speedMult;
             if (e.fireTimer > Math.max(60, 120 - (gs.fase * 5)) && Math.random() < 0.05) { 
-              gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 15, vx: 0, vy: 6 + gs.fase, size: 6, damage: 10, homing: false, color: '#FF0055', hp: 1 }); 
+              gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: 0, vy: 6 + gs.fase, size: 5, damage: 10, homing: false, color: '#FF0055', hp: 1 }); 
               e.fireTimer = 0; 
             }
           }
         }
       }
       
-      if (Math.abs(gs.player.x - e.x) < 30 && Math.abs(gs.player.y - e.y) < 30) { 
+      if (Math.abs(gs.player.x - e.x) < 25 && Math.abs(gs.player.y - e.y) < 25) { 
         aplicarDano(15); 
         if (!e.mathRequired) e.hp = -100; 
       }
@@ -690,7 +698,7 @@ export default function MathBlaster() {
 
     gs.lasers.forEach(l => {
       gs.enemyLasers.forEach(el => {
-        if (el.homing && el.hp > 0 && Math.abs(l.x - el.x) < 25 && Math.abs(l.y - el.y) < 25) { 
+        if (el.homing && el.hp > 0 && Math.abs(l.x - el.x) < 20 && Math.abs(l.y - el.y) < 20) { 
           el.hp -= l.damage; 
           if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; }
           criarParticulas(el.x, el.y, '#FF8C00', 3); 
@@ -698,7 +706,7 @@ export default function MathBlaster() {
       });
 
       gs.enemies.forEach(e => {
-        if (!e.mathRequired && Math.abs(l.x - e.x) < 25 && Math.abs(l.y - e.y) < 25) {
+        if (!e.mathRequired && Math.abs(l.x - e.x) < 20 && Math.abs(l.y - e.y) < 20) {
           if (e.shield && e.shield > 0) { 
             e.shield -= l.damage; 
             if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; } 
@@ -713,17 +721,17 @@ export default function MathBlaster() {
             if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; 
           } else if (l.type !== 'LASER') l.y = -100; 
           criarParticulas(l.x, l.y, '#FFF', 3);
-        } else if (e.mathRequired && Math.abs(l.x - e.x) < 40 && Math.abs(l.y - e.y) < 40) {
+        } else if (e.mathRequired && Math.abs(l.x - e.x) < 30 && Math.abs(l.y - e.y) < 30) {
            if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; 
            criarParticulas(l.x, l.y, '#00FFFF', 2); 
         }
       });
 
-      if (gs.boss.active && Math.abs(l.x - gs.boss.x) < 55 && Math.abs(l.y - gs.boss.y) < 45) {
+      if (gs.boss.active && Math.abs(l.x - gs.boss.x) < 45 && Math.abs(l.y - gs.boss.y) < 35) {
         if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; }
         
         if (gs.boss.shield) { 
-          criarParticulas(l.x, gs.boss.y + 45, '#00FFFF', 2); 
+          criarParticulas(l.x, gs.boss.y + 35, '#00FFFF', 2); 
         } else { 
           gs.boss.hp -= l.damage; 
           criarParticulas(l.x, l.y, '#FFD700', 4); 
@@ -775,7 +783,6 @@ export default function MathBlaster() {
         tipos.push({ type: 'X_RAY', color: '#FF1493', nome: 'RAIO-X MATH' });
       }
 
-      // RECOMPENSA DE MESTRE: DRONE DE ELITE
       if (gs.flawlessBossesCount >= 3) {
         if (!gs.drones.advanced.active) {
             tipos.push({ type: 'DRONE_ADVANCED', color: '#FFD700', nome: 'DRONE ELITE' });
@@ -788,7 +795,7 @@ export default function MathBlaster() {
       const eq = gerarEquacao(gs.fase, getRespostasAtivas());
       
       gs.powerups.push({ 
-        id: Math.random().toString(), x: Math.random() * (gw - 80) + 40, y: -40, 
+        id: Math.random().toString(), x: Math.random() * (gw - 60) + 30, y: -40, 
         type: sel.type, color: sel.color, title: sel.nome, txt: eq.txt, res: eq.res, collected: false 
       });
       gs.lastPowerupSpawn = now;
@@ -833,7 +840,7 @@ export default function MathBlaster() {
       <View key={weaponKey} style={{ alignItems: 'center' }}>
         <Text style={{color: color, fontSize: 10, fontWeight: 'bold', marginBottom: 2}}>Lv.{w.level}</Text>
         <View style={styles.skillBox}>
-          <Ionicons name={icon as any} size={24} color={color} />
+          <Ionicons name={icon as any} size={20} color={color} />
           <View style={[styles.skillOverlay, { height: `${100 - pct}%` }]} />
         </View>
         <Text style={{color: '#FFF', fontSize: 8, marginTop: 2, fontWeight: 'bold'}}>ATK: {totalDamage}</Text>
@@ -849,7 +856,7 @@ export default function MathBlaster() {
           <TouchableOpacity style={{ position: 'absolute', top: 20, left: 20 }} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={30} color="#00FFFF" />
           </TouchableOpacity>
-          <Ionicons name="rocket" size={100} color="#00FFFF" style={{ marginBottom: 20 }} />
+          <Ionicons name="rocket" size={80} color="#00FFFF" style={{ marginBottom: 20 }} />
           <Text style={styles.tituloMenu}>SKY</Text>
           <Text style={styles.subTituloMenu}>EQUATIONS</Text>
           <Text style={styles.instrucoes}>Toque ou use as Setas/WASD para mover. Digite a resposta no teclado físico e dê Enter!</Text>
@@ -881,202 +888,230 @@ export default function MathBlaster() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      
-      <View style={styles.hud}>
-        <View style={{ flex: 1, paddingRight: 10 }}>
-          <Text style={styles.hudScore}>SCORE: {gs.score}</Text>
-          <View style={styles.hpBarContainer}>
-            <View style={[styles.hpBarFill, { width: `${porcentagemHP}%`, backgroundColor: corHP }]} />
-          </View>
-          {renderBuffs()}
-        </View>
-        <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 15 }}>
-          <Text style={[styles.hudFase, { alignSelf: 'flex-start', marginTop: 15, marginRight: 5 }]}>FASE {gs.fase}</Text>
-          {renderCooldownBox('missile', '#FF4444', 'rocket')}
-          {renderCooldownBox('laser', '#32CD32', 'flash')}
-          {renderCooldownBox('pulsar', '#00BFFF', 'shield')} 
-        </View>
-      </View>
-
-      <View style={[styles.gameArea, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} onTouchStart={handleGameTouchStart} onTouchMove={handleGameTouchMove} onTouchEnd={handleGameTouchEnd} onTouchCancel={handleGameTouchEnd}>
-        <View style={styles.gridOverlay} />
+      <View style={styles.gameWrapper}>
         
-        {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
-        {gs.gameState === 'TRANSITION' && (<View style={styles.centerAlert}><Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text><Text style={styles.alertSubText}>PREPARANDO SALTO...</Text></View>)}
-
-        {gs.enemies.map(e => {
-          if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 15, top: e.y - 15 }]} />;
-          if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 15, top: e.y - 15, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield} />}</View>);
-          if (e.type === 'SPAWNER') {
-            return (
-               <View key={e.id} style={[styles.spawnerShape, { left: e.x - 40, top: e.y - 30 }]}>
-                  <Text style={styles.spawnerMath}>{e.txt}</Text>
-                  {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{e.res}</Text>}
-                  <View style={styles.powerupDots}>
-                    {Array.from({length: e.solvesNeeded}).map((_, i) => (<View key={i} style={[styles.dot, { backgroundColor: i < e.solvesDone ? '#00FFFF' : 'transparent', borderColor: '#00FFFF' }]} />))}
-                  </View>
-               </View>
-            );
-          }
-          const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
-          return (<View key={e.id} style={[styles.squadronShip, { left: e.x - 15, top: e.y - 15, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style={styles.miniShield} />}</View>);
-        })}
-
-        {gs.boss.active && (
-          <View style={[styles.bossContainer, { left: gs.boss.x - 50, top: gs.boss.y - 30 }]}>
-            <View style={styles.bossHpBar}><View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]} /></View>
-            <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 40, height: 80, backgroundColor: '#006400', borderColor: '#32CD32' }]} />
-            {gs.boss.shield && (
-              <View style={styles.bossShield}>
-                <Text style={styles.bossMath}>{gs.boss.txt}</Text>
-                {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{gs.boss.res}</Text>}
-              </View>
-            )}
+        <View style={styles.hud}>
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.hudScore}>SCORE: {gs.score}</Text>
+            <View style={styles.hpBarContainer}>
+              <View style={[styles.hpBarFill, { width: `${porcentagemHP}%`, backgroundColor: corHP }]} />
+            </View>
+            {renderBuffs()}
           </View>
-        )}
-
-        {gs.powerups.map(p => (
-          <View key={p.id} style={[styles.powerupBox, { left: p.x - 45, top: p.y - 20, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
-            <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
-            <Text style={styles.powerupMath}>{p.txt}</Text>
+          <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 15 }}>
+            <Text style={[styles.hudFase, { alignSelf: 'flex-start', marginTop: 15, marginRight: 5 }]}>FASE {gs.fase}</Text>
+            {renderCooldownBox('missile', '#FF4444', 'rocket')}
+            {renderCooldownBox('laser', '#32CD32', 'flash')}
+            {renderCooldownBox('pulsar', '#00BFFF', 'shield')} 
           </View>
-        ))}
-
-        {gs.lasers.map(l => (
-          <View key={l.id} style={[styles.laserNormal, { 
-            left: l.x - (l.size/2), top: l.y, 
-            width: l.size, height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3)), 
-            backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : '#00FFFF', 
-            borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') ? l.size / 2 : 5 
-          }]} />
-        ))}
-
-        {gs.pulses.map(p => {
-          const currentRadius = p.maxRadius * (1 - (p.life / p.maxLife));
-          return (
-            <View key={p.id} style={{ position: 'absolute', left: p.x - currentRadius, top: p.y - currentRadius, width: currentRadius * 2, height: currentRadius * 2, borderRadius: currentRadius, borderWidth: 4, borderColor: `rgba(0, 191, 255, ${p.life / p.maxLife})`, backgroundColor: `rgba(0, 191, 255, ${(p.life / p.maxLife) * 0.2})`, zIndex: 5 }} />
-          )
-        })}
-
-        {gs.mathShots.map(ms => (
-          <View key={ms.id} style={{ position: 'absolute', left: ms.x - 8, top: ms.y - 8, width: 16, height: 16, borderRadius: 8, backgroundColor: ms.color, shadowColor: ms.color, shadowRadius: 10, shadowOpacity: 1, zIndex: 10 }} />
-        ))}
-
-        {gs.enemyLasers.map(el => (
-          <View key={el.id} style={[el.homing ? styles.cannonBall : styles.enemyLaser, { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color }]}>
-            {el.homing && el.hp < 5 && <View style={{width:'100%', height:'100%', backgroundColor:'rgba(255,255,255,0.5)', borderRadius: 20}}/>}
-          </View>
-        ))}
-
-        {gs.particles.map((p, i) => (
-          <View key={i} style={{ position: 'absolute', width: 4, height: 4, backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 2 }} />
-        ))}
-
-        {gs.floatingTexts.map(ft => (
-          <Text key={ft.id} style={[styles.floatingText, { left: ft.x - 40, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text>
-        ))}
-
-        <View style={[styles.playerShape, { left: gs.player.x - 20, top: gs.player.y - 20 }]} />
-        <View style={[styles.propulsor, { left: gs.player.x - 6, top: gs.player.y + 18, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
-        
-        {gs.forceShieldHits > 0 && (
-          <View style={{ position: 'absolute', left: gs.player.x - 35, top: gs.player.y - 35, width: 70, height: 70, borderRadius: 35, borderWidth: 3, borderColor: '#00FA9A', backgroundColor: 'rgba(0,250,154,0.1)', zIndex: 10 }} />
-        )}
-        {gs.drones.normal.active && <View style={[styles.droneNormal, { left: gs.player.x - 40, top: gs.player.y + 10 }]} />}
-        {gs.drones.advanced.active && <View style={[styles.droneAdvanced, { left: gs.player.x + 30, top: gs.player.y + 10 }]} />}
-      </View>
-
-      <View style={styles.painelInferior}>
-        <View style={styles.visorRadar}>
-          <Text style={styles.visorTexto}>{resposta || '_'}</Text>
         </View>
-        <View style={styles.tecladoContainer}>
-          {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((linha, i) => (
-            <View key={i} style={styles.tecladoRow}>
-              {linha.map(num => <BotaoRetro key={num} valor={num} onPressWeb={lidarComTeclado} />)}
+
+        <View style={[styles.gameArea, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} onTouchStart={handleGameTouchStart} onTouchMove={handleGameTouchMove} onTouchEnd={handleGameTouchEnd} onTouchCancel={handleGameTouchEnd}>
+          <View style={styles.gridOverlay} />
+          
+          {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
+          {gs.gameState === 'TRANSITION' && (<View style={styles.centerAlert}><Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text><Text style={styles.alertSubText}>PREPARANDO SALTO...</Text></View>)}
+
+          {gs.enemies.map(e => {
+            if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 12, top: e.y - 12 }]} />;
+            if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 10, top: e.y - 10, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield} />}</View>);
+            if (e.type === 'SPAWNER') {
+              return (
+                 <View key={e.id} style={[styles.spawnerShape, { left: e.x - 30, top: e.y - 22 }]}>
+                    <Text style={styles.spawnerMath}>{e.txt}</Text>
+                    {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{e.res}</Text>}
+                    <View style={styles.powerupDots}>
+                      {Array.from({length: e.solvesNeeded}).map((_, i) => (<View key={i} style={[styles.dot, { backgroundColor: i < e.solvesDone ? '#00FFFF' : 'transparent', borderColor: '#00FFFF' }]} />))}
+                    </View>
+                 </View>
+              );
+            }
+            const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
+            return (<View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style={styles.miniShield} />}</View>);
+          })}
+
+          {gs.boss.active && (
+            <View style={[styles.bossContainer, { left: gs.boss.x - 40, top: gs.boss.y - 25 }]}>
+              <View style={styles.bossHpBar}><View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]} /></View>
+              <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 30, height: 60, backgroundColor: '#006400', borderColor: '#32CD32' }]} />
+              {gs.boss.shield && (
+                <View style={styles.bossShield}>
+                  <Text style={styles.bossMath}>{gs.boss.txt}</Text>
+                  {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{gs.boss.res}</Text>}
+                </View>
+              )}
+            </View>
+          )}
+
+          {gs.powerups.map(p => (
+            <View key={p.id} style={[styles.powerupBox, { left: p.x - 40, top: p.y - 18, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
+              <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
+              <Text style={styles.powerupMath}>{p.txt}</Text>
             </View>
           ))}
-          <View style={styles.tecladoRow}>
-            <BotaoRetro valor="apagar" onPressWeb={lidarComTeclado} />
-            <BotaoRetro valor="0" onPressWeb={lidarComTeclado} />
-            <BotaoRetro valor="enviar" onPressWeb={lidarComTeclado} />
+
+          {gs.lasers.map(l => (
+            <View key={l.id} style={[styles.laserNormal, { 
+              left: l.x - (l.size/2), top: l.y, 
+              width: l.size, height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3)), 
+              backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : '#00FFFF', 
+              borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') ? l.size / 2 : 5 
+            }]} />
+          ))}
+
+          {gs.pulses.map(p => {
+            const currentRadius = p.maxRadius * (1 - (p.life / p.maxLife));
+            return (
+              <View key={p.id} style={{ position: 'absolute', left: p.x - currentRadius, top: p.y - currentRadius, width: currentRadius * 2, height: currentRadius * 2, borderRadius: currentRadius, borderWidth: 3, borderColor: `rgba(0, 191, 255, ${p.life / p.maxLife})`, backgroundColor: `rgba(0, 191, 255, ${(p.life / p.maxLife) * 0.2})`, zIndex: 5 }} />
+            )
+          })}
+
+          {gs.mathShots.map(ms => (
+            <View key={ms.id} style={{ position: 'absolute', left: ms.x - 6, top: ms.y - 6, width: 12, height: 12, borderRadius: 6, backgroundColor: ms.color, shadowColor: ms.color, shadowRadius: 8, shadowOpacity: 1, zIndex: 10 }} />
+          ))}
+
+          {gs.enemyLasers.map(el => (
+            <View key={el.id} style={[el.homing ? styles.cannonBall : styles.enemyLaser, { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color }]}>
+              {el.homing && el.hp < 5 && <View style={{width:'100%', height:'100%', backgroundColor:'rgba(255,255,255,0.5)', borderRadius: 20}}/>}
+            </View>
+          ))}
+
+          {gs.particles.map((p, i) => (
+            <View key={i} style={{ position: 'absolute', width: 4, height: 4, backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 2 }} />
+          ))}
+
+          {gs.floatingTexts.map(ft => (
+            <Text key={ft.id} style={[styles.floatingText, { left: ft.x - 30, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text>
+          ))}
+
+          <View style={[styles.playerShape, { left: gs.player.x - 15, top: gs.player.y - 15 }]} />
+          <View style={[styles.propulsor, { left: gs.player.x - 5, top: gs.player.y + 15, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
+          
+          {gs.forceShieldHits > 0 && (
+            <View style={{ position: 'absolute', left: gs.player.x - 25, top: gs.player.y - 25, width: 50, height: 50, borderRadius: 25, borderWidth: 3, borderColor: '#00FA9A', backgroundColor: 'rgba(0,250,154,0.1)', zIndex: 10 }} />
+          )}
+          {gs.drones.normal.active && <View style={[styles.droneNormal, { left: gs.player.x - 30, top: gs.player.y + 5 }]} />}
+          {gs.drones.advanced.active && <View style={[styles.droneAdvanced, { left: gs.player.x + 20, top: gs.player.y + 5 }]} />}
+        </View>
+
+        <View style={styles.painelInferior}>
+          <View style={styles.visorRadar}>
+            <Text style={styles.visorTexto}>{resposta || '_'}</Text>
+          </View>
+          <View style={styles.tecladoContainer}>
+            {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((linha, i) => (
+              <View key={i} style={styles.tecladoRow}>
+                {linha.map(num => <BotaoRetro key={num} valor={num} onPressWeb={lidarComTeclado} />)}
+              </View>
+            ))}
+            <View style={styles.tecladoRow}>
+              <BotaoRetro valor="apagar" onPressWeb={lidarComTeclado} />
+              <BotaoRetro valor="0" onPressWeb={lidarComTeclado} />
+              <BotaoRetro valor="enviar" onPressWeb={lidarComTeclado} />
+            </View>
           </View>
         </View>
+
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#050015', touchAction: 'none' as any },
-  menuContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050015' },
-  tituloMenu: { fontSize: 55, fontWeight: '900', color: '#00FFFF', fontStyle: 'italic' },
-  subTituloMenu: { fontSize: 35, fontWeight: '900', color: '#FFF', letterSpacing: 5 },
-  instrucoes: { color: '#9D97B5', textAlign: 'center', marginHorizontal: 30, marginTop: 20, fontSize: 16, fontWeight: 'bold' },
-  btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 18, paddingHorizontal: 40, borderRadius: 12, marginTop: 50 },
-  btnIniciarTxt: { color: '#FFF', fontSize: 18, fontWeight: '900' },
-  textoScore: { color: '#00FFFF', fontSize: 30, fontWeight: 'bold', marginTop: 20 },
-  textoFase: { color: '#9D97B5', fontSize: 18, marginTop: 10 },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#050015', 
+    touchAction: 'none' as any,
+    alignItems: 'center', 
+  },
+  gameWrapper: {
+    flex: 1,
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? 500 : '100%', // Limita apenas na WEB, tela cheia no Mobile
+    backgroundColor: '#050015',
+    overflow: 'hidden',
+  },
+  menuContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050015', width: '100%', maxWidth: 600 },
+  tituloMenu: { fontSize: 45, fontWeight: '900', color: '#00FFFF', fontStyle: 'italic' },
+  subTituloMenu: { fontSize: 25, fontWeight: '900', color: '#FFF', letterSpacing: 5 },
+  instrucoes: { color: '#9D97B5', textAlign: 'center', marginHorizontal: 30, marginTop: 20, fontSize: 14, fontWeight: 'bold' },
+  btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 12, marginTop: 40 },
+  btnIniciarTxt: { color: '#FFF', fontSize: 16, fontWeight: '900' },
+  textoScore: { color: '#00FFFF', fontSize: 24, fontWeight: 'bold', marginTop: 20 },
+  textoFase: { color: '#9D97B5', fontSize: 16, marginTop: 10 },
 
-  hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10 },
-  hudScore: { color: '#FFF', fontSize: 18, fontWeight: '900', letterSpacing: 1, marginBottom: 5 },
-  hpBarContainer: { width: '100%', height: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 5, overflow: 'hidden' },
-  hpBarFill: { height: '100%', borderRadius: 5 },
-  hudFase: { color: '#FF00FF', fontSize: 24, fontWeight: '900', fontStyle: 'italic' },
+  hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10, width: '100%' },
+  hudScore: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1, marginBottom: 5 },
+  hpBarContainer: { width: '100%', height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' },
+  hpBarFill: { height: '100%', borderRadius: 4 },
+  hudFase: { color: '#FF00FF', fontSize: 20, fontWeight: '900', fontStyle: 'italic' },
   
   buffContainer: { flexDirection: 'row', gap: 5, marginTop: 5 },
-  buffText: { fontSize: 10, fontWeight: 'bold', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 4, borderRadius: 4 },
+  buffText: { fontSize: 9, fontWeight: 'bold', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 4, borderRadius: 4 },
   
-  skillBox: { width: 34, height: 34, borderWidth: 2, borderColor: '#333', borderRadius: 8, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  skillBox: { width: 30, height: 30, borderWidth: 2, borderColor: '#333', borderRadius: 8, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   skillOverlay: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)' },
 
-  gameArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#050015', touchAction: 'none' as any },
-  gridOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.1, backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)', backgroundSize: '40px 40px' },
+  gameArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#050015', touchAction: 'none' as any, width: '100%' },
+  gridOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.1, backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)', backgroundSize: '30px 30px' },
   
   centerAlert: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
-  alertTextDanger: { color: '#FF0055', fontSize: 40, fontWeight: '900', textShadowColor: '#FF0055', textShadowRadius: 10, textShadowOffset: { width: 1, height: 1 } },
-  alertTextSuccess: { color: '#32CD32', fontSize: 40, fontWeight: '900', textShadowColor: '#32CD32', textShadowRadius: 10, textShadowOffset: { width: 1, height: 1 } },
-  alertSubText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 },
+  alertTextDanger: { color: '#FF0055', fontSize: 35, fontWeight: '900', textShadowColor: '#FF0055', textShadowRadius: 8, textShadowOffset: { width: 1, height: 1 } },
+  alertTextSuccess: { color: '#32CD32', fontSize: 35, fontWeight: '900', textShadowColor: '#32CD32', textShadowRadius: 8, textShadowOffset: { width: 1, height: 1 } },
+  alertSubText: { color: '#FFF', fontSize: 14, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 },
 
-  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 20, borderRightWidth: 20, borderBottomWidth: 40, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF' },
-  propulsor: { position: 'absolute', width: 12, height: 15, backgroundColor: '#FF8C00', borderBottomLeftRadius: 6, borderBottomRightRadius: 6 },
-  droneNormal: { position: 'absolute', width: 12, height: 12, backgroundColor: '#1E90FF', borderRadius: 6, borderWidth: 2, borderColor: '#FFF', zIndex: 5 },
-  droneAdvanced: { position: 'absolute', width: 16, height: 16, backgroundColor: '#FFD700', borderRadius: 4, borderWidth: 2, borderColor: '#FF4444', zIndex: 5 },
+  // --- MODELOS DE NAVES E INIMIGOS REDUZIDOS ---
+  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 15, borderRightWidth: 15, borderBottomWidth: 30, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF' },
+  propulsor: { position: 'absolute', width: 10, height: 12, backgroundColor: '#FF8C00', borderBottomLeftRadius: 5, borderBottomRightRadius: 5 },
+  droneNormal: { position: 'absolute', width: 10, height: 10, backgroundColor: '#1E90FF', borderRadius: 5, borderWidth: 1, borderColor: '#FFF', zIndex: 5 },
+  droneAdvanced: { position: 'absolute', width: 12, height: 12, backgroundColor: '#FFD700', borderRadius: 3, borderWidth: 1, borderColor: '#FF4444', zIndex: 5 },
   
-  meteorShape: { position: 'absolute', width: 30, height: 30, backgroundColor: '#555', borderRadius: 5, borderWidth: 2, borderColor: '#777' },
-  squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 15, borderRightWidth: 15, borderTopWidth: 30, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
-  flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 10, borderRightWidth: 10, borderTopWidth: 20, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500' },
-  miniShield: { position: 'absolute', top: -10, left: -20, width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)' },
+  meteorShape: { position: 'absolute', width: 24, height: 24, backgroundColor: '#555', borderRadius: 4, borderWidth: 2, borderColor: '#777' },
+  squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
+  flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 16, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500' },
+  miniShield: { position: 'absolute', top: -8, left: -16, width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)' },
   
-  spawnerShape: { position: 'absolute', width: 80, height: 60, backgroundColor: 'rgba(0, 255, 255, 0.2)', borderWidth: 3, borderColor: '#00FFFF', borderRadius: 15, justifyContent: 'center', alignItems: 'center', shadowColor: '#00FFFF', shadowRadius: 15, zIndex: 15 },
-  spawnerMath: { color: '#FFF', fontSize: 20, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 5, textShadowOffset: { width: 1, height: 1 } },
-  xrayText: { position: 'absolute', top: -25, color: '#FF1493', fontSize: 16, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 1, height: 1 } },
+  spawnerShape: { position: 'absolute', width: 60, height: 45, backgroundColor: 'rgba(0, 255, 255, 0.2)', borderWidth: 2, borderColor: '#00FFFF', borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: '#00FFFF', shadowRadius: 10, zIndex: 15 },
+  spawnerMath: { color: '#FFF', fontSize: 15, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 1, height: 1 } },
+  xrayText: { position: 'absolute', top: -20, color: '#FF1493', fontSize: 14, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 } },
   
-  bossContainer: { position: 'absolute', width: 100, height: 80, alignItems: 'center', zIndex: 20 },
-  bossShip: { width: 80, height: 50, backgroundColor: '#8B0000', borderRadius: 20, borderWidth: 3, borderColor: '#FF4444' },
-  bossHpBar: { width: '100%', height: 6, backgroundColor: '#333', marginBottom: 5, borderRadius: 3, overflow: 'hidden' },
+  bossContainer: { position: 'absolute', width: 80, height: 60, alignItems: 'center', zIndex: 20 },
+  bossShip: { width: 60, height: 40, backgroundColor: '#8B0000', borderRadius: 15, borderWidth: 2, borderColor: '#FF4444' },
+  bossHpBar: { width: '100%', height: 5, backgroundColor: '#333', marginBottom: 4, borderRadius: 2, overflow: 'hidden' },
   bossHpFill: { height: '100%', backgroundColor: '#FF0055' },
-  bossShield: { position: 'absolute', top: -10, width: 130, height: 130, borderRadius: 65, borderWidth: 4, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
-  bossMath: { color: '#FFF', fontSize: 24, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 5, textShadowOffset: { width: 1, height: 1 } },
+  bossShield: { position: 'absolute', top: -10, width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
+  bossMath: { color: '#FFF', fontSize: 20, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 4, textShadowOffset: { width: 1, height: 1 } },
 
-  powerupBox: { position: 'absolute', width: 105, height: 40, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  powerupTitle: { fontSize: 8, fontWeight: '900', position: 'absolute', top: -10, backgroundColor: '#050015', paddingHorizontal: 4 },
-  powerupMath: { color: '#FFF', fontSize: 16, fontWeight: '900' },
-  powerupDots: { flexDirection: 'row', gap: 4, position: 'absolute', bottom: -8 },
-  dot: { width: 8, height: 8, borderRadius: 4, borderWidth: 1, backgroundColor: '#050015' },
+  powerupBox: { position: 'absolute', width: 80, height: 35, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  powerupTitle: { fontSize: 7, fontWeight: '900', position: 'absolute', top: -8, backgroundColor: '#050015', paddingHorizontal: 3 },
+  powerupMath: { color: '#FFF', fontSize: 14, fontWeight: '900' },
+  powerupDots: { flexDirection: 'row', gap: 3, position: 'absolute', bottom: -6 },
+  dot: { width: 6, height: 6, borderRadius: 3, borderWidth: 1, backgroundColor: '#050015' },
 
   laserNormal: { position: 'absolute', zIndex: 1 },
   enemyLaser: { position: 'absolute', borderRadius: 5 },
   cannonBall: { position: 'absolute', borderRadius: 20, borderWidth: 2, borderColor: '#FFF' }, 
-  floatingText: { position: 'absolute', fontSize: 14, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 1, height: 1 }, zIndex: 100, textAlign: 'center', width: 100 },
+  floatingText: { position: 'absolute', fontSize: 12, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 }, zIndex: 100, textAlign: 'center', width: 80 },
 
-  painelInferior: { backgroundColor: '#0A0025', borderTopWidth: 2, borderTopColor: '#FF00FF', paddingHorizontal: 15, paddingTop: 10, paddingBottom: Platform.OS === 'android' ? 20 : 10, alignItems: 'center', width: '100%' },
-  visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 10, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 10 },
-  visorTexto: { color: '#00FFFF', fontSize: 26, fontWeight: '900', letterSpacing: 3 },
-  tecladoContainer: { width: '100%', maxWidth: 350, gap: 6 },
-  tecladoRow: { flexDirection: 'row', gap: 6, height: 45 },
-  teclaRetro: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
-  teclaRetroText: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  // --- TECLADO COMPACTADO PARA SOBRAR MAIS TELA ---
+  painelInferior: { 
+    backgroundColor: '#0A0025', 
+    borderTopWidth: 2, 
+    borderTopColor: '#FF00FF', 
+    paddingHorizontal: 15, 
+    paddingTop: 8, 
+    paddingBottom: Platform.OS === 'android' ? 15 : 10, 
+    alignItems: 'center',
+    width: '100%',
+    flexShrink: 1, 
+  },
+  visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 8, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 8 }, 
+  visorTexto: { color: '#00FFFF', fontSize: 24, fontWeight: '900', letterSpacing: 3 },
+  tecladoContainer: { width: '100%', maxWidth: 350, gap: 4 }, 
+  tecladoRow: { flexDirection: 'row', gap: 4, height: 40 }, 
+  teclaRetro: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
+  teclaRetroText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' }, 
   teclaApagar: { backgroundColor: 'rgba(255, 68, 68, 0.15)', borderColor: '#FF4444' },
   teclaEnviar: { backgroundColor: 'rgba(255, 0, 255, 0.15)', borderColor: '#FF00FF' },
 });
+```</TouchableOpacity>
