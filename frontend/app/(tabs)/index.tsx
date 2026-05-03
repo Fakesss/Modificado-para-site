@@ -163,37 +163,42 @@ export default function Home() {
           
           {/* Fila 1 */}
           <View style={styles.actionRow}>
-            {/* 🎨 COR VIBRANTE (Aumentada a opacidade de '15' para '50') */}
+            {/* 🎨 COR VIBRANTE */}
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#4169E1' + '50' }]} onPress={() => router.push('/(tabs)/videos')}>
               <Ionicons name="play" size={24} color="#4169E1" />
               <Text style={styles.actionText}>Vídeo-aulas</Text>
             </TouchableOpacity>
 
-            {/* 🎨 COR VIBRANTE (Aumentada a opacidade de '15' para '50') */}
+            {/* 🎨 COR VIBRANTE */}
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#32CD32' + '50' }]} onPress={() => router.push('/(tabs)/exercicios')}>
               <Ionicons name="document-text" size={24} color="#32CD32" />
               <Text style={styles.actionText}>Atividades</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Fila 2 (Ranking Sozinho no Meio) */}
-          <View style={styles.actionRowCenter}>
-            {/* 🎨 COR VIBRANTE (Aumentada a opacidade de '20' para '50') */}
-            <TouchableOpacity style={[styles.actionCardCenter, { backgroundColor: '#FFD700' + '50' }]} onPress={() => router.push('/(tabs)/ranking')}>
+          {/* Fila 2 (Ranking e Math Blaster lado a lado) */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FFD700' + '50' }]} onPress={() => router.push('/(tabs)/ranking')}>
               <Ionicons name="trophy" size={28} color="#FFD700" />
               <Text style={[styles.actionText, { fontSize: 13, marginTop: 10 }]}>Ranking Geral</Text>
+            </TouchableOpacity>
+
+            {/* 🚀 BOTÃO DO MATH BLASTER ADICIONADO AQUI */}
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#00FFFF' + '40', borderColor: '#00FFFF' }]} onPress={() => router.push('/math_blaster')}>
+              <Ionicons name="rocket" size={28} color="#00FFFF" />
+              <Text style={[styles.actionText, { fontSize: 13, marginTop: 10 }]}>Math Blaster</Text>
             </TouchableOpacity>
           </View>
 
           {/* Fila 3 */}
           <View style={styles.actionRow}>
-            {/* 🎨 COR VIBRANTE (Aumentada a opacidade de '15' para '50') */}
+            {/* 🎨 COR VIBRANTE */}
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FF8C00' + '50' }]} onPress={() => router.push('/(tabs)/conteudos')}>
               <Ionicons name="book-outline" size={24} color="#FF8C00" />
               <Text style={styles.actionText}>Conteúdos</Text>
             </TouchableOpacity>
 
-            {/* 🎨 COR VIBRANTE (Aumentada a opacidade de '15' para '50') */}
+            {/* 🎨 COR VIBRANTE */}
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#E066FF' + '50' }]} onPress={() => router.push('/(tabs)/progresso')}>
               <Ionicons name="stats-chart" size={24} color="#E066FF" />
               <Text style={styles.actionText}>Progresso</Text>
@@ -214,7 +219,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   greeting: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 6 },
   
-  /* 🎯 ESTILO DA ETIQUETA DA TURMA */
   turmaBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start', marginBottom: 10, borderWidth: 1, borderColor: '#333', gap: 6 },
   turmaText: { color: '#888', fontSize: 13, fontWeight: '600' },
 
@@ -229,8 +233,6 @@ const styles = StyleSheet.create({
   
   actionGrid: { gap: 12, paddingBottom: 20 },
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  actionRowCenter: { flexDirection: 'row', justifyContent: 'center' },
   actionCard: { flex: 1, borderRadius: 16, padding: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1a1a2e' },
-  actionCardCenter: { width: '60%', borderRadius: 16, padding: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#222' },
-  actionText: { color: '#fff', fontSize: 12, fontWeight: '600', marginTop: 10 },
+  actionText: { color: '#fff', fontSize: 12, fontWeight: '600', marginTop: 10, textAlign: 'center' },
 });
