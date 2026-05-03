@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 const initialWidth = Dimensions.get('window').width;
-const initialHeight = Dimensions.get('window').height * 0.85;
+const initialHeight = Dimensions.get('window').height * 0.75;
 
 // --- COMPONENTE: TECLADO RETRÔ (Otimizado para Multi-Touch Nativo) ---
 const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed: boolean, onPressWeb: (v: string) => void }) => {
@@ -24,8 +24,8 @@ const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed
         }
       } : {})}
     >
-      {valor === 'apagar' && <Ionicons name="backspace" size={22} color="#FFF"/>}
-      {valor === 'enviar' && <Ionicons name="flash" size={22} color="#FFF"/>}
+      {valor === 'apagar' && <Ionicons name="backspace" size={26} color="#FFF"/>}
+      {valor === 'enviar' && <Ionicons name="flash" size={26} color="#FFF"/>}
       {valor !== 'apagar' && valor !== 'enviar' && <Text style={styles.teclaRetroText}>{valor}</Text>}
     </View>
   );
@@ -137,12 +137,12 @@ export default function MathBlaster() {
   };
 
   // ==========================================
-  // LÓGICA DO TECLADO REDUZIDO (MULTI-TOUCH)
+  // LÓGICA DO TECLADO QUADRADO (MULTI-TOUCH)
   // ==========================================
   const getTeclaFromCoords = (x: number, y: number, layoutWidth: number) => {
-    const GAP = 4; 
+    const GAP = 8; 
     const KEY_W = (layoutWidth - (GAP * 2)) / 3; 
-    const KEY_H = 45; // Altura compactada para abrir mais espaço na tela do jogo
+    const KEY_H = 60; // Altura aumentada para deixar a tecla mais quadrada
     
     let col = -1;
     if (x >= 0 && x <= KEY_W) col = 0; 
@@ -167,6 +167,7 @@ export default function MathBlaster() {
 
     for (let i = 0; i < touches.length; i++) {
         const touch = touches[i];
+        // Processa APENAS toques que COMEÇARAM na área do teclado (ignora o dedo da nave)
         if (kbTouchIds.current.has(touch.identifier)) {
             const x = touch.locationX;
             const y = touch.locationY;
@@ -434,8 +435,7 @@ export default function MathBlaster() {
     if (gs.player.x < 20) gs.player.x = 20; 
     if (gs.player.x > gw - 20) gs.player.x = gw - 20;
     if (gs.player.y < 20) gs.player.y = 20; 
-    // Limite de movimentação da nave para acompanhar o painel inferior dinamicamente
-    if (gs.player.y > gh - 30) gs.player.y = gh - 30;
+    if (gs.player.y > gh - 20) gs.player.y = gh - 20;
 
     if (now - gs.player.lastFire > gs.player.fireRate) {
       gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
@@ -859,7 +859,7 @@ export default function MathBlaster() {
       <View key={weaponKey} style={{ alignItems: 'center' }}>
         <Text style={{color: color, fontSize: 10, fontWeight: 'bold', marginBottom: 2}}>Lv.{w.level}</Text>
         <View style={styles.skillBox}>
-          <Ionicons name={icon as any} size={14} color={color}/>
+          <Ionicons name={icon as any} size={20} color={color}/>
           <View style={[styles.skillOverlay, { height: `${100 - pct}%` }]}/>
         </View>
         <Text style={{color: '#FFF', fontSize: 8, marginTop: 2, fontWeight: 'bold'}}>ATK: {totalDamage}</Text>
@@ -925,115 +925,107 @@ export default function MathBlaster() {
           </View>
         </View>
 
-        <View style={styles.gameAreaWrapperContainer} onLayout={(e) => { 
-            if (layoutRef.current && e.nativeEvent?.layout) {
-                layoutRef.current.width = e.nativeEvent.layout.width; 
-                layoutRef.current.height = e.nativeEvent.layout.height; 
-            }
-        }}>
-          <View style={[styles.gameAreaScaled, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} 
-            onTouchStart={handleGameTouchStart} 
-            onTouchMove={handleGameTouchMove} 
-            onTouchEnd={handleGameTouchEnd} 
-            onTouchCancel={handleGameTouchEnd}
-          >
-            <View style={styles.gridOverlay}/>
-            
-            {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
-            {gs.gameState === 'TRANSITION' && (<View style={styles.centerAlert}><Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text><Text style={styles.alertSubText}>PREPARANDO SALTO...</Text></View>)}
+        <View style={[styles.gameArea, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} 
+          onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} 
+          onTouchStart={handleGameTouchStart} 
+          onTouchMove={handleGameTouchMove} 
+          onTouchEnd={handleGameTouchEnd} 
+          onTouchCancel={handleGameTouchEnd}
+        >
+          <View style={styles.gridOverlay}/>
+          
+          {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
+          {gs.gameState === 'TRANSITION' && (<View style={styles.centerAlert}><Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text><Text style={styles.alertSubText}>PREPARANDO SALTO...</Text></View>)}
 
-            {gs.enemies.map(e => {
-              if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 12, top: e.y - 12 }]}/>;
-              if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 10, top: e.y - 8, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
-              if (e.type === 'SPAWNER') {
-                return (
-                   <View key={e.id} style={[styles.spawnerShape, { left: e.x - 30, top: e.y - 22 }]}>
-                      <Text style={styles.spawnerMath}>{e.txt}</Text>
-                      {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{e.res}</Text>}
-                      <View style={styles.powerupDots}>
-                        {Array.from({length: e.solvesNeeded}).map((_, i) => (<View key={i} style={[styles.dot, { backgroundColor: i < e.solvesDone ? '#00FFFF' : 'transparent', borderColor: '#00FFFF' }]}/>))}
-                      </View>
-                   </View>
-                );
-              }
-              const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
-              return (<View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
-            })}
-
-            {gs.boss.active && (
-              <View style={[styles.bossContainer, { left: gs.boss.x - 40, top: gs.boss.y - 30 }]}>
-                <View style={styles.bossHpBar}><View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]}/></View>
-                <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 30, height: 60, backgroundColor: '#006400', borderColor: '#32CD32' }]}/>
-                {gs.boss.shield && (
-                  <View style={styles.bossShield}>
-                    <Text style={styles.bossMath}>{gs.boss.txt}</Text>
-                    {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{gs.boss.res}</Text>}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {gs.powerups.map(p => (
-              <View key={p.id} style={[styles.powerupBox, { left: p.x - 40, top: p.y - 18, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
-                <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
-                <Text style={styles.powerupMath}>{p.txt}</Text>
-              </View>
-            ))}
-
-            {gs.lasers.map(l => (
-              <View key={l.id} style={[styles.laserNormal, { 
-                left: l.x - (l.size/2), 
-                top: l.y, 
-                width: l.size, 
-                height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3)), 
-                backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : '#00FFFF', 
-                borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') ? l.size / 2 : 5 
-              }]}/>
-            ))}
-
-            {gs.pulses.map(p => {
-              const currentRadius = p.maxRadius * (1 - (p.life / p.maxLife));
+          {gs.enemies.map(e => {
+            if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 12, top: e.y - 12 }]}/>;
+            if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 10, top: e.y - 8, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
+            if (e.type === 'SPAWNER') {
               return (
-                <View key={p.id} style={{ position: 'absolute', left: p.x - currentRadius, top: p.y - currentRadius, width: currentRadius * 2, height: currentRadius * 2, borderRadius: currentRadius, borderWidth: 3, borderColor: `rgba(0, 191, 255, ${p.life / p.maxLife})`, backgroundColor: `rgba(0, 191, 255, ${(p.life / p.maxLife) * 0.2})`, zIndex: 5 }}/>
-              )
-            })}
+                 <View key={e.id} style={[styles.spawnerShape, { left: e.x - 30, top: e.y - 22 }]}>
+                    <Text style={styles.spawnerMath}>{e.txt}</Text>
+                    {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{e.res}</Text>}
+                    <View style={styles.powerupDots}>
+                      {Array.from({length: e.solvesNeeded}).map((_, i) => (<View key={i} style={[styles.dot, { backgroundColor: i < e.solvesDone ? '#00FFFF' : 'transparent', borderColor: '#00FFFF' }]}/>))}
+                    </View>
+                 </View>
+              );
+            }
+            const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
+            return (<View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
+          })}
 
-            {gs.mathShots.map(ms => (
-              <View key={ms.id} style={{ position: 'absolute', left: ms.x - 6, top: ms.y - 6, width: 12, height: 12, borderRadius: 6, backgroundColor: ms.color, shadowColor: ms.color, shadowRadius: 8, shadowOpacity: 1, zIndex: 10 }}/>
-            ))}
+          {gs.boss.active && (
+            <View style={[styles.bossContainer, { left: gs.boss.x - 40, top: gs.boss.y - 30 }]}>
+              <View style={styles.bossHpBar}><View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]}/></View>
+              <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 30, height: 60, backgroundColor: '#006400', borderColor: '#32CD32' }]}/>
+              {gs.boss.shield && (
+                <View style={styles.bossShield}>
+                  <Text style={styles.bossMath}>{gs.boss.txt}</Text>
+                  {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{gs.boss.res}</Text>}
+                </View>
+              )}
+            </View>
+          )}
 
-            {gs.enemyLasers.map(el => (
-              <View key={el.id} style={[el.homing ? styles.cannonBall : styles.enemyLaser, { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color }]}>
-                {el.homing && el.hp < 5 && <View style={{width:'100%', height:'100%', backgroundColor:'rgba(255,255,255,0.5)', borderRadius: 20}}/>}
-              </View>
-            ))}
+          {gs.powerups.map(p => (
+            <View key={p.id} style={[styles.powerupBox, { left: p.x - 40, top: p.y - 18, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
+              <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
+              <Text style={styles.powerupMath}>{p.txt}</Text>
+            </View>
+          ))}
 
-            {gs.particles.map((p, i) => (
-              <View key={i} style={{ position: 'absolute', width: 4, height: 4, backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 2 }}/>
-            ))}
+          {gs.lasers.map(l => (
+            <View key={l.id} style={[styles.laserNormal, { 
+              left: l.x - (l.size/2), 
+              top: l.y, 
+              width: l.size, 
+              height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3)), 
+              backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : '#00FFFF', 
+              borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') ? l.size / 2 : 5 
+            }]}/>
+          ))}
 
-            {gs.floatingTexts.map(ft => (
-              <Text key={ft.id} style={[styles.floatingText, { left: ft.x - 30, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text>
-            ))}
+          {gs.pulses.map(p => {
+            const currentRadius = p.maxRadius * (1 - (p.life / p.maxLife));
+            return (
+              <View key={p.id} style={{ position: 'absolute', left: p.x - currentRadius, top: p.y - currentRadius, width: currentRadius * 2, height: currentRadius * 2, borderRadius: currentRadius, borderWidth: 3, borderColor: `rgba(0, 191, 255, ${p.life / p.maxLife})`, backgroundColor: `rgba(0, 191, 255, ${(p.life / p.maxLife) * 0.2})`, zIndex: 5 }}/>
+            )
+          })}
 
-            <View style={[styles.playerShape, { left: gs.player.x - 15, top: gs.player.y - 15 }]}/>
-            <View style={[styles.propulsor, { left: gs.player.x - 5, top: gs.player.y + 15, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
-            
-            {gs.forceShieldHits > 0 && (
-              <View style={{ position: 'absolute', left: gs.player.x - 25, top: gs.player.y - 25, width: 50, height: 50, borderRadius: 25, borderWidth: 3, borderColor: '#00FA9A', backgroundColor: 'rgba(0,250,154,0.1)', zIndex: 10 }}/>
-            )}
-            {gs.drones.normal.active && <View style={[styles.droneNormal, { left: gs.player.x - 30, top: gs.player.y + 5 }]}/>}
-            {gs.drones.advanced.active && <View style={[styles.droneAdvanced, { left: gs.player.x + 20, top: gs.player.y - 5 }]}/>}
-          </View>
+          {gs.mathShots.map(ms => (
+            <View key={ms.id} style={{ position: 'absolute', left: ms.x - 6, top: ms.y - 6, width: 12, height: 12, borderRadius: 6, backgroundColor: ms.color, shadowColor: ms.color, shadowRadius: 8, shadowOpacity: 1, zIndex: 10 }}/>
+          ))}
+
+          {gs.enemyLasers.map(el => (
+            <View key={el.id} style={[el.homing ? styles.cannonBall : styles.enemyLaser, { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color }]}>
+              {el.homing && el.hp < 5 && <View style={{width:'100%', height:'100%', backgroundColor:'rgba(255,255,255,0.5)', borderRadius: 20}}/>}
+            </View>
+          ))}
+
+          {gs.particles.map((p, i) => (
+            <View key={i} style={{ position: 'absolute', width: 4, height: 4, backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 2 }}/>
+          ))}
+
+          {gs.floatingTexts.map(ft => (
+            <Text key={ft.id} style={[styles.floatingText, { left: ft.x - 30, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text>
+          ))}
+
+          <View style={[styles.playerShape, { left: gs.player.x - 15, top: gs.player.y - 15 }]}/>
+          <View style={[styles.propulsor, { left: gs.player.x - 5, top: gs.player.y + 15, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
+          
+          {gs.forceShieldHits > 0 && (
+            <View style={{ position: 'absolute', left: gs.player.x - 25, top: gs.player.y - 25, width: 50, height: 50, borderRadius: 25, borderWidth: 3, borderColor: '#00FA9A', backgroundColor: 'rgba(0,250,154,0.1)', zIndex: 10 }}/>
+          )}
+          {gs.drones.normal.active && <View style={[styles.droneNormal, { left: gs.player.x - 30, top: gs.player.y + 5 }]}/>}
+          {gs.drones.advanced.active && <View style={[styles.droneAdvanced, { left: gs.player.x + 20, top: gs.player.y - 5 }]}/>}
         </View>
 
         <View style={styles.painelInferior} pointerEvents="box-none">
           <View style={styles.visorRadar}>
             <Text style={styles.visorTexto}>{resposta || '_'}</Text>
           </View>
-          <View style={styles.tecladoContainer} onLayout={(e) => { 
-            if(tecladoLayoutRef.current && e.nativeEvent?.layout) tecladoLayoutRef.current.width = e.nativeEvent.layout.width; 
-          }}>
+          <View style={styles.tecladoContainer} onLayout={(e) => tecladoLayoutRef.current.width = e.nativeEvent.layout.width}>
             {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((linha, i) => (
               <View key={i} style={styles.tecladoRow}>
                 {linha.map(num => <BotaoRetro key={num} valor={num} isPressed={teclasPressionadas.includes(num)} onPressWeb={lidarComTeclado}/>)}
@@ -1044,6 +1036,17 @@ export default function MathBlaster() {
               <BotaoRetro valor="0" isPressed={teclasPressionadas.includes('0')} onPressWeb={lidarComTeclado}/>
               <BotaoRetro valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={lidarComTeclado}/>
             </View>
+
+            {/* A INTERCEPTAÇÃO MULTI-TOUCH INVISÍVEL */}
+            {Platform.OS !== 'web' && (
+                <View 
+                    style={StyleSheet.absoluteFillObject} 
+                    onTouchStart={handleKbTouchStart} 
+                    onTouchMove={handleKbTouchMove} 
+                    onTouchEnd={handleKbTouchEnd} 
+                    onTouchCancel={handleKbTouchEnd} 
+                />
+            )}
           </View>
         </View>
 
@@ -1075,31 +1078,25 @@ const styles = StyleSheet.create({
   textoScore: { color: '#00FFFF', fontSize: 24, fontWeight: 'bold', marginTop: 20 },
   textoFase: { color: '#9D97B5', fontSize: 16, marginTop: 10 },
 
-  hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 15, paddingVertical: 6, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10, width: '100%' },
-  hudScore: { color: '#FFF', fontSize: 14, fontWeight: '900', letterSpacing: 1, marginBottom: 5 },
+  hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10, width: '100%' },
+  hudScore: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1, marginBottom: 5 },
   hpBarContainer: { width: '100%', height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' },
   hpBarFill: { height: '100%', borderRadius: 4 },
-  hudFase: { color: '#FF00FF', fontSize: 16, fontWeight: '900', fontStyle: 'italic' },
+  hudFase: { color: '#FF00FF', fontSize: 20, fontWeight: '900', fontStyle: 'italic' },
   
   buffContainer: { flexDirection: 'row', gap: 5, marginTop: 5 },
   buffText: { fontSize: 9, fontWeight: 'bold', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 4, borderRadius: 4 },
   
-  skillBox: { width: 24, height: 24, borderWidth: 2, borderColor: '#333', borderRadius: 8, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  skillBox: { width: 30, height: 30, borderWidth: 2, borderColor: '#333', borderRadius: 8, backgroundColor: '#111', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   skillOverlay: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)' },
 
-  gameAreaWrapperContainer: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#050015', touchAction: 'none' as any, width: '100%', alignItems: 'center', justifyContent: 'center' },
-  
-  gameAreaScaled: { 
-    width: '100%', 
-    height: '100%',
-    position: 'relative' 
-  },
+  gameArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#050015', touchAction: 'none' as any, width: '100%' },
   
   gridOverlay: Platform.OS === 'web' ? { 
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     opacity: 0.1, 
     backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)' as any, 
-    backgroundSize: '25px 25px' as any 
+    backgroundSize: '30px 30px' as any 
   } : { display: 'none' },
   
   centerAlert: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
@@ -1144,18 +1141,18 @@ const styles = StyleSheet.create({
     borderTopWidth: 2, 
     borderTopColor: '#FF00FF', 
     paddingHorizontal: 15, 
-    paddingTop: 4, 
-    paddingBottom: Platform.OS === 'android' ? 6 : 4, 
+    paddingTop: 6, 
+    paddingBottom: Platform.OS === 'android' ? 10 : 8, 
     alignItems: 'center',
     width: '100%',
     flexShrink: 1, 
   },
-  visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 4, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 4 }, 
-  visorTexto: { color: '#00FFFF', fontSize: 16, fontWeight: '900', letterSpacing: 3 },
-  tecladoContainer: { width: '100%', maxWidth: 350, gap: 4 }, 
-  tecladoRow: { flexDirection: 'row', gap: 4, height: 45 }, 
-  teclaRetro: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
-  teclaRetroText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' }, 
+  visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 6, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 6 }, 
+  visorTexto: { color: '#00FFFF', fontSize: 20, fontWeight: '900', letterSpacing: 3 },
+  tecladoContainer: { width: '100%', maxWidth: 350, gap: 8 }, 
+  tecladoRow: { flexDirection: 'row', gap: 8, height: 60 }, 
+  teclaRetro: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
+  teclaRetroText: { color: '#FFF', fontSize: 22, fontWeight: 'bold' }, 
   teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)', borderColor: '#FF4444' },
   teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)', borderColor: '#32CD32' },
 });
