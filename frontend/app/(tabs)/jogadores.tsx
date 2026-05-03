@@ -16,7 +16,7 @@ export default function JogadoresOnline() {
   const [aceitaConvites, setAceitaConvites] = useState(true);
   
   const [jogadorParaConvidar, setJogadorParaConvidar] = useState<any>(null);
-  const [jogoSelecionadoParaDesafio, setJogoSelecionadoParaDesafio] = useState<'arcade' | 'tugofwar' | 'math_blaster' | null>(null);
+  const [jogoSelecionadoParaDesafio, setJogoSelecionadoParaDesafio] = useState<'arcade' | 'tugofwar' | null>(null);
 
   // =====================================================================
   // CORREÇÃO DA CONDIÇÃO DE CORRIDA: REGISTRO SEGURO DE EVENTOS
@@ -221,13 +221,14 @@ export default function JogadoresOnline() {
                     <Ionicons name="chevron-forward" size={20} color="#888" />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.gameOptionBtn} onPress={() => setJogoSelecionadoParaDesafio('math_blaster')}>
+                {/* MODIFICAÇÃO: Ação direta ao clicar em Math Blaster Co-op */}
+                <TouchableOpacity style={styles.gameOptionBtn} onPress={() => enviarConviteFinal('math_blaster', 'misto')}>
                     <View style={[styles.iconContainer, {backgroundColor: '#FFD70020'}]}><Ionicons name="planet" size={28} color="#FFD700" /></View>
                     <View style={{flex: 1}}>
                        <Text style={styles.gameOptionText}>Math Blaster Co-op</Text>
-                       <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Escolher operação...</Text>
+                       <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Ação Direta!</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={20} color="#888" />
+                    <Ionicons name="rocket" size={20} color="#FFD700" />
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.gameOptionBtn} onPress={() => setJogoSelecionadoParaDesafio('tugofwar')}>
@@ -243,7 +244,7 @@ export default function JogadoresOnline() {
               <>
                 <Text style={styles.modalTitle}>ESCOLHA A OPERAÇÃO</Text>
                 <Text style={styles.modalText}>
-                  Modo: {jogoSelecionadoParaDesafio === 'arcade' ? 'Matemática Turbo' : jogoSelecionadoParaDesafio === 'math_blaster' ? 'Math Blaster Co-op' : 'Cabo de Guerra'}
+                  Modo: {jogoSelecionadoParaDesafio === 'arcade' ? 'Matemática Turbo' : 'Cabo de Guerra'}
                 </Text>
                 
                 <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center'}}>
