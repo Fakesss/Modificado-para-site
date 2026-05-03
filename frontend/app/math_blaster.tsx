@@ -7,6 +7,9 @@ import { useRouter } from 'expo-router';
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
 
+// NOVO: Fator de Zoom (1 = Normal na Web, 0.5 = Dobro de visão no Android)
+const ZOOM = Platform.OS === 'web' ? 1 : 0.5;
+
 // --- COMPONENTE: TECLADO RETRÔ (Otimizado para Multi-Touch Nativo) ---
 const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed: boolean, onPressWeb: (v: string) => void }) => {
   const isWeb = Platform.OS === 'web';
@@ -37,6 +40,9 @@ export default function MathBlaster() {
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
   
+  // NOVO: Estado para guardar o tamanho físico da tela para cálculo da câmera virtual
+  const [canvasSize, setCanvasSize] = useState({ width: initialWidth, height: initialHeight });
+  
   // ESTADOS DO MULTI-TOUCH ISOLADO
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
@@ -46,12 +52,13 @@ export default function MathBlaster() {
   const respostaRef = useRef('');
   useEffect(() => { respostaRef.current = resposta; }, [resposta]);
   
-  const layoutRef = useRef({ width: initialWidth, height: initialHeight });
+  // NOVO: O layout de referência já inicia considerando o Zoom para não ter bugs na hora de iniciar o jogo
+  const layoutRef = useRef({ width: initialWidth / ZOOM, height: initialHeight / ZOOM });
 
   const gs = useRef({
     player: { 
-      x: initialWidth / 2, 
-      y: initialHeight - 60, 
+      x: (initialWidth / ZOOM) / 2, 
+      y: (initialHeight / ZOOM) - 60, 
       hp: 100, 
       maxHp: 100, 
       damage: 1, 
@@ -121,8 +128,9 @@ export default function MathBlaster() {
     if (gs.movementTouchId !== null) {
       const touch = Array.from(e.nativeEvent.touches).find((t: any) => t.identifier === gs.movementTouchId);
       if (touch) {
-        const dx = (touch as any).pageX - gs.lastTouchX;
-        const dy = (touch as any).pageY - gs.lastTouchY;
+        // NOVO: Ajuste de movimento levando em conta o ZOOM
+        const dx = ((touch as any).pageX - gs.lastTouchX) / ZOOM;
+        const dy = ((touch as any).pageY - gs.lastTouchY) / ZOOM;
         gs.player.x += dx * 1.5;
         gs.player.y += dy * 1.5;
         gs.lastTouchX = (touch as any).pageX;
@@ -142,7 +150,7 @@ export default function MathBlaster() {
   const getTeclaFromCoords = (x: number, y: number, layoutWidth: number) => {
     const GAP = 8; 
     const KEY_W = (layoutWidth - (GAP * 2)) / 3; 
-    const KEY_H = 60; // Altura aumentada para deixar a tecla mais quadrada
+    const KEY_H = 60; 
     
     let col = -1;
     if (x >= 0 && x <= KEY_W) col = 0; 
@@ -167,7 +175,6 @@ export default function MathBlaster() {
 
     for (let i = 0; i < touches.length; i++) {
         const touch = touches[i];
-        // Processa APENAS toques que COMEÇARAM na área do teclado (ignora o dedo da nave)
         if (kbTouchIds.current.has(touch.identifier)) {
             const x = touch.locationX;
             const y = touch.locationY;
@@ -926,99 +933,120 @@ export default function MathBlaster() {
         </View>
 
         <View style={[styles.gameArea, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} 
-          onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} 
+          onLayout={(e) => { 
+            const { width, height } = e.nativeEvent.layout;
+            setCanvasSize({ width, height }); // NOVO: Guarda o tamanho real
+            layoutRef.current.width = width / ZOOM; // NOVO: Informa o tamanho virtual gigante
+            layoutRef.current.height = height / ZOOM; 
+          }} 
           onTouchStart={handleGameTouchStart} 
           onTouchMove={handleGameTouchMove} 
           onTouchEnd={handleGameTouchEnd} 
           onTouchCancel={handleGameTouchEnd}
         >
-          <View style={styles.gridOverlay}/>
           
+          {/* Alertas mantidos FORA do Zoom para não distorcer o texto */}
           {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
           {gs.gameState === 'TRANSITION' && (<View style={styles.centerAlert}><Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text><Text style={styles.alertSubText}>PREPARANDO SALTO...</Text></View>)}
 
-          {gs.enemies.map(e => {
-            if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 12, top: e.y - 12 }]}/>;
-            if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 10, top: e.y - 8, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
-            if (e.type === 'SPAWNER') {
+          {/* NOVO: CONTAINER DA CÂMERA VIRTUAL */}
+          <View style={{
+            position: 'absolute',
+            width: canvasSize.width / ZOOM,
+            height: canvasSize.height / ZOOM,
+            left: -(canvasSize.width / ZOOM - canvasSize.width) / 2,
+            top: -(canvasSize.height / ZOOM - canvasSize.height) / 2,
+            transform: [{ scale: ZOOM }],
+          }}>
+
+            <View style={styles.gridOverlay}/>
+
+            {gs.enemies.map(e => {
+              if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 12, top: e.y - 12 }]}/>;
+              if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 10, top: e.y - 8, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
+              if (e.type === 'SPAWNER') {
+                return (
+                   <View key={e.id} style={[styles.spawnerShape, { left: e.x - 30, top: e.y - 22 }]}>
+                      <Text style={styles.spawnerMath}>{e.txt}</Text>
+                      {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{e.res}</Text>}
+                      <View style={styles.powerupDots}>
+                        {Array.from({length: e.solvesNeeded}).map((_, i) => (<View key={i} style={[styles.dot, { backgroundColor: i < e.solvesDone ? '#00FFFF' : 'transparent', borderColor: '#00FFFF' }]}/>))}
+                      </View>
+                   </View>
+                );
+              }
+              const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
+              return (<View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
+            })}
+
+            {gs.boss.active && (
+              <View style={[styles.bossContainer, { left: gs.boss.x - 40, top: gs.boss.y - 30 }]}>
+                <View style={styles.bossHpBar}><View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]}/></View>
+                <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 30, height: 60, backgroundColor: '#006400', borderColor: '#32CD32' }]}/>
+                {gs.boss.shield && (
+                  <View style={styles.bossShield}>
+                    <Text style={styles.bossMath}>{gs.boss.txt}</Text>
+                    {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{gs.boss.res}</Text>}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {gs.powerups.map(p => (
+              <View key={p.id} style={[styles.powerupBox, { left: p.x - 40, top: p.y - 18, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
+                <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
+                <Text style={styles.powerupMath}>{p.txt}</Text>
+              </View>
+            ))}
+
+            {gs.lasers.map(l => (
+              <View key={l.id} style={[styles.laserNormal, { 
+                left: l.x - (l.size/2), 
+                top: l.y, 
+                width: l.size, 
+                height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3)), 
+                backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : '#00FFFF', 
+                borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') ? l.size / 2 : 5 
+              }]}/>
+            ))}
+
+            {gs.pulses.map(p => {
+              const currentRadius = p.maxRadius * (1 - (p.life / p.maxLife));
               return (
-                 <View key={e.id} style={[styles.spawnerShape, { left: e.x - 30, top: e.y - 22 }]}>
-                    <Text style={styles.spawnerMath}>{e.txt}</Text>
-                    {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{e.res}</Text>}
-                    <View style={styles.powerupDots}>
-                      {Array.from({length: e.solvesNeeded}).map((_, i) => (<View key={i} style={[styles.dot, { backgroundColor: i < e.solvesDone ? '#00FFFF' : 'transparent', borderColor: '#00FFFF' }]}/>))}
-                    </View>
-                 </View>
-              );
-            }
-            const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
-            return (<View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
-          })}
+                <View key={p.id} style={{ position: 'absolute', left: p.x - currentRadius, top: p.y - currentRadius, width: currentRadius * 2, height: currentRadius * 2, borderRadius: currentRadius, borderWidth: 3, borderColor: `rgba(0, 191, 255, ${p.life / p.maxLife})`, backgroundColor: `rgba(0, 191, 255, ${(p.life / p.maxLife) * 0.2})`, zIndex: 5 }}/>
+              )
+            })}
 
-          {gs.boss.active && (
-            <View style={[styles.bossContainer, { left: gs.boss.x - 40, top: gs.boss.y - 30 }]}>
-              <View style={styles.bossHpBar}><View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]}/></View>
-              <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 30, height: 60, backgroundColor: '#006400', borderColor: '#32CD32' }]}/>
-              {gs.boss.shield && (
-                <View style={styles.bossShield}>
-                  <Text style={styles.bossMath}>{gs.boss.txt}</Text>
-                  {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{gs.boss.res}</Text>}
-                </View>
-              )}
-            </View>
-          )}
+            {gs.mathShots.map(ms => (
+              <View key={ms.id} style={{ position: 'absolute', left: ms.x - 6, top: ms.y - 6, width: 12, height: 12, borderRadius: 6, backgroundColor: ms.color, shadowColor: ms.color, shadowRadius: 8, shadowOpacity: 1, zIndex: 10 }}/>
+            ))}
 
-          {gs.powerups.map(p => (
-            <View key={p.id} style={[styles.powerupBox, { left: p.x - 40, top: p.y - 18, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
-              <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
-              <Text style={styles.powerupMath}>{p.txt}</Text>
-            </View>
-          ))}
+            {gs.enemyLasers.map(el => (
+              <View key={el.id} style={[el.homing ? styles.cannonBall : styles.enemyLaser, { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color }]}>
+                {el.homing && el.hp < 5 && <View style={{width:'100%', height:'100%', backgroundColor:'rgba(255,255,255,0.5)', borderRadius: 20}}/>}
+              </View>
+            ))}
 
-          {gs.lasers.map(l => (
-            <View key={l.id} style={[styles.laserNormal, { 
-              left: l.x - (l.size/2), 
-              top: l.y, 
-              width: l.size, 
-              height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3)), 
-              backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : '#00FFFF', 
-              borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') ? l.size / 2 : 5 
-            }]}/>
-          ))}
+            {gs.particles.map((p, i) => (
+              <View key={i} style={{ position: 'absolute', width: 4, height: 4, backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 2 }}/>
+            ))}
 
-          {gs.pulses.map(p => {
-            const currentRadius = p.maxRadius * (1 - (p.life / p.maxLife));
-            return (
-              <View key={p.id} style={{ position: 'absolute', left: p.x - currentRadius, top: p.y - currentRadius, width: currentRadius * 2, height: currentRadius * 2, borderRadius: currentRadius, borderWidth: 3, borderColor: `rgba(0, 191, 255, ${p.life / p.maxLife})`, backgroundColor: `rgba(0, 191, 255, ${(p.life / p.maxLife) * 0.2})`, zIndex: 5 }}/>
-            )
-          })}
+            {gs.floatingTexts.map(ft => (
+              <Text key={ft.id} style={[styles.floatingText, { left: ft.x - 30, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text>
+            ))}
 
-          {gs.mathShots.map(ms => (
-            <View key={ms.id} style={{ position: 'absolute', left: ms.x - 6, top: ms.y - 6, width: 12, height: 12, borderRadius: 6, backgroundColor: ms.color, shadowColor: ms.color, shadowRadius: 8, shadowOpacity: 1, zIndex: 10 }}/>
-          ))}
-
-          {gs.enemyLasers.map(el => (
-            <View key={el.id} style={[el.homing ? styles.cannonBall : styles.enemyLaser, { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color }]}>
-              {el.homing && el.hp < 5 && <View style={{width:'100%', height:'100%', backgroundColor:'rgba(255,255,255,0.5)', borderRadius: 20}}/>}
-            </View>
-          ))}
-
-          {gs.particles.map((p, i) => (
-            <View key={i} style={{ position: 'absolute', width: 4, height: 4, backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 2 }}/>
-          ))}
-
-          {gs.floatingTexts.map(ft => (
-            <Text key={ft.id} style={[styles.floatingText, { left: ft.x - 30, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text>
-          ))}
-
-          <View style={[styles.playerShape, { left: gs.player.x - 15, top: gs.player.y - 15 }]}/>
-          <View style={[styles.propulsor, { left: gs.player.x - 5, top: gs.player.y + 15, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
+            <View style={[styles.playerShape, { left: gs.player.x - 15, top: gs.player.y - 15 }]}/>
+            <View style={[styles.propulsor, { left: gs.player.x - 5, top: gs.player.y + 15, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
+            
+            {gs.forceShieldHits > 0 && (
+              <View style={{ position: 'absolute', left: gs.player.x - 25, top: gs.player.y - 25, width: 50, height: 50, borderRadius: 25, borderWidth: 3, borderColor: '#00FA9A', backgroundColor: 'rgba(0,250,154,0.1)', zIndex: 10 }}/>
+            )}
+            {gs.drones.normal.active && <View style={[styles.droneNormal, { left: gs.player.x - 30, top: gs.player.y + 5 }]}/>}
+            {gs.drones.advanced.active && <View style={[styles.droneAdvanced, { left: gs.player.x + 20, top: gs.player.y - 5 }]}/>}
           
-          {gs.forceShieldHits > 0 && (
-            <View style={{ position: 'absolute', left: gs.player.x - 25, top: gs.player.y - 25, width: 50, height: 50, borderRadius: 25, borderWidth: 3, borderColor: '#00FA9A', backgroundColor: 'rgba(0,250,154,0.1)', zIndex: 10 }}/>
-          )}
-          {gs.drones.normal.active && <View style={[styles.droneNormal, { left: gs.player.x - 30, top: gs.player.y + 5 }]}/>}
-          {gs.drones.advanced.active && <View style={[styles.droneAdvanced, { left: gs.player.x + 20, top: gs.player.y - 5 }]}/>}
+          </View>
+          {/* FIM DA CÂMERA VIRTUAL */}
+
         </View>
 
         <View style={styles.painelInferior} pointerEvents="box-none">
