@@ -47,16 +47,23 @@ export default function MathBlasterMulti() {
   const [guestUserId, setGuestUserId] = useState<string | null>(null);
 
   let parsedRoomId = (params.roomId as string) || '';
-  let parsedIsHost = params.isHost === 'true';
+  let parsedIsHost = params.isHost === 'true' || params.isHost === true;
   let parsedOpponentName = (params.opponentName as string) || 'Aliado';
   let parsedOpponentColor = (params.opponentColor as string) || '#FF00FF';
 
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('roomId')) parsedRoomId = urlParams.get('roomId') as string;
-      if (urlParams.get('isHost')) parsedIsHost = urlParams.get('isHost') === 'true';
-      if (urlParams.get('opponentName')) parsedOpponentName = urlParams.get('opponentName') as string;
-      if (urlParams.get('opponentColor')) parsedOpponentColor = decodeURIComponent(urlParams.get('opponentColor') as string);
+      const hashQuery = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+      const searchQuery = window.location.search.replace('?', '');
+      const query = searchQuery || hashQuery;
+      const urlParams = new URLSearchParams(query);
+      
+      if (urlParams.has('roomId')) parsedRoomId = urlParams.get('roomId') as string;
+      if (urlParams.has('isHost')) {
+          const val = urlParams.get('isHost');
+          parsedIsHost = val === 'true' || val === '1';
+      }
+      if (urlParams.has('opponentName')) parsedOpponentName = urlParams.get('opponentName') as string;
+      if (urlParams.has('opponentColor')) parsedOpponentColor = decodeURIComponent(urlParams.get('opponentColor') as string);
   }
 
   const roomId = parsedRoomId;
@@ -175,7 +182,10 @@ export default function MathBlasterMulti() {
 
     const joinRoom = () => {
         if (socket.connected) {
+            // Emite várias nomenclaturas comuns de Join Room para garantir suporte ao seu backend
             socket.emit('join_game_room', { roomId });
+            socket.emit('joinRoom', roomId); 
+            socket.emit('join_room', { roomId }); 
         }
     };
 
@@ -224,7 +234,7 @@ export default function MathBlasterMulti() {
   }, [roomId, isHost]);
 
   const enviarPosicaoSocket = () => {
-     if (roomId && gs.stateTimer % 3 === 0) {
+     if (roomId && gs.stateTimer % 2 === 0) {
          socket.emit('game_action', {
              roomId, instanceId, action: 'SYNC_PLAYER',
              data: { x: gs.player.x, y: gs.player.y, hp: gs.player.hp, score: gs.score }
@@ -299,7 +309,7 @@ export default function MathBlasterMulti() {
                e.isDying = true; e.mathRequired = false;
                setTimeout(() => { e.hp = -100; criarParticulas(e.x, e.y, '#00FFFF', 15); }, 350);
             } else {
-               if (!roomId || isHost) { // Apenas Host ou Offline atualiza a conta
+               if (!roomId || isHost) { 
                    const eq = gerarEquacao(gs.fase, getRespostasAtivas()); e.txt = eq.txt; e.res = eq.res;
                }
             }
@@ -762,7 +772,6 @@ export default function MathBlasterMulti() {
 
     enviarPosicaoSocket();
     
-    // CORREÇÃO: Sync do host a cada 2 frames para deixar as naves fluidas no cliente
     if (isHost && roomId && gs.stateTimer % 2 === 0) { 
         socket.emit('game_action', {
             roomId, instanceId, action: 'SYNC_HOST_STATE',
@@ -893,8 +902,39 @@ export default function MathBlasterMulti() {
         }
         if (l.type === 'MISSILE' && l.life <= 0) l.y = -100; 
       }
+      
       l.x += l.vx; 
       l.y += l.vy;
+
+      // CORREÇÃO DA COLISÃO COM INIMIGOS E BOSS
+      if (l.y > -50 && l.type !== 'LASER') { // Lasers perfuram, os outros não
+          let hit = false;
+          for (let i = 0; i < gs.enemies.length; i++) {
+              let e = gs.enemies[i];
+              if (!e.mathRequired && e.hp > 0 && !e.invisible) {
+                  const hitRange = e.type === 'TANK' ? 25 : 15;
+                  if (Math.abs(l.x - e.x) < hitRange + (l.size/2) && Math.abs(l.y - e.y) < hitRange + (l.size/2)) {
+                      e.hp -= l.damage;
+                      hit = true;
+                      criarParticulas(l.x, l.y, '#00FFFF', 4);
+                      break; 
+                  }
+              }
+          }
+
+          if (!hit && gs.boss.active && !gs.boss.shield && gs.boss.hp > 0) {
+              if (Math.abs(l.x - gs.boss.x) < 40 + (l.size/2) && Math.abs(l.y - gs.boss.y) < 30 + (l.size/2)) {
+                  gs.boss.hp -= l.damage;
+                  hit = true;
+                  criarParticulas(l.x, l.y, '#00FFFF', 5);
+              }
+          }
+
+          if (hit && l.type !== 'ELECTRIC') {
+              l.life = 0;
+              l.y = -999;
+          }
+      }
     });
     
     gs.lasers = gs.lasers.filter(l => (l.type === 'MISSILE_HOMING' || l.type === 'ELECTRIC') ? l.y > -50 : (l.y > -50 && l.x > -20 && l.x < gw + 20));
@@ -947,7 +987,6 @@ export default function MathBlasterMulti() {
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
-      // CORREÇÃO: Toda a lógica de criação de inimigos agora é restrita ao HOST
       if (!roomId || isHost) {
           if (gs.stateTimer === 100) {
               if (dailySpawnsRef.current < 5 && Math.random() <= 0.10) {
@@ -1066,7 +1105,7 @@ export default function MathBlasterMulti() {
             });
             gs.lastPowerupSpawn = now;
           }
-      } // <- FIM DA ÁREA DO HOST
+      }
 
       if (gs.stateTimer > 1500) { 
         gs.gameState = 'BOSS_WARNING'; 
@@ -1197,6 +1236,16 @@ export default function MathBlasterMulti() {
         }
       }
       
+      // CORREÇÃO: Disparo dos Inimigos
+      if ((e.type === 'SQUAD' || e.type === 'TANK' || e.type === 'ZIGZAG') && (!roomId || isHost)) {
+          e.fireTimer = (e.fireTimer || 0) + 1 * speedMult;
+          const rate = e.type === 'TANK' ? 80 : 150;
+          if (e.fireTimer > rate) {
+              e.fireTimer = 0;
+              gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: 0, vy: 4 + gs.fase * 0.5, size: e.type==='TANK'?12:8, damage: 5 + gs.fase*2, homing: false, color: e.type==='TANK'?'#FFA500':'#FF0055', hp: 1 });
+          }
+      }
+
       if (Math.abs(gs.player.x - e.x) < 25 && Math.abs(gs.player.y - e.y) < 25 && !e.invisible) { 
         aplicarDano(5 + (gs.fase * 5)); 
         if (!e.mathRequired) e.hp = -100; 
@@ -1330,9 +1379,17 @@ export default function MathBlasterMulti() {
             )}
           </View>
 
-          <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
-            <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
-          </TouchableOpacity>
+          {/* CORREÇÃO: Convidado não pode iniciar a partida sozinho */}
+          {(!roomId || isHost) ? (
+            <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
+              <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.btnIniciar, { backgroundColor: '#333' }]}>
+              <Text style={[styles.btnIniciarTxt, { color: '#888' }]}>AGUARDANDO LÍDER DA SALA...</Text>
+            </View>
+          )}
+
         </ScrollView>
       </SafeAreaView>
     );
@@ -1351,9 +1408,13 @@ export default function MathBlasterMulti() {
           
           <Text style={styles.textoFase}>Chegou na Fase {gs.fase}</Text>
           
-          <TouchableOpacity style={[styles.btnIniciar, { marginTop: 40 }]} onPress={iniciarJogo}>
-            <Text style={styles.btnIniciarTxt}>TENTAR NOVAMENTE</Text>
-          </TouchableOpacity>
+          {/* O convidado também não pode reiniciar o jogo sozinho, apenas voltar */}
+          {(!roomId || isHost) && (
+              <TouchableOpacity style={[styles.btnIniciar, { marginTop: 40 }]} onPress={iniciarJogo}>
+                <Text style={styles.btnIniciarTxt}>TENTAR NOVAMENTE</Text>
+              </TouchableOpacity>
+          )}
+
           <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#555', marginTop: 15 }]} onPress={goBack}>
             <Text style={[styles.btnIniciarTxt, { color: '#888' }]}>VOLTAR AO MENU</Text>
           </TouchableOpacity>
@@ -1369,12 +1430,13 @@ export default function MathBlasterMulti() {
         <View style={styles.hud}>
           <View style={{ flex: 1, paddingRight: 10 }}>
             <Text style={styles.hudScore}>SCORE: {gs.score} {roomId ? `| ALIADO: ${gs.scoreAliado}` : ''}</Text>
-            <View style={{flexDirection:'row', gap: 5}}>
-                <View style={styles.hpBarContainer}>
+            {/* CORREÇÃO: Flex nas barrinhas para não estourarem o layout juntas */}
+            <View style={{flexDirection:'row', gap: 5, width: '100%', marginTop: 2}}>
+                <View style={[styles.hpBarContainer, { flex: 1, width: 'auto' }]}>
                   <View style={[styles.hpBarFill, { width: `${porcentagemHP}%`, backgroundColor: corHP }]}/>
                 </View>
                 {roomId && (
-                  <View style={styles.hpBarContainer}>
+                  <View style={[styles.hpBarContainer, { flex: 1, width: 'auto' }]}>
                     <View style={[styles.hpBarFill, { width: `${Math.max(0, (gs.aliado.hp / gs.aliado.maxHp) * 100)}%`, backgroundColor: corAliado }]}/>
                   </View>
                 )}
@@ -1604,7 +1666,7 @@ const styles = StyleSheet.create({
 
   hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10, width: '100%' },
   hudScore: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1, marginBottom: 5 },
-  hpBarContainer: { width: '100%', height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' },
+  hpBarContainer: { height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' },
   hpBarFill: { height: '100%', borderRadius: 4 },
   hudFase: { color: '#FF00FF', fontSize: 20, fontWeight: '900', fontStyle: 'italic' },
   
