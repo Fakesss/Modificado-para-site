@@ -63,7 +63,6 @@ export default function MathBlasterMulti() {
   const isHost = parsedIsHost;
   const opponentName = parsedOpponentName;
   
-  // SOLUÇÃO: Usando um ID único por aba/celular para o filtro de eco de rede
   const instanceId = useRef(Math.random().toString(36).substring(7)).current;
 
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
@@ -171,7 +170,6 @@ export default function MathBlasterMulti() {
     initWebViewAuth();
   }, [tela]);
 
-  // CORREÇÃO: Força o WebView a entrar na sala constantemente para não perder o Socket
   useEffect(() => {
     if (!roomId) return;
 
@@ -186,7 +184,6 @@ export default function MathBlasterMulti() {
     const interval = setInterval(joinRoom, 2000);
 
     const handleSocketAcao = (payload: any) => {
-      // CORREÇÃO: Impede o eco usando a InstanceId da aba, não a conta logada
       if (!payload || payload.instanceId === instanceId) return; 
 
       if (payload.action === 'SYNC_PLAYER') {
@@ -254,7 +251,6 @@ export default function MathBlasterMulti() {
       router.back();
   };
 
-  // NOVO: Botão de Desistir que mata o player e avisa o aliado
   const handleDesistir = () => {
       const desistirAcao = () => {
           gs.player.hp = 0;
@@ -303,7 +299,9 @@ export default function MathBlasterMulti() {
                e.isDying = true; e.mathRequired = false;
                setTimeout(() => { e.hp = -100; criarParticulas(e.x, e.y, '#00FFFF', 15); }, 350);
             } else {
-               const eq = gerarEquacao(gs.fase, getRespostasAtivas()); e.txt = eq.txt; e.res = eq.res;
+               if (!roomId || isHost) { // Apenas Host ou Offline atualiza a conta
+                   const eq = gerarEquacao(gs.fase, getRespostasAtivas()); e.txt = eq.txt; e.res = eq.res;
+               }
             }
             break;
           }
@@ -336,10 +334,11 @@ export default function MathBlasterMulti() {
             gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `LIMITE DIÁRIO ATINGIDO!`, color: '#FF4444', life: 90 });
             setResposta(''); return;
         }
-        const gw = layoutRef.current.width;
-        const eq = gerarEquacao(10, getRespostasAtivas());
-        gs.enemies.push({ id: Math.random().toString(), type: 'RARE_ENEMY', x: gw / 2, y: -50, targetY: 100, hp: 9999, mathRequired: true, solvesNeeded: 1, solvesDone: 0, txt: "👑 " + eq.txt, res: eq.res, vy: 0.5, evasive: false });
-        
+        if (!roomId || isHost) {
+            const gw = layoutRef.current.width;
+            const eq = gerarEquacao(10, getRespostasAtivas());
+            gs.enemies.push({ id: Math.random().toString(), type: 'RARE_ENEMY', x: gw / 2, y: -50, targetY: 100, hp: 9999, mathRequired: true, solvesNeeded: 1, solvesDone: 0, txt: "👑 " + eq.txt, res: eq.res, vy: 0.5, evasive: false });
+        }
         dailySpawnsRef.current += 1;
         AsyncStorage.setItem('rareSpawnCount', dailySpawnsRef.current.toString()).catch(()=>{});
         setResposta(''); return;
@@ -381,7 +380,9 @@ export default function MathBlasterMulti() {
 
                setTimeout(() => { e.hp = -100; gs.score += (e.type === 'RARE_ENEMY' ? 100 : 15); criarParticulas(e.x, e.y, '#00FFFF', 15); }, 350);
             } else {
-               const eq = gerarEquacao(gs.fase, getRespostasAtivas()); e.txt = eq.txt; e.res = eq.res;
+               if (!roomId || isHost) {
+                   const eq = gerarEquacao(gs.fase, getRespostasAtivas()); e.txt = eq.txt; e.res = eq.res;
+               }
             }
             enviarAcertoSocket(num, gs.player.x, gs.player.y);
             break;
@@ -761,7 +762,8 @@ export default function MathBlasterMulti() {
 
     enviarPosicaoSocket();
     
-    if (isHost && roomId && gs.stateTimer % 5 === 0) { 
+    // CORREÇÃO: Sync do host a cada 2 frames para deixar as naves fluidas no cliente
+    if (isHost && roomId && gs.stateTimer % 2 === 0) { 
         socket.emit('game_action', {
             roomId, instanceId, action: 'SYNC_HOST_STATE',
             data: { enemies: gs.enemies, boss: gs.boss, powerups: gs.powerups, enemyLasers: gs.enemyLasers }
@@ -945,6 +947,7 @@ export default function MathBlasterMulti() {
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
+      // CORREÇÃO: Toda a lógica de criação de inimigos agora é restrita ao HOST
       if (!roomId || isHost) {
           if (gs.stateTimer === 100) {
               if (dailySpawnsRef.current < 5 && Math.random() <= 0.10) {
@@ -1063,7 +1066,7 @@ export default function MathBlasterMulti() {
             });
             gs.lastPowerupSpawn = now;
           }
-      }
+      } // <- FIM DA ÁREA DO HOST
 
       if (gs.stateTimer > 1500) { 
         gs.gameState = 'BOSS_WARNING'; 
