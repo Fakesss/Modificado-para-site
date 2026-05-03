@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions, Platform, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions, Platform, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/context/AuthContext';
-import socket from '../src/services/socket'; // Conexão Multiplayer
+import { socket } from '../src/services/socket'; // CORRIGIDO: importação nomeada
 import * as apiRoutes from '../src/services/api';
 
 const initialWidth = Dimensions.get('window').width;
@@ -42,6 +42,12 @@ export default function MathBlasterMulti() {
   const [tela, setTela] = useState<'jogo' | 'resultado'>('jogo');
   const [jogoAtivo, setJogoAtivo] = useState(true);
   const [resposta, setResposta] = useState('');
+  
+  // CORREÇÕES DE ESTADOS E REFS FALTANTES
+  const [frames, setFrames] = useState(0); 
+  const gameOverFired = useRef(false);
+  const tecladoLayoutRef = useRef({ width: 0 });
+  const goBack = () => { router.back(); };
   
   const [canvasSize, setCanvasSize] = useState({ width: initialWidth, height: initialHeight });
   const canvasSizeRef = useRef({ width: initialWidth, height: initialHeight });
@@ -269,6 +275,33 @@ export default function MathBlasterMulti() {
         return () => { window.removeEventListener('keydown', handleKeyDownLocal); window.removeEventListener('keyup', handleKeyUpLocal); };
     }
   }, [jogoAtivo, lidarComTeclado]);
+
+  // CORREÇÃO: Implementação das funções de Touch para Mobile Web
+  const handleGameTouchStart = (e: any) => {
+    if (!jogoAtivo) return;
+    const touch = e.nativeEvent.touches[0];
+    gs.movementTouchId = touch.identifier;
+    gs.lastTouchX = touch.pageX;
+    gs.lastTouchY = touch.pageY;
+  };
+
+  const handleGameTouchMove = (e: any) => {
+      if (!jogoAtivo || gs.movementTouchId === null) return;
+      const touch = Array.from(e.nativeEvent.touches).find((t: any) => t.identifier === gs.movementTouchId) as any;
+      if (touch) {
+          const dx = touch.pageX - gs.lastTouchX;
+          const dy = touch.pageY - gs.lastTouchY;
+          gs.player.x += dx / gs.currentZoom;
+          gs.player.y += dy / gs.currentZoom;
+          gs.lastTouchX = touch.pageX;
+          gs.lastTouchY = touch.pageY;
+      }
+  };
+
+  const handleGameTouchEnd = () => {
+      gs.movementTouchId = null;
+  };
+
 
   const getRespostasAtivas = () => {
     const resps: number[] = [];
