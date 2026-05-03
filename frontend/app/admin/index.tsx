@@ -18,16 +18,16 @@ export default function AdminHome() {
   const [pts2, setPts2] = useState('300');
   const [pts3, setPts3] = useState('100');
   
+  // Abas de Controle de Qual Ranking ver
+  const [modoPremiacao, setModoPremiacao] = useState<'ARCADE'|'MATH_BLASTER'>('ARCADE');
+  
+  const [topArcade, setTopArcade] = useState<any[]>([]);
+  const [topBlaster, setTopBlaster] = useState<any[]>([]);
+
   const [isAutoAtivo, setIsAutoAtivo] = useState(false);
   const [intervaloAuto, setIntervaloAuto] = useState<'semanal'|'mensal'>('semanal');
   const [diaSemana, setDiaSemana] = useState('Sexta-feira');
   const [diaMes, setDiaMes] = useState('15');
-
-  const top3 = [
-    { nome: 'Ana C.', pontos: 15420 },
-    { nome: 'Pedro', pontos: 12300 },
-    { nome: 'Lucas', pontos: 9800 }
-  ];
 
   useEffect(() => { loadStats(); }, []);
 
@@ -36,6 +36,12 @@ export default function AdminHome() {
       if (!isPreviewMode) {
         const data = await api.getRelatorioGeral();
         setStats(data);
+        
+        // Puxa os dados reais de ambos os rankings!
+        const rArcade = await api.getRankingArcade();
+        const rBlaster = await api.getRankingMathBlaster();
+        setTopArcade(rArcade.slice(0, 3));
+        setTopBlaster(rBlaster.slice(0, 3));
       } else {
         setStats({ totalUsuarios: 8, totalExercicios: 3, totalVideos: 5, totalSubmissoes: 12, mediaNotas: 7.5 });
       }
@@ -54,9 +60,20 @@ export default function AdminHome() {
     router.push(route as any);
   };
 
-  const handlePremiarManualmente = () => {
-    Alert.alert('Sucesso!', `Pontos enviados!\n\n🥇 ${top3[0].nome}: +${pts1} pts\n🥈 ${top3[1].nome}: +${pts2} pts\n🥉 ${top3[2].nome}: +${pts3} pts`);
-    setModalPremiacaoVisible(false);
+  // FUNÇÃO DE PREMIAÇÃO AGORA INTEGRADA COM A API!
+  const handlePremiarManualmente = async () => {
+    try {
+        await api.premiarRankingAdmin(modoPremiacao, parseInt(pts1) || 0, parseInt(pts2) || 0, parseInt(pts3) || 0);
+        
+        const topAtual = modoPremiacao === 'ARCADE' ? topArcade : topBlaster;
+        Alert.alert(
+            'Sucesso!', 
+            `Os pontos foram distribuídos para o pódio do ${modoPremiacao === 'ARCADE' ? 'Arcade' : 'Math Blaster'}!\n\n🥇 ${topAtual[0]?.nome || '-'}: +${pts1} pts\n🥈 ${topAtual[1]?.nome || '-'}: +${pts2} pts\n🥉 ${topAtual[2]?.nome || '-'}: +${pts3} pts`
+        );
+        setModalPremiacaoVisible(false);
+    } catch (err) {
+        Alert.alert('Erro', 'Ocorreu um erro ao premiar os jogadores.');
+    }
   };
 
   const handleSalvarAuto = () => {
@@ -67,16 +84,22 @@ export default function AdminHome() {
   const handleZerarRanking = () => {
     Alert.alert(
       "Aviso de Segurança!",
-      "Você tem CERTEZA que deseja apagar a pontuação de TODOS os jogadores no Arcade? Essa ação não poderá ser desfeita.",
+      "Você tem CERTEZA que deseja apagar os recordes de TODOS os jogadores do modo Arcade e Math Blaster? Essa ação não poderá ser desfeita.",
       [
         { text: "Cancelar", style: "cancel" },
-        { text: "Sim, Zerar Tudo", style: "destructive", onPress: () => {
-          Alert.alert("Sucesso", "O ranking do Arcade foi completamente zerado.");
-          setModalPremiacaoVisible(false);
+        { text: "Sim, Zerar Tudo", style: "destructive", onPress: async () => {
+          try {
+              await api.zerarTodosPontos();
+              Alert.alert("Sucesso", "Todos os Rankings foram completamente zerados.");
+              loadStats();
+              setModalPremiacaoVisible(false);
+          } catch(e) { Alert.alert("Erro"); }
         }}
       ]
     );
   };
+
+  const topAtual = modoPremiacao === 'ARCADE' ? topArcade : topBlaster;
 
   if (loading) {
     return (
@@ -120,9 +143,6 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
-        {/* ======================================= */}
-        {/* NOVO BOTÃO: MODERAÇÃO DO CHAT AQUI      */}
-        {/* ======================================= */}
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/moderacao_chat')}>
           <View style={[styles.menuIcon, { backgroundColor: '#E74C3C30' }]}><Ionicons name="shield-checkmark" size={24} color="#E74C3C" /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Moderação de Chat</Text><Text style={styles.menuDescription}>Visualizar mensagens e bloquear conversas</Text></View>
@@ -149,7 +169,7 @@ export default function AdminHome() {
 
         <TouchableOpacity style={styles.menuItem} onPress={() => setModalPremiacaoVisible(true)}>
           <View style={[styles.menuIcon, { backgroundColor: '#FFD70030' }]}><Ionicons name="trophy" size={24} color="#FFD700" /></View>
-          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Premiação do Arcade</Text><Text style={styles.menuDescription}>Dar pontos e configurar robô automático</Text></View>
+          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Premiações de Rankings</Text><Text style={styles.menuDescription}>Dar pontos a quem estiver no Hall da Fama</Text></View>
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
@@ -190,13 +210,22 @@ export default function AdminHome() {
             <View style={styles.modalHeader}>
                <Ionicons name="trophy" size={32} color="#FFD700" />
                <View style={{ marginLeft: 12 }}>
-                 <Text style={styles.modalTitle}>Premiação do Arcade</Text>
-                 <Text style={styles.modalSubtitle}>Configure os prêmios do Hall da Fama</Text>
+                 <Text style={styles.modalTitle}>Gerenciador de Premiações</Text>
+                 <Text style={styles.modalSubtitle}>Configure os prêmios dos Rankings</Text>
                </View>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
               
+              <View style={styles.intervaloContainer}>
+                 <TouchableOpacity style={[styles.btnIntervalo, modoPremiacao === 'ARCADE' && styles.btnIntervaloAtivo]} onPress={() => setModoPremiacao('ARCADE')}>
+                   <Text style={[styles.txtIntervalo, modoPremiacao === 'ARCADE' && styles.txtIntervaloAtivo]}>🎮 ARCADE</Text>
+                 </TouchableOpacity>
+                 <TouchableOpacity style={[styles.btnIntervalo, modoPremiacao === 'MATH_BLASTER' && styles.btnIntervaloAtivo]} onPress={() => setModoPremiacao('MATH_BLASTER')}>
+                   <Text style={[styles.txtIntervalo, modoPremiacao === 'MATH_BLASTER' && styles.txtIntervaloAtivo]}>🚀 MATH BLASTER</Text>
+                 </TouchableOpacity>
+              </View>
+
               <View style={styles.modalSection}>
                 <Text style={styles.sectionLabelModal}>VALOR DO PRÊMIO</Text>
                 <View style={styles.inputRow}>
@@ -215,12 +244,12 @@ export default function AdminHome() {
 
               <View style={styles.modalSection}>
                 <Text style={styles.sectionLabelModal}>PAGAMENTO MANUAL</Text>
-                <Text style={styles.sectionDescModal}>Envie os pontos agora mesmo para os jogadores que estão no topo hoje.</Text>
+                <Text style={styles.sectionDescModal}>Envie os pontos para os jogadores do ranking {modoPremiacao === 'ARCADE' ? 'do Matemática Turbo' : 'da nave Blaster'}.</Text>
                 
                 <View style={styles.top3Box}>
-                  <Text style={styles.top3Item}><Text style={{color:'#FFD700'}}>🥇 1º {top3[0].nome}</Text> • {top3[0].pontos} pts</Text>
-                  <Text style={styles.top3Item}><Text style={{color:'#C0C0C0'}}>🥈 2º {top3[1].nome}</Text> • {top3[1].pontos} pts</Text>
-                  <Text style={styles.top3Item}><Text style={{color:'#CD7F32'}}>🥉 3º {top3[2].nome}</Text> • {top3[2].pontos} pts</Text>
+                  <Text style={styles.top3Item}><Text style={{color:'#FFD700'}}>🥇 1º {topAtual[0]?.nome || 'N/A'}</Text> • {topAtual[0]?.pontosMaximos || 0} pts (recorde)</Text>
+                  <Text style={styles.top3Item}><Text style={{color:'#C0C0C0'}}>🥈 2º {topAtual[1]?.nome || 'N/A'}</Text> • {topAtual[1]?.pontosMaximos || 0} pts (recorde)</Text>
+                  <Text style={styles.top3Item}><Text style={{color:'#CD7F32'}}>🥉 3º {topAtual[2]?.nome || 'N/A'}</Text> • {topAtual[2]?.pontosMaximos || 0} pts (recorde)</Text>
                 </View>
                 
                 <TouchableOpacity style={styles.btnPremiar} onPress={handlePremiarManualmente}>
@@ -277,10 +306,10 @@ export default function AdminHome() {
 
               <View style={[styles.modalSection, { backgroundColor: 'rgba(231, 76, 60, 0.1)', borderColor: '#E74C3C50', borderWidth: 1 }]}>
                  <Text style={[styles.sectionLabelModal, { color: '#E74C3C' }]}>ZONA DE PERIGO</Text>
-                 <Text style={styles.sectionDescModal}>Zerar a pontuação de todos os jogadores do Arcade de forma permanente.</Text>
+                 <Text style={styles.sectionDescModal}>Zerar as pontuações e recordes de todos os jogadores.</Text>
                  <TouchableOpacity style={[styles.btnPremiar, { backgroundColor: '#E74C3C' }]} onPress={handleZerarRanking}>
                     <Ionicons name="trash-outline" size={18} color="#FFF" />
-                    <Text style={[styles.btnPremiarText, { color: '#FFF' }]}>ZERAR RANKING DO ARCADE</Text>
+                    <Text style={[styles.btnPremiarText, { color: '#FFF' }]}>ZERAR TODOS OS JOGOS</Text>
                  </TouchableOpacity>
               </View>
 
