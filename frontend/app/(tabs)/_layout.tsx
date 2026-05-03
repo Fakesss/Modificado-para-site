@@ -98,10 +98,24 @@ export default function TabsLayout() {
     const onMatchFound = (data: any) => {
       setActiveMatchData(data);
       setConvite(null);
-      // CORREÇÃO: Adicionada a rota correta para o Math Blaster Multi
+
+      // CORREÇÃO: Pegando os dados vindos do servidor com fallback de snake_case para camelCase
+      const paramsParaJogo = {
+        roomId: data.room_id || data.roomId,
+        isHost: String(data.is_host ?? data.isHost ?? false),
+        opponentName: data.opponent_name || data.opponentName || data.from_name || 'Aliado',
+        opponentColor: data.opponent_color || data.opponentColor || '#FF00FF'
+      };
+
       if (data.game_type === 'arcade') router.push('/arcade_multi');
       else if (data.game_type === 'tugofwar') router.push('/cabo_de_guerra');
-      else if (data.game_type === 'math_blaster') router.push('/math_blaster_multi');
+      else if (data.game_type === 'math_blaster') {
+        // CORREÇÃO: Enviando os parâmetros via rota para o WebView conseguir capturar
+        router.push({
+          pathname: '/math_blaster_multi',
+          params: paramsParaJogo
+        });
+      }
       else router.push('/tictactoe'); 
     };
 
@@ -136,7 +150,6 @@ export default function TabsLayout() {
     setConvite(null);
   };
 
-  // CORREÇÃO: Ajuste na lógica para exibir o nome correto do jogo no Modal
   const getGameName = (type: string) => {
     if (type === 'tictactoe') return 'Jogo da Velha';
     if (type === 'arcade') return 'Matemática Turbo';
@@ -198,7 +211,6 @@ export default function TabsLayout() {
         <Tabs.Screen name="jogadores" options={{ title: 'Online', tabBarIcon: ({ color, size }) => (<Ionicons name="radio" size={size} color={color} /> ) }} />
         <Tabs.Screen name="salas" options={{ title: 'Salas', tabBarIcon: ({ color, size }) => (<Ionicons name="chatbubbles" size={size} color={color} /> ) }} />
         
-        {/* INBOX COM A BOLINHA VERMELHA (tabBarBadge) */}
         <Tabs.Screen name="chat" options={{ title: 'Inbox', tabBarIcon: ({ color, size }) => (<Ionicons name="mail" size={size} color={color} /> ), tabBarBadge: totalNaoLidas > 0 ? totalNaoLidas : undefined }} />
 
         <Tabs.Screen name="jogo" options={{ title: 'Jogos', tabBarIcon: ({ color, size }) => (<Ionicons name="game-controller" size={size} color={color} />), tabBarBadge: '🧪', tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 } }} />
