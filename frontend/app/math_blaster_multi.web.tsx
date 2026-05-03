@@ -186,14 +186,17 @@ export default function MathBlasterMulti() {
   useEffect(() => {
     if (!roomId) return;
 
+    // FORÇA O USO DE WEBSOCKETS (Evita o problema de cookies do WebView no Android)
+    if (socket && socket.io) {
+        socket.io.opts.transports = ['websocket'];
+    }
+
     const joinRoom = () => {
         if (socket.connected) {
-            // Emite de várias formas para garantir que o backend Python aceite a sala
             socket.emit('join_game_room', { roomId });
             socket.emit('join_room', { room: roomId }); 
             socket.emit('joinRoom', roomId); 
             
-            // HANDSHAKE DE AUTO-START CONSTANTE
             if (telaRef.current === 'menu' && !jogoAtivoRef.current) {
                 if (!isHost) {
                     socket.emit('game_action', { roomId, instanceId, action: 'GUEST_READY' });
@@ -201,32 +204,30 @@ export default function MathBlasterMulti() {
                     socket.emit('game_action', { roomId, instanceId, action: 'HOST_READY' });
                 }
             }
+        } else {
+            socket.connect();
         }
     };
 
     joinRoom(); 
     socket.on('connect', joinRoom);
-    // Grita para o servidor a cada 1 segundo garantindo que o outro receba quando chegar
     const interval = setInterval(joinRoom, 1000);
 
     const handleSocketAcao = (payload: any) => {
       if (!payload || payload.instanceId === instanceId) return; 
 
-      // SE O HOST OUVIR QUE O CONVIDADO CHEGOU -> DÁ O START NA PARTIDA PRA TODO MUNDO
       if (payload.action === 'GUEST_READY') {
           if (isHost && telaRef.current === 'menu' && !jogoAtivoRef.current) {
               iniciarJogo();
           }
       }
 
-      // SE O CONVIDADO OUVIR QUE O HOST JÁ TÁ PRONTO, ELE AVISA QUE CHEGOU
       if (payload.action === 'HOST_READY') {
           if (!isHost && telaRef.current === 'menu' && !jogoAtivoRef.current) {
               socket.emit('game_action', { roomId, instanceId, action: 'GUEST_READY' });
           }
       }
 
-      // INICIA O JOGO SE O SINAL DE START CHEGAR
       if (payload.action === 'START_MATCH') {
           if (!jogoAtivoRef.current) {
               iniciarJogo();
@@ -748,7 +749,6 @@ export default function MathBlasterMulti() {
 
     if (roomId && isHost) {
         socket.emit('game_action', { roomId, instanceId, action: 'START_MATCH' });
-        // Dispara algumas vezes para garantir que o cliente pegue o pacote via socket
         setTimeout(() => { if (socket.connected) socket.emit('game_action', { roomId, instanceId, action: 'START_MATCH' }); }, 500);
         setTimeout(() => { if (socket.connected) socket.emit('game_action', { roomId, instanceId, action: 'START_MATCH' }); }, 1000);
     }
@@ -824,7 +824,7 @@ export default function MathBlasterMulti() {
     if (gs.keys.right) gs.player.x += movSpeed;
 
     const aplicarDano = (dano: number) => {
-      if (gs.player.hp <= 0) return; // Impede a nave zumbi de tomar mais dano
+      if (gs.player.hp <= 0) return; 
 
       if (gs.forceShieldHits > 0) {
         gs.forceShieldHits -= 1;
@@ -843,7 +843,6 @@ export default function MathBlasterMulti() {
     if (gs.player.x < 20) gs.player.x = 20; if (gs.player.x > maxX) gs.player.x = maxX;
     if (gs.player.y < 20) gs.player.y = 20; if (gs.player.y > maxY) gs.player.y = maxY;
 
-    // BLOCO DE TIRO: Só atira se o player estiver vivo
     if (gs.player.hp > 0) {
         if (now - gs.player.lastFire > gs.player.fireRate) {
           gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL', isMine: true });
@@ -883,7 +882,7 @@ export default function MathBlasterMulti() {
           gs.pulses.push({ id: Math.random().toString(), maxRadius: gs.player.weapons.pulsar.radius, life: 20, maxLife: 20 });
           gs.player.weapons.pulsar.lastFire = now;
         }
-    } // FIM DO BLOCO DE TIROS
+    }
 
     gs.pulses.forEach(p => {
       p.x = gs.player.x;
@@ -1420,18 +1419,21 @@ export default function MathBlasterMulti() {
             )}
           </View>
 
-          {/* NOVO: No Multiplayer o botão some completamente */}
           {!roomId ? (
             <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
               <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
             </TouchableOpacity>
           ) : (
-            <View style={[styles.btnIniciar, { backgroundColor: '#333' }]}>
-              <Text style={[styles.btnIniciarTxt, { color: '#888' }]}>
-                {isHost ? 'AGUARDANDO ALIADO...' : 'CONECTANDO AO LÍDER...'}
+            <View style={[styles.btnIniciar, { backgroundColor: '#333', borderColor: isHost ? '#FFD700' : '#00FFFF', borderWidth: 1 }]}>
+              <Text style={[styles.btnIniciarTxt, { color: '#FFF' }]}>
+                {isHost ? 'AGUARDANDO O ALIADO ENTRAR...' : 'SALA ENCONTRADA. PREPARANDO INÍCIO...'}
               </Text>
             </View>
           )}
+
+          <Text style={{color: 'rgba(255,255,255,0.2)', fontSize: 10, marginTop: 15}}>
+             SALA: {roomId || 'Nenhuma'} | TIPO: {isHost ? 'Host' : 'Guest'}
+          </Text>
 
         </ScrollView>
       </SafeAreaView>
