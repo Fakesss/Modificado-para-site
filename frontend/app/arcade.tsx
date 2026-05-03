@@ -809,7 +809,8 @@ export default function Arcade() {
         ))}
       </View>
       
-      <View style={styles.bottomPanel}>
+      {/* PAINEL INFERIOR AGORA É TRANSPARENTE E FLUTUANTE PARA VERMOS O QUE ESTÁ POR TRÁS */}
+      <View style={styles.bottomPanel} pointerEvents="box-none">
         <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
         
         <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
@@ -881,7 +882,6 @@ const styles = StyleSheet.create({
   faseBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
   btnPausaIcone: { padding: 4, marginLeft: 10 },
   
-  // Menu de Volume Flutuante
   volumeOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100, justifyContent: 'center', alignItems: 'center' },
   volumeModal: { backgroundColor: '#1a1a2e', borderWidth: 2, borderColor: '#FFD700', borderRadius: 16, padding: 25, width: '85%', maxWidth: 350 },
   volumeTitle: { color: '#FFD700', fontSize: 20, fontWeight: '900', textAlign: 'center', marginBottom: 20, textTransform: 'uppercase' },
@@ -907,7 +907,16 @@ const styles = StyleSheet.create({
 
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
   
-  bottomPanel: { width: '100%', alignItems: 'center', paddingBottom: 15, paddingTop: 5, backgroundColor: '#0c0c0c', zIndex: 10 },
+  // Painel Inferior refeito: transparente, posicionado no fundo e respeitando barra do Android
+  bottomPanel: { 
+    position: 'absolute',
+    bottom: Platform.OS === 'android' ? 20 : 10, // Evita sobrepor botões virtuais do Android
+    width: '100%', 
+    alignItems: 'center', 
+    paddingTop: 5, 
+    backgroundColor: 'transparent', // Retirado o fundo preto
+    zIndex: 10 
+  },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
   btnPowerUpAtivo: { backgroundColor: '#FFD700', padding: 10, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   txtPowerUpAtivo: { color: '#000', fontWeight: '900', fontSize: 14 },
