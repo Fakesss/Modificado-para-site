@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions, Platform, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions, Platform, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../src/context/AuthContext';
+import * as api from '../src/services/api';
 
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
@@ -38,14 +40,13 @@ const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed
 
 export default function MathBlaster() {
   const router = useRouter();
+  const { user } = useAuth();
   const [jogoAtivo, setJogoAtivo] = useState(false);
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
   
   // Estados para o Hall da Fama
   const [hallDaFama, setHallDaFama] = useState<any[]>([]);
-  const [nomeJogador, setNomeJogador] = useState('');
-  const [scoreSalvo, setScoreSalvo] = useState(false);
   
   // Controle de Tela e Câmera Virtual
   const [canvasSize, setCanvasSize] = useState({ width: initialWidth, height: initialHeight });
@@ -116,48 +117,19 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
-  // Lógica do Hall da Fama
+  // Lógica do Hall da Fama via API
   const carregarHallDaFama = async () => {
     try {
-      // Caso queira usar a API conectada ao backend:
-      // const response = await api.get('/ranking/math_blaster');
-      // setHallDaFama(response.data);
-
-      const saved = await AsyncStorage.getItem('math_blaster_ranking');
-      if (saved) setHallDaFama(JSON.parse(saved));
+      const data = await api.getRankingMathBlaster();
+      setHallDaFama(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("Erro ao carregar ranking", e);
     }
   };
 
-  const salvarScore = async () => {
-    if (!nomeJogador.trim()) return;
-    try {
-      // Caso queira usar a API conectada ao backend (substitua a lógica abaixo):
-      // await api.post('/ranking', { game: 'math_blaster', nome: nomeJogador, score: gs.score });
-      
-      const saved = await AsyncStorage.getItem('math_blaster_ranking');
-      const currentRanking = saved ? JSON.parse(saved) : [];
-      
-      const newRanking = [...currentRanking, { nome: nomeJogador, score: gs.score }]
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 5); // Mantém os top 5
-      
-      await AsyncStorage.setItem('math_blaster_ranking', JSON.stringify(newRanking));
-      setHallDaFama(newRanking);
-      setScoreSalvo(true);
-    } catch (e) {
-      console.error("Erro ao salvar score", e);
-    }
-  };
-
   useEffect(() => {
-    if (!jogoAtivo && gs.player.hp <= 0) {
-      carregarHallDaFama();
-      setScoreSalvo(false);
-      setNomeJogador('');
-    }
-  }, [jogoAtivo, gs.player.hp]);
+    carregarHallDaFama();
+  }, []);
 
   // ==========================================
   // LÓGICA DE MOVIMENTAÇÃO NAVE (MULTI-TOUCH)
@@ -375,6 +347,14 @@ export default function MathBlaster() {
   const gameOver = () => { 
     setJogoAtivo(false); 
     if (loopRef.current) clearInterval(loopRef.current); 
+    
+    if (gs.score > 0) {
+      api.submitMathBlasterScore(gs.score)
+        .then(() => carregarHallDaFama())
+        .catch(() => {});
+    } else {
+      carregarHallDaFama();
+    }
   };
 
   const criarParticulas = (x: number, y: number, color: string, qtd: number) => {
@@ -987,36 +967,51 @@ export default function MathBlaster() {
           <Text style={styles.textoScore}>Pontos: {gs.score}</Text>
           <Text style={styles.textoFase}>Chegou na Fase {gs.fase}</Text>
           
-          {/* SESSÃO: HALL DA FAMA */}
+          {/* SESSÃO: HALL DA FAMA AUTOMÁTICO */}
           <View style={styles.hallDaFamaContainer}>
             <Text style={styles.hallDaFamaTitle}>🏆 HALL DA FAMA 🏆</Text>
-            {hallDaFama.map((item, idx) => (
-              <View key={idx} style={styles.rankingRow}>
-                <Text style={styles.rankingPos}>#{idx + 1}</Text>
-                <Text style={styles.rankingName}>{item.nome}</Text>
-                <Text style={styles.rankingScore}>{item.score}</Text>
-              </View>
-            ))}
-
-            {hallDaFama.length === 0 && (
-              <Text style={{ color: '#888', fontStyle: 'italic', marginBottom: 10 }}>Nenhum recorde ainda...</Text>
-            )}
             
-            {!scoreSalvo && gs.score > 0 && (
-              <View style={styles.inputContainer}>
-                <TextInput 
-                  style={styles.inputNome}
-                  placeholder="Seu Nome"
-                  placeholderTextColor="#9D97B5"
-                  value={nomeJogador}
-                  onChangeText={setNomeJogador}
-                  maxLength={10}
-                />
-                <TouchableOpacity style={styles.btnSalvar} onPress={salvarScore}>
-                  <Text style={styles.btnSalvarTxt}>SALVAR</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            <View style={styles.rankingScrollWrapper}>
+              <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 200, width: '100%' }}>
+                {hallDaFama.length > 0 ? (
+                  hallDaFama.map((jogador, idx) => {
+                    let corPosicao = '#888'; 
+                    if (jogador.posicao === 1 || idx === 0) corPosicao = '#FFD700'; 
+                    else if (jogador.posicao === 2 || idx === 1) corPosicao = '#C0C0C0'; 
+                    else if (jogador.posicao === 3 || idx === 2) corPosicao = '#CD7F32';
+                    
+                    const isMe = jogador.id === user?.id;
+
+                    return (
+                      <View key={jogador.posicao || idx} style={[styles.rankingRow, isMe && styles.rankingRowMe]}>
+                        <View style={styles.rankingLeft}>
+                          <Text style={[styles.rankingPosText, { color: corPosicao }]}>#{jogador.posicao || idx + 1}</Text>
+                          <View>
+                            <Text style={[styles.rankingNameText, isMe && { color: '#00FFFF' }, jogador.isProf && { color: '#E74C3C' }]}>
+                              {jogador.nome} {jogador.isProf ? '👑' : ''}
+                            </Text>
+                            {!jogador.isProf && jogador.equipe ? (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: jogador.cor || '#AAA' }} />
+                                <Text style={{ color: '#AAA', fontSize: 11, fontWeight: 'bold' }}>{jogador.equipe}</Text>
+                                {jogador.turma ? <Text style={{ color: '#666', fontSize: 11 }}>• {jogador.turma}</Text> : null}
+                              </View>
+                            ) : null}
+                          </View>
+                        </View>
+                        <Text style={[styles.rankingScoreText, isMe && { color: '#00FFFF' }]}>
+                          {jogador.pontosMaximos !== undefined ? jogador.pontosMaximos : jogador.score} pts
+                        </Text>
+                      </View>
+                    );
+                  })
+                ) : (
+                  <Text style={{ color: '#888', fontStyle: 'italic', marginBottom: 10, textAlign: 'center' }}>
+                    Nenhum recorde ainda...
+                  </Text>
+                )}
+              </ScrollView>
+            </View>
           </View>
 
           <TouchableOpacity style={[styles.btnIniciar, { marginTop: 20 }]} onPress={iniciarJogo}>
@@ -1218,7 +1213,7 @@ const styles = StyleSheet.create({
   textoScore: { color: '#00FFFF', fontSize: 24, fontWeight: 'bold', marginTop: 20 },
   textoFase: { color: '#9D97B5', fontSize: 16, marginTop: 10 },
 
-  // Estilos do Hall da Fama
+  // Estilos do Hall da Fama atualizados para o padrão Arcade
   hallDaFamaContainer: {
     width: '100%',
     backgroundColor: 'rgba(0, 255, 255, 0.05)',
@@ -1230,14 +1225,13 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   hallDaFamaTitle: { color: '#FFD700', fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
-  rankingRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between', marginBottom: 5 },
-  rankingPos: { color: '#00FFFF', fontWeight: 'bold', width: 30 },
-  rankingName: { color: '#FFF', flex: 1 },
-  rankingScore: { color: '#32CD32', fontWeight: 'bold' },
-  inputContainer: { flexDirection: 'row', marginTop: 15, width: '100%', gap: 10 },
-  inputNome: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', color: '#FFF', borderRadius: 8, paddingHorizontal: 10, height: 40, borderWidth: 1, borderColor: '#555' },
-  btnSalvar: { backgroundColor: '#32CD32', justifyContent: 'center', paddingHorizontal: 15, borderRadius: 8, height: 40 },
-  btnSalvarTxt: { color: '#FFF', fontWeight: 'bold' },
+  rankingScrollWrapper: { backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8, overflow: 'hidden', width: '100%' },
+  rankingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)', width: '100%' },
+  rankingRowMe: { backgroundColor: 'rgba(0, 255, 255, 0.15)', borderRadius: 8 },
+  rankingLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rankingPosText: { fontWeight: '900', fontSize: 16, width: 30 },
+  rankingNameText: { color: '#FFF', fontSize: 15, fontWeight: '600' },
+  rankingScoreText: { color: '#32CD32', fontWeight: 'bold', fontSize: 15 },
 
   hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10, width: '100%' },
   hudScore: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1, marginBottom: 5 },
