@@ -41,6 +41,9 @@ export default function MathBlaster() {
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
   
+  const respostaRef = useRef('');
+  useEffect(() => { respostaRef.current = resposta; }, [resposta]);
+  
   const layoutRef = useRef({ width: initialWidth, height: 500 });
 
   // ESTADO GLOBAL DO MOTOR
@@ -79,6 +82,7 @@ export default function MathBlaster() {
     movementTouchId: null as string | null,
     lastTouchX: 0, 
     lastTouchY: 0,
+    keys: { up: false, down: false, left: false, right: false },
     
     // SISTEMAS DE RECOMPENSA E NOVOS PODERES
     timeAlive: 0,
@@ -151,13 +155,14 @@ export default function MathBlaster() {
       tipo = operacoes[Math.floor(Math.random() * operacoes.length)];
 
       if (tipo === 'soma') {
-        const max = 10 + (fase * 3);
+        const max = fase === 1 ? 5 : 10 + (fase * 3);
         n1 = r(1, max); n2 = r(1, max);
         res = n1 + n2; txt = `${n1} + ${n2}`;
       }
       else if (tipo === 'subtracao') {
-        const max = 15 + (fase * 3);
-        n1 = r(5, max); n2 = r(1, n1 - 1);
+        const max = fase === 1 ? 6 : 15 + (fase * 3);
+        const min = fase === 1 ? 2 : 5;
+        n1 = r(min, max); n2 = r(1, n1 - 1);
         res = n1 - n2; txt = `${n1} - ${n2}`;
       }
       else if (tipo === 'multiplicacao') {
@@ -203,6 +208,7 @@ export default function MathBlaster() {
     gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
+    gs.keys = { up: false, down: false, left: false, right: false };
     
     gs.timeAlive = 0;
     gs.flawlessBossesCount = 0;
@@ -233,6 +239,139 @@ export default function MathBlaster() {
     }
   };
 
+  // --- COLISÃO MATEMÁTICA E TECLADO ---
+  const lidarComTeclado = useCallback((valor: string) => {
+    if (!jogoAtivo) return;
+    
+    if (valor === 'apagar') {
+      setResposta(r => r.slice(0, -1));
+    } else if (valor === 'enviar') {
+      const num = parseInt(respostaRef.current);
+      let acertou = false;
+
+      const dispararMagia = (tx: number, ty: number, color: string) => { 
+        gs.mathShots.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, tx, ty, color, life: 15 }); 
+      };
+
+      if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
+        acertou = true; gs.boss.shield = false; gs.boss.timer = 0; gs.boss.nextShieldAt = Math.random() * 210 + 240; 
+        dispararMagia(gs.boss.x, gs.boss.y, '#FFD700'); setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50), 350); 
+        gs.score += 200;
+      } 
+      
+      if (!acertou) {
+        for (let i = 0; i < gs.enemies.length; i++) {
+          let e = gs.enemies[i];
+          if (e.mathRequired && !e.isDying && e.res === num) {
+            acertou = true; e.solvesDone += 1; dispararMagia(e.x, e.y, '#00FFFF');
+            if (e.solvesDone >= e.solvesNeeded) {
+               e.isDying = true; e.mathRequired = false;
+               setTimeout(() => { e.hp = -100; gs.score += 300; criarParticulas(e.x, e.y, '#00FFFF', 80); }, 350);
+            } else {
+               const eq = gerarEquacao(gs.fase, getRespostasAtivas()); e.txt = eq.txt; e.res = eq.res;
+            }
+            break;
+          }
+        }
+      }
+        
+      if (!acertou) {
+        for (let i = 0; i < gs.powerups.length; i++) {
+          let p = gs.powerups[i];
+          if (!p.collected && p.res === num) {
+            acertou = true; p.collected = true; dispararMagia(p.x, p.y, p.color); 
+            const type = p.type; const color = p.color; const px = p.x; const py = p.y; const title = p.title;
+            
+            setTimeout(() => {
+              criarParticulas(px, py, color, 30);
+              gs.floatingTexts.push({ id: Math.random().toString(), x: px, y: py, text: `+ ${title}`, color: color, life: 60 });
+              
+              if (type === 'DAMAGE') gs.player.damage += 0.5;
+              else if (type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 20);
+              else if (type === 'TRIPLE_SHOT') gs.player.tripleShot = true;
+              else if (type === 'MISSILE_UNLOCK') gs.player.weapons.missile.active = true;
+              else if (type === 'MISSILE_COOLDOWN') { gs.player.weapons.missile.baseCooldown = Math.max(3000, gs.player.weapons.missile.baseCooldown - 500); gs.player.weapons.missile.level += 1; }
+              else if (type === 'MISSILE_DAMAGE') { gs.player.weapons.missile.damageMult += 0.5; gs.player.weapons.missile.level += 1; }
+              else if (type === 'MISSILE_AOE') { gs.player.weapons.missile.aoeRange += 10; gs.player.weapons.missile.level += 1; }
+              else if (type === 'LASER_UNLOCK') gs.player.weapons.laser.active = true;
+              else if (type === 'LASER_COOLDOWN') { gs.player.weapons.laser.baseCooldown = Math.max(4000, gs.player.weapons.laser.baseCooldown - 500); gs.player.weapons.laser.level += 1; }
+              else if (type === 'LASER_DAMAGE') { gs.player.weapons.laser.damageMult += 0.5; gs.player.weapons.laser.level += 1; }
+              else if (type === 'PULSAR_UNLOCK') gs.player.weapons.pulsar.active = true;
+              else if (type === 'PULSAR_COOLDOWN') { gs.player.weapons.pulsar.baseCooldown = Math.max(4000, gs.player.weapons.pulsar.baseCooldown - 1000); gs.player.weapons.pulsar.level += 1; }
+              else if (type === 'PULSAR_RADIUS') { gs.player.weapons.pulsar.radius += 20; gs.player.weapons.pulsar.level += 1; }
+              
+              // NOVOS EFEITOS
+              else if (type === 'FORCE_SHIELD') gs.forceShieldHits = 3;
+              else if (type === 'DRONE_NORMAL') { if (!gs.drones.normal.active) gs.drones.normal.active = true; else gs.drones.normal.baseCooldown = Math.max(500, gs.drones.normal.baseCooldown - 200); }
+              else if (type === 'TIME_FREEZE') gs.timeFreezeTimer = 5000;
+              else if (type === 'X_RAY') gs.xRayTimer = 10000;
+              else if (type === 'DRONE_ADVANCED') gs.drones.advanced.active = true;
+              else if (type === 'DRONE_ADVANCED_UP') gs.drones.advanced.baseCooldown = Math.max(500, gs.drones.advanced.baseCooldown - 200);
+
+              gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); 
+              gs.score += 50; p.y = 9999; 
+            }, 350);
+            break; 
+          }
+        }
+      }
+
+      if (!acertou && respostaRef.current !== '') { 
+        if (gs.forceShieldHits > 0) {
+          gs.forceShieldHits -= 1;
+          criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 10);
+        } else {
+          gs.player.hp = Math.max(0, gs.player.hp - 8); 
+          criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8); 
+        }
+      }
+      setResposta('');
+    } else {
+      setResposta(r => r.length < 4 ? r + valor : r);
+    }
+  }, [jogoAtivo]);
+
+  // --- LISTENERS DE TECLADO FÍSICO ---
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!jogoAtivo) return;
+      const key = e.key;
+      const k = key.toLowerCase();
+
+      if (k === 'w' || key === 'arrowup') gs.keys.up = true;
+      if (k === 's' || key === 'arrowdown') gs.keys.down = true;
+      if (k === 'a' || key === 'arrowleft') gs.keys.left = true;
+      if (k === 'd' || key === 'arrowright') gs.keys.right = true;
+
+      if (/\d/.test(key)) lidarComTeclado(key);
+      if (key === 'Backspace') lidarComTeclado('apagar');
+      if (key === 'Enter') lidarComTeclado('enviar');
+
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(key)) {
+        e.preventDefault();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key;
+      const k = key.toLowerCase();
+      if (k === 'w' || key === 'arrowup') gs.keys.up = false;
+      if (k === 's' || key === 'arrowdown') gs.keys.down = false;
+      if (k === 'a' || key === 'arrowleft') gs.keys.left = false;
+      if (k === 'd' || key === 'arrowright') gs.keys.right = false;
+    };
+
+    window.addEventListener('keydown', handleKeyDown, { passive: false });
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [jogoAtivo, lidarComTeclado]);
+
   // --- MOTOR PRINCIPAL ---
   const gameTick = () => {
     const now = Date.now();
@@ -242,6 +381,13 @@ export default function MathBlaster() {
     gs.timeAlive += 30;
     if (gs.timeFreezeTimer > 0) gs.timeFreezeTimer -= 30;
     if (gs.xRayTimer > 0) gs.xRayTimer -= 30;
+
+    // PROCESSA MOVIMENTAÇÃO PELO TECLADO FÍSICO
+    const keyboardSpeed = 6;
+    if (gs.keys.up) gs.player.y -= keyboardSpeed;
+    if (gs.keys.down) gs.player.y += keyboardSpeed;
+    if (gs.keys.left) gs.player.x -= keyboardSpeed;
+    if (gs.keys.right) gs.player.x += keyboardSpeed;
 
     const aplicarDano = (dano: number) => {
       if (gs.forceShieldHits > 0) {
@@ -269,7 +415,6 @@ export default function MathBlaster() {
       gs.player.lastFire = now;
     }
 
-    // ARMAS SECUNDÁRIAS E DRONES
     if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
       gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 3, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
       gs.player.weapons.missile.lastFire = now;
@@ -285,13 +430,11 @@ export default function MathBlaster() {
       gs.drones.normal.lastFire = now;
     }
 
-    // MÍSSIL HOMING DO DRONE ELITE (NÃO SOME SOZINHO)
     if (gs.drones.advanced.active && now - gs.drones.advanced.lastFire > gs.drones.advanced.baseCooldown) {
       gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 30, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.5, type: 'MISSILE_HOMING', life: 9999, aoeRange: 40 });
       gs.drones.advanced.lastFire = now;
     }
 
-    // PULSAR ELÉTRICO
     if (gs.player.weapons.pulsar.active && now - gs.player.weapons.pulsar.lastFire > gs.player.weapons.pulsar.baseCooldown) {
       gs.pulses.push({ id: Math.random().toString(), maxRadius: gs.player.weapons.pulsar.radius, life: 20, maxLife: 20 });
       gs.player.weapons.pulsar.lastFire = now;
@@ -408,8 +551,10 @@ export default function MathBlaster() {
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
+      
       if (gs.stateTimer % Math.max(20, 60 - gs.fase * 5) === 0) {
-        gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: Math.random() * 2 + 4 + (gs.fase * 0.5), angle: 0 });
+        const meteorVy = gs.fase === 1 ? Math.random() * 1.5 + 2.5 : Math.random() * 2 + 4 + (gs.fase * 0.5);
+        gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: meteorVy, angle: 0 });
       }
 
       if (gs.stateTimer % 180 === 0 && gs.fase >= 2) {
@@ -585,14 +730,7 @@ export default function MathBlaster() {
       }
     });
 
-    gs.enemyLasers.forEach(el => {
-      if (Math.abs(el.x - gs.player.x) < 20 && Math.abs(el.y - gs.player.y) < 20) { 
-        aplicarDano(el.damage); 
-        el.hp = 0; 
-      }
-    });
-
-    // SISTEMA AVANÇADO DE SPAWN DE POWER-UPS
+    // SPAWNER DE POWER-UPS
     if (now - gs.lastPowerupSpawn > 15000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
       const tipos = [ 
         { type: 'DAMAGE', color: '#FF00FF', nome: 'DANO NAVE' }, 
@@ -666,98 +804,6 @@ export default function MathBlaster() {
     setFrames(f => f + 1); 
   };
 
-  // --- COLISÃO MATEMÁTICA E TECLADO ---
-  const lidarComTeclado = useCallback((valor: string) => {
-    if (!jogoAtivo) return;
-    
-    if (valor === 'apagar') {
-      setResposta(r => r.slice(0, -1));
-    } else if (valor === 'enviar') {
-      const num = parseInt(resposta);
-      let acertou = false;
-
-      const dispararMagia = (tx: number, ty: number, color: string) => { 
-        gs.mathShots.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, tx, ty, color, life: 15 }); 
-      };
-
-      if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
-        acertou = true; gs.boss.shield = false; gs.boss.timer = 0; gs.boss.nextShieldAt = Math.random() * 210 + 240; 
-        dispararMagia(gs.boss.x, gs.boss.y, '#FFD700'); setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50), 350); 
-        gs.score += 200;
-      } 
-      
-      if (!acertou) {
-        for (let i = 0; i < gs.enemies.length; i++) {
-          let e = gs.enemies[i];
-          if (e.mathRequired && !e.isDying && e.res === num) {
-            acertou = true; e.solvesDone += 1; dispararMagia(e.x, e.y, '#00FFFF');
-            if (e.solvesDone >= e.solvesNeeded) {
-               e.isDying = true; e.mathRequired = false;
-               setTimeout(() => { e.hp = -100; gs.score += 300; criarParticulas(e.x, e.y, '#00FFFF', 80); }, 350);
-            } else {
-               const eq = gerarEquacao(gs.fase, getRespostasAtivas()); e.txt = eq.txt; e.res = eq.res;
-            }
-            break;
-          }
-        }
-      }
-        
-      if (!acertou) {
-        for (let i = 0; i < gs.powerups.length; i++) {
-          let p = gs.powerups[i];
-          if (!p.collected && p.res === num) {
-            acertou = true; p.collected = true; dispararMagia(p.x, p.y, p.color); 
-            const type = p.type; const color = p.color; const px = p.x; const py = p.y; const title = p.title;
-            
-            setTimeout(() => {
-              criarParticulas(px, py, color, 30);
-              gs.floatingTexts.push({ id: Math.random().toString(), x: px, y: py, text: `+ ${title}`, color: color, life: 60 });
-              
-              if (type === 'DAMAGE') gs.player.damage += 0.5;
-              else if (type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 20);
-              else if (type === 'TRIPLE_SHOT') gs.player.tripleShot = true;
-              else if (type === 'MISSILE_UNLOCK') gs.player.weapons.missile.active = true;
-              else if (type === 'MISSILE_COOLDOWN') { gs.player.weapons.missile.baseCooldown = Math.max(3000, gs.player.weapons.missile.baseCooldown - 500); gs.player.weapons.missile.level += 1; }
-              else if (type === 'MISSILE_DAMAGE') { gs.player.weapons.missile.damageMult += 0.5; gs.player.weapons.missile.level += 1; }
-              else if (type === 'MISSILE_AOE') { gs.player.weapons.missile.aoeRange += 10; gs.player.weapons.missile.level += 1; }
-              else if (type === 'LASER_UNLOCK') gs.player.weapons.laser.active = true;
-              else if (type === 'LASER_COOLDOWN') { gs.player.weapons.laser.baseCooldown = Math.max(4000, gs.player.weapons.laser.baseCooldown - 500); gs.player.weapons.laser.level += 1; }
-              else if (type === 'LASER_DAMAGE') { gs.player.weapons.laser.damageMult += 0.5; gs.player.weapons.laser.level += 1; }
-              else if (type === 'PULSAR_UNLOCK') gs.player.weapons.pulsar.active = true;
-              else if (type === 'PULSAR_COOLDOWN') { gs.player.weapons.pulsar.baseCooldown = Math.max(4000, gs.player.weapons.pulsar.baseCooldown - 1000); gs.player.weapons.pulsar.level += 1; }
-              else if (type === 'PULSAR_RADIUS') { gs.player.weapons.pulsar.radius += 20; gs.player.weapons.pulsar.level += 1; }
-              
-              // NOVOS EFEITOS
-              else if (type === 'FORCE_SHIELD') gs.forceShieldHits = 3;
-              else if (type === 'DRONE_NORMAL') { if (!gs.drones.normal.active) gs.drones.normal.active = true; else gs.drones.normal.baseCooldown = Math.max(500, gs.drones.normal.baseCooldown - 200); }
-              else if (type === 'TIME_FREEZE') gs.timeFreezeTimer = 5000;
-              else if (type === 'X_RAY') gs.xRayTimer = 10000;
-              else if (type === 'DRONE_ADVANCED') gs.drones.advanced.active = true;
-              else if (type === 'DRONE_ADVANCED_UP') gs.drones.advanced.baseCooldown = Math.max(500, gs.drones.advanced.baseCooldown - 200);
-
-              gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); 
-              gs.score += 50; p.y = 9999; 
-            }, 350);
-            break; 
-          }
-        }
-      }
-
-      if (!acertou && resposta !== '') { 
-        if (gs.forceShieldHits > 0) {
-          gs.forceShieldHits -= 1;
-          criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 10);
-        } else {
-          gs.player.hp = Math.max(0, gs.player.hp - 8); 
-          criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8); 
-        }
-      }
-      setResposta('');
-    } else {
-      setResposta(r => r.length < 4 ? r + valor : r);
-    }
-  }, [jogoAtivo, resposta]);
-
   const porcentagemHP = Math.max(0, (gs.player.hp / gs.player.maxHp) * 100);
   const corHP = porcentagemHP > 50 ? '#32CD32' : porcentagemHP > 25 ? '#FFD700' : '#FF4444';
 
@@ -801,7 +847,7 @@ export default function MathBlaster() {
           <Ionicons name="rocket" size={100} color="#00FFFF" style={{ marginBottom: 20 }} />
           <Text style={styles.tituloMenu}>SKY</Text>
           <Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Derrote os chefes sem tomar dano para desbloquear recompensas ocultas!</Text>
+          <Text style={styles.instrucoes}>Toque ou use as Setas/WASD para mover. Digite a resposta no teclado físico e dê Enter!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
           </TouchableOpacity>
@@ -925,7 +971,6 @@ export default function MathBlaster() {
           <Text key={ft.id} style={[styles.floatingText, { left: ft.x - 40, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text>
         ))}
 
-        {/* NAVE DO JOGADOR, DRONES E ESCUDO */}
         <View style={[styles.playerShape, { left: gs.player.x - 20, top: gs.player.y - 20 }]} />
         <View style={[styles.propulsor, { left: gs.player.x - 6, top: gs.player.y + 18, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
         
