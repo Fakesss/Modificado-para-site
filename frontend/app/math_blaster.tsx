@@ -7,47 +7,32 @@ import { useRouter } from 'expo-router';
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
 
-// --- CONFIGURAÇÃO DE ZOOM OUT (0.70 = afasta a câmera em 30%) ---
+// --- CONFIGURAÇÃO DE ZOOM OUT (0.7 = 30% mais longe) ---
 const ZOOM = 0.70;
 const INV_ZOOM = 1 / ZOOM; 
 
 // --- COMPONENTE: TECLADO RETRÔ (Otimizado para Multi-Touch Nativo) ---
-const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
-  const anim = useRef(new Animated.Value(1)).current;
+const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed: boolean, onPressWeb: (v: string) => void }) => {
   const isWeb = Platform.OS === 'web';
   
   let customStyle = styles.teclaRetro;
   if (valor === 'apagar') customStyle = { ...styles.teclaRetro, ...styles.teclaApagar } as any;
   if (valor === 'enviar') customStyle = { ...styles.teclaRetro, ...styles.teclaEnviar } as any;
 
-  const handlePressIn = () => {
-    Animated.spring(anim, { toValue: 0.85, useNativeDriver: true }).start();
-    onPressWeb(valor);
-  };
-  
-  const handlePressOut = () => {
-    Animated.spring(anim, { toValue: 1, useNativeDriver: true }).start();
-  };
-
   return (
-    <Animated.View 
-      style={[customStyle, { transform: [{ scale: anim }] }]} 
-      onTouchStart={handlePressIn}
-      onTouchEnd={handlePressOut}
-      onTouchCancel={handlePressOut}
+    <View 
+      style={[customStyle, isPressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
       {...(isWeb ? {
         onPointerDown: (e: any) => {
             e.preventDefault();
-            handlePressIn();
-        },
-        onPointerUp: handlePressOut,
-        onPointerLeave: handlePressOut
+            onPressWeb(valor);
+        }
       } : {})}
     >
       {valor === 'apagar' && <Ionicons name="backspace" size={26} color="#FFF"/>}
       {valor === 'enviar' && <Ionicons name="flash" size={26} color="#FFF"/>}
       {valor !== 'apagar' && valor !== 'enviar' && <Text style={styles.teclaRetroText}>{valor}</Text>}
-    </Animated.View>
+    </View>
   );
 };
 
@@ -57,10 +42,22 @@ export default function MathBlaster() {
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
   
+  // ESTADOS DO MULTI-TOUCH DO TECLADO
+  const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
+  const triggeredTouchesRef = useRef<Set<string>>(new Set());
+  const tecladoLayoutRef = useRef({ width: 350 }); 
+  const kbTouchIds = useRef<Set<string>>(new Set());
+
   const respostaRef = useRef('');
-  useEffect(() => { respostaRef.current = resposta; }, [resposta]);
+  useEffect(() => { 
+    respostaRef.current = resposta; 
+  }, [resposta]);
   
-  const layoutRef = useRef({ width: initialWidth * INV_ZOOM, height: initialHeight * INV_ZOOM });
+  // Referência principal das dimensões do jogo escaladas
+  const layoutRef = useRef({ 
+    width: initialWidth * INV_ZOOM, 
+    height: initialHeight * INV_ZOOM 
+  });
 
   const gs = useRef({
     player: { 
@@ -112,14 +109,16 @@ export default function MathBlaster() {
   const loopRef = useRef<any>(null);
 
   useEffect(() => {
-    return () => { if (loopRef.current) clearInterval(loopRef.current); };
+    return () => { 
+      if (loopRef.current) clearInterval(loopRef.current); 
+    };
   }, []);
 
   // ==========================================
   // LÓGICA DE MOVIMENTAÇÃO NAVE (MULTI-TOUCH)
   // ==========================================
   const handleGameTouchStart = (e: any) => {
-    const changed = e.nativeEvent.changedTouches;
+    const changed = e.nativeEvent?.changedTouches || [];
     for (let i = 0; i < changed.length; i++) {
       const touch = changed[i];
       if (gs.movementTouchId === null) {
@@ -133,12 +132,13 @@ export default function MathBlaster() {
 
   const handleGameTouchMove = (e: any) => {
     if (gs.movementTouchId !== null) {
-      const touch = Array.from(e.nativeEvent.touches).find((t: any) => t.identifier === gs.movementTouchId);
+      const touches = e.nativeEvent?.touches || [];
+      const touch = Array.from(touches).find((t: any) => t.identifier === gs.movementTouchId);
       if (touch) {
         const dx = (touch as any).pageX - gs.lastTouchX;
         const dy = (touch as any).pageY - gs.lastTouchY;
         
-        // Multiplicado pelo INV_ZOOM para compensar a escala da tela
+        // Multiplicado pelo INV_ZOOM para compensar a escala da tela visualmente
         gs.player.x += dx * 1.5 * INV_ZOOM;
         gs.player.y += dy * 1.5 * INV_ZOOM;
         
@@ -149,10 +149,98 @@ export default function MathBlaster() {
   };
 
   const handleGameTouchEnd = (e: any) => {
-    const touchExists = Array.from(e.nativeEvent.touches).some((t: any) => t.identifier === gs.movementTouchId);
+    const touches = e.nativeEvent?.touches || [];
+    const touchExists = Array.from(touches).some((t: any) => t.identifier === gs.movementTouchId);
     if (!touchExists) gs.movementTouchId = null;
   };
 
+  // ==========================================
+  // LÓGICA DO TECLADO QUADRADO (MULTI-TOUCH)
+  // ==========================================
+  const getTeclaFromCoords = (x: number, y: number, layoutWidth: number) => {
+    if (!layoutWidth) return null;
+    
+    const GAP = 8; 
+    const KEY_W = (layoutWidth - (GAP * 2)) / 3; 
+    const KEY_H = 65; // Altura aumentada para deixar a tecla mais quadrada
+    
+    let col = -1;
+    if (x >= 0 && x <= KEY_W) col = 0; 
+    else if (x > KEY_W && x <= KEY_W * 2 + GAP) col = 1; 
+    else if (x > KEY_W * 2 + GAP) col = 2;
+
+    let row = -1;
+    if (y >= 0 && y <= KEY_H) row = 0; 
+    else if (y > KEY_H && y <= KEY_H * 2 + GAP) row = 1; 
+    else if (y > KEY_H * 2 + GAP && y <= KEY_H * 3 + GAP * 2) row = 2; 
+    else if (y > KEY_H * 3 + GAP * 2) row = 3;
+
+    if (col === -1 || row === -1) return null;
+    const layout = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['apagar', '0', 'enviar']];
+    return layout[row]?.[col] || null;
+  };
+
+  const processKeyboardTouches = (evt: any) => {
+    if (Platform.OS === 'web') return;
+    
+    const touches = evt.nativeEvent?.touches || [];
+    const currentActive = new Set<string>();
+
+    const safeKbWidth = tecladoLayoutRef.current?.width || 350;
+
+    for (let i = 0; i < touches.length; i++) {
+        const touch = touches[i];
+        
+        // Processa APENAS toques que COMEÇARAM na área do teclado (ignora o dedo que move a nave)
+        if (kbTouchIds.current.has(touch.identifier)) {
+            const x = touch.locationX;
+            const y = touch.locationY;
+            
+            if (x >= -20 && x <= safeKbWidth + 20 && y >= -20 && y <= 300) {
+                const key = getTeclaFromCoords(x, y, safeKbWidth);
+                if (key) currentActive.add(key);
+            }
+        }
+    }
+    
+    setTeclasPressionadas(Array.from(currentActive));
+
+    currentActive.forEach(key => {
+        if (!triggeredTouchesRef.current.has(key)) {
+            triggeredTouchesRef.current.add(key);
+            lidarComTeclado(key);
+        }
+    });
+
+    triggeredTouchesRef.current.forEach(key => {
+        if (!currentActive.has(key)) triggeredTouchesRef.current.delete(key);
+    });
+  };
+
+  const handleKbTouchStart = (evt: any) => {
+    if (Platform.OS === 'web') return;
+    const changed = evt.nativeEvent?.changedTouches || [];
+    for (let i = 0; i < changed.length; i++) {
+        kbTouchIds.current.add(changed[i].identifier);
+    }
+    processKeyboardTouches(evt);
+  };
+
+  const handleKbTouchMove = (evt: any) => {
+    if (Platform.OS === 'web') return;
+    processKeyboardTouches(evt);
+  };
+
+  const handleKbTouchEnd = (evt: any) => {
+    if (Platform.OS === 'web') return;
+    const changed = evt.nativeEvent?.changedTouches || [];
+    for (let i = 0; i < changed.length; i++) {
+        kbTouchIds.current.delete(changed[i].identifier);
+    }
+    processKeyboardTouches(evt);
+  };
+
+  // --- MATEMÁTICA ---
   const getRespostasAtivas = () => {
     const resps: number[] = [];
     if (gs.boss.active && gs.boss.shield) resps.push(gs.boss.res);
@@ -215,20 +303,32 @@ export default function MathBlaster() {
   };
 
   const iniciarJogo = () => {
+    // Uso defensivo do Fallback na hora de iniciar o layout para impedir erro de undefined na renderização rápida
+    const safeWidth = layoutRef.current?.width || (initialWidth * INV_ZOOM);
+    const safeHeight = layoutRef.current?.height || (initialHeight * INV_ZOOM);
+    
     gs.player = { 
-      x: layoutRef.current.width / 2, 
-      y: layoutRef.current.height - 100, 
-      hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, 
-      weapons: { 
-        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 }, 
+      x: safeWidth / 2, 
+      y: safeHeight - 100, 
+      hp: 100, 
+      maxHp: 100, 
+      damage: 1, 
+      shotSize: 6,
+      fireRate: 300, 
+      lastFire: 0, 
+      tripleShot: false,
+      weapons: {
+        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
-        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 } 
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 }
       }
     };
+    
     gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.pulses = []; gs.floatingTexts = [];
     gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
+    gs.lastTouchX = 0; gs.lastTouchY = 0;
     
     gs.timeAlive = 0;
     gs.flawlessBossesCount = 0;
@@ -260,7 +360,7 @@ export default function MathBlaster() {
   };
 
   const lidarComTeclado = useCallback((valor: string) => {
-    if (!jogoAtivo) return;
+    if (!jogoAtivo || !gs.player.hp || gs.player.hp <= 0) return;
     
     if (valor === 'apagar') {
       setResposta(r => r.slice(0, -1));
@@ -350,8 +450,9 @@ export default function MathBlaster() {
 
   const gameTick = () => {
     const now = Date.now();
-    const gw = layoutRef.current.width; 
-    const gh = layoutRef.current.height;
+    // Proteção de leitura do Layout no tick
+    const gw = layoutRef.current?.width || (initialWidth * INV_ZOOM); 
+    const gh = layoutRef.current?.height || (initialHeight * INV_ZOOM);
     
     gs.timeAlive += 30;
     if (gs.timeFreezeTimer > 0) gs.timeFreezeTimer -= 30;
@@ -861,7 +962,13 @@ export default function MathBlaster() {
           </View>
         </View>
 
-        <View style={styles.gameAreaWrapperContainer} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width * INV_ZOOM; layoutRef.current.height = e.nativeEvent.layout.height * INV_ZOOM; }}>
+        {/* CAMADA SEGURA PARA NÃO QUEBRAR O ONLAYOUT COM O ZOOM */}
+        <View style={styles.gameAreaWrapperContainer} onLayout={(e) => { 
+            if (layoutRef.current && e.nativeEvent?.layout) {
+                layoutRef.current.width = e.nativeEvent.layout.width * INV_ZOOM; 
+                layoutRef.current.height = e.nativeEvent.layout.height * INV_ZOOM; 
+            }
+        }}>
           <View style={[styles.gameAreaScaled, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} 
             onTouchStart={handleGameTouchStart} 
             onTouchMove={handleGameTouchMove} 
@@ -962,7 +1069,9 @@ export default function MathBlaster() {
           <View style={styles.visorRadar}>
             <Text style={styles.visorTexto}>{resposta || '_'}</Text>
           </View>
-          <View style={styles.tecladoContainer} onLayout={(e) => tecladoLayoutRef.current.width = e.nativeEvent.layout.width}>
+          <View style={styles.tecladoContainer} onLayout={(e) => { 
+            if(tecladoLayoutRef.current && e.nativeEvent?.layout) tecladoLayoutRef.current.width = e.nativeEvent.layout.width; 
+          }}>
             {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((linha, i) => (
               <View key={i} style={styles.tecladoRow}>
                 {linha.map(num => <BotaoRetro key={num} valor={num} isPressed={teclasPressionadas.includes(num)} onPressWeb={lidarComTeclado}/>)}
@@ -973,6 +1082,17 @@ export default function MathBlaster() {
               <BotaoRetro valor="0" isPressed={teclasPressionadas.includes('0')} onPressWeb={lidarComTeclado}/>
               <BotaoRetro valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={lidarComTeclado}/>
             </View>
+
+            {/* A INTERCEPTAÇÃO MULTI-TOUCH INVISÍVEL NO ANDROID */}
+            {Platform.OS !== 'web' && (
+                <View 
+                    style={StyleSheet.absoluteFillObject} 
+                    onTouchStart={handleKbTouchStart} 
+                    onTouchMove={processKeyboardTouches} 
+                    onTouchEnd={handleKbTouchEnd} 
+                    onTouchCancel={handleKbTouchEnd} 
+                />
+            )}
           </View>
         </View>
 
