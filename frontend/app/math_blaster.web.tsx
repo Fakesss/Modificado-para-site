@@ -5,8 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/context/AuthContext';
-import api from '../src/services/api';
-import * as apiRoutes from '../src/services/api';
+import * as api from '../src/services/api';
 
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
@@ -50,7 +49,7 @@ export default function MathBlaster() {
   const [guestUserId, setGuestUserId] = useState<string | null>(null);
   const gameOverFired = useRef(false);
   
-  // Limite Diário de Spawn
+  // Limite Diário de Spawn do Inimigo Raro
   const dailySpawnsRef = useRef(0);
   
   const [canvasSize, setCanvasSize] = useState({ width: initialWidth, height: initialHeight });
@@ -90,7 +89,7 @@ export default function MathBlaster() {
 
   const loopRef = useRef<any>(null);
 
-  // Carrega limite diário na inicialização
+  // Controle de Inimigos Raros no Dia
   useEffect(() => {
     const loadDailyLimit = async () => {
        const today = new Date().toLocaleDateString();
@@ -111,8 +110,10 @@ export default function MathBlaster() {
 
   const carregarHallDaFama = async () => {
     try {
-      const data = await apiRoutes.getRankingMathBlaster();
-      setHallDaFama(Array.isArray(data) ? data : []);
+      if (typeof (api as any).getRankingMathBlaster === 'function') {
+          const data = await (api as any).getRankingMathBlaster();
+          setHallDaFama(Array.isArray(data) ? data : []);
+      }
     } catch (e) {
       console.error("Erro ao carregar ranking", e);
     }
@@ -128,7 +129,9 @@ export default function MathBlaster() {
                 
                 if (token) {
                     await AsyncStorage.setItem('token', token);
-                    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                    if ((api as any).defaults) {
+                        (api as any).defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                    }
                 }
                 if (uid) setGuestUserId(uid);
             } catch(e) {}
@@ -148,6 +151,13 @@ export default function MathBlaster() {
           }
       } catch (e) {}
       router.back();
+  };
+
+  const criarParticulas = (x: number, y: number, color: string, qtd: number) => {
+    // QUANTIDADE DE PARTÍCULAS DRASTICAMENTE REDUZIDA PARA EVITAR TRAVAMENTO DO NAVEGADOR
+    for(let i=0; i<qtd; i++) { 
+      gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color }); 
+    }
   };
 
   const lidarComTeclado = useCallback((valor: string) => {
@@ -176,7 +186,7 @@ export default function MathBlaster() {
       if (respostaRef.current === '3141592') {
         gs.drones.advanced.active = true; gs.drones.advanced.baseCooldown = 500;
         gs.score += 500;
-        criarParticulas(gs.player.x, gs.player.y, '#FFD700', 80);
+        criarParticulas(gs.player.x, gs.player.y, '#FFD700', 15);
         gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE!`, color: '#FFD700', life: 90 });
         setResposta(''); return;
       }
@@ -190,7 +200,7 @@ export default function MathBlaster() {
 
       if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
         acertou = true; gs.boss.shield = false; gs.boss.timer = 0; gs.boss.nextShieldAt = Math.random() * 210 + 240; 
-        dispararMagia(gs.boss.x, gs.boss.y, '#FFD700'); setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50), 350); 
+        dispararMagia(gs.boss.x, gs.boss.y, '#FFD700'); setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 15), 350); 
         gs.score += 5;
       } 
       
@@ -204,11 +214,13 @@ export default function MathBlaster() {
                
                // PREMIAÇÃO: PONTO GLOBAL NA HORA E PARA A EQUIPE!
                if (e.type === 'RARE_ENEMY') {
-                   apiRoutes.submitMathBlasterRareKill().catch(()=>{});
+                   if (typeof (api as any).submitMathBlasterRareKill === 'function') {
+                       (api as any).submitMathBlasterRareKill().catch(()=>{});
+                   }
                    gs.floatingTexts.push({ id: Math.random().toString(), x: e.x, y: e.y, text: `+1 PONTO GLOBAL!`, color: '#FFD700', life: 120 });
                }
 
-               setTimeout(() => { e.hp = -100; gs.score += (e.type === 'RARE_ENEMY' ? 100 : 15); criarParticulas(e.x, e.y, '#00FFFF', 80); }, 350);
+               setTimeout(() => { e.hp = -100; gs.score += (e.type === 'RARE_ENEMY' ? 100 : 15); criarParticulas(e.x, e.y, '#00FFFF', 15); }, 350);
             } else {
                const eq = gerarEquacao(gs.fase, getRespostasAtivas()); e.txt = eq.txt; e.res = eq.res;
             }
@@ -225,7 +237,7 @@ export default function MathBlaster() {
             const type = p.type; const color = p.color; const px = p.x; const py = p.y; const title = p.title;
             
             setTimeout(() => {
-              criarParticulas(px, py, color, 30);
+              criarParticulas(px, py, color, 10);
               gs.floatingTexts.push({ id: Math.random().toString(), x: px, y: py, text: `+ ${title}`, color: color, life: 60 });
               
               if (type === 'DAMAGE') gs.player.damage += 0.5;
@@ -259,10 +271,10 @@ export default function MathBlaster() {
       if (!acertou && respostaRef.current !== '') { 
         if (gs.forceShieldHits > 0) {
           gs.forceShieldHits -= 1;
-          criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 10);
+          criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 5);
         } else {
           gs.player.hp = Math.max(0, gs.player.hp - (3 + (gs.fase * 2))); 
-          criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8); 
+          criarParticulas(gs.player.x, gs.player.y, '#FF0000', 5); 
         }
       }
       setResposta('');
@@ -271,14 +283,16 @@ export default function MathBlaster() {
     }
   }, [jogoAtivo]);
 
-  // CONTROLE NATIVO PELO TECLADO FÍSICO DO COMPUTADOR
+  // CONTROLE DO TECLADO FÍSICO COM ALÍVIO DE PROCESSAMENTO (Sem congelar o React)
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const handleKeyDownLocal = (e: any) => {
             if (!jogoAtivo || gs.timeFreezeTimer > 0) return;
-            const key = e.key.toLowerCase();
+            if (e.repeat) return; // BLOQUEIO EXTREMAMENTE IMPORTANTE
+
+            const key = e.key ? e.key.toLowerCase() : '';
             
-            // Movimentação
+            // Movimentação Fluida
             if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
                 e.preventDefault(); 
                 if (key === 'w' || key === 'arrowup') gs.keys.up = true;
@@ -287,30 +301,31 @@ export default function MathBlaster() {
                 if (key === 'd' || key === 'arrowright') gs.keys.right = true;
             }
 
-            // Ações do Teclado Numérico
+            // Ações Numéricas
             let actionKey = '';
-            if (e.key >= '0' && e.key <= '9') actionKey = e.key;
-            else if (e.key === 'Backspace' || e.key === 'Delete') actionKey = 'apagar';
-            else if (e.key === 'Enter') actionKey = 'enviar';
+            if (key >= '0' && key <= '9') actionKey = key;
+            else if (key === 'backspace' || key === 'delete') actionKey = 'apagar';
+            else if (key === 'enter') actionKey = 'enviar';
 
             if (actionKey) {
                 e.preventDefault();
                 lidarComTeclado(actionKey);
+                // Animação visual mantida mas controlada
                 setTeclasPressionadas(prev => [...prev, actionKey]);
                 setTimeout(() => setTeclasPressionadas(prev => prev.filter(k => k !== actionKey)), 150);
             }
         };
 
         const handleKeyUpLocal = (e: any) => {
-            const key = e.key.toLowerCase();
+            const key = e.key ? e.key.toLowerCase() : '';
             if (key === 'w' || key === 'arrowup') gs.keys.up = false;
             if (key === 's' || key === 'arrowdown') gs.keys.down = false;
             if (key === 'a' || key === 'arrowleft') gs.keys.left = false;
             if (key === 'd' || key === 'arrowright') gs.keys.right = false;
         };
 
-        window.addEventListener('keydown', handleKeyDownLocal);
-        window.addEventListener('keyup', handleKeyUpLocal);
+        window.addEventListener('keydown', handleKeyDownLocal, { passive: false });
+        window.addEventListener('keyup', handleKeyUpLocal, { passive: true });
         return () => {
             window.removeEventListener('keydown', handleKeyDownLocal);
             window.removeEventListener('keyup', handleKeyUpLocal);
@@ -443,6 +458,7 @@ export default function MathBlaster() {
     if (fase >= 7) operacoes.push('divisao');
     if (fase >= 8) operacoes.push('potencia', 'raiz');
 
+    let tentativas = 0;
     do {
       tipo = operacoes[Math.floor(Math.random() * operacoes.length)];
 
@@ -481,6 +497,10 @@ export default function MathBlaster() {
         n1 = res * res;
         txt = `√${n1}`;
       }
+      
+      tentativas++;
+      if (tentativas > 30) break; // Trava de segurança (redundante, mas necessária)
+      
     } while (evitar.includes(res)); 
     
     return { txt, res };
@@ -531,9 +551,13 @@ export default function MathBlaster() {
     setTela('resultado');
     
     if (gs.score > 0) {
-      apiRoutes.submitMathBlasterScore(gs.score)
-        .then(() => carregarHallDaFama())
-        .catch(() => carregarHallDaFama());
+      if (typeof (api as any).submitMathBlasterScore === 'function') {
+          (api as any).submitMathBlasterScore(gs.score)
+            .then(() => carregarHallDaFama())
+            .catch(() => carregarHallDaFama());
+      } else {
+          carregarHallDaFama();
+      }
     } else {
       carregarHallDaFama();
     }
@@ -565,11 +589,11 @@ export default function MathBlaster() {
     const aplicarDano = (dano: number) => {
       if (gs.forceShieldHits > 0) {
         gs.forceShieldHits -= 1;
-        criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 15);
+        criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 5);
       } else {
         gs.player.hp = Math.max(0, gs.player.hp - dano);
         if (gs.gameState === 'BOSS') gs.tookDamageThisBoss = true;
-        criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8);
+        criarParticulas(gs.player.x, gs.player.y, '#FF0000', 5);
       }
     };
 
@@ -629,7 +653,7 @@ export default function MathBlaster() {
         if (!e.mathRequired && Math.pow(e.x - p.x, 2) + Math.pow(e.y - p.y, 2) < currentRadius * currentRadius) {
           e.hp = -100;
           gs.score += 1;
-          criarParticulas(e.x, e.y, '#00BFFF', 10);
+          criarParticulas(e.x, e.y, '#00BFFF', 5);
         }
       });
       
@@ -727,11 +751,11 @@ export default function MathBlaster() {
 
     if (gs.gameState === 'WAVES') {
         
-      // INIMIGO RARO (10% de chance no começo da fase) LIMITADO A 5 POR DIA
+      // INIMIGO RARO (10% de chance APENAS no inicio da fase, e restrito a 5 por dia)
       if (gs.stateTimer === 100) {
           if (dailySpawnsRef.current < 5 && Math.random() <= 0.10) {
               const eq = gerarEquacao(Math.max(8, gs.fase + 4), getRespostasAtivas());
-              gs.enemies.push({ id: Math.random().toString(), type: 'RARE_ENEMY', x: gw / 2, y: -50, targetY: 100, hp: 9999, mathRequired: true, solvesNeeded: 1, solvesDone: 0, txt: "👑 " + eq.txt, res: eq.res, vy: 0.5, evasive: false });
+              gs.enemies.push({ id: Math.random().toString(), type: 'RARE_ENEMY', x: Math.random() * (gw - 80) + 40, y: -50, targetY: 100, hp: 9999, mathRequired: true, solvesNeeded: 1, solvesDone: 0, txt: "👑 " + eq.txt, res: eq.res, vy: 0.5, evasive: false });
               
               dailySpawnsRef.current += 1;
               AsyncStorage.setItem('rareSpawnCount', dailySpawnsRef.current.toString()).catch(()=>{});
@@ -804,7 +828,7 @@ export default function MathBlaster() {
       }
       
       if (gs.boss.hp <= 0) {
-        criarParticulas(gs.boss.x, gs.boss.y, '#FFD700', 80); 
+        criarParticulas(gs.boss.x, gs.boss.y, '#FFD700', 30); 
         gs.score += 50 * gs.fase;
         gs.boss.active = false; 
         gs.gameState = 'TRANSITION'; 
@@ -890,7 +914,7 @@ export default function MathBlaster() {
           
           e.hp -= l.damage;
           if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') {
-            criarParticulas(e.x, e.y, '#FF4444', 15);
+            criarParticulas(e.x, e.y, '#FF4444', 10);
             gs.enemies.forEach(e2 => { if (!e2.mathRequired && Math.abs(e.x - e2.x) < l.aoeRange && Math.abs(e.y - e2.y) < l.aoeRange) e2.hp -= l.damage; });
             if (gs.boss.active && Math.abs(gs.boss.x - e.x) < l.aoeRange && Math.abs(gs.boss.y - e.y) < l.aoeRange) gs.boss.hp -= l.damage;
             if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; 
@@ -911,7 +935,7 @@ export default function MathBlaster() {
           gs.boss.hp -= l.damage; 
           criarParticulas(l.x, l.y, '#FFD700', 4); 
           if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') { 
-            criarParticulas(l.x, l.y, '#FF4444', 15); 
+            criarParticulas(l.x, l.y, '#FF4444', 10); 
             if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; 
           } 
         }
@@ -1180,7 +1204,7 @@ export default function MathBlaster() {
               
               if (e.type === 'RARE_ENEMY') {
                 return (
-                   <View key={e.id} style={[styles.spawnerShape, { left: e.x - 35, top: e.y - 25, backgroundColor: 'rgba(255, 215, 0, 0.2)', borderColor: '#FFD700', shadowColor: '#FFD700' }]}>
+                   <View key={e.id} style={[styles.spawnerShape, { left: e.x - 35, top: e.y - 25, backgroundColor: 'rgba(255, 215, 0, 0.2)', borderColor: '#FFD700', shadowColor: 'transparent' }]}>
                       <Text style={[styles.spawnerMath, { color: '#FFD700' }]}>{e.txt}</Text>
                       {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{e.res}</Text>}
                    </View>
@@ -1369,7 +1393,7 @@ const styles = StyleSheet.create({
   flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 16, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500' },
   miniShield: { position: 'absolute', top: -8, left: -16, width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)' },
   
-  spawnerShape: { position: 'absolute', width: 60, height: 45, backgroundColor: 'rgba(0, 255, 255, 0.2)', borderWidth: 2, borderColor: '#00FFFF', borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: '#00FFFF', shadowRadius: 10, zIndex: 15 },
+  spawnerShape: { position: 'absolute', width: 60, height: 45, backgroundColor: 'rgba(0, 255, 255, 0.2)', borderWidth: 2, borderColor: '#00FFFF', borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: 'transparent', zIndex: 15 },
   spawnerMath: { color: '#FFF', fontSize: 15, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 1, height: 1 } },
   xrayText: { position: 'absolute', top: -20, color: '#FF1493', fontSize: 14, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 } },
   
