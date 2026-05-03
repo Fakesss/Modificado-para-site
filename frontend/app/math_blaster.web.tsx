@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions, Platform, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
@@ -40,6 +41,11 @@ export default function MathBlaster() {
   const [jogoAtivo, setJogoAtivo] = useState(false);
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
+  
+  // Estados para o Hall da Fama
+  const [hallDaFama, setHallDaFama] = useState<any[]>([]);
+  const [nomeJogador, setNomeJogador] = useState('');
+  const [scoreSalvo, setScoreSalvo] = useState(false);
   
   // Controle de Tela e Câmera Virtual
   const [canvasSize, setCanvasSize] = useState({ width: initialWidth, height: initialHeight });
@@ -110,6 +116,49 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
+  // Lógica do Hall da Fama
+  const carregarHallDaFama = async () => {
+    try {
+      // Caso queira usar a API conectada ao backend:
+      // const response = await api.get('/ranking/math_blaster');
+      // setHallDaFama(response.data);
+
+      const saved = await AsyncStorage.getItem('math_blaster_ranking');
+      if (saved) setHallDaFama(JSON.parse(saved));
+    } catch (e) {
+      console.error("Erro ao carregar ranking", e);
+    }
+  };
+
+  const salvarScore = async () => {
+    if (!nomeJogador.trim()) return;
+    try {
+      // Caso queira usar a API conectada ao backend (substitua a lógica abaixo):
+      // await api.post('/ranking', { game: 'math_blaster', nome: nomeJogador, score: gs.score });
+      
+      const saved = await AsyncStorage.getItem('math_blaster_ranking');
+      const currentRanking = saved ? JSON.parse(saved) : [];
+      
+      const newRanking = [...currentRanking, { nome: nomeJogador, score: gs.score }]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5); // Mantém os top 5
+      
+      await AsyncStorage.setItem('math_blaster_ranking', JSON.stringify(newRanking));
+      setHallDaFama(newRanking);
+      setScoreSalvo(true);
+    } catch (e) {
+      console.error("Erro ao salvar score", e);
+    }
+  };
+
+  useEffect(() => {
+    if (!jogoAtivo && gs.player.hp <= 0) {
+      carregarHallDaFama();
+      setScoreSalvo(false);
+      setNomeJogador('');
+    }
+  }, [jogoAtivo, gs.player.hp]);
+
   // ==========================================
   // LÓGICA DE MOVIMENTAÇÃO NAVE (MULTI-TOUCH)
   // ==========================================
@@ -130,7 +179,6 @@ export default function MathBlaster() {
     if (gs.movementTouchId !== null) {
       const touch = Array.from(e.nativeEvent.touches).find((t: any) => t.identifier === gs.movementTouchId);
       if (touch) {
-        // A compensação de velocidade de movimento escala junto com o zoom dinâmico!
         const dx = ((touch as any).pageX - gs.lastTouchX) / gs.currentZoom;
         const dy = ((touch as any).pageY - gs.lastTouchY) / gs.currentZoom;
         gs.player.x += dx * 1.5;
@@ -346,7 +394,7 @@ export default function MathBlaster() {
       if (respostaRef.current === '3141592') {
         gs.drones.advanced.active = true;
         gs.drones.advanced.baseCooldown = 500; // Drone Elite Turbinado!
-        gs.score += 5000;
+        gs.score += 500; // Pontuação reduzida
         criarParticulas(gs.player.x, gs.player.y, '#FFD700', 80);
         gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE!`, color: '#FFD700', life: 90 });
         setResposta('');
@@ -363,7 +411,7 @@ export default function MathBlaster() {
       if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
         acertou = true; gs.boss.shield = false; gs.boss.timer = 0; gs.boss.nextShieldAt = Math.random() * 210 + 240; 
         dispararMagia(gs.boss.x, gs.boss.y, '#FFD700'); setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50), 350); 
-        gs.score += 200;
+        gs.score += 5; // Pontuação balanceada para manter < 700
       } 
       
       if (!acertou) {
@@ -373,7 +421,7 @@ export default function MathBlaster() {
             acertou = true; e.solvesDone += 1; dispararMagia(e.x, e.y, '#00FFFF');
             if (e.solvesDone >= e.solvesNeeded) {
                e.isDying = true; e.mathRequired = false;
-               setTimeout(() => { e.hp = -100; gs.score += 300; criarParticulas(e.x, e.y, '#00FFFF', 80); }, 350);
+               setTimeout(() => { e.hp = -100; gs.score += 15; criarParticulas(e.x, e.y, '#00FFFF', 80); }, 350); // Pontuação reduzida
             } else {
                const eq = gerarEquacao(gs.fase, getRespostasAtivas()); e.txt = eq.txt; e.res = eq.res;
             }
@@ -415,7 +463,7 @@ export default function MathBlaster() {
               else if (type === 'DRONE_ADVANCED_UP') gs.drones.advanced.baseCooldown = Math.max(500, gs.drones.advanced.baseCooldown - 200);
 
               gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); 
-              gs.score += 50; p.y = 9999; 
+              gs.score += 5; p.y = 9999; // Pontuação reduzida
             }, 350);
             break; 
           }
@@ -524,7 +572,7 @@ export default function MathBlaster() {
       gs.enemies.forEach(e => {
         if (!e.mathRequired && Math.pow(e.x - p.x, 2) + Math.pow(e.y - p.y, 2) < currentRadius * currentRadius) {
           e.hp = -100;
-          gs.score += 10;
+          gs.score += 1; // Pontuação reduzida
           criarParticulas(e.x, e.y, '#00BFFF', 10);
         }
       });
@@ -696,7 +744,7 @@ export default function MathBlaster() {
       
       if (gs.boss.hp <= 0) {
         criarParticulas(gs.boss.x, gs.boss.y, '#FFD700', 80); 
-        gs.score += 1000 * gs.fase; 
+        gs.score += 50 * gs.fase; // Pontuação balanceada para ficar < 700 no total geral
         gs.boss.active = false; 
         gs.gameState = 'TRANSITION'; 
         gs.stateTimer = 0; 
@@ -868,7 +916,7 @@ export default function MathBlaster() {
 
     gs.enemies.forEach(e => { 
       if (e.hp <= 0 && e.hp > -90) { 
-        gs.score += e.isLeader ? 50 : 20; 
+        gs.score += e.isLeader ? 3 : 1; // Pontuação reduzida
         criarParticulas(e.x, e.y, e.type === 'SQUAD' ? '#FF0055' : '#AAA', 10); 
       } 
     });
@@ -938,7 +986,40 @@ export default function MathBlaster() {
           <Text style={[styles.tituloMenu, { color: '#FF4444' }]}>DESTRUÍDO</Text>
           <Text style={styles.textoScore}>Pontos: {gs.score}</Text>
           <Text style={styles.textoFase}>Chegou na Fase {gs.fase}</Text>
-          <TouchableOpacity style={[styles.btnIniciar, { marginTop: 40 }]} onPress={iniciarJogo}>
+          
+          {/* SESSÃO: HALL DA FAMA */}
+          <View style={styles.hallDaFamaContainer}>
+            <Text style={styles.hallDaFamaTitle}>🏆 HALL DA FAMA 🏆</Text>
+            {hallDaFama.map((item, idx) => (
+              <View key={idx} style={styles.rankingRow}>
+                <Text style={styles.rankingPos}>#{idx + 1}</Text>
+                <Text style={styles.rankingName}>{item.nome}</Text>
+                <Text style={styles.rankingScore}>{item.score}</Text>
+              </View>
+            ))}
+
+            {hallDaFama.length === 0 && (
+              <Text style={{ color: '#888', fontStyle: 'italic', marginBottom: 10 }}>Nenhum recorde ainda...</Text>
+            )}
+            
+            {!scoreSalvo && gs.score > 0 && (
+              <View style={styles.inputContainer}>
+                <TextInput 
+                  style={styles.inputNome}
+                  placeholder="Seu Nome"
+                  placeholderTextColor="#9D97B5"
+                  value={nomeJogador}
+                  onChangeText={setNomeJogador}
+                  maxLength={10}
+                />
+                <TouchableOpacity style={styles.btnSalvar} onPress={salvarScore}>
+                  <Text style={styles.btnSalvarTxt}>SALVAR</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          <TouchableOpacity style={[styles.btnIniciar, { marginTop: 20 }]} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>TENTAR NOVAMENTE</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#555', marginTop: 15 }]} onPress={() => router.back()}>
@@ -1128,14 +1209,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#050015',
     overflow: 'hidden',
   },
-  menuContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050015', width: '100%', maxWidth: 600 },
+  menuContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050015', width: '100%', maxWidth: 600, paddingHorizontal: 20 },
   tituloMenu: { fontSize: 45, fontWeight: '900', color: '#00FFFF', fontStyle: 'italic' },
   subTituloMenu: { fontSize: 25, fontWeight: '900', color: '#FFF', letterSpacing: 5 },
   instrucoes: { color: '#9D97B5', textAlign: 'center', marginHorizontal: 30, marginTop: 20, fontSize: 14, fontWeight: 'bold' },
-  btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 12, marginTop: 40 },
+  btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 12, marginTop: 20, width: '100%', alignItems: 'center' },
   btnIniciarTxt: { color: '#FFF', fontSize: 16, fontWeight: '900' },
   textoScore: { color: '#00FFFF', fontSize: 24, fontWeight: 'bold', marginTop: 20 },
   textoFase: { color: '#9D97B5', fontSize: 16, marginTop: 10 },
+
+  // Estilos do Hall da Fama
+  hallDaFamaContainer: {
+    width: '100%',
+    backgroundColor: 'rgba(0, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: '#00FFFF',
+    borderRadius: 10,
+    padding: 15,
+    marginTop: 20,
+    alignItems: 'center'
+  },
+  hallDaFamaTitle: { color: '#FFD700', fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
+  rankingRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between', marginBottom: 5 },
+  rankingPos: { color: '#00FFFF', fontWeight: 'bold', width: 30 },
+  rankingName: { color: '#FFF', flex: 1 },
+  rankingScore: { color: '#32CD32', fontWeight: 'bold' },
+  inputContainer: { flexDirection: 'row', marginTop: 15, width: '100%', gap: 10 },
+  inputNome: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', color: '#FFF', borderRadius: 8, paddingHorizontal: 10, height: 40, borderWidth: 1, borderColor: '#555' },
+  btnSalvar: { backgroundColor: '#32CD32', justifyContent: 'center', paddingHorizontal: 15, borderRadius: 8, height: 40 },
+  btnSalvarTxt: { color: '#FFF', fontWeight: 'bold' },
 
   hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10, width: '100%' },
   hudScore: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1, marginBottom: 5 },
