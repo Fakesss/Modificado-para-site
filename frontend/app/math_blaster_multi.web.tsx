@@ -9,11 +9,9 @@ import api from '../src/services/api';
 import * as apiRoutes from '../src/services/api';
 import { socket } from '../src/services/socket';
 
-const initialWidth = Dimensions.get('window').width;
-const initialHeight = Dimensions.get('window').height * 0.75;
-
-const isMobileWeb = Platform.OS === 'web' && initialWidth < 768;
-const BASE_ZOOM = (Platform.OS !== 'web' || isMobileWeb) ? 0.5 : 1;
+// CORREÇÃO: Resolução lógica fixa para garantir sincronia exata entre telas de tamanhos diferentes
+const GAME_WIDTH = 400;
+const GAME_HEIGHT = 650;
 
 const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed: boolean, onPressWeb: (v: string) => void }) => {
   const isWeb = Platform.OS === 'web';
@@ -87,8 +85,8 @@ export default function MathBlasterMulti() {
   const gameOverFired = useRef(false);
   const dailySpawnsRef = useRef(0);
   
-  const [canvasSize, setCanvasSize] = useState({ width: initialWidth, height: initialHeight });
-  const canvasSizeRef = useRef({ width: initialWidth, height: initialHeight });
+  const [canvasSize, setCanvasSize] = useState({ width: Dimensions.get('window').width, height: 600 });
+  const canvasSizeRef = useRef({ width: Dimensions.get('window').width, height: 600 });
   
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
@@ -97,18 +95,15 @@ export default function MathBlasterMulti() {
 
   const respostaRef = useRef('');
   useEffect(() => { respostaRef.current = resposta; }, [resposta]);
-  
-  const layoutRef = useRef({ width: initialWidth, height: initialHeight });
 
   const minhaCor = user?.equipe?.cor || '#00FFFF';
   let corAliado = parsedOpponentColor;
   if (minhaCor === corAliado) corAliado = minhaCor === '#00FFFF' ? '#FFD700' : '#00FFFF';
 
   const gs = useRef({
-    currentZoom: BASE_ZOOM,
     keys: { up: false, down: false, left: false, right: false },
     player: { 
-      x: initialWidth / 2, y: initialHeight - 60, hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false,
+      x: GAME_WIDTH / 2, y: GAME_HEIGHT - 60, hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false,
       weapons: {
         missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
@@ -116,8 +111,8 @@ export default function MathBlasterMulti() {
         electric: { active: false, level: 1, baseCooldown: 7000, lastFire: 0, damageMult: 2, chainCount: 3 }
       }
     },
-    aliado: { x: initialWidth / 2 + 30, y: initialHeight - 60, hp: 100, maxHp: 100 },
-    lasers: [] as any[], specialLasers: [] as any[], mathShots: [] as any[], pulses: [] as any[], floatingTexts: [] as any[], 
+    aliado: { x: GAME_WIDTH / 2 + 30, y: GAME_HEIGHT - 60, hp: 100, maxHp: 100 },
+    lasers: [] as any[], aliadoLasers: [] as any[], specialLasers: [] as any[], mathShots: [] as any[], pulses: [] as any[], floatingTexts: [] as any[], 
     enemies: [] as any[], enemyLasers: [] as any[], powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, scoreAliado: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0, movementTouchId: null as string | null, lastTouchX: 0, lastTouchY: 0,
@@ -186,7 +181,6 @@ export default function MathBlasterMulti() {
   useEffect(() => {
     if (!roomId) return;
 
-    // FORÇA O USO DE WEBSOCKETS (Evita o problema de cookies do WebView no Android)
     if (socket && socket.io) {
         socket.io.opts.transports = ['websocket'];
     }
@@ -211,7 +205,8 @@ export default function MathBlasterMulti() {
 
     joinRoom(); 
     socket.on('connect', joinRoom);
-    const interval = setInterval(joinRoom, 1000);
+    // Intervalo reduzido para 500ms para o handshake inicial ser mais rápido
+    const interval = setInterval(joinRoom, 500);
 
     const handleSocketAcao = (payload: any) => {
       if (!payload || payload.instanceId === instanceId) return; 
@@ -239,6 +234,7 @@ export default function MathBlasterMulti() {
          gs.aliado.y = payload.data.y;
          gs.aliado.hp = payload.data.hp;
          gs.scoreAliado = payload.data.score;
+         gs.aliadoLasers = payload.data.lasers || []; // CORREÇÃO: Sincronizando os lasers do aliado
       }
       
       if (payload.action === 'SYNC_HOST_STATE' && !isHost) {
@@ -271,7 +267,8 @@ export default function MathBlasterMulti() {
      if (roomId && gs.stateTimer % 2 === 0) {
          socket.emit('game_action', {
              roomId, instanceId, action: 'SYNC_PLAYER',
-             data: { x: gs.player.x, y: gs.player.y, hp: gs.player.hp, score: gs.score }
+             // CORREÇÃO: Enviando os lasers no payload para o aliado conseguir ver
+             data: { x: gs.player.x, y: gs.player.y, hp: gs.player.hp, score: gs.score, lasers: gs.lasers }
          });
      }
   };
@@ -299,7 +296,7 @@ export default function MathBlasterMulti() {
       const desistirAcao = () => {
           gs.player.hp = 0;
           if (roomId) {
-              socket.emit('game_action', { roomId, instanceId, action: 'SYNC_PLAYER', data: { x: gs.player.x, y: gs.player.y, hp: 0, score: gs.score }});
+              socket.emit('game_action', { roomId, instanceId, action: 'SYNC_PLAYER', data: { x: gs.player.x, y: gs.player.y, hp: 0, score: gs.score, lasers: [] }});
           }
           gameOver();
       };
@@ -379,9 +376,8 @@ export default function MathBlasterMulti() {
             setResposta(''); return;
         }
         if (!roomId || isHost) {
-            const gw = layoutRef.current.width;
             const eq = gerarEquacao(10, getRespostasAtivas());
-            gs.enemies.push({ id: Math.random().toString(), type: 'RARE_ENEMY', x: gw / 2, y: -50, targetY: 100, hp: 9999, mathRequired: true, solvesNeeded: 1, solvesDone: 0, txt: "👑 " + eq.txt, res: eq.res, vy: 0.5, evasive: false });
+            gs.enemies.push({ id: Math.random().toString(), type: 'RARE_ENEMY', x: GAME_WIDTH / 2, y: -50, targetY: 100, hp: 9999, mathRequired: true, solvesNeeded: 1, solvesDone: 0, txt: "👑 " + eq.txt, res: eq.res, vy: 0.5, evasive: false });
         }
         dailySpawnsRef.current += 1;
         AsyncStorage.setItem('rareSpawnCount', dailySpawnsRef.current.toString()).catch(()=>{});
@@ -556,8 +552,9 @@ export default function MathBlasterMulti() {
     if (gs.movementTouchId !== null) {
       const touch = Array.from(e.nativeEvent.touches).find((t: any) => t.identifier === gs.movementTouchId);
       if (touch) {
-        const dx = ((touch as any).pageX - gs.lastTouchX) / gs.currentZoom;
-        const dy = ((touch as any).pageY - gs.lastTouchY) / gs.currentZoom;
+        const baseScale = Math.min(canvasSizeRef.current.width / GAME_WIDTH, canvasSizeRef.current.height / GAME_HEIGHT);
+        const dx = ((touch as any).pageX - gs.lastTouchX) / baseScale;
+        const dy = ((touch as any).pageY - gs.lastTouchY) / baseScale;
         gs.player.x += dx * 1.5;
         gs.player.y += dy * 1.5;
         gs.lastTouchX = (touch as any).pageX;
@@ -718,12 +715,8 @@ export default function MathBlasterMulti() {
     gameOverFired.current = false;
     gs.keys = { up: false, down: false, left: false, right: false }; 
     
-    gs.currentZoom = BASE_ZOOM;
-    const initialGw = canvasSizeRef.current.width / gs.currentZoom;
-    const initialGh = canvasSizeRef.current.height / gs.currentZoom;
-
     gs.player = { 
-      x: initialGw / 2, y: initialGh - 100, 
+      x: GAME_WIDTH / 2, y: GAME_HEIGHT - 100, 
       hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, 
       weapons: { 
         missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 }, 
@@ -732,7 +725,8 @@ export default function MathBlasterMulti() {
         electric: { active: false, level: 1, baseCooldown: 7000, lastFire: 0, damageMult: 2, chainCount: 3 }
       }
     };
-    gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.pulses = []; gs.floatingTexts = [];
+    gs.aliado = { x: GAME_WIDTH / 2 + 30, y: GAME_HEIGHT - 60, hp: 100, maxHp: 100 };
+    gs.lasers = []; gs.aliadoLasers = []; gs.specialLasers = []; gs.mathShots = []; gs.pulses = []; gs.floatingTexts = [];
     gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
@@ -794,15 +788,9 @@ export default function MathBlasterMulti() {
 
   const gameTick = () => {
     const now = Date.now();
-    gs.currentZoom = BASE_ZOOM === 1 ? 1 : Math.max(0.35, BASE_ZOOM - ((gs.fase - 1) * 0.03));
     
-    if (canvasSizeRef.current.width > 0) {
-        layoutRef.current.width = canvasSizeRef.current.width / gs.currentZoom;
-        layoutRef.current.height = canvasSizeRef.current.height / gs.currentZoom;
-    }
-
-    const gw = layoutRef.current.width; 
-    const gh = layoutRef.current.height;
+    const gw = GAME_WIDTH; 
+    const gh = GAME_HEIGHT;
     
     gs.timeAlive += 30;
     if (gs.timeFreezeTimer > 0) gs.timeFreezeTimer -= 30;
@@ -817,7 +805,7 @@ export default function MathBlasterMulti() {
         });
     }
 
-    const movSpeed = 6 / gs.currentZoom;
+    const movSpeed = 6;
     if (gs.keys.up) gs.player.y -= movSpeed;
     if (gs.keys.down) gs.player.y += movSpeed;
     if (gs.keys.left) gs.player.x -= movSpeed;
@@ -1467,6 +1455,8 @@ export default function MathBlasterMulti() {
     );
   }
 
+  const baseScale = Math.min(canvasSize.width / GAME_WIDTH, canvasSize.height / GAME_HEIGHT);
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.gameWrapper}>
@@ -1520,11 +1510,13 @@ export default function MathBlasterMulti() {
 
           <View style={{
             position: 'absolute',
-            width: canvasSize.width / gs.currentZoom,
-            height: canvasSize.height / gs.currentZoom,
-            left: -(canvasSize.width / gs.currentZoom - canvasSize.width) / 2,
-            top: -(canvasSize.height / gs.currentZoom - canvasSize.height) / 2,
-            transform: [{ scale: gs.currentZoom }],
+            width: GAME_WIDTH,
+            height: GAME_HEIGHT,
+            left: (canvasSize.width - GAME_WIDTH) / 2,
+            top: (canvasSize.height - GAME_HEIGHT) / 2,
+            transform: [{ scale: baseScale }],
+            borderColor: 'rgba(0, 255, 255, 0.1)',
+            borderWidth: 1,
           }}>
 
             <View style={styles.gridOverlay}/>
@@ -1593,6 +1585,21 @@ export default function MathBlasterMulti() {
                 shadowRadius: l.type === 'ELECTRIC' ? 10 : 0
               }]}/>
             ))}
+            
+            {/* CORREÇÃO: Renderização dos tiros do Aliado */}
+            {gs.aliadoLasers && gs.aliadoLasers.map(l => (
+              <View key={l.id + '_ally'} style={[styles.laserNormal, { 
+                left: l.x - (l.size/2), 
+                top: l.y, 
+                width: l.size, 
+                height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : (l.type === 'ELECTRIC' ? l.size : l.size * 3))), 
+                backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : l.type === 'ELECTRIC' ? '#FFFF00' : '#00FFFF', 
+                borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING' || l.type === 'ELECTRIC') ? l.size / 2 : 5,
+                shadowColor: l.type === 'ELECTRIC' ? '#FFFF00' : 'transparent',
+                shadowRadius: l.type === 'ELECTRIC' ? 10 : 0,
+                opacity: 0.6 // Deixando levemente transparente para saber que não é seu
+              }]}/>
+            ))}
 
             {gs.pulses.map(p => {
               const currentRadius = p.maxRadius * (1 - (p.life / p.maxLife));
@@ -1644,7 +1651,7 @@ export default function MathBlasterMulti() {
           </View>
         </View>
 
-        <View style={[styles.painelInferior, { bottom: Math.max(insets.bottom, 10) }]} pointerEvents="box-none">
+        <View style={[styles.painelInferior, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <View style={styles.visorRadar}>
             <Text style={styles.visorTexto}>{resposta || '_'}</Text>
           </View>
@@ -1772,11 +1779,10 @@ const styles = StyleSheet.create({
   floatingText: { position: 'absolute', fontSize: 12, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 }, zIndex: 100, textAlign: 'center', width: 80 },
 
   painelInferior: { 
-    position: 'absolute',
     width: '100%', 
     alignItems: 'center', 
     paddingTop: 5, 
-    backgroundColor: 'transparent', 
+    backgroundColor: '#050015', 
     zIndex: 10 
   },
   visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 6, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 6 }, 
