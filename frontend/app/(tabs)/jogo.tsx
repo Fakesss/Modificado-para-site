@@ -19,6 +19,23 @@ export default function HubJogos() {
           <Text style={styles.subtitle}>Escolha seu modo de treinamento</Text>
         </View>
 
+        {/* NOVO: BOTÃO DO MATH BLASTER */}
+        <TouchableOpacity 
+          style={styles.gameCard} 
+          onPress={() => router.push('/math_blaster')}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: '#00FFFF20' }]}>
+            <Ionicons name="rocket" size={40} color="#00FFFF" />
+          </View>
+          <View style={styles.gameInfo}>
+            <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
+              Math Blaster
+            </Text>
+            <Text style={styles.gameDesc}>Pilote sua nave e resolva equações para destruir os inimigos e as naves-mãe. Sobreviva!</Text>
+          </View>
+        </TouchableOpacity>
+
         {/* BOTÃO DO JOGO DA VELHA */}
         <TouchableOpacity 
           style={styles.gameCard} 
@@ -53,7 +70,7 @@ export default function HubJogos() {
           </View>
         </TouchableOpacity>
 
-        {/* NOVO: BOTÃO DO CABO DE GUERRA OFFLINE */}
+        {/* BOTÃO DO CABO DE GUERRA OFFLINE */}
         <TouchableOpacity 
           style={styles.gameCard} 
           onPress={() => router.push('/cabo_de_guerra_offline')}
