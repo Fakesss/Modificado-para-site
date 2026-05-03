@@ -10,25 +10,28 @@ const initialHeight = Dimensions.get('window').height * 0.75;
 const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
   const anim = useRef(new Animated.Value(1)).current;
   
-  const handlePressIn = () => {
+  const handlePressIn = (e: any) => {
+    if (e && e.stopPropagation) e.stopPropagation();
     Animated.spring(anim, { toValue: 0.85, useNativeDriver: true }).start();
     onPressWeb(valor);
   };
   
-  const handlePressOut = () => {
+  const handlePressOut = (e: any) => {
+    if (e && e.stopPropagation) e.stopPropagation();
     Animated.spring(anim, { toValue: 1, useNativeDriver: true }).start();
-  };
-
-  const getStyle = () => {
-    if (valor === 'apagar') return [styles.teclaRetro, styles.teclaApagar];
-    if (valor === 'enviar') return [styles.teclaRetro, styles.teclaEnviar];
-    return styles.teclaRetro;
   };
 
   const isWeb = Platform.OS === 'web';
 
+  let customStyle = styles.teclaRetro;
+  if (valor === 'apagar') customStyle = { ...styles.teclaRetro, ...styles.teclaApagar } as any;
+  if (valor === 'enviar') customStyle = { ...styles.teclaRetro, ...styles.teclaEnviar } as any;
+
   return (
-    <Animated.View style="{[getStyle()," { transform: [{ scale: anim }], flex: 1 }]} onTouchStart="{handlePressIn}" onTouchEnd="{handlePressOut}" onTouchCancel="{handlePressOut}" onMouseDown="{isWeb" ? handlePressIn : undefined} onMouseUp="{isWeb" handlePressOut onMouseLeave="{isWeb"> {valor === 'apagar' && <Ionicons name="backspace" size="{20}" color="#FFF"/>} {valor === 'enviar' && <Ionicons name="flash" size="{20}" color="#FFF"/>} {valor !== 'apagar' && valor !== 'enviar' && <Text style="{styles.teclaRetroText}">{valor}</Text>}
+    <Animated.View style="{[customStyle," { transform: [{ scale: anim }], flex: 1 }]} onTouchStart="{handlePressIn}" onTouchEnd="{handlePressOut}" onTouchCancel="{handlePressOut}" onMouseDown="{isWeb" ? handlePressIn : undefined} onMouseUp="{isWeb" handlePressOut onMouseLeave="{isWeb">
+      {valor === 'apagar' && <Ionicons name="backspace" size="{20}" color="#FFF"/>}
+      {valor === 'enviar' && <Ionicons name="flash" size="{20}" color="#FFF"/>}
+      {valor !== 'apagar' && valor !== 'enviar' && <Text style="{styles.teclaRetroText}">{valor}</Text>}
     </Animated.View>
   );
 };
@@ -98,21 +101,20 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
-  // --- MULTITOQUE GLOBAL (GAMBIARRA ARCADE) ---
-  const handleRootTouchStart = (e: any) => {
+  const handleGameTouchStart = (e: any) => {
     const touches = e.nativeEvent.touches;
     for (let i = 0; i < touches.length; i++) {
       const touch = touches[i];
-      // Se o toque for na metade superior da tela (Game Area), assumimos o controle da nave
-      if (gs.movementTouchId === null && touch.pageY < layoutRef.current.height + 80) {
+      if (gs.movementTouchId === null) {
         gs.movementTouchId = touch.identifier;
         gs.lastTouchX = touch.pageX;
         gs.lastTouchY = touch.pageY;
+        break;
       }
     }
   };
 
-  const handleRootTouchMove = (e: any) => {
+  const handleGameTouchMove = (e: any) => {
     if (gs.movementTouchId !== null) {
       const touch = Array.from(e.nativeEvent.touches).find((t: any) => t.identifier === gs.movementTouchId);
       if (touch) {
@@ -126,7 +128,7 @@ export default function MathBlaster() {
     }
   };
 
-  const handleRootTouchEnd = (e: any) => {
+  const handleGameTouchEnd = (e: any) => {
     const touchExists = Array.from(e.nativeEvent.touches).some((t: any) => t.identifier === gs.movementTouchId);
     if (!touchExists) gs.movementTouchId = null;
   };
@@ -399,14 +401,14 @@ export default function MathBlaster() {
     if (now - gs.player.lastFire > gs.player.fireRate) {
       gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 15, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       if (gs.player.tripleShot) {
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 6, y: gs.player.y - 10, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 6, y: gs.player.y - 10, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 8, y: gs.player.y - 10, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 8, y: gs.player.y - 10, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       }
       gs.player.lastFire = now;
     }
 
     if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 15, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 2, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 15, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 2.5, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
       gs.player.weapons.missile.lastFire = now;
     }
     
@@ -416,12 +418,12 @@ export default function MathBlaster() {
     }
 
     if (gs.drones.normal.active && now - gs.drones.normal.lastFire > gs.drones.normal.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 20, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 30, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       gs.drones.normal.lastFire = now;
     }
 
     if (gs.drones.advanced.active && now - gs.drones.advanced.lastFire > gs.drones.advanced.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 20, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.2, type: 'MISSILE_HOMING', life: 9999, aoeRange: 35 });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 25, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.2, type: 'MISSILE_HOMING', life: 9999, aoeRange: 35 });
       gs.drones.advanced.lastFire = now;
     }
 
@@ -522,7 +524,7 @@ export default function MathBlaster() {
           el.vy += (dy/dist) * 0.4; 
         }
         const speed = Math.sqrt(el.vx*el.vx + el.vy*el.vy);
-        const maxSpeed = 3 + (gs.fase * 0.2); // Reduzido de 5 para 3 (mais lento)
+        const maxSpeed = gs.fase === 1 ? 3 : 3 + (gs.fase * 0.6); // Escala gradualmente a velocidade homing
         if (speed > maxSpeed) { 
           el.vx = (el.vx/speed) * maxSpeed; 
           el.vy = (el.vy/speed) * maxSpeed; 
@@ -546,13 +548,13 @@ export default function MathBlaster() {
     if (gs.gameState === 'WAVES') {
       
       if (gs.stateTimer % Math.max(20, 60 - gs.fase * 5) === 0) {
-        const meteorVy = gs.fase === 1 ? Math.random() * 1.5 + 1.5 : Math.random() * 1.5 + 2 + (gs.fase * 0.3); // Reduzido
+        const meteorVy = gs.fase === 1 ? Math.random() * 1.5 + 2 : Math.random() * 2 + 3 + (gs.fase * 0.6);
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: meteorVy, angle: 0 });
       }
 
       if (gs.stateTimer % 180 === 0 && gs.fase >= 2) {
         const isLeft = Math.random() > 0.5;
-        gs.enemies.push({ id: Math.random().toString(), type: 'FLANKER', x: isLeft ? -20 : gw + 20, y: Math.random() * (gh/3), targetY: 0, hp: 2 + gs.fase * 2, vx: isLeft ? 4 + gs.fase*0.5 : -4 - gs.fase*0.5, vy: 1.5, angle: 0, shield: Math.random() > 0.7 ? 2 : 0 });
+        gs.enemies.push({ id: Math.random().toString(), type: 'FLANKER', x: isLeft ? -20 : gw + 20, y: Math.random() * (gh/3), targetY: 0, hp: 2 + gs.fase * 2, vx: isLeft ? 3 + gs.fase * 1.2 : -3 - gs.fase * 1.2, vy: 1.5, angle: 0, shield: Math.random() > 0.7 ? 2 : 0 });
       }
 
       if (gs.stateTimer === 600 || gs.stateTimer === 1200) {
@@ -580,7 +582,7 @@ export default function MathBlaster() {
         gs.gameState = 'BOSS'; 
         gs.stateTimer = 0;
         const eq = gerarEquacao(gs.fase, getRespostasAtivas());
-        gs.boss = { active: true, type: Math.floor(Math.random() * 3), x: gw / 2, y: -100, hp: 200 + (gs.fase * 120), maxHp: 200 + (gs.fase * 120), vx: 2 + gs.fase*0.5, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
+        gs.boss = { active: true, type: Math.floor(Math.random() * 3), x: gw / 2, y: -100, hp: 200 + (gs.fase * 120), maxHp: 200 + (gs.fase * 120), vx: 3 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
       }
     }
     else if (gs.gameState === 'BOSS') {
@@ -592,11 +594,11 @@ export default function MathBlaster() {
         gs.boss.timer += 1 * speedMult;
 
         if (gs.boss.type === 0) {
-          if (gs.boss.timer % Math.max(40, 90 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 1.5, size: 12, damage: 20, homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) });
+          if (gs.boss.timer % Math.max(40, 90 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 2, size: 14, damage: 20, homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) });
         } else if (gs.boss.type === 1) {
-          if (gs.boss.timer % 60 === 0) [-2, -1, 0, 1, 2].forEach(dir => gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: dir * 1.2, vy: 4 + gs.fase * 0.5, size: 5, damage: 15, homing: false, color: '#FF0055', hp: 1 }));
+          if (gs.boss.timer % 60 === 0) [-2, -1, 0, 1, 2].forEach(dir => gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: dir * 1.5, vy: 6 + gs.fase, size: 6, damage: 15, homing: false, color: '#FF0055', hp: 1 }));
         } else {
-          if (gs.boss.timer % 120 === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 8, size: 16, damage: 30, homing: false, color: '#32CD32', hp: 99 });
+          if (gs.boss.timer % 120 === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 15, size: 20, damage: 30, homing: false, color: '#32CD32', hp: 99 });
         }
 
         if (gs.boss.timer % 300 === 0 && gs.enemies.length < 2) {
@@ -638,7 +640,7 @@ export default function MathBlaster() {
            e.x += Math.sin(now / 500) * 0.5 * speedMult; 
            e.spawnTimer += 1 * speedMult;
            if (e.spawnTimer > Math.max(50, 120 - (gs.fase * 10))) {
-              gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: e.x, y: e.y + 25, targetY: e.y + 70 + Math.random() * 50, isLeader: false, hp: 1 + gs.fase, vx: (Math.random() - 0.5) * 3, vy: 3, fireTimer: 0, angle: Math.PI });
+              gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: e.x, y: e.y + 30, targetY: e.y + 80 + Math.random() * 50, isLeader: false, hp: 1 + gs.fase, vx: (Math.random() - 0.5) * 3, vy: 4, fireTimer: 0, angle: Math.PI });
               e.spawnTimer = 0;
            }
         }
@@ -652,10 +654,10 @@ export default function MathBlaster() {
         if (e.isLeader) {
           const dx = gs.player.x - e.x; const dy = gs.player.y - e.y; const dist = Math.sqrt(dx*dx + dy*dy); 
           e.angle = Math.atan2(dy, dx); 
-          if (dist > 50) { e.x += (dx/dist) * (1.2 + gs.fase * 0.2) * speedMult; e.y += (dy/dist) * (0.8 + gs.fase * 0.2) * speedMult; }
+          if (dist > 50) { e.x += (dx/dist) * (1.5 + gs.fase * 0.3) * speedMult; e.y += (dy/dist) * (1.0 + gs.fase * 0.2) * speedMult; }
           e.fireTimer += 1 * speedMult;
           if (e.fireTimer > Math.max(30, 80 - (gs.fase * 8))) { 
-            gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: Math.cos(e.angle)*4, vy: Math.sin(e.angle)*4, size: 5, damage: 15, homing: false, color: '#FF00FF', hp: 1 }); 
+            gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: Math.cos(e.angle)*(3 + gs.fase*0.8), vy: Math.sin(e.angle)*(3 + gs.fase*0.8), size: 6, damage: 15, homing: false, color: '#FF00FF', hp: 1 }); 
             e.fireTimer = 0; 
           }
         } else {
@@ -663,13 +665,14 @@ export default function MathBlaster() {
           else {
             e.x += Math.sin(now / 300) * 1.5 * speedMult; e.fireTimer += 1 * speedMult;
             if (e.fireTimer > Math.max(60, 120 - (gs.fase * 5)) && Math.random() < 0.05) { 
-              gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: 0, vy: 4 + gs.fase * 0.5, size: 4, damage: 10, homing: false, color: '#FF0055', hp: 1 }); 
+              gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: 0, vy: 3 + gs.fase, size: 5, damage: 10, homing: false, color: '#FF0055', hp: 1 }); 
               e.fireTimer = 0; 
             }
           }
         }
       }
       
+      // COLISÃO DO CORPO INIMIGO COM O PLAYER
       if (Math.abs(gs.player.x - e.x) < 25 && Math.abs(gs.player.y - e.y) < 25) { 
         aplicarDano(15); 
         if (!e.mathRequired) e.hp = -100; 
@@ -707,11 +710,11 @@ export default function MathBlaster() {
         }
       });
 
-      if (gs.boss.active && Math.abs(l.x - gs.boss.x) < 40 && Math.abs(l.y - gs.boss.y) < 30) {
+      if (gs.boss.active && Math.abs(l.x - gs.boss.x) < 45 && Math.abs(l.y - gs.boss.y) < 35) {
         if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; }
         
         if (gs.boss.shield) { 
-          criarParticulas(l.x, gs.boss.y + 30, '#00FFFF', 2); 
+          criarParticulas(l.x, gs.boss.y + 35, '#00FFFF', 2); 
         } else { 
           gs.boss.hp -= l.damage; 
           criarParticulas(l.x, l.y, '#FFD700', 4); 
@@ -837,7 +840,7 @@ export default function MathBlaster() {
           <Ionicons name="rocket" size="{80}" color="#00FFFF" style="{{" marginBottom: 20 }}/>
           <Text style="{styles.tituloMenu}">SKY</Text>
           <Text style="{styles.subTituloMenu}">EQUATIONS</Text>
-          <Text style="{styles.instrucoes}">Toque ou use as Setas/WASD para mover. Digite a resposta no teclado físico e dê Enter!</Text>
+          <Text style="{styles.instrucoes}">Toque na metade superior da tela para mover a nave. Use a metade inferior para digitar a resposta e enviar!</Text>
           <TouchableOpacity style="{styles.btnIniciar}" onPress="{iniciarJogo}">
             <Text style="{styles.btnIniciarTxt}">INICIAR MISSÃO</Text>
           </TouchableOpacity>
@@ -865,7 +868,7 @@ export default function MathBlaster() {
   }
 
   return (
-    <SafeAreaView style="{styles.container}" edges="{['top'," 'bottom']} onTouchStart="{handleRootTouchStart}" onTouchMove="{handleRootTouchMove}" onTouchEnd="{handleRootTouchEnd}" onTouchCancel="{handleRootTouchEnd}">
+    <SafeAreaView style="{styles.container}" edges="{['top'," 'bottom']}>
       <View style="{styles.gameWrapper}">
         
         <View style="{styles.hud}">
@@ -886,7 +889,10 @@ export default function MathBlaster() {
 
         <View style="{[styles.gameArea," gs.timeFreezeTimer> 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} 
           onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} 
-          pointerEvents="box-none"
+          onTouchStart={handleRootTouchStart} 
+          onTouchMove={handleRootTouchMove} 
+          onTouchEnd={handleRootTouchEnd} 
+          onTouchCancel={handleRootTouchEnd}
         >
           <View style="{styles.gridOverlay}"/>
           
@@ -894,11 +900,11 @@ export default function MathBlaster() {
           {gs.gameState === 'TRANSITION' && (<View style="{styles.centerAlert}"><Text style="{styles.alertTextSuccess}">FASE CONCLUÍDA</Text><Text style="{styles.alertSubText}">PREPARANDO SALTO...</Text></View>)}
 
           {gs.enemies.map(e => {
-            if (e.type === 'METEOR') return <View key="{e.id}" style="{[styles.meteorShape," { left: e.x - 10, top: e.y 10 }]}/>;
-            if (e.type === 'FLANKER') return ( <View key="{e.id}" style="{[styles.flankerShape," { left: e.x - 8, top: e.y transform: [{ rotate: e.vx> 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style="{styles.miniShield}"/>}</View>);
+            if (e.type === 'METEOR') return <View key="{e.id}" style="{[styles.meteorShape," { left: e.x - 12, top: e.y 12 }]}/>;
+            if (e.type === 'FLANKER') return ( <View key="{e.id}" style="{[styles.flankerShape," { left: e.x - 10, top: e.y transform: [{ rotate: e.vx> 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style="{styles.miniShield}"/>}</View>);
             if (e.type === 'SPAWNER') {
               return (
-                 <View key="{e.id}" style="{[styles.spawnerShape," { left: e.x - 25, top: e.y 17 }]}>
+                 <View key="{e.id}" style="{[styles.spawnerShape," { left: e.x - 30, top: e.y 22 }]}>
                     <Text style="{styles.spawnerMath}">{e.txt}</Text>
                     {gs.xRayTimer > 0 && <Text style="{styles.xrayText}">{e.res}</Text>}
                     <View style="{styles.powerupDots}">
@@ -908,13 +914,13 @@ export default function MathBlaster() {
               );
             }
             const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
-            return (<View key="{e.id}" style="{[styles.squadronShip," { left: e.x - 10, top: e.y borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style="{styles.miniShield}"/>}</View>);
+            return (<View key="{e.id}" style="{[styles.squadronShip," { left: e.x - 12, top: e.y borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style="{styles.miniShield}"/>}</View>);
           })}
 
           {gs.boss.active && (
-            <View style="{[styles.bossContainer," { left: gs.boss.x - 30, top: gs.boss.y 20 }]}>
+            <View style="{[styles.bossContainer," { left: gs.boss.x - 40, top: gs.boss.y 25 }]}>
               <View style="{styles.bossHpBar}"><View style="{[styles.bossHpFill," { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]}/></View>
-              <View style="{[styles.bossShip," gs.boss.type="==" 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, 2 20, height: 40, '#006400', '#32CD32' }]}/>
+              <View style="{[styles.bossShip," gs.boss.type="==" 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, 2 30, height: 60, '#006400', '#32CD32' }]}/>
               {gs.boss.shield && (
                 <View style="{styles.bossShield}">
                   <Text style="{styles.bossMath}">{gs.boss.txt}</Text>
@@ -925,7 +931,7 @@ export default function MathBlaster() {
           )}
 
           {gs.powerups.map(p => (
-            <View key="{p.id}" style="{[styles.powerupBox," { left: p.x - 35, top: p.y 15, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
+            <View key="{p.id}" style="{[styles.powerupBox," { left: p.x - 40, top: p.y 18, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
               <Text style="{[styles.powerupTitle," { color: p.color }]}>{p.title}</Text>
               <Text style="{styles.powerupMath}">{p.txt}</Text>
             </View>
@@ -943,7 +949,7 @@ export default function MathBlaster() {
           })}
 
           {gs.mathShots.map(ms => (
-            <View key="{ms.id}" style="{{" position: 'absolute', left: ms.x - 5, top: ms.y width: 10, height: borderRadius: backgroundColor: ms.color, shadowColor: shadowRadius: 6, shadowOpacity: 1, zIndex: 10 }}/>
+            <View key="{ms.id}" style="{{" position: 'absolute', left: ms.x - 6, top: ms.y width: 12, height: borderRadius: backgroundColor: ms.color, shadowColor: shadowRadius: 8, shadowOpacity: 1, zIndex: 10 }}/>
           ))}
 
           {gs.enemyLasers.map(el => (
@@ -953,24 +959,24 @@ export default function MathBlaster() {
           ))}
 
           {gs.particles.map((p, i) => (
-            <View key="{i}" style="{{" position: 'absolute', width: 3, height: backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 1.5 }}/>
+            <View key="{i}" style="{{" position: 'absolute', width: 4, height: backgroundColor: p.color, left: p.x, top: p.y, borderRadius: 2 }}/>
           ))}
 
           {gs.floatingTexts.map(ft => (
             <Text key="{ft.id}" style="{[styles.floatingText," { left: ft.x - 30, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text>
           ))}
 
-          <View style="{[styles.playerShape," { left: gs.player.x - 12, top: gs.player.y 12 }]}/>
-          <View style="{[styles.propulsor," { left: gs.player.x - 4, top: gs.player.y + 13, opacity: Math.random()> 0.5 ? 1 : 0.4 }]} />
+          <View style="{[styles.playerShape," { left: gs.player.x - 15, top: gs.player.y 15 }]}/>
+          <View style="{[styles.propulsor," { left: gs.player.x - 5, top: gs.player.y + 15, opacity: Math.random()> 0.5 ? 1 : 0.4 }]} />
           
           {gs.forceShieldHits > 0 && (
-            <View style="{{" position: 'absolute', left: gs.player.x - 20, top: gs.player.y width: 40, height: borderRadius: borderWidth: 3, borderColor: '#00FA9A', backgroundColor: 'rgba(0,250,154,0.1)', zIndex: 10 }}/>
+            <View style="{{" position: 'absolute', left: gs.player.x - 25, top: gs.player.y width: 50, height: borderRadius: borderWidth: 3, borderColor: '#00FA9A', backgroundColor: 'rgba(0,250,154,0.1)', zIndex: 10 }}/>
           )}
-          {gs.drones.normal.active && <View style="{[styles.droneNormal," { left: gs.player.x - 25, top: gs.player.y + 5 }]}/>}
-          {gs.drones.advanced.active && <View style="{[styles.droneAdvanced," { left: gs.player.x + 15, top: gs.player.y 5 }]}/>}
+          {gs.drones.normal.active && <View style="{[styles.droneNormal," { left: gs.player.x - 30, top: gs.player.y + 5 }]}/>}
+          {gs.drones.advanced.active && <View style="{[styles.droneAdvanced," { left: gs.player.x + 20, top: gs.player.y 5 }]}/>}
         </View>
 
-        <View style="{styles.painelInferior}">
+        <View style="{styles.painelInferior}" pointerEvents="box-none">
           <View style="{styles.visorRadar}">
             <Text style="{styles.visorTexto}">{resposta || '_'}</Text>
           </View>
@@ -1042,40 +1048,38 @@ const styles = StyleSheet.create({
   alertTextSuccess: { color: '#32CD32', fontSize: 35, fontWeight: '900', textShadowColor: '#32CD32', textShadowRadius: 8, textShadowOffset: { width: 1, height: 1 } },
   alertSubText: { color: '#FFF', fontSize: 14, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 },
 
-  // --- MODELOS DE NAVES E INIMIGOS REDUZIDOS (ZOOM OUT) ---
-  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderBottomWidth: 25, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF' },
-  propulsor: { position: 'absolute', width: 8, height: 10, backgroundColor: '#FF8C00', borderBottomLeftRadius: 4, borderBottomRightRadius: 4 },
-  droneNormal: { position: 'absolute', width: 8, height: 8, backgroundColor: '#1E90FF', borderRadius: 4, borderWidth: 1, borderColor: '#FFF', zIndex: 5 },
-  droneAdvanced: { position: 'absolute', width: 10, height: 10, backgroundColor: '#FFD700', borderRadius: 2, borderWidth: 1, borderColor: '#FF4444', zIndex: 5 },
+  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 15, borderRightWidth: 15, borderBottomWidth: 30, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF' },
+  propulsor: { position: 'absolute', width: 10, height: 12, backgroundColor: '#FF8C00', borderBottomLeftRadius: 5, borderBottomRightRadius: 5 },
+  droneNormal: { position: 'absolute', width: 10, height: 10, backgroundColor: '#1E90FF', borderRadius: 5, borderWidth: 1, borderColor: '#FFF', zIndex: 5 },
+  droneAdvanced: { position: 'absolute', width: 12, height: 12, backgroundColor: '#FFD700', borderRadius: 3, borderWidth: 1, borderColor: '#FF4444', zIndex: 5 },
   
-  meteorShape: { position: 'absolute', width: 20, height: 20, backgroundColor: '#555', borderRadius: 4, borderWidth: 2, borderColor: '#777' },
-  squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 10, borderRightWidth: 10, borderTopWidth: 20, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
-  flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 12, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500' },
-  miniShield: { position: 'absolute', top: -6, left: -14, width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)' },
+  meteorShape: { position: 'absolute', width: 24, height: 24, backgroundColor: '#555', borderRadius: 4, borderWidth: 2, borderColor: '#777' },
+  squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
+  flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 16, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500' },
+  miniShield: { position: 'absolute', top: -8, left: -16, width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)' },
   
-  spawnerShape: { position: 'absolute', width: 50, height: 35, backgroundColor: 'rgba(0, 255, 255, 0.2)', borderWidth: 2, borderColor: '#00FFFF', borderRadius: 8, justifyContent: 'center', alignItems: 'center', shadowColor: '#00FFFF', shadowRadius: 10, zIndex: 15 },
-  spawnerMath: { color: '#FFF', fontSize: 12, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 1, height: 1 } },
-  xrayText: { position: 'absolute', top: -16, color: '#FF1493', fontSize: 12, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 } },
+  spawnerShape: { position: 'absolute', width: 60, height: 45, backgroundColor: 'rgba(0, 255, 255, 0.2)', borderWidth: 2, borderColor: '#00FFFF', borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: '#00FFFF', shadowRadius: 10, zIndex: 15 },
+  spawnerMath: { color: '#FFF', fontSize: 15, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 1, height: 1 } },
+  xrayText: { position: 'absolute', top: -20, color: '#FF1493', fontSize: 14, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 } },
   
-  bossContainer: { position: 'absolute', width: 60, height: 45, alignItems: 'center', zIndex: 20 },
-  bossShip: { width: 50, height: 30, backgroundColor: '#8B0000', borderRadius: 10, borderWidth: 2, borderColor: '#FF4444' },
-  bossHpBar: { width: '100%', height: 4, backgroundColor: '#333', marginBottom: 3, borderRadius: 2, overflow: 'hidden' },
+  bossContainer: { position: 'absolute', width: 80, height: 60, alignItems: 'center', zIndex: 20 },
+  bossShip: { width: 60, height: 40, backgroundColor: '#8B0000', borderRadius: 15, borderWidth: 2, borderColor: '#FF4444' },
+  bossHpBar: { width: '100%', height: 5, backgroundColor: '#333', marginBottom: 4, borderRadius: 2, overflow: 'hidden' },
   bossHpFill: { height: '100%', backgroundColor: '#FF0055' },
-  bossShield: { position: 'absolute', top: -10, width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
-  bossMath: { color: '#FFF', fontSize: 16, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 4, textShadowOffset: { width: 1, height: 1 } },
+  bossShield: { position: 'absolute', top: -10, width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
+  bossMath: { color: '#FFF', fontSize: 20, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 4, textShadowOffset: { width: 1, height: 1 } },
 
-  powerupBox: { position: 'absolute', width: 70, height: 30, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  powerupTitle: { fontSize: 6, fontWeight: '900', position: 'absolute', top: -6, backgroundColor: '#050015', paddingHorizontal: 3 },
-  powerupMath: { color: '#FFF', fontSize: 12, fontWeight: '900' },
-  powerupDots: { flexDirection: 'row', gap: 2, position: 'absolute', bottom: -5 },
-  dot: { width: 4, height: 4, borderRadius: 2, borderWidth: 1, backgroundColor: '#050015' },
+  powerupBox: { position: 'absolute', width: 80, height: 35, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  powerupTitle: { fontSize: 7, fontWeight: '900', position: 'absolute', top: -8, backgroundColor: '#050015', paddingHorizontal: 3 },
+  powerupMath: { color: '#FFF', fontSize: 14, fontWeight: '900' },
+  powerupDots: { flexDirection: 'row', gap: 3, position: 'absolute', bottom: -6 },
+  dot: { width: 6, height: 6, borderRadius: 3, borderWidth: 1, backgroundColor: '#050015' },
 
   laserNormal: { position: 'absolute', zIndex: 1 },
   enemyLaser: { position: 'absolute', borderRadius: 5 },
   cannonBall: { position: 'absolute', borderRadius: 16, borderWidth: 2, borderColor: '#FFF' }, 
-  floatingText: { position: 'absolute', fontSize: 10, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 }, zIndex: 100, textAlign: 'center', width: 80 },
+  floatingText: { position: 'absolute', fontSize: 12, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 }, zIndex: 100, textAlign: 'center', width: 80 },
 
-  // --- TECLADO AINDA MAIS COMPACTADO ---
   painelInferior: { 
     backgroundColor: '#0A0025', 
     borderTopWidth: 2, 
