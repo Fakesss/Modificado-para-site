@@ -30,7 +30,7 @@ players_online: Dict[str, dict] = {}
 rooms: Dict[str, dict] = {}
 lobbies: Dict[str, dict] = {}
 
-# CORREÇÃO: Adicionada a fila do Math Blaster
+# CORREÇÃO: Fila do Math Blaster adicionada
 matchmaking_queues = {
     'tictactoe': [],
     'arcade': [],
@@ -288,7 +288,7 @@ async def accept_lobby_challenge(sid, data):
             room_id = await start_arcade_match(p1_sid, sid, desafio['modo_operacao'])
         elif desafio['game_type'] == 'tugofwar': 
             room_id = await start_tugofwar_match(p1_sid, sid, desafio['modo_operacao'])
-        # CORREÇÃO: Redireciona corretamente desafios do lobby
+        # CORREÇÃO: Matchmaking dentro do Lobby para o Math Blaster
         elif desafio['game_type'] == 'math_blaster': 
             room_id = await start_math_blaster_match(p1_sid, sid, desafio['modo_operacao'])
 
@@ -440,22 +440,14 @@ async def cancel_matchmaking(sid):
 
 def gerar_operacao_simples(modo='misto'):
     ops_disponiveis = ['+', '-', 'x', '/', '^', 'v']
-    
-    if modo == 'soma': 
-        ops_disponiveis = ['+']
-    elif modo == 'subtracao': 
-        ops_disponiveis = ['-']
-    elif modo == 'multiplicacao': 
-        ops_disponiveis = ['x']
-    elif modo == 'divisao': 
-        ops_disponiveis = ['/']
-    elif modo == 'potenciacao': 
-        ops_disponiveis = ['^', 'v']
+    if modo == 'soma': ops_disponiveis = ['+']
+    elif modo == 'subtracao': ops_disponiveis = ['-']
+    elif modo == 'multiplicacao': ops_disponiveis = ['x']
+    elif modo == 'divisao': ops_disponiveis = ['/']
+    elif modo == 'potenciacao': ops_disponiveis = ['^', 'v']
         
     op = random.choice(ops_disponiveis)
-    
-    texto = ""
-    res = 0
+    texto, res = "", 0
 
     if op == '+': 
         n1, n2 = random.randint(1, 20), random.randint(1, 20)
@@ -683,10 +675,9 @@ async def tugofwar_answer(sid, data):
 
 
 # ====================================================
-# 🚀 SISTEMA MATH BLASTER
+# 🚀 SISTEMA MATH BLASTER (CORREÇÃO TOTAL DE REDE)
 # ====================================================
 
-# CORREÇÃO: Função de criação da sala
 async def start_math_blaster_match(p1_sid, p2_sid, modo_operacao):
     room_id = f"mb_{p1_sid[:5]}_{p2_sid[:5]}"
     rooms[room_id] = {
@@ -721,18 +712,18 @@ async def start_math_blaster_match(p1_sid, p2_sid, modo_operacao):
 
     return room_id
 
-# CORREÇÃO: Função que permite o Celular e o Navegador entrarem na sala do Servidor
+# CORREÇÃO: Força o WebView/Navegador a entrar na sala incondicionalmente
 @sio.event
 async def join_game_room(sid, data):
     room_id = data.get('roomId')
-    if room_id in rooms:
+    if room_id:
         await sio.enter_room(sid, room_id)
 
-# CORREÇÃO: O canal de comunicação que estava faltando para enviar as posições
+# CORREÇÃO: Retransmite os dados do jogo incondicionalmente para a sala
 @sio.event
 async def game_action(sid, data):
     room_id = data.get('roomId')
-    if room_id in rooms:
+    if room_id:
         await sio.emit('game_action', data, room=room_id, skip_sid=sid)
 
 
