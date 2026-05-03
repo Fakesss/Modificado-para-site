@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
 
-// --- NOVO COMPONENTE DE TECLA (Otimizado para Multi-Touch Nativamente) ---
+// --- COMPONENTE: TECLADO RETRÔ (Otimizado para Multi-Touch Nativo) ---
 const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed: boolean, onPressWeb: (v: string) => void }) => {
   const isWeb = Platform.OS === 'web';
   let customStyle = styles.teclaRetro;
@@ -37,11 +37,12 @@ export default function MathBlaster() {
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
   
-  // Estados do Multi-touch
+  // ESTADOS DO MULTI-TOUCH ISOLADO
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
-  const tecladoLayoutRef = useRef({ width: 350 }); // Fallback
-  
+  const tecladoLayoutRef = useRef({ width: 350 }); 
+  const kbTouchIds = useRef<Set<string>>(new Set());
+
   const respostaRef = useRef('');
   useEffect(() => { respostaRef.current = resposta; }, [resposta]);
   
@@ -54,14 +55,14 @@ export default function MathBlaster() {
       hp: 100, 
       maxHp: 100, 
       damage: 1, 
-      shotSize: 4,
+      shotSize: 6,
       fireRate: 300, 
       lastFire: 0, 
       tripleShot: false,
       weapons: {
-        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 40, life: 80 },
+        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
-        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 35, damageMult: 1 }
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 }
       }
     },
     lasers: [] as any[], 
@@ -73,7 +74,7 @@ export default function MathBlaster() {
     enemyLasers: [] as any[],
     powerups: [] as any[], 
     particles: [] as any[],
-    boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 3, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
+    boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, 
     fase: 1, 
     gameState: 'WAVES', 
@@ -82,7 +83,6 @@ export default function MathBlaster() {
     movementTouchId: null as string | null,
     lastTouchX: 0, 
     lastTouchY: 0,
-    keys: { up: false, down: false, left: false, right: false },
     timeAlive: 0,
     flawlessBossesCount: 0,
     tookDamageThisBoss: false,
@@ -101,10 +101,13 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
+  // ==========================================
+  // LÓGICA DE MOVIMENTAÇÃO NAVE (MULTI-TOUCH)
+  // ==========================================
   const handleGameTouchStart = (e: any) => {
-    const touches = e.nativeEvent.touches;
-    for (let i = 0; i < touches.length; i++) {
-      const touch = touches[i];
+    const changed = e.nativeEvent.changedTouches;
+    for (let i = 0; i < changed.length; i++) {
+      const touch = changed[i];
       if (gs.movementTouchId === null) {
         gs.movementTouchId = touch.identifier;
         gs.lastTouchX = touch.pageX;
@@ -133,6 +136,87 @@ export default function MathBlaster() {
     if (!touchExists) gs.movementTouchId = null;
   };
 
+  // ==========================================
+  // LÓGICA DO TECLADO QUADRADO (MULTI-TOUCH)
+  // ==========================================
+  const getTeclaFromCoords = (x: number, y: number, layoutWidth: number) => {
+    const GAP = 8; 
+    const KEY_W = (layoutWidth - (GAP * 2)) / 3; 
+    const KEY_H = 60; // Altura aumentada para deixar a tecla mais quadrada
+    
+    let col = -1;
+    if (x >= 0 && x <= KEY_W) col = 0; 
+    else if (x > KEY_W && x <= KEY_W * 2 + GAP) col = 1; 
+    else if (x > KEY_W * 2 + GAP) col = 2;
+
+    let row = -1;
+    if (y >= 0 && y <= KEY_H) row = 0; 
+    else if (y > KEY_H && y <= KEY_H * 2 + GAP) row = 1; 
+    else if (y > KEY_H * 2 + GAP && y <= KEY_H * 3 + GAP * 2) row = 2; 
+    else if (y > KEY_H * 3 + GAP * 2) row = 3;
+
+    if (col === -1 || row === -1) return null;
+    const layout = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['apagar', '0', 'enviar']];
+    return layout[row]?.[col] || null;
+  };
+
+  const processKeyboardTouches = (evt: any) => {
+    if (Platform.OS === 'web') return;
+    const touches = evt.nativeEvent.touches;
+    const currentActive = new Set<string>();
+
+    for (let i = 0; i < touches.length; i++) {
+        const touch = touches[i];
+        // Processa APENAS toques que COMEÇARAM na área do teclado (ignora o dedo da nave)
+        if (kbTouchIds.current.has(touch.identifier)) {
+            const x = touch.locationX;
+            const y = touch.locationY;
+            if (x >= -20 && x <= tecladoLayoutRef.current.width + 20 && y >= -20 && y <= 300) {
+                const key = getTeclaFromCoords(x, y, tecladoLayoutRef.current.width);
+                if (key) currentActive.add(key);
+            }
+        }
+    }
+    
+    setTeclasPressionadas(Array.from(currentActive));
+
+    currentActive.forEach(key => {
+        if (!triggeredTouchesRef.current.has(key)) {
+            triggeredTouchesRef.current.add(key);
+            lidarComTeclado(key);
+        }
+    });
+
+    triggeredTouchesRef.current.forEach(key => {
+        if (!currentActive.has(key)) triggeredTouchesRef.current.delete(key);
+    });
+  };
+
+  const handleKbTouchStart = (evt: any) => {
+    if (Platform.OS === 'web') return;
+    const changed = evt.nativeEvent.changedTouches;
+    for (let i = 0; i < changed.length; i++) {
+        kbTouchIds.current.add(changed[i].identifier);
+    }
+    processKeyboardTouches(evt);
+  };
+
+  const handleKbTouchMove = (evt: any) => {
+    if (Platform.OS === 'web') return;
+    processKeyboardTouches(evt);
+  };
+
+  const handleKbTouchEnd = (evt: any) => {
+    if (Platform.OS === 'web') return;
+    const changed = evt.nativeEvent.changedTouches;
+    for (let i = 0; i < changed.length; i++) {
+        kbTouchIds.current.delete(changed[i].identifier);
+    }
+    processKeyboardTouches(evt);
+  };
+
+
+  // --- MATEMÁTICA ---
   const getRespostasAtivas = () => {
     const resps: number[] = [];
     if (gs.boss.active && gs.boss.shield) resps.push(gs.boss.res);
@@ -196,19 +280,18 @@ export default function MathBlaster() {
 
   const iniciarJogo = () => {
     gs.player = { 
-      x: layoutRef.current.width / 2, y: layoutRef.current.height - 60, 
-      hp: 100, maxHp: 100, damage: 1, shotSize: 4, fireRate: 300, lastFire: 0, tripleShot: false, 
+      x: layoutRef.current.width / 2, y: layoutRef.current.height - 100, 
+      hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, 
       weapons: { 
-        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 40, life: 80 }, 
+        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 }, 
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
-        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 35, damageMult: 1 } 
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 } 
       }
     };
     gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.pulses = []; gs.floatingTexts = [];
     gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
-    gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 3, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
+    gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
-    gs.keys = { up: false, down: false, left: false, right: false };
     
     gs.timeAlive = 0;
     gs.flawlessBossesCount = 0;
@@ -237,58 +320,6 @@ export default function MathBlaster() {
     for(let i=0; i<qtd; i++) { 
       gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color }); 
     }
-  };
-
-  // --- LÓGICA MULTI-TOUCH E TECLADO ---
-  const getTeclaFromCoords = (x: number, y: number, layoutWidth: number) => {
-    const GAP = 6; 
-    const KEY_W = (layoutWidth - (GAP * 2)) / 3; 
-    const KEY_H = 55;
-    
-    let col = -1;
-    if (x >= 0 && x <= KEY_W) col = 0; 
-    else if (x > KEY_W && x <= KEY_W * 2 + GAP) col = 1; 
-    else if (x > KEY_W * 2 + GAP) col = 2;
-
-    let row = -1;
-    if (y >= 0 && y <= KEY_H) row = 0; 
-    else if (y > KEY_H && y <= KEY_H * 2 + GAP) row = 1; 
-    else if (y > KEY_H * 2 + GAP && y <= KEY_H * 3 + GAP * 2) row = 2; 
-    else if (y > KEY_H * 3 + GAP * 2) row = 3;
-
-    if (col === -1 || row === -1) return null;
-    const layout = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['apagar', '0', 'enviar']];
-    return layout[row]?.[col] || null;
-  };
-
-  const handleMultiTouchTeclado = (evt: any) => {
-    if (Platform.OS === 'web') return;
-    const touches = evt.nativeEvent.touches;
-    const currentActive = new Set<string>();
-
-    for (let i = 0; i < touches.length; i++) {
-        const x = touches[i].locationX;
-        const y = touches[i].locationY;
-        
-        // Impede que toques da tela de cima se misturem aqui caso a tela falhe na medição
-        if (x >= -20 && x <= tecladoLayoutRef.current.width + 20 && y >= -20 && y <= 300) {
-            const key = getTeclaFromCoords(x, y, tecladoLayoutRef.current.width);
-            if (key) currentActive.add(key);
-        }
-    }
-    
-    setTeclasPressionadas(Array.from(currentActive));
-
-    currentActive.forEach(key => {
-        if (!triggeredTouchesRef.current.has(key)) {
-            triggeredTouchesRef.current.add(key);
-            lidarComTeclado(key);
-        }
-    });
-
-    triggeredTouchesRef.current.forEach(key => {
-        if (!currentActive.has(key)) triggeredTouchesRef.current.delete(key);
-    });
   };
 
   const lidarComTeclado = useCallback((valor: string) => {
@@ -350,6 +381,7 @@ export default function MathBlaster() {
               else if (type === 'PULSAR_UNLOCK') gs.player.weapons.pulsar.active = true;
               else if (type === 'PULSAR_COOLDOWN') { gs.player.weapons.pulsar.baseCooldown = Math.max(4000, gs.player.weapons.pulsar.baseCooldown - 1000); gs.player.weapons.pulsar.level += 1; }
               else if (type === 'PULSAR_RADIUS') { gs.player.weapons.pulsar.radius += 20; gs.player.weapons.pulsar.level += 1; }
+              
               else if (type === 'FORCE_SHIELD') gs.forceShieldHits = 3;
               else if (type === 'DRONE_NORMAL') { if (!gs.drones.normal.active) gs.drones.normal.active = true; else gs.drones.normal.baseCooldown = Math.max(500, gs.drones.normal.baseCooldown - 200); }
               else if (type === 'TIME_FREEZE') gs.timeFreezeTimer = 5000;
@@ -380,44 +412,6 @@ export default function MathBlaster() {
     }
   }, [jogoAtivo]);
 
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!jogoAtivo) return;
-      const key = e.key;
-
-      if (key === 'w' || key === 'W' || key === 'ArrowUp') gs.keys.up = true;
-      if (key === 's' || key === 'S' || key === 'ArrowDown') gs.keys.down = true;
-      if (key === 'a' || key === 'A' || key === 'ArrowLeft') gs.keys.left = true;
-      if (key === 'd' || key === 'D' || key === 'ArrowRight') gs.keys.right = true;
-
-      if (/\d/.test(key)) lidarComTeclado(key);
-      if (key === 'Backspace') lidarComTeclado('apagar');
-      if (key === 'Enter') lidarComTeclado('enviar');
-
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(key)) {
-        e.preventDefault();
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      const key = e.key;
-      if (key === 'w' || key === 'W' || key === 'ArrowUp') gs.keys.up = false;
-      if (key === 's' || key === 'S' || key === 'ArrowDown') gs.keys.down = false;
-      if (key === 'a' || key === 'A' || key === 'ArrowLeft') gs.keys.left = false;
-      if (key === 'd' || key === 'D' || key === 'ArrowRight') gs.keys.right = false;
-    };
-
-    window.addEventListener('keydown', handleKeyDown, { passive: false });
-    window.addEventListener('keyup', handleKeyUp);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [jogoAtivo, lidarComTeclado]);
-
   const gameTick = () => {
     const now = Date.now();
     const gw = layoutRef.current.width; 
@@ -426,12 +420,6 @@ export default function MathBlaster() {
     gs.timeAlive += 30;
     if (gs.timeFreezeTimer > 0) gs.timeFreezeTimer -= 30;
     if (gs.xRayTimer > 0) gs.xRayTimer -= 30;
-
-    const keyboardSpeed = 6;
-    if (gs.keys.up) gs.player.y -= keyboardSpeed;
-    if (gs.keys.down) gs.player.y += keyboardSpeed;
-    if (gs.keys.left) gs.player.x -= keyboardSpeed;
-    if (gs.keys.right) gs.player.x += keyboardSpeed;
 
     const aplicarDano = (dano: number) => {
       if (gs.forceShieldHits > 0) {
@@ -444,37 +432,37 @@ export default function MathBlaster() {
       }
     };
 
-    if (gs.player.x < 15) gs.player.x = 15; 
-    if (gs.player.x > gw - 15) gs.player.x = gw - 15;
-    if (gs.player.y < 15) gs.player.y = 15; 
-    if (gs.player.y > gh - 15) gs.player.y = gh - 15;
+    if (gs.player.x < 20) gs.player.x = 20; 
+    if (gs.player.x > gw - 20) gs.player.x = gw - 20;
+    if (gs.player.y < 20) gs.player.y = 20; 
+    if (gs.player.y > gh - 20) gs.player.y = gh - 20;
 
     if (now - gs.player.lastFire > gs.player.fireRate) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 15, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       if (gs.player.tripleShot) {
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 8, y: gs.player.y - 10, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 8, y: gs.player.y - 10, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 10, y: gs.player.y - 15, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 10, y: gs.player.y - 15, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       }
       gs.player.lastFire = now;
     }
 
     if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 15, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 2.5, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 3, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
       gs.player.weapons.missile.lastFire = now;
     }
     
     if (gs.player.weapons.laser.active && now - gs.player.weapons.laser.lastFire > gs.player.weapons.laser.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 30, vx: 0, vy: -25, damage: gs.player.damage * gs.player.weapons.laser.damageMult, size: gs.player.shotSize * 1.5 * gs.player.weapons.laser.sizeMult, type: 'LASER' });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, vx: 0, vy: -25, damage: gs.player.damage * gs.player.weapons.laser.damageMult, size: gs.player.shotSize * 2 * gs.player.weapons.laser.sizeMult, type: 'LASER' });
       gs.player.weapons.laser.lastFire = now;
     }
 
     if (gs.drones.normal.active && now - gs.drones.normal.lastFire > gs.drones.normal.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 30, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 40, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       gs.drones.normal.lastFire = now;
     }
 
     if (gs.drones.advanced.active && now - gs.drones.advanced.lastFire > gs.drones.advanced.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 25, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.2, type: 'MISSILE_HOMING', life: 9999, aoeRange: 35 });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 30, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.5, type: 'MISSILE_HOMING', life: 9999, aoeRange: 40 });
       gs.drones.advanced.lastFire = now;
     }
 
@@ -584,7 +572,7 @@ export default function MathBlaster() {
       el.x += el.vx * speedMult; 
       el.y += el.vy * speedMult;
 
-      if (Math.abs(gs.player.x - el.x) < 25 && Math.abs(gs.player.y - el.y) < 25) {
+      if (Math.abs(gs.player.x - el.x) < 20 && Math.abs(gs.player.y - el.y) < 20) {
         aplicarDano(el.damage);
         el.hp = 0; 
       }
@@ -597,6 +585,7 @@ export default function MathBlaster() {
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
+      
       if (gs.stateTimer % Math.max(20, 60 - gs.fase * 5) === 0) {
         const meteorVy = gs.fase === 1 ? Math.random() * 1.5 + 2 : Math.random() * 2 + 3 + (gs.fase * 0.6);
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: meteorVy, angle: 0 });
@@ -889,7 +878,7 @@ export default function MathBlaster() {
           <Ionicons name="rocket" size={80} color="#00FFFF" style={{ marginBottom: 20 }}/>
           <Text style={styles.tituloMenu}>SKY</Text>
           <Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Toque na metade superior da tela para mover a nave. Use a metade inferior para digitar a resposta e enviar!</Text>
+          <Text style={styles.instrucoes}>Deslize na nave para voar e use o teclado para atirar e destruir os asteróides!</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
           </TouchableOpacity>
@@ -1048,15 +1037,14 @@ export default function MathBlaster() {
               <BotaoRetro valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={lidarComTeclado}/>
             </View>
 
-            {/* A GAMBIARRA DO MULTI-TOUCH */}
+            {/* A INTERCEPTAÇÃO MULTI-TOUCH INVISÍVEL */}
             {Platform.OS !== 'web' && (
                 <View 
                     style={StyleSheet.absoluteFillObject} 
-                    onStartShouldSetResponder={() => true} 
-                    onResponderGrant={handleMultiTouchTeclado} 
-                    onResponderMove={handleMultiTouchTeclado} 
-                    onResponderRelease={handleMultiTouchTeclado} 
-                    onResponderTerminate={handleMultiTouchTeclado} 
+                    onTouchStart={handleKbTouchStart} 
+                    onTouchMove={handleKbTouchMove} 
+                    onTouchEnd={handleKbTouchEnd} 
+                    onTouchCancel={handleKbTouchEnd} 
                 />
             )}
           </View>
@@ -1161,8 +1149,8 @@ const styles = StyleSheet.create({
   },
   visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 6, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 6 }, 
   visorTexto: { color: '#00FFFF', fontSize: 20, fontWeight: '900', letterSpacing: 3 },
-  tecladoContainer: { width: '100%', maxWidth: 350, gap: 6 }, 
-  tecladoRow: { flexDirection: 'row', gap: 6, height: 55 }, 
+  tecladoContainer: { width: '100%', maxWidth: 350, gap: 8 }, 
+  tecladoRow: { flexDirection: 'row', gap: 8, height: 60 }, 
   teclaRetro: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
   teclaRetroText: { color: '#FFF', fontSize: 22, fontWeight: 'bold' }, 
   teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)', borderColor: '#FF4444' },
