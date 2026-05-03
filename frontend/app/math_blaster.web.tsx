@@ -5,7 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/context/AuthContext';
-import * as api from '../src/services/api';
+import api from '../src/services/api';
+import * as apiRoutes from '../src/services/api';
 
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
@@ -49,6 +50,9 @@ export default function MathBlaster() {
   const [guestUserId, setGuestUserId] = useState<string | null>(null);
   const gameOverFired = useRef(false);
   
+  // Limite Diário de Spawn
+  const dailySpawnsRef = useRef(0);
+  
   const [canvasSize, setCanvasSize] = useState({ width: initialWidth, height: initialHeight });
   const canvasSizeRef = useRef({ width: initialWidth, height: initialHeight });
   
@@ -64,6 +68,7 @@ export default function MathBlaster() {
 
   const gs = useRef({
     currentZoom: BASE_ZOOM,
+    keys: { up: false, down: false, left: false, right: false },
     player: { 
       x: initialWidth / 2, y: initialHeight - 60, hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false,
       weapons: {
@@ -85,29 +90,48 @@ export default function MathBlaster() {
 
   const loopRef = useRef<any>(null);
 
+  // Carrega limite diário na inicialização
   useEffect(() => {
+    const loadDailyLimit = async () => {
+       const today = new Date().toLocaleDateString();
+       const storedDate = await AsyncStorage.getItem('rareSpawnDate');
+       if (storedDate === today) {
+           const count = await AsyncStorage.getItem('rareSpawnCount');
+           dailySpawnsRef.current = count ? parseInt(count) : 0;
+       } else {
+           await AsyncStorage.setItem('rareSpawnDate', today);
+           await AsyncStorage.setItem('rareSpawnCount', '0');
+           dailySpawnsRef.current = 0;
+       }
+    };
+    loadDailyLimit();
+
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
   const carregarHallDaFama = async () => {
     try {
-      const data = await api.getRankingMathBlaster();
+      const data = await apiRoutes.getRankingMathBlaster();
       setHallDaFama(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error("Erro ao carregar ranking do Math Blaster", e);
+      console.error("Erro ao carregar ranking", e);
     }
   };
 
-  // INICIALIZAÇÃO DE AUTENTICAÇÃO VIA WEBVIEW
   useEffect(() => {
     const initWebViewAuth = async () => {
         if (Platform.OS === 'web') {
-            const urlParams = new URLSearchParams(window.location.search);
-            const token = urlParams.get('token');
-            const uid = urlParams.get('userId');
-            
-            if (token) await AsyncStorage.setItem('token', token);
-            if (uid) setGuestUserId(uid);
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const token = urlParams.get('token');
+                const uid = urlParams.get('userId');
+                
+                if (token) {
+                    await AsyncStorage.setItem('token', token);
+                    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                }
+                if (uid) setGuestUserId(uid);
+            } catch(e) {}
         }
         if (tela === 'menu') {
             carregarHallDaFama();
@@ -116,14 +140,183 @@ export default function MathBlaster() {
     initWebViewAuth();
   }, [tela]);
 
-  // COMUNICAÇÃO REVERSA: Manda fechar a WebView no App Nativo
   const goBack = () => {
-      if (Platform.OS === 'web' && (window as any).ReactNativeWebView) {
-          (window as any).ReactNativeWebView.postMessage('GO_BACK');
-      } else {
-          router.back();
-      }
+      try {
+          if (Platform.OS === 'web' && (window as any).ReactNativeWebView) {
+              (window as any).ReactNativeWebView.postMessage('GO_BACK');
+              return;
+          }
+      } catch (e) {}
+      router.back();
   };
+
+  const lidarComTeclado = useCallback((valor: string) => {
+    if (!jogoAtivo) return;
+    
+    if (valor === 'apagar') {
+      setResposta(r => r.slice(0, -1));
+    } else if (valor === 'enviar') {
+      
+      // CHEAT CODE 1: INVOCAR INIMIGO RARO (Usa 1 limite diário)
+      if (respostaRef.current === '314159') {
+        if (dailySpawnsRef.current >= 5) {
+            gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `LIMITE DIÁRIO ATINGIDO!`, color: '#FF4444', life: 90 });
+            setResposta(''); return;
+        }
+        const gw = layoutRef.current.width;
+        const eq = gerarEquacao(10, getRespostasAtivas());
+        gs.enemies.push({ id: Math.random().toString(), type: 'RARE_ENEMY', x: gw / 2, y: -50, targetY: 100, hp: 9999, mathRequired: true, solvesNeeded: 1, solvesDone: 0, txt: "👑 " + eq.txt, res: eq.res, vy: 0.5, evasive: false });
+        
+        dailySpawnsRef.current += 1;
+        AsyncStorage.setItem('rareSpawnCount', dailySpawnsRef.current.toString()).catch(()=>{});
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 2: DRONE
+      if (respostaRef.current === '3141592') {
+        gs.drones.advanced.active = true; gs.drones.advanced.baseCooldown = 500;
+        gs.score += 500;
+        criarParticulas(gs.player.x, gs.player.y, '#FFD700', 80);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE!`, color: '#FFD700', life: 90 });
+        setResposta(''); return;
+      }
+
+      const num = parseInt(respostaRef.current);
+      let acertou = false;
+
+      const dispararMagia = (tx: number, ty: number, color: string) => { 
+        gs.mathShots.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, tx, ty, color, life: 15 }); 
+      };
+
+      if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
+        acertou = true; gs.boss.shield = false; gs.boss.timer = 0; gs.boss.nextShieldAt = Math.random() * 210 + 240; 
+        dispararMagia(gs.boss.x, gs.boss.y, '#FFD700'); setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50), 350); 
+        gs.score += 5;
+      } 
+      
+      if (!acertou) {
+        for (let i = 0; i < gs.enemies.length; i++) {
+          let e = gs.enemies[i];
+          if (e.mathRequired && !e.isDying && e.res === num) {
+            acertou = true; e.solvesDone += 1; dispararMagia(e.x, e.y, '#00FFFF');
+            if (e.solvesDone >= e.solvesNeeded) {
+               e.isDying = true; e.mathRequired = false;
+               
+               // PREMIAÇÃO: PONTO GLOBAL NA HORA E PARA A EQUIPE!
+               if (e.type === 'RARE_ENEMY') {
+                   apiRoutes.submitMathBlasterRareKill().catch(()=>{});
+                   gs.floatingTexts.push({ id: Math.random().toString(), x: e.x, y: e.y, text: `+1 PONTO GLOBAL!`, color: '#FFD700', life: 120 });
+               }
+
+               setTimeout(() => { e.hp = -100; gs.score += (e.type === 'RARE_ENEMY' ? 100 : 15); criarParticulas(e.x, e.y, '#00FFFF', 80); }, 350);
+            } else {
+               const eq = gerarEquacao(gs.fase, getRespostasAtivas()); e.txt = eq.txt; e.res = eq.res;
+            }
+            break;
+          }
+        }
+      }
+        
+      if (!acertou) {
+        for (let i = 0; i < gs.powerups.length; i++) {
+          let p = gs.powerups[i];
+          if (!p.collected && p.res === num) {
+            acertou = true; p.collected = true; dispararMagia(p.x, p.y, p.color); 
+            const type = p.type; const color = p.color; const px = p.x; const py = p.y; const title = p.title;
+            
+            setTimeout(() => {
+              criarParticulas(px, py, color, 30);
+              gs.floatingTexts.push({ id: Math.random().toString(), x: px, y: py, text: `+ ${title}`, color: color, life: 60 });
+              
+              if (type === 'DAMAGE') gs.player.damage += 0.5;
+              else if (type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 20);
+              else if (type === 'TRIPLE_SHOT') gs.player.tripleShot = true;
+              else if (type === 'MISSILE_UNLOCK') gs.player.weapons.missile.active = true;
+              else if (type === 'MISSILE_COOLDOWN') { gs.player.weapons.missile.baseCooldown = Math.max(3000, gs.player.weapons.missile.baseCooldown - 500); gs.player.weapons.missile.level += 1; }
+              else if (type === 'MISSILE_DAMAGE') { gs.player.weapons.missile.damageMult += 0.5; gs.player.weapons.missile.level += 1; }
+              else if (type === 'MISSILE_AOE') { gs.player.weapons.missile.aoeRange += 10; gs.player.weapons.missile.level += 1; }
+              else if (type === 'LASER_UNLOCK') gs.player.weapons.laser.active = true;
+              else if (type === 'LASER_COOLDOWN') { gs.player.weapons.laser.baseCooldown = Math.max(4000, gs.player.weapons.laser.baseCooldown - 500); gs.player.weapons.laser.level += 1; }
+              else if (type === 'LASER_DAMAGE') { gs.player.weapons.laser.damageMult += 0.5; gs.player.weapons.laser.level += 1; }
+              else if (type === 'PULSAR_UNLOCK') gs.player.weapons.pulsar.active = true;
+              else if (type === 'PULSAR_COOLDOWN') { gs.player.weapons.pulsar.baseCooldown = Math.max(4000, gs.player.weapons.pulsar.baseCooldown - 1000); gs.player.weapons.pulsar.level += 1; }
+              else if (type === 'PULSAR_RADIUS') { gs.player.weapons.pulsar.radius += 20; gs.player.weapons.pulsar.level += 1; }
+              else if (type === 'FORCE_SHIELD') gs.forceShieldHits = 3;
+              else if (type === 'DRONE_NORMAL') { if (!gs.drones.normal.active) gs.drones.normal.active = true; else gs.drones.normal.baseCooldown = Math.max(500, gs.drones.normal.baseCooldown - 200); }
+              else if (type === 'TIME_FREEZE') gs.timeFreezeTimer = 5000;
+              else if (type === 'X_RAY') gs.xRayTimer = 10000;
+              else if (type === 'DRONE_ADVANCED') gs.drones.advanced.active = true;
+              else if (type === 'DRONE_ADVANCED_UP') gs.drones.advanced.baseCooldown = Math.max(500, gs.drones.advanced.baseCooldown - 200);
+
+              gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); 
+              gs.score += 5; p.y = 9999;
+            }, 350);
+            break; 
+          }
+        }
+      }
+
+      if (!acertou && respostaRef.current !== '') { 
+        if (gs.forceShieldHits > 0) {
+          gs.forceShieldHits -= 1;
+          criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 10);
+        } else {
+          gs.player.hp = Math.max(0, gs.player.hp - (3 + (gs.fase * 2))); 
+          criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8); 
+        }
+      }
+      setResposta('');
+    } else {
+      setResposta(r => r.length < 7 ? r + valor : r);
+    }
+  }, [jogoAtivo]);
+
+  // CONTROLE NATIVO PELO TECLADO FÍSICO DO COMPUTADOR
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const handleKeyDownLocal = (e: any) => {
+            if (!jogoAtivo || gs.timeFreezeTimer > 0) return;
+            const key = e.key.toLowerCase();
+            
+            // Movimentação
+            if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+                e.preventDefault(); 
+                if (key === 'w' || key === 'arrowup') gs.keys.up = true;
+                if (key === 's' || key === 'arrowdown') gs.keys.down = true;
+                if (key === 'a' || key === 'arrowleft') gs.keys.left = true;
+                if (key === 'd' || key === 'arrowright') gs.keys.right = true;
+            }
+
+            // Ações do Teclado Numérico
+            let actionKey = '';
+            if (e.key >= '0' && e.key <= '9') actionKey = e.key;
+            else if (e.key === 'Backspace' || e.key === 'Delete') actionKey = 'apagar';
+            else if (e.key === 'Enter') actionKey = 'enviar';
+
+            if (actionKey) {
+                e.preventDefault();
+                lidarComTeclado(actionKey);
+                setTeclasPressionadas(prev => [...prev, actionKey]);
+                setTimeout(() => setTeclasPressionadas(prev => prev.filter(k => k !== actionKey)), 150);
+            }
+        };
+
+        const handleKeyUpLocal = (e: any) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w' || key === 'arrowup') gs.keys.up = false;
+            if (key === 's' || key === 'arrowdown') gs.keys.down = false;
+            if (key === 'a' || key === 'arrowleft') gs.keys.left = false;
+            if (key === 'd' || key === 'arrowright') gs.keys.right = false;
+        };
+
+        window.addEventListener('keydown', handleKeyDownLocal);
+        window.addEventListener('keyup', handleKeyUpLocal);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDownLocal);
+            window.removeEventListener('keyup', handleKeyUpLocal);
+        };
+    }
+  }, [jogoAtivo, lidarComTeclado]);
 
   const handleGameTouchStart = (e: any) => {
     const changed = e.nativeEvent.changedTouches;
@@ -295,6 +488,7 @@ export default function MathBlaster() {
 
   const iniciarJogo = () => {
     gameOverFired.current = false;
+    gs.keys = { up: false, down: false, left: false, right: false }; // Zera teclas pressionadas ao reiniciar
     
     gs.currentZoom = BASE_ZOOM;
     const initialGw = canvasSizeRef.current.width / gs.currentZoom;
@@ -336,118 +530,14 @@ export default function MathBlaster() {
     if (loopRef.current) clearInterval(loopRef.current); 
     setTela('resultado');
     
-    // Submete a pontuação de fato usando as credenciais passadas do App
     if (gs.score > 0) {
-      api.submitMathBlasterScore(gs.score)
+      apiRoutes.submitMathBlasterScore(gs.score)
         .then(() => carregarHallDaFama())
-        .catch(() => {});
+        .catch(() => carregarHallDaFama());
     } else {
       carregarHallDaFama();
     }
   };
-
-  const criarParticulas = (x: number, y: number, color: string, qtd: number) => {
-    for(let i=0; i<qtd; i++) { 
-      gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color }); 
-    }
-  };
-
-  const lidarComTeclado = useCallback((valor: string) => {
-    if (!jogoAtivo) return;
-    
-    if (valor === 'apagar') {
-      setResposta(r => r.slice(0, -1));
-    } else if (valor === 'enviar') {
-      if (respostaRef.current === '3141592') {
-        gs.drones.advanced.active = true; gs.drones.advanced.baseCooldown = 500;
-        gs.score += 500;
-        criarParticulas(gs.player.x, gs.player.y, '#FFD700', 80);
-        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE!`, color: '#FFD700', life: 90 });
-        setResposta(''); return;
-      }
-
-      const num = parseInt(respostaRef.current);
-      let acertou = false;
-
-      const dispararMagia = (tx: number, ty: number, color: string) => { 
-        gs.mathShots.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, tx, ty, color, life: 15 }); 
-      };
-
-      if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
-        acertou = true; gs.boss.shield = false; gs.boss.timer = 0; gs.boss.nextShieldAt = Math.random() * 210 + 240; 
-        dispararMagia(gs.boss.x, gs.boss.y, '#FFD700'); setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50), 350); 
-        gs.score += 5;
-      } 
-      
-      if (!acertou) {
-        for (let i = 0; i < gs.enemies.length; i++) {
-          let e = gs.enemies[i];
-          if (e.mathRequired && !e.isDying && e.res === num) {
-            acertou = true; e.solvesDone += 1; dispararMagia(e.x, e.y, '#00FFFF');
-            if (e.solvesDone >= e.solvesNeeded) {
-               e.isDying = true; e.mathRequired = false;
-               setTimeout(() => { e.hp = -100; gs.score += 15; criarParticulas(e.x, e.y, '#00FFFF', 80); }, 350);
-            } else {
-               const eq = gerarEquacao(gs.fase, getRespostasAtivas()); e.txt = eq.txt; e.res = eq.res;
-            }
-            break;
-          }
-        }
-      }
-        
-      if (!acertou) {
-        for (let i = 0; i < gs.powerups.length; i++) {
-          let p = gs.powerups[i];
-          if (!p.collected && p.res === num) {
-            acertou = true; p.collected = true; dispararMagia(p.x, p.y, p.color); 
-            const type = p.type; const color = p.color; const px = p.x; const py = p.y; const title = p.title;
-            
-            setTimeout(() => {
-              criarParticulas(px, py, color, 30);
-              gs.floatingTexts.push({ id: Math.random().toString(), x: px, y: py, text: `+ ${title}`, color: color, life: 60 });
-              
-              if (type === 'DAMAGE') gs.player.damage += 0.5;
-              else if (type === 'FIRE_RATE') gs.player.fireRate = Math.max(100, gs.player.fireRate - 20);
-              else if (type === 'TRIPLE_SHOT') gs.player.tripleShot = true;
-              else if (type === 'MISSILE_UNLOCK') gs.player.weapons.missile.active = true;
-              else if (type === 'MISSILE_COOLDOWN') { gs.player.weapons.missile.baseCooldown = Math.max(3000, gs.player.weapons.missile.baseCooldown - 500); gs.player.weapons.missile.level += 1; }
-              else if (type === 'MISSILE_DAMAGE') { gs.player.weapons.missile.damageMult += 0.5; gs.player.weapons.missile.level += 1; }
-              else if (type === 'MISSILE_AOE') { gs.player.weapons.missile.aoeRange += 10; gs.player.weapons.missile.level += 1; }
-              else if (type === 'LASER_UNLOCK') gs.player.weapons.laser.active = true;
-              else if (type === 'LASER_COOLDOWN') { gs.player.weapons.laser.baseCooldown = Math.max(4000, gs.player.weapons.laser.baseCooldown - 500); gs.player.weapons.laser.level += 1; }
-              else if (type === 'LASER_DAMAGE') { gs.player.weapons.laser.damageMult += 0.5; gs.player.weapons.laser.level += 1; }
-              else if (type === 'PULSAR_UNLOCK') gs.player.weapons.pulsar.active = true;
-              else if (type === 'PULSAR_COOLDOWN') { gs.player.weapons.pulsar.baseCooldown = Math.max(4000, gs.player.weapons.pulsar.baseCooldown - 1000); gs.player.weapons.pulsar.level += 1; }
-              else if (type === 'PULSAR_RADIUS') { gs.player.weapons.pulsar.radius += 20; gs.player.weapons.pulsar.level += 1; }
-              else if (type === 'FORCE_SHIELD') gs.forceShieldHits = 3;
-              else if (type === 'DRONE_NORMAL') { if (!gs.drones.normal.active) gs.drones.normal.active = true; else gs.drones.normal.baseCooldown = Math.max(500, gs.drones.normal.baseCooldown - 200); }
-              else if (type === 'TIME_FREEZE') gs.timeFreezeTimer = 5000;
-              else if (type === 'X_RAY') gs.xRayTimer = 10000;
-              else if (type === 'DRONE_ADVANCED') gs.drones.advanced.active = true;
-              else if (type === 'DRONE_ADVANCED_UP') gs.drones.advanced.baseCooldown = Math.max(500, gs.drones.advanced.baseCooldown - 200);
-
-              gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); 
-              gs.score += 5; p.y = 9999;
-            }, 350);
-            break; 
-          }
-        }
-      }
-
-      if (!acertou && respostaRef.current !== '') { 
-        if (gs.forceShieldHits > 0) {
-          gs.forceShieldHits -= 1;
-          criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 10);
-        } else {
-          gs.player.hp = Math.max(0, gs.player.hp - (3 + (gs.fase * 2))); 
-          criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8); 
-        }
-      }
-      setResposta('');
-    } else {
-      setResposta(r => r.length < 7 ? r + valor : r);
-    }
-  }, [jogoAtivo]);
 
   const gameTick = () => {
     const now = Date.now();
@@ -464,6 +554,13 @@ export default function MathBlaster() {
     gs.timeAlive += 30;
     if (gs.timeFreezeTimer > 0) gs.timeFreezeTimer -= 30;
     if (gs.xRayTimer > 0) gs.xRayTimer -= 30;
+
+    // APLICAR MOVIMENTO DO TECLADO FÍSICO
+    const movSpeed = 6 / gs.currentZoom;
+    if (gs.keys.up) gs.player.y -= movSpeed;
+    if (gs.keys.down) gs.player.y += movSpeed;
+    if (gs.keys.left) gs.player.x -= movSpeed;
+    if (gs.keys.right) gs.player.x += movSpeed;
 
     const aplicarDano = (dano: number) => {
       if (gs.forceShieldHits > 0) {
@@ -629,6 +726,18 @@ export default function MathBlaster() {
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
+        
+      // INIMIGO RARO (10% de chance no começo da fase) LIMITADO A 5 POR DIA
+      if (gs.stateTimer === 100) {
+          if (dailySpawnsRef.current < 5 && Math.random() <= 0.10) {
+              const eq = gerarEquacao(Math.max(8, gs.fase + 4), getRespostasAtivas());
+              gs.enemies.push({ id: Math.random().toString(), type: 'RARE_ENEMY', x: gw / 2, y: -50, targetY: 100, hp: 9999, mathRequired: true, solvesNeeded: 1, solvesDone: 0, txt: "👑 " + eq.txt, res: eq.res, vy: 0.5, evasive: false });
+              
+              dailySpawnsRef.current += 1;
+              AsyncStorage.setItem('rareSpawnCount', dailySpawnsRef.current.toString()).catch(()=>{});
+          }
+      }
+
       if (gs.stateTimer % Math.max(20, 100 - gs.fase * 10) === 0) {
         const meteorVy = gs.fase === 1 ? Math.random() * 1 + 1.5 : Math.random() * 2 + 3 + (gs.fase * 0.6);
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: meteorVy, angle: 0 });
@@ -716,14 +825,16 @@ export default function MathBlaster() {
     gs.enemies.forEach(e => {
       if (e.type === 'METEOR') { e.y += e.vy * speedMult; } 
       else if (e.type === 'FLANKER') { e.x += e.vx * speedMult; e.y += e.vy * speedMult; }
-      else if (e.type === 'SPAWNER') {
+      else if (e.type === 'SPAWNER' || e.type === 'RARE_ENEMY') {
         if (e.y < e.targetY) e.y += e.vy * speedMult;
         else {
            e.x += Math.sin(now / 500) * 0.5 * speedMult; 
-           e.spawnTimer += 1 * speedMult;
-           if (e.spawnTimer > Math.max(50, 120 - (gs.fase * 10))) {
-              gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: e.x, y: e.y + 30, targetY: e.y + 80 + Math.random() * 50, isLeader: false, hp: 1 + gs.fase, vx: (Math.random() - 0.5) * 3, vy: 4, fireTimer: 0, angle: Math.PI });
-              e.spawnTimer = 0;
+           if (e.type !== 'RARE_ENEMY') {
+               e.spawnTimer += 1 * speedMult;
+               if (e.spawnTimer > Math.max(50, 120 - (gs.fase * 10))) {
+                  gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: e.x, y: e.y + 30, targetY: e.y + 80 + Math.random() * 50, isLeader: false, hp: 1 + gs.fase, vx: (Math.random() - 0.5) * 3, vy: 4, fireTimer: 0, angle: Math.PI });
+                  e.spawnTimer = 0;
+               }
            }
         }
       }
@@ -911,7 +1022,6 @@ export default function MathBlaster() {
     );
   };
 
-  // TELA DE MENU INICIAL COM O HALL DA FAMA IDÊNTICO AO ARCADE
   if (tela === 'menu') {
     const meuRank = hallDaFama.find(j => j.id === (user?.id || guestUserId));
 
@@ -924,9 +1034,8 @@ export default function MathBlaster() {
           <Ionicons name="rocket" size={80} color="#00FFFF" style={{ marginBottom: 20, marginTop: 20 }}/>
           <Text style={styles.tituloMenu}>SKY</Text>
           <Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Deslize na nave para voar e use o teclado para atirar e destruir os asteróides!</Text>
+          <Text style={styles.instrucoes}>Use (W,A,S,D) ou Setas do teclado para voar. Digite a resposta e aperte (ENTER) para atirar!</Text>
 
-          {/* HALL DA FAMA */}
           <View style={styles.rankingContainer}>
             <View style={styles.rankingHeaderRow}>
               <Ionicons name="trophy" size={24} color="#FFD700" />
@@ -995,7 +1104,6 @@ export default function MathBlaster() {
     );
   }
 
-  // TELA DE GAME OVER
   if (tela === 'resultado') {
     return (
       <SafeAreaView style={styles.container}>
@@ -1020,7 +1128,6 @@ export default function MathBlaster() {
     );
   }
 
-  // TELA DO JOGO ROLANDO
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.gameWrapper}>
@@ -1070,6 +1177,16 @@ export default function MathBlaster() {
             {gs.enemies.map(e => {
               if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 12, top: e.y - 12 }]}/>;
               if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 10, top: e.y - 8, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
+              
+              if (e.type === 'RARE_ENEMY') {
+                return (
+                   <View key={e.id} style={[styles.spawnerShape, { left: e.x - 35, top: e.y - 25, backgroundColor: 'rgba(255, 215, 0, 0.2)', borderColor: '#FFD700', shadowColor: '#FFD700' }]}>
+                      <Text style={[styles.spawnerMath, { color: '#FFD700' }]}>{e.txt}</Text>
+                      {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{e.res}</Text>}
+                   </View>
+                );
+              }
+
               if (e.type === 'SPAWNER') {
                 return (
                    <View key={e.id} style={[styles.spawnerShape, { left: e.x - 30, top: e.y - 22 }]}>
