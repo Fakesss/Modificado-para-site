@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView, Alert, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext'; 
 import * as api from '../src/services/api'; 
@@ -85,6 +85,8 @@ const BotaoVisual = ({ valor, isPressed, children, styleExtra, onPressWeb }: any
 export default function Arcade() {
   const router = useRouter();
   const { user } = useAuth(); 
+  const insets = useSafeAreaInsets(); // <--- A MÁGICA ACONTECE AQUI
+
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [pontos, setPontos] = useState(0);
   const pontosRef = useRef(0);
@@ -145,7 +147,6 @@ export default function Arcade() {
   useEffect(() => {
     const carregarSons = async () => {
       try {
-        // FORÇA O ÁUDIO A IGNORAR MODO SILENCIOSO E SAIR NO ALTO-FALANTE
         await Audio.setAudioModeAsync({
             playsInSilentModeIOS: true,
             staysActiveInBackground: true,
@@ -153,7 +154,6 @@ export default function Arcade() {
             playThroughEarpieceAndroid: false, 
         });
 
-        // 1. CARREGA OS EFEITOS
         const sonsParaCarregar = {
             shoot: 'https://raw.githubusercontent.com/Zenoguy/Space_Shooters/main/bgm/laser.mp3',
             hit: 'https://raw.githubusercontent.com/Gtajisan/bongoboltu_2.0/main/hit.mp3',
@@ -167,11 +167,10 @@ export default function Arcade() {
             } catch (e) { console.log(`Falha som: ${key}`); }
         }
 
-        // 2. SISTEMA DE RESGATE DE MÚSICA (Tenta várias URLs até uma funcionar)
         const bgmUrlsFallback = [
-            'https://raw.githubusercontent.com/phaserjs/examples/master/public/assets/audio/tech/bgm.mp3', // Oficial
-            'https://raw.githubusercontent.com/photonstorm/macapaka/master/assets/audio/music.mp3', // Reserva 1
-            'https://actions.google.com/sounds/v1/loops/looping_synth_melody.ogg' // Reserva Google (Inquebrável)
+            'https://raw.githubusercontent.com/phaserjs/examples/master/public/assets/audio/tech/bgm.mp3',
+            'https://raw.githubusercontent.com/photonstorm/macapaka/master/assets/audio/music.mp3',
+            'https://actions.google.com/sounds/v1/loops/looping_synth_melody.ogg'
         ];
 
         let bgmCarregado = null;
@@ -182,7 +181,7 @@ export default function Arcade() {
                     { isLooping: true, volume: Math.pow(volumeBGMRef.current, 2) * 0.5 }
                 );
                 bgmCarregado = sound;
-                break; // Se carregou, para o loop de tentativas
+                break;
             } catch (error) {
                 console.log(`BGM Falhou na URL: ${url}`);
             }
@@ -190,7 +189,6 @@ export default function Arcade() {
         
         if (bgmCarregado) {
             bgmRef.current = bgmCarregado;
-            // Se o jogador iniciou o jogo antes da música baixar, toca agora!
             if (jogoAtivoRef.current && !jogoPausadoRef.current) {
                 await bgmCarregado.playAsync();
             }
@@ -212,7 +210,6 @@ export default function Arcade() {
     try {
         if (bgmRef.current) {
             await bgmRef.current.setVolumeAsync(Math.pow(volumeBGMRef.current, 2) * 0.5);
-            // Ao iniciar, força o play, burlando o bloqueio de navegadores pois é após um "clique" do usuário
             await bgmRef.current.playAsync();
         }
     } catch(e) { console.log("Erro Play BGM", e) }
@@ -435,7 +432,6 @@ export default function Arcade() {
     
     setTela('jogo'); 
     
-    // Inicia a música de fundo IMEDIATAMENTE após o clique no botão para burlar o navegador
     iniciarBGM();
     
     setTimeout(() => { spawnarQuestao(); iniciarLoopSpawner(); }, 100);
@@ -809,8 +805,7 @@ export default function Arcade() {
         ))}
       </View>
       
-      {/* PAINEL INFERIOR AGORA É TRANSPARENTE E FLUTUANTE PARA VERMOS O QUE ESTÁ POR TRÁS */}
-      <View style={styles.bottomPanel} pointerEvents="box-none">
+      <View style={[styles.bottomPanel, { bottom: Math.max(insets.bottom, 10) }]} pointerEvents="box-none">
         <View style={styles.powerUpContainer}>{powerUpDisponivel && <TouchableOpacity style={styles.btnPowerUpAtivo} onPress={ativarPowerUp}><Ionicons name="flash" size={18} color="#000" /><Text style={styles.txtPowerUpAtivo}>DESTRUIR TUDO!</Text></TouchableOpacity>}</View>
         
         <Animated.View style={[styles.displayContainer, { transform: [{ translateX: shakeAnim }] }]}><Text style={styles.displayText}>{resposta || ' '}</Text></Animated.View>
@@ -907,14 +902,12 @@ const styles = StyleSheet.create({
 
   laser: { position: 'absolute', width: 4, zIndex: 1, borderRadius: 2 },
   
-  // Painel Inferior refeito: transparente, posicionado no fundo e respeitando barra do Android
   bottomPanel: { 
     position: 'absolute',
-    bottom: Platform.OS === 'android' ? 20 : 10, // Evita sobrepor botões virtuais do Android
     width: '100%', 
     alignItems: 'center', 
     paddingTop: 5, 
-    backgroundColor: 'transparent', // Retirado o fundo preto
+    backgroundColor: 'transparent', 
     zIndex: 10 
   },
   powerUpContainer: { width: '100%', paddingHorizontal: 20, marginBottom: 8, height: 40 },
