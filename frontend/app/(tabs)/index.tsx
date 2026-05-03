@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,20 +13,66 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 import RankingHeader from '../../src/components/RankingHeader';
 import StreakBadge from '../../src/components/StreakBadge';
-import { RankingItem, Equipe, Turma } from '../../src/types'; // 🚨 Turma importada
+import { RankingItem, Equipe, Turma } from '../../src/types'; 
+
+// --- CONFIGURAÇÃO DO BOTÃO ROTATIVO ---
+const JOGOS_ROTATIVOS = [
+  { rota: '/math_blaster', icone: 'rocket', titulo: 'Math Blaster', cor: '#00FFFF' },
+  { rota: '/tictactoe', icone: 'grid', titulo: 'Jogo da Velha', cor: '#32CD32' },
+  { rota: '/cabo_de_guerra_offline', icone: 'people', titulo: 'Cabo de Guerra', cor: '#FF4500' }
+];
+
+const obterJogoDoDia = () => {
+  // Pega o dia atual do ano (1 a 365) para fazer um rodízio previsível e diário
+  const hoje = new Date();
+  const diaDoAno = Math.floor((hoje.getTime() - new Date(hoje.getFullYear(), 0, 0).getTime()) / 86400000);
+  const index = diaDoAno % JOGOS_ROTATIVOS.length;
+  return JOGOS_ROTATIVOS[index];
+};
 
 export default function Home() {
   const { user, logout, refreshUser } = useAuth();
   const router = useRouter();
   const [ranking, setRanking] = useState<RankingItem[]>([]);
   const [equipe, setEquipe] = useState<Equipe | null>(null);
-  const [turma, setTurma] = useState<Turma | null>(null); // 🚨 Novo Estado para a Turma
+  const [turma, setTurma] = useState<Turma | null>(null); 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [mostrarSeloNovo, setMostrarSeloNovo] = useState(false);
+
+  const jogoDestacado = obterJogoDoDia();
+
+  // Controle do Selo "Novo"
+  useEffect(() => {
+    const verificarSelo = async () => {
+      try {
+        const dataVistoStr = await AsyncStorage.getItem('data_visto_rotativo');
+        const agora = Date.now();
+        
+        if (!dataVistoStr) {
+          // Se for a primeira vez, marca agora e mostra o selo
+          await AsyncStorage.setItem('data_visto_rotativo', agora.toString());
+          setMostrarSeloNovo(true);
+        } else {
+          // Se já viu, verifica se passaram 24h (86400000 ms)
+          const dataVisto = parseInt(dataVistoStr);
+          if (agora - dataVisto < 86400000) {
+            setMostrarSeloNovo(true);
+          } else {
+            setMostrarSeloNovo(false);
+          }
+        }
+      } catch (e) {
+        console.error("Erro no selo novo:", e);
+      }
+    };
+    verificarSelo();
+  }, []);
 
   // Pergunta antes de sair do app
   useFocusEffect(
@@ -52,17 +98,15 @@ export default function Home() {
       const [rankingData, equipesData, turmasData] = await Promise.all([
         api.getRankingGeral(),
         api.getEquipes(),
-        api.getTurmas(), // 🚨 Puxa as turmas do banco de dados
+        api.getTurmas(), 
       ]);
       setRanking(rankingData);
       
-      // 🚨 IDs convertidos para String por segurança
       if (user?.equipeId) {
         const userEquipe = equipesData.find((e: Equipe) => String(e.id) === String(user.equipeId));
         setEquipe(userEquipe || null);
       }
       
-      // 🚨 Encontra a Turma do Aluno
       if (user?.turmaId) {
         const userTurma = turmasData.find((t: Turma) => String(t.id) === String(user.turmaId));
         setTurma(userTurma || null);
@@ -102,7 +146,6 @@ export default function Home() {
     );
   }
 
-  // Puxa a cor exatamente como está no banco de dados (se não tiver, fica um cinza escuro de aviso)
   const finalTeamColor = equipe?.cor || '#333333';
 
   return (
@@ -119,7 +162,6 @@ export default function Home() {
           <View>
             <Text style={styles.greeting}>Olá, {user?.nome?.split(' ')[0]}!</Text>
             
-            {/* 🎯 NOVA ETIQUETA DISCRETA DA TURMA */}
             {turma && (
               <View style={styles.turmaBadge}>
                 <Ionicons name="school" size={14} color="#888" />
@@ -163,42 +205,46 @@ export default function Home() {
           
           {/* Fila 1 */}
           <View style={styles.actionRow}>
-            {/* 🎨 COR VIBRANTE */}
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#4169E1' + '50' }]} onPress={() => router.push('/(tabs)/videos')}>
               <Ionicons name="play" size={24} color="#4169E1" />
               <Text style={styles.actionText}>Vídeo-aulas</Text>
             </TouchableOpacity>
 
-            {/* 🎨 COR VIBRANTE */}
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#32CD32' + '50' }]} onPress={() => router.push('/(tabs)/exercicios')}>
               <Ionicons name="document-text" size={24} color="#32CD32" />
               <Text style={styles.actionText}>Atividades</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Fila 2 (Ranking e Math Blaster lado a lado) */}
+          {/* Fila 2 (Ranking e Jogo Rotativo lado a lado) */}
           <View style={styles.actionRow}>
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FFD700' + '50' }]} onPress={() => router.push('/(tabs)/ranking')}>
               <Ionicons name="trophy" size={28} color="#FFD700" />
               <Text style={[styles.actionText, { fontSize: 13, marginTop: 10 }]}>Ranking Geral</Text>
             </TouchableOpacity>
 
-            {/* 🚀 BOTÃO DO MATH BLASTER ADICIONADO AQUI */}
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#00FFFF' + '40', borderColor: '#00FFFF' }]} onPress={() => router.push('/math_blaster')}>
-              <Ionicons name="rocket" size={28} color="#00FFFF" />
-              <Text style={[styles.actionText, { fontSize: 13, marginTop: 10 }]}>Math Blaster</Text>
+            {/* BOTÃO ROTATIVO COM SELO "NOVO" */}
+            <TouchableOpacity 
+                style={[styles.actionCard, { backgroundColor: jogoDestacado.cor + '40', borderColor: jogoDestacado.cor }]} 
+                onPress={() => router.push(jogoDestacado.rota as any)}
+            >
+              {mostrarSeloNovo && (
+                <View style={styles.novoBadge}>
+                    <Text style={styles.novoBadgeText}>NOVO!</Text>
+                </View>
+              )}
+              <Ionicons name={jogoDestacado.icone as any} size={28} color={jogoDestacado.cor} />
+              <Text style={[styles.actionText, { fontSize: 13, marginTop: 10, color: '#FFF' }]}>{jogoDestacado.titulo}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Fila 3 */}
           <View style={styles.actionRow}>
-            {/* 🎨 COR VIBRANTE */}
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FF8C00' + '50' }]} onPress={() => router.push('/(tabs)/conteudos')}>
               <Ionicons name="book-outline" size={24} color="#FF8C00" />
               <Text style={styles.actionText}>Conteúdos</Text>
             </TouchableOpacity>
 
-            {/* 🎨 COR VIBRANTE */}
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#E066FF' + '50' }]} onPress={() => router.push('/(tabs)/progresso')}>
               <Ionicons name="stats-chart" size={24} color="#E066FF" />
               <Text style={styles.actionText}>Progresso</Text>
@@ -233,6 +279,29 @@ const styles = StyleSheet.create({
   
   actionGrid: { gap: 12, paddingBottom: 20 },
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  actionCard: { flex: 1, borderRadius: 16, padding: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1a1a2e' },
+  actionCard: { flex: 1, borderRadius: 16, padding: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1a1a2e', position: 'relative' },
   actionText: { color: '#fff', fontSize: 12, fontWeight: '600', marginTop: 10, textAlign: 'center' },
+
+  // Estilos do Selo "Novo"
+  novoBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#FF0055',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFF',
+    zIndex: 10,
+    shadowColor: '#FF0055',
+    shadowRadius: 5,
+    shadowOpacity: 0.8
+  },
+  novoBadgeText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '900',
+    fontStyle: 'italic'
+  }
 });
