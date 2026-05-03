@@ -27,7 +27,8 @@ export default function AdminUsuarios() {
   const [editEquipe, setEditEquipe] = useState('');
   const [editPontos, setEditPontos] = useState(''); 
   const [editRecordeArcade, setEditRecordeArcade] = useState(''); 
-  const [editOcultoChat, setEditOcultoChat] = useState(false); // NOVO: Controle de Fantasma
+  const [editRecordeMathBlaster, setEditRecordeMathBlaster] = useState(''); // NOVO: Estado para Math Blaster
+  const [editOcultoChat, setEditOcultoChat] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -70,7 +71,8 @@ export default function AdminUsuarios() {
     setEditSenha(''); 
     setEditPontos(String(user.pontosTotais || 0)); 
     setEditRecordeArcade(String(user.recordeJogoSingle || 0)); 
-    setEditOcultoChat(user.ocultoChat || false); // Inicia a chave com o valor do banco
+    setEditRecordeMathBlaster(String(user.recordeMathBlaster || 0)); // Inicia com o recorde do Math Blaster
+    setEditOcultoChat(user.ocultoChat || false); 
     setModalVisible(true);
   };
 
@@ -79,8 +81,10 @@ export default function AdminUsuarios() {
     try {
       const data: any = { 
         nome: editNome, perfil: editPerfil, turmaId: editTurma || null, equipeId: editEquipe || null,
-        pontosTotais: Number(editPontos), recordeJogoSingle: Number(editRecordeArcade),
-        ocultoChat: editOcultoChat // Salva se é fantasma ou não
+        pontosTotais: Number(editPontos), 
+        recordeJogoSingle: Number(editRecordeArcade),
+        recordeMathBlaster: Number(editRecordeMathBlaster), // Salva o novo recorde do Math Blaster
+        ocultoChat: editOcultoChat 
       };
       if (editSenha.trim() !== '') data.senha = editSenha;
       await api.updateUsuario(selectedUser.id, data);
@@ -203,6 +207,7 @@ export default function AdminUsuarios() {
                   <View style={styles.statItem}><Ionicons name="star" size={14} color="#FFD700" /><Text style={styles.statText}>{user.pontosTotais} pts</Text></View>
                   <View style={styles.statItem}><Ionicons name="flame" size={14} color="#FF6B35" /><Text style={styles.statText}>{user.streakDias} dias</Text></View>
                   <View style={styles.statItem}><Ionicons name="game-controller" size={14} color="#9b59b6" /><Text style={styles.statText}>{user.recordeJogoSingle || 0} arcade</Text></View>
+                  <View style={styles.statItem}><Ionicons name="rocket" size={14} color="#00FFFF" /><Text style={styles.statText}>{user.recordeMathBlaster || 0} blaster</Text></View>
                 </View>
               </View>
               <View style={styles.userActions}>
@@ -226,6 +231,9 @@ export default function AdminUsuarios() {
 
               <Text style={[styles.inputLabel, { color: '#9b59b6', marginTop: 16 }]}>🕹️ Recorde Arcade (Hall da Fama)</Text>
               <TextInput style={[styles.textInput, { borderColor: '#9b59b6' }]} value={editRecordeArcade} onChangeText={setEditRecordeArcade} keyboardType="numeric" placeholder="Definir recorde do Arcade..." placeholderTextColor="#666" />
+
+              <Text style={[styles.inputLabel, { color: '#00FFFF', marginTop: 16 }]}>🚀 Recorde Math Blaster (Hall da Fama)</Text>
+              <TextInput style={[styles.textInput, { borderColor: '#00FFFF' }]} value={editRecordeMathBlaster} onChangeText={setEditRecordeMathBlaster} keyboardType="numeric" placeholder="Definir recorde do Math Blaster..." placeholderTextColor="#666" />
 
               <Text style={styles.inputLabel}>Nome de Exibição</Text>
               <TextInput style={styles.textInput} value={editNome} onChangeText={setEditNome} placeholder="Ex: João da Silva" placeholderTextColor="#666" />
@@ -306,8 +314,8 @@ const styles = StyleSheet.create({
   metaText: { color: '#666', fontSize: 12 },
   teamBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   teamText: { fontSize: 12, fontWeight: '600' },
-  userStats: { flexDirection: 'row', gap: 12 },
-  statItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  userStats: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }, // Adicionado flexWrap para evitar quebra visual em ecrãs pequenos
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
   statText: { color: '#888', fontSize: 12 },
   userActions: { justifyContent: 'center', gap: 8 },
   actionButton: { padding: 8 },
