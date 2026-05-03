@@ -7,6 +7,10 @@ import { useRouter } from 'expo-router';
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
 
+// DETECÇÃO DE ZOOM: Se for Web no celular, aplica o zoom de 0.5. Se for Web no PC, zoom 1.
+const isMobileWeb = Platform.OS === 'web' && initialWidth < 768;
+const BASE_ZOOM = (Platform.OS !== 'web' || isMobileWeb) ? 0.5 : 1;
+
 // --- COMPONENTE: TECLADO RETRÔ (Otimizado para Multi-Touch Nativo) ---
 const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed: boolean, onPressWeb: (v: string) => void }) => {
   const isWeb = Platform.OS === 'web';
@@ -24,8 +28,8 @@ const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed
         }
       } : {})}
     >
-      {valor === 'apagar' && <Ionicons name="backspace" size={26} color="#FFF"/>}
-      {valor === 'enviar' && <Ionicons name="flash" size={26} color="#FFF"/>}
+      {valor === 'apagar' && <Ionicons name="backspace" size={22} color="#FFF"/>}
+      {valor === 'enviar' && <Ionicons name="flash" size={22} color="#FFF"/>}
       {valor !== 'apagar' && valor !== 'enviar' && <Text style={styles.teclaRetroText}>{valor}</Text>}
     </View>
   );
@@ -53,7 +57,7 @@ export default function MathBlaster() {
   const layoutRef = useRef({ width: initialWidth, height: initialHeight });
 
   const gs = useRef({
-    currentZoom: Platform.OS === 'web' ? 1 : 0.5, // O Zoom dinâmico que diminui com o tempo
+    currentZoom: BASE_ZOOM, // O Zoom dinâmico que diminui com o tempo
     player: { 
       x: initialWidth / 2, 
       y: initialHeight - 60, 
@@ -148,7 +152,7 @@ export default function MathBlaster() {
   const getTeclaFromCoords = (x: number, y: number, layoutWidth: number) => {
     const GAP = 8; 
     const KEY_W = (layoutWidth - (GAP * 2)) / 3; 
-    const KEY_H = 60; 
+    const KEY_H = 45; 
     
     let col = -1;
     if (x >= 0 && x <= KEY_W) col = 0; 
@@ -176,7 +180,7 @@ export default function MathBlaster() {
         if (kbTouchIds.current.has(touch.identifier)) {
             const x = touch.locationX;
             const y = touch.locationY;
-            if (x >= -20 && x <= tecladoLayoutRef.current.width + 20 && y >= -20 && y <= 300) {
+            if (x >= -20 && x <= tecladoLayoutRef.current.width + 20 && y >= -20 && y <= 250) {
                 const key = getTeclaFromCoords(x, y, tecladoLayoutRef.current.width);
                 if (key) currentActive.add(key);
             }
@@ -284,7 +288,7 @@ export default function MathBlaster() {
 
   const iniciarJogo = () => {
     // Calcula o zoom inicial imediatamente
-    gs.currentZoom = Platform.OS === 'web' ? 1 : 0.5;
+    gs.currentZoom = BASE_ZOOM;
     const initialGw = canvasSizeRef.current.width / gs.currentZoom;
     const initialGh = canvasSizeRef.current.height / gs.currentZoom;
 
@@ -439,7 +443,7 @@ export default function MathBlaster() {
     const now = Date.now();
     
     // ATUALIZAÇÃO DO ZOOM DINÂMICO! (Mínimo de 0.35 para não ficar formiga, diminui 0.03 a cada fase no celular)
-    gs.currentZoom = Platform.OS === 'web' ? 1 : Math.max(0.35, 0.5 - ((gs.fase - 1) * 0.03));
+    gs.currentZoom = BASE_ZOOM === 1 ? 1 : Math.max(0.35, BASE_ZOOM - ((gs.fase - 1) * 0.03));
     
     // Atualiza o canvas virtual em tempo real
     if (canvasSizeRef.current.width > 0) {
@@ -969,7 +973,7 @@ export default function MathBlaster() {
           onLayout={(e) => { 
             const { width, height } = e.nativeEvent.layout;
             setCanvasSize({ width, height }); 
-            canvasSizeRef.current = { width, height }; // Atualiza a ref que o gameTick lê
+            canvasSizeRef.current = { width, height }; 
           }} 
           onTouchStart={handleGameTouchStart} 
           onTouchMove={handleGameTouchMove} 
@@ -980,7 +984,6 @@ export default function MathBlaster() {
           {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
           {gs.gameState === 'TRANSITION' && (<View style={styles.centerAlert}><Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text><Text style={styles.alertSubText}>PREPARANDO SALTO...</Text></View>)}
 
-          {/* O container interno agora usa o currentZoom que se afasta sozinho a cada fase! */}
           <View style={{
             position: 'absolute',
             width: canvasSize.width / gs.currentZoom,
@@ -1204,11 +1207,11 @@ const styles = StyleSheet.create({
     flexShrink: 1, 
   },
   visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 6, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 6 }, 
-  visorTexto: { color: '#00FFFF', fontSize: 20, fontWeight: '900', letterSpacing: 3 },
+  visorTexto: { color: '#00FFFF', fontSize: 16, fontWeight: '900', letterSpacing: 3 },
   tecladoContainer: { width: '100%', maxWidth: 350, gap: 8 }, 
-  tecladoRow: { flexDirection: 'row', gap: 8, height: 60 }, 
+  tecladoRow: { flexDirection: 'row', gap: 8, height: 45 }, 
   teclaRetro: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
-  teclaRetroText: { color: '#FFF', fontSize: 22, fontWeight: 'bold' }, 
+  teclaRetroText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' }, 
   teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)', borderColor: '#FF4444' },
   teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)', borderColor: '#32CD32' },
 });
