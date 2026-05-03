@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions, PanResponder, Platform } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions, PanResponder, Platform, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -65,7 +65,7 @@ export default function MathBlaster() {
     lasers: [] as any[], 
     specialLasers: [] as any[],
     mathShots: [] as any[],
-    floatingTexts: [] as any[], // LISTA DE TEXTOS FLUTUANTES RESTAURADA
+    floatingTexts: [] as any[], 
     enemies: [] as any[], 
     enemyLasers: [] as any[],
     powerups: [] as any[], 
@@ -164,6 +164,12 @@ export default function MathBlaster() {
   const gameOver = () => { 
     setJogoAtivo(false); 
     if (loopRef.current) clearInterval(loopRef.current); 
+  };
+
+  const criarParticulas = (x: number, y: number, color: string, qtd: number) => {
+    for(let i=0; i<qtd; i++) { 
+      gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color }); 
+    }
   };
 
   // --- MOTOR PRINCIPAL ---
@@ -946,8 +952,8 @@ const styles = StyleSheet.create({
   gridOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.1, backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)', backgroundSize: '40px 40px' },
   
   centerAlert: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
-  alertTextDanger: { color: '#FF0055', fontSize: 40, fontWeight: '900', textShadowColor: '#FF0055', textShadowRadius: 10 },
-  alertTextSuccess: { color: '#32CD32', fontSize: 40, fontWeight: '900', textShadowColor: '#32CD32', textShadowRadius: 10 },
+  alertTextDanger: { color: '#FF0055', fontSize: 40, fontWeight: '900', textShadowColor: '#FF0055', textShadowRadius: 10, textShadowOffset: { width: 1, height: 1 } },
+  alertTextSuccess: { color: '#32CD32', fontSize: 40, fontWeight: '900', textShadowColor: '#32CD32', textShadowRadius: 10, textShadowOffset: { width: 1, height: 1 } },
   alertSubText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 },
 
   playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 20, borderRightWidth: 20, borderBottomWidth: 40, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF' },
@@ -959,14 +965,14 @@ const styles = StyleSheet.create({
   miniShield: { position: 'absolute', top: -10, left: -20, width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)' },
   
   spawnerShape: { position: 'absolute', width: 80, height: 60, backgroundColor: 'rgba(0, 255, 255, 0.2)', borderWidth: 3, borderColor: '#00FFFF', borderRadius: 15, justifyContent: 'center', alignItems: 'center', shadowColor: '#00FFFF', shadowRadius: 15, zIndex: 15 },
-  spawnerMath: { color: '#FFF', fontSize: 20, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 5 },
+  spawnerMath: { color: '#FFF', fontSize: 20, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 5, textShadowOffset: { width: 1, height: 1 } },
   
   bossContainer: { position: 'absolute', width: 100, height: 80, alignItems: 'center', zIndex: 20 },
   bossShip: { width: 80, height: 50, backgroundColor: '#8B0000', borderRadius: 20, borderWidth: 3, borderColor: '#FF4444' },
   bossHpBar: { width: '100%', height: 6, backgroundColor: '#333', marginBottom: 5, borderRadius: 3, overflow: 'hidden' },
   bossHpFill: { height: '100%', backgroundColor: '#FF0055' },
   bossShield: { position: 'absolute', top: -10, width: 130, height: 130, borderRadius: 65, borderWidth: 4, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
-  bossMath: { color: '#FFF', fontSize: 24, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 5 },
+  bossMath: { color: '#FFF', fontSize: 24, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 5, textShadowOffset: { width: 1, height: 1 } },
 
   powerupBox: { position: 'absolute', width: 105, height: 40, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   powerupTitle: { fontSize: 8, fontWeight: '900', position: 'absolute', top: -10, backgroundColor: '#050015', paddingHorizontal: 4 },
@@ -977,7 +983,7 @@ const styles = StyleSheet.create({
   laserNormal: { position: 'absolute', zIndex: 1 },
   enemyLaser: { position: 'absolute', borderRadius: 5 },
   cannonBall: { position: 'absolute', borderRadius: 20, borderWidth: 2, borderColor: '#FFF' }, 
-  floatingText: { position: 'absolute', fontSize: 14, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 3, zIndex: 100, textAlign: 'center', width: 100 },
+  floatingText: { position: 'absolute', fontSize: 14, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 1, height: 1 }, zIndex: 100, textAlign: 'center', width: 100 },
 
   painelInferior: { backgroundColor: '#0A0025', borderTopWidth: 2, borderTopColor: '#FF00FF', paddingHorizontal: 15, paddingTop: 15, paddingBottom: Platform.OS === 'android' ? 20 : 15, alignItems: 'center' },
   visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 12 },
