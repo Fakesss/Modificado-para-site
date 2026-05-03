@@ -7,17 +7,18 @@ import { useRouter } from 'expo-router';
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.7;
 
+// --- COMPONENTE: TECLADO RETRÔ (MULTITOQUE NATIVO) ---
 const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
   const anim = useRef(new Animated.Value(1)).current;
   
   const handlePressIn = (e: any) => {
-    e.stopPropagation();
+    if(e && e.stopPropagation) e.stopPropagation();
     Animated.spring(anim, { toValue: 0.85, useNativeDriver: true }).start();
     onPressWeb(valor);
   };
   
   const handlePressOut = (e: any) => {
-    e.stopPropagation();
+    if(e && e.stopPropagation) e.stopPropagation();
     Animated.spring(anim, { toValue: 1, useNativeDriver: true }).start();
   };
 
@@ -27,19 +28,18 @@ const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: stri
     return styles.teclaRetro;
   };
 
-  const webEvents = Platform.OS === 'web' ? {
-    onMouseDown: handlePressIn,
-    onMouseUp: handlePressOut,
-    onMouseLeave: handlePressOut,
-  } : {};
-
   return (
     <Animated.View 
       style={[getStyle(), { transform: [{ scale: anim }], flex: 1 }]}
       onTouchStart={handlePressIn}
       onTouchEnd={handlePressOut}
       onTouchCancel={handlePressOut}
-      {...webEvents}
+      // @ts-ignore - Ignorando erro de tipagem web no expo
+      onMouseDown={Platform.OS === 'web' ? handlePressIn : undefined}
+      // @ts-ignore
+      onMouseUp={Platform.OS === 'web' ? handlePressOut : undefined}
+      // @ts-ignore
+      onMouseLeave={Platform.OS === 'web' ? handlePressOut : undefined}
     >
       {valor === 'apagar' ? <Ionicons name="backspace" size={22} color="#FFF" /> : 
        valor === 'enviar' ? <Ionicons name="flash" size={22} color="#FFF" /> : 
@@ -59,6 +59,7 @@ export default function MathBlaster() {
   
   const layoutRef = useRef({ width: initialWidth, height: initialHeight });
 
+  // ESTADO GLOBAL DO MOTOR
   const gs = useRef({
     player: { 
       x: initialWidth / 2, 
@@ -113,10 +114,12 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
+  // --- CONTROLES DE MOVIMENTO MULTITOQUE ---
   const handleGameTouchStart = (e: any) => {
     const touches = e.nativeEvent.touches;
     for (let i = 0; i < touches.length; i++) {
       const touch = touches[i];
+      // Aceita toque apenas se for na metade de cima da tela (evita conflito com teclado)
       if (gs.movementTouchId === null && touch.pageY < layoutRef.current.height + 100) {
         gs.movementTouchId = touch.identifier;
         gs.lastTouchX = touch.pageX;
@@ -145,6 +148,7 @@ export default function MathBlaster() {
     if (!touchExists) gs.movementTouchId = null;
   };
 
+  // --- MATEMÁTICA ---
   const getRespostasAtivas = () => {
     const resps: number[] = [];
     if (gs.boss.active && gs.boss.shield) resps.push(gs.boss.res);
@@ -251,6 +255,7 @@ export default function MathBlaster() {
     }
   };
 
+  // --- COLISÃO MATEMÁTICA E TECLADO ---
   const lidarComTeclado = useCallback((valor: string) => {
     if (!jogoAtivo) return;
     
@@ -341,6 +346,7 @@ export default function MathBlaster() {
     }
   }, [jogoAtivo]);
 
+  // --- LISTENERS DE TECLADO FÍSICO ---
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
@@ -381,6 +387,7 @@ export default function MathBlaster() {
     };
   }, [jogoAtivo, lidarComTeclado]);
 
+  // --- MOTOR PRINCIPAL ---
   const gameTick = () => {
     const now = Date.now();
     const gw = layoutRef.current.width; 
@@ -412,6 +419,7 @@ export default function MathBlaster() {
     if (gs.player.y < 15) gs.player.y = 15; 
     if (gs.player.y > gh - 15) gs.player.y = gh - 15;
 
+    // DISPAROS DA NAVE
     if (now - gs.player.lastFire > gs.player.fireRate) {
       gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 15, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       if (gs.player.tripleShot) {
@@ -474,6 +482,7 @@ export default function MathBlaster() {
     });
     gs.pulses = gs.pulses.filter(p => p.life > 0);
 
+    // FÍSICA DOS TIROS DA NAVE E HOMING
     gs.lasers.forEach(l => {
       if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') {
         if (l.type === 'MISSILE') l.life -= 1;
@@ -526,6 +535,7 @@ export default function MathBlaster() {
     });
     gs.floatingTexts = gs.floatingTexts.filter(ft => ft.life > 0);
 
+    // FÍSICA INIMIGA (Com Time Freeze)
     const speedMult = gs.timeFreezeTimer > 0 ? 0.15 : 1;
 
     gs.enemyLasers.forEach(el => {
@@ -546,6 +556,12 @@ export default function MathBlaster() {
       }
       el.x += el.vx * speedMult; 
       el.y += el.vy * speedMult;
+
+      // COLISÃO DO TIRO INIMIGO COM O PLAYER
+      if (Math.abs(gs.player.x - el.x) < 20 && Math.abs(gs.player.y - el.y) < 20) {
+        aplicarDano(el.damage);
+        el.hp = 0; 
+      }
     });
     gs.enemyLasers = gs.enemyLasers.filter(el => el.y < gh + 20 && el.x > -20 && el.x < gw + 20 && el.hp > 0);
 
@@ -681,6 +697,7 @@ export default function MathBlaster() {
         }
       }
       
+      // COLISÃO DO CORPO INIMIGO COM O PLAYER
       if (Math.abs(gs.player.x - e.x) < 25 && Math.abs(gs.player.y - e.y) < 25) { 
         aplicarDano(15); 
         if (!e.mathRequired) e.hp = -100; 
@@ -895,7 +912,15 @@ export default function MathBlaster() {
           </View>
         </View>
 
-        <View style={[styles.gameArea, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} onTouchStart={handleGameTouchStart} onTouchMove={handleGameTouchMove} onTouchEnd={handleGameTouchEnd} onTouchCancel={handleGameTouchEnd}>
+        <View 
+          style={[styles.gameArea, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} 
+          onLayout={(e) => { layoutRef.current.width = e.nativeEvent.layout.width; layoutRef.current.height = e.nativeEvent.layout.height; }} 
+          onTouchStart={handleGameTouchStart} 
+          onTouchMove={handleGameTouchMove} 
+          onTouchEnd={handleGameTouchEnd} 
+          onTouchCancel={handleGameTouchEnd}
+          pointerEvents="auto"
+        >
           <View style={styles.gridOverlay} />
           
           {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
@@ -1042,7 +1067,13 @@ const styles = StyleSheet.create({
   skillOverlay: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.7)' },
 
   gameArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#050015', touchAction: 'none' as any, width: '100%' },
-  gridOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.1, backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)', backgroundSize: '30px 30px' },
+  
+  gridOverlay: Platform.OS === 'web' ? { 
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    opacity: 0.1, 
+    backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)' as any, 
+    backgroundSize: '30px 30px' as any 
+  } : { display: 'none' },
   
   centerAlert: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
   alertTextDanger: { color: '#FF0055', fontSize: 35, fontWeight: '900', textShadowColor: '#FF0055', textShadowRadius: 8, textShadowOffset: { width: 1, height: 1 } },
