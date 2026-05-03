@@ -66,7 +66,7 @@ class Usuario(BaseModel):
     pontosTotais: int = 0
     recordeJogoSingle: int = 0
     recordeJogoMulti: int = 0
-    recordeMathBlaster: int = 0  # <--- CAMPO NOVO ADICIONADO AQUI
+    recordeMathBlaster: int = 0  
     criadoEm: str = Field(default_factory=lambda: get_now_brt().isoformat())
     ultimoAcesso: Optional[str] = None
     dataUltimoPontoArcade: Optional[str] = None
@@ -99,14 +99,20 @@ class AdminUsuarioUpdate(BaseModel):
     ativo: Optional[bool] = None
     pontosTotais: Optional[int] = None
     recordeJogoSingle: Optional[int] = None
-    recordeMathBlaster: Optional[int] = None # <--- CAMPO NOVO ADICIONADO AQUI
+    recordeMathBlaster: Optional[int] = None 
     ocultoChat: Optional[bool] = None
 
 class ArcadeScore(BaseModel):
     pontos: int
 
-class MathBlasterScore(BaseModel):  # <--- MODELO NOVO ADICIONADO AQUI
+class MathBlasterScore(BaseModel):  
     pontos: int
+
+class PremiacaoRequest(BaseModel):
+    tipo: str # "ARCADE" ou "MATH_BLASTER"
+    pts1: int
+    pts2: int
+    pts3: int
 
 class Conteudo(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -329,19 +335,16 @@ def get_bncc_grade(codigo: str) -> int:
 
 # ============== MOTOR DO PONTO DIÁRIO ==============
 async def registrar_ponto_diario(user: dict):
-    """ Verifica se é um novo dia. Se for, soma 1 ponto de recompensa diária. """
     hoje_str = get_now_brt().date().isoformat()
     last_str = str(user.get("streakUltimoLoginData"))[:10] if user.get("streakUltimoLoginData") else None
     
     agora = get_now_brt().isoformat()
     updates = {"ultimoAcesso": agora}
-    pontos_adicionados = 0
     
     if hoje_str != last_str:
         new_streak, new_date = calculate_streak(user.get("streakUltimoLoginData"), user.get("streakDias", 0))
         updates["streakDias"] = new_streak
         updates["streakUltimoLoginData"] = new_date
-        pontos_adicionados = 1
         
         await db.usuarios.update_one(
             {"id": user["id"]}, 
@@ -349,7 +352,6 @@ async def registrar_ponto_diario(user: dict):
         )
         user["pontosTotais"] = user.get("pontosTotais", 0) + 1
         
-        # Sobe o ponto da equipe também
         eq_id = user.get("equipeId")
         if eq_id:
             await db.equipes.update_one({"id": eq_id}, {"$inc": {"pontosTotais": 1}})
@@ -744,7 +746,7 @@ async def delete_permanente(item_id: str, tipo: str, current_user: dict = Depend
     raise HTTPException(400, "Tipo inválido")
 
 # =====================================================================
-# ROTAS DO CHAT PRIVADO
+# ROTAS DO CHAT PRIVADO E MODERAÇÃO
 # =====================================================================
 @api_router.get("/chat/inbox")
 async def obter_resumo_inbox(current_user: dict = Depends(get_current_user)):
@@ -810,24 +812,18 @@ async def obter_conversa(other_user_id: str, current_user: dict = Depends(get_cu
 
     return [{k: v for k, v in m.items() if k != '_id'} for m in mensagens if not m.get("apagadaPorAdmin")]
 
-# =====================================================================
-# ROTAS DO ADMIN PARA MODERAÇÃO AVANÇADA
-# =====================================================================
 @api_router.get("/admin/chat/inbox/{alvo_id}")
 async def admin_obter_resumo_inbox(alvo_id: str, current_user: dict = Depends(require_admin)):
     mensagens = await db.mensagens_privadas.find({
         "$or": [{"remetenteId": alvo_id}, {"destinatarioId": alvo_id}]
     }).to_list(10000)
-
     inbox = {}
     for m in mensagens:
         other_id = m["destinatarioId"] if m["remetenteId"] == alvo_id else m["remetenteId"]
         if other_id not in inbox:
             inbox[other_id] = {"lastMessageTime": m["criadoEm"]}
-        
         if m["criadoEm"] > inbox[other_id]["lastMessageTime"]:
             inbox[other_id]["lastMessageTime"] = m["criadoEm"]
-            
     return inbox
 
 @api_router.get("/admin/chat/mensagens/{user1}/{user2}")
@@ -845,11 +841,8 @@ class MensagemEdit(BaseModel):
 
 @api_router.put("/admin/chat/mensagens/{msg_id}")
 async def admin_editar_mensagem(msg_id: str, dados: MensagemEdit, current_user: dict = Depends(require_admin)):
-    await db.mensagens_privadas.update_one(
-        {"id": msg_id}, 
-        {"$set": {"texto": dados.texto, "editadaPorAdmin": True}}
-    )
-    return {"message": "Mensagem editada com sucesso"}
+    await db.mensagens_privadas.update_one({"id": msg_id}, {"$set": {"texto": dados.texto, "editadaPorAdmin": True}})
+    return {"message": "Mensagem editada"}
 
 @api_router.get("/admin/chat/mensagens")
 async def admin_obter_todas_mensagens(current_user: dict = Depends(require_admin)):
@@ -866,12 +859,12 @@ async def admin_bloquear_conversa(dados: BloqueioChatCreate, current_user: dict 
     existente = await db.bloqueios_chat.find_one({ "$or": [ {"usuarioId1": dados.usuarioId1, "usuarioId2": dados.usuarioId2}, {"usuarioId1": dados.usuarioId2, "usuarioId2": dados.usuarioId1} ] })
     if existente: await db.bloqueios_chat.update_one({"_id": existente["_id"]}, {"$set": {"bloqueadoPorAdmin": True}})
     else: await db.bloqueios_chat.insert_one({"id": str(uuid.uuid4()), "usuarioId1": dados.usuarioId1, "usuarioId2": dados.usuarioId2, "bloqueadoPorAdmin": True})
-    return {"message": "Bloqueada com sucesso"}
+    return {"message": "Bloqueada"}
 
 @api_router.post("/admin/chat/desbloquear")
 async def admin_desbloquear_conversa(dados: BloqueioChatCreate, current_user: dict = Depends(require_admin)):
     await db.bloqueios_chat.update_many({ "$or": [ {"usuarioId1": dados.usuarioId1, "usuarioId2": dados.usuarioId2}, {"usuarioId1": dados.usuarioId2, "usuarioId2": dados.usuarioId1} ] }, {"$set": {"bloqueadoPorAdmin": False}})
-    return {"message": "Desbloqueada com sucesso"}
+    return {"message": "Desbloqueada"}
 
 # =====================================================================
 # ROTAS DO RANKING E OUTRAS
@@ -969,20 +962,14 @@ async def get_ranking_arcade():
     for i, r in enumerate(ranking): r["posicao"] = i + 1
     return ranking
 
-# =========================================================
-# ROTAS DO MATH BLASTER (NOVO MODO DE JOGO)
-# =========================================================
 @api_router.post("/math_blaster/score")
 async def submit_math_blaster_score(data: MathBlasterScore, current_user: dict = Depends(get_current_user)):
     pontos_score = data.pontos
     if pontos_score <= 0: return {"message": "Nenhum ponto recebido"}
-    
     current_record = current_user.get("recordeMathBlaster", 0)
     is_new_record = pontos_score > current_record
-    
     if is_new_record: 
         await db.usuarios.update_one({"id": current_user["id"]}, {"$set": {"recordeMathBlaster": pontos_score}})
-        
     return {"message": "Score processado", "newRecord": is_new_record}
 
 @api_router.get("/ranking/math_blaster")
@@ -991,29 +978,56 @@ async def get_ranking_math_blaster():
     equipes = {str(e.get("id", e.get("_id", ""))): e for e in await db.equipes.find({}).to_list(100)}
     turmas = {str(t.get("id", t.get("_id", ""))): t for t in await db.turmas.find({}).to_list(100)}
     ranking = []
-    
     for u in usuarios:
         recorde = u.get("recordeMathBlaster", 0)
         is_admin = u.get("perfil") == "ADMIN"
-        
         if is_admin:
             pontos_finais = recorde if recorde > 0 else 1
-            ranking.append({
-                "id": u["id"], "nome": u.get("nome", "Admin").split(" ")[0], "pontosMaximos": pontos_finais, 
-                "equipe": "", "cor": "#FFD700", "turma": "Professor", "isProf": True
-            })
+            ranking.append({"id": u["id"], "nome": u.get("nome", "Admin").split(" ")[0], "pontosMaximos": pontos_finais, "equipe": "", "cor": "#FFD700", "turma": "Professor", "isProf": True})
         elif recorde > 0:
             eq = equipes.get(str(u.get("equipeId", "")))
             turma = turmas.get(str(u.get("turmaId", "")))
-            ranking.append({
-                "id": u["id"], "nome": u.get("nome", "Estudante").split(" ")[0], "pontosMaximos": recorde, 
-                "equipe": eq.get("nome", "") if eq else "", "cor": eq.get("cor", "#888") if eq else "#888", 
-                "turma": turma.get("nome", "") if turma else "", "isProf": False
-            })
-            
+            ranking.append({"id": u["id"], "nome": u.get("nome", "Estudante").split(" ")[0], "pontosMaximos": recorde, "equipe": eq.get("nome", "") if eq else "", "cor": eq.get("cor", "#888") if eq else "#888", "turma": turma.get("nome", "") if turma else "", "isProf": False})
     ranking.sort(key=lambda x: x["pontosMaximos"], reverse=True)
     for i, r in enumerate(ranking): r["posicao"] = i + 1
     return ranking
+
+# =========================================================
+# NOVAS ROTAS (Inimigo Raro e Premiação de Admin)
+# =========================================================
+@api_router.post("/math_blaster/rare_kill")
+async def math_blaster_rare_kill(current_user: dict = Depends(get_current_user)):
+    await db.usuarios.update_one({"id": current_user["id"]}, {"$inc": {"pontosTotais": 1}})
+    eq_id = current_user.get("equipeId")
+    if eq_id:
+        await db.equipes.update_one({"id": str(eq_id).strip()}, {"$inc": {"pontosTotais": 1}})
+    return {"message": "1 ponto de perfil adicionado ao jogador e equipe."}
+
+@api_router.post("/admin/premiar_ranking")
+async def admin_premiar_ranking(dados: PremiacaoRequest, current_user: dict = Depends(require_admin)):
+    if dados.tipo == "ARCADE":
+        usuarios = await db.usuarios.find({"ativo": True, "recordeJogoSingle": {"$gt": 0}}).to_list(5000)
+        usuarios.sort(key=lambda x: x.get("recordeJogoSingle", 0), reverse=True)
+    elif dados.tipo == "MATH_BLASTER":
+        usuarios = await db.usuarios.find({"ativo": True, "recordeMathBlaster": {"$gt": 0}}).to_list(5000)
+        usuarios.sort(key=lambda x: x.get("recordeMathBlaster", 0), reverse=True)
+    else:
+        raise HTTPException(status_code=400, detail="Tipo de ranking inválido")
+
+    top_users = usuarios[:3]
+    premios = [dados.pts1, dados.pts2, dados.pts3]
+    
+    for i, user in enumerate(top_users):
+        pts = premios[i]
+        if pts > 0:
+            await db.usuarios.update_one({"id": user["id"]}, {"$inc": {"pontosTotais": pts}})
+            eq_id = user.get("equipeId")
+            if eq_id:
+                await db.equipes.update_one({"id": str(eq_id).strip()}, {"$inc": {"pontosTotais": pts}})
+                
+    return {"message": "Premiação distribuída com sucesso."}
+
+# =========================================================
 
 @api_router.get("/usuarios/progresso")
 async def get_meu_progresso(current_user: dict = Depends(get_current_user)):
@@ -1048,7 +1062,7 @@ async def create_missao(missao_data: MissaoCreate, current_user: dict = Depends(
 @api_router.delete("/missoes/{missao_id}")
 async def delete_missao(missao_id: str, current_user: dict = Depends(require_admin)):
     await db.missoes.delete_one({"id": missao_id})
-    return {"message": "Missão deletada com sucesso"}
+    return {"message": "Missão deletada"}
 
 @api_router.get("/missoes/disponiveis")
 async def get_missoes_disponiveis(current_user: dict = Depends(get_current_user)):
@@ -1090,16 +1104,6 @@ async def concluir_missao(missao_id: str, current_user: dict = Depends(get_curre
     eq_raw = current_user.get("equipeId")
     if eq_raw: await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": pontos}})
     return {"message": "Missão concluída", "pontos": pontos}
-
-@api_router.post("/missoes/{missao_id}/reenviar")
-async def reenviar_missao(missao_id: str, dados: ReenviarData, current_user: dict = Depends(require_admin)):
-    old = await db.missoes.find_one({"id": missao_id})
-    if not old: raise HTTPException(status_code=404, detail="Missão não encontrada")
-    new_data = {k: v for k, v in old.items() if k not in ['_id', 'id', 'criadoEm', 'expiraEm', 'alvoTipo', 'alvoNome', 'alvoId', 'tentativasFeitas', 'criadaPor']}
-    agora = get_now_brt()
-    new_missao = Missao(**new_data, alvoTipo=dados.alvoTipo, alvoNome=dados.alvoNome, alvoId=dados.alvoId, criadaPor=current_user["id"], criadoEm=agora.isoformat(), expiraEm=(agora + timedelta(hours=24)).isoformat())
-    await db.missoes.insert_one(new_missao.dict())
-    return new_missao.dict()
 
 @api_router.post("/online/ping")
 async def ping_online(): return {"status": "ok"}
