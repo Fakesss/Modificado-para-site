@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions, Platform, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -8,11 +8,9 @@ const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
 
 // --- COMPONENTE: TECLADO RETRÔ ---
-// O comportamento visual agora mescla a leitura nativa do controlador invisível com os cliques da Web
 const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed: boolean, onPressWeb: (v: string) => void }) => {
   const isWeb = Platform.OS === 'web';
   const [localPress, setLocalPress] = useState(false);
-  
   const currentlyPressed = isWeb ? localPress : isPressed;
   
   let customStyle = styles.teclaRetro;
@@ -45,17 +43,17 @@ export default function MathBlaster() {
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
   
-  // ESTADOS DO MULTI-TOUCH DO TECLADO
+  // ESTADOS DO MULTI-TOUCH GLOBAL
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
-  const tecladoLayoutRef = useRef({ width: Math.min(initialWidth, 350) }); 
+  const tecladoViewRef = useRef<View>(null);
+  const tecladoGeomRef = useRef({ x: 0, y: 0, width: 350, height: 284 });
 
   const respostaRef = useRef('');
   useEffect(() => { 
     respostaRef.current = resposta; 
   }, [resposta]);
   
-  // Referência das dimensões da tela do jogo
   const layoutRef = useRef({ width: initialWidth, height: initialHeight });
 
   const gs = useRef({
@@ -65,7 +63,7 @@ export default function MathBlaster() {
       hp: 100, 
       maxHp: 100, 
       damage: 1, 
-      shotSize: 4, // Tamanho base reduzido para o efeito "Zoom Out"
+      shotSize: 4, 
       fireRate: 300, 
       lastFire: 0, 
       tripleShot: false,
@@ -75,30 +73,13 @@ export default function MathBlaster() {
         pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 35, damageMult: 1 }
       }
     },
-    lasers: [] as any[], 
-    specialLasers: [] as any[],
-    mathShots: [] as any[],
-    pulses: [] as any[], 
-    floatingTexts: [] as any[], 
-    enemies: [] as any[], 
-    enemyLasers: [] as any[],
-    powerups: [] as any[], 
-    particles: [] as any[],
+    lasers: [] as any[], specialLasers: [] as any[], mathShots: [] as any[], pulses: [] as any[], floatingTexts: [] as any[], 
+    enemies: [] as any[], enemyLasers: [] as any[], powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 3, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
-    score: 0, 
-    fase: 1, 
-    gameState: 'WAVES', 
-    stateTimer: 0, 
-    lastPowerupSpawn: 0,
-    movementTouchId: null as string | null,
-    lastTouchX: 0, 
-    lastTouchY: 0,
-    timeAlive: 0,
-    flawlessBossesCount: 0,
-    tookDamageThisBoss: false,
-    timeFreezeTimer: 0,
-    forceShieldHits: 0,
-    xRayTimer: 0,
+    score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0,
+    movementTouchId: null as string | null, lastTouchX: 0, lastTouchY: 0,
+    keys: { up: false, down: false, left: false, right: false },
+    timeAlive: 0, flawlessBossesCount: 0, tookDamageThisBoss: false, timeFreezeTimer: 0, forceShieldHits: 0, xRayTimer: 0,
     drones: {
       normal: { active: false, level: 1, lastFire: 0, baseCooldown: 1500 },
       advanced: { active: false, level: 1, lastFire: 0, baseCooldown: 2000 }
@@ -115,69 +96,69 @@ export default function MathBlaster() {
 
   // =========================================================================
   // CONTROLADOR UNIVERSAL DE MULTI-TOUCH (ANDROID/IOS)
-  // Lida simultaneamente com a Nave e com o Teclado sem bloqueios do sistema!
+  // Lida simultaneamente com a Nave e com o Teclado (Baseado em Coordenadas Globais)
   // =========================================================================
   const handleUnifiedTouch = (e: any) => {
-    if (Platform.OS === 'web') return; // Web usa eventos nativos do DOM
+    if (Platform.OS === 'web') return; 
 
     const touches = e.nativeEvent?.touches || [];
     let shipTouchFound = false;
     const keysPressedNow = new Set<string>();
 
-    const screenH = Dimensions.get('window').height;
-    const screenW = Dimensions.get('window').width;
-
-    // A área do teclado ocupa os últimos 295px da tela inferior
-    const keysTopY = screenH - 295; 
-    const kbWidth = Math.min(screenW, 350);
-    const kbLeft = (screenW - kbWidth) / 2;
+    const kb = tecladoGeomRef.current;
+    const safeKbY = kb.y > 0 ? kb.y : Dimensions.get('window').height - 280;
 
     for (let i = 0; i < touches.length; i++) {
         const t = touches[i];
+        const px = t.pageX;
+        const py = t.pageY;
 
-        // 1. Dedo que movimenta a nave (Parte superior da tela)
-        if (t.pageY < keysTopY - 20) {
+        // 1. Dedo digitando no teclado
+        if (py >= safeKbY - 15 && px >= kb.x - 10 && px <= kb.x + kb.width + 10) {
+            const localX = px - kb.x;
+            const localY = py - safeKbY;
+            
+            // Margens exatas do layout
+            const gap = 8;
+            const rowH = 65;
+            const colW = (kb.width - 2 * gap) / 3;
+
+            let row = -1;
+            for (let r=0; r<4; r++) {
+                if (localY >= (rowH+gap)*r && localY <= (rowH+gap)*r + rowH + gap/2) { row = r; break; }
+            }
+
+            let col = -1;
+            for (let c=0; c<3; c++) {
+                if (localX >= (colW+gap)*c && localX <= (colW+gap)*c + colW + gap/2) { col = c; break; }
+            }
+
+            if (row !== -1 && col !== -1) {
+                const layout = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['apagar', '0', 'enviar']];
+                const key = layout[row]?.[col];
+                if (key) keysPressedNow.add(key);
+            }
+        } 
+        // 2. Dedo movimentando a nave
+        else {
             if (gs.movementTouchId === null) {
                 gs.movementTouchId = t.identifier;
-                gs.lastTouchX = t.pageX;
-                gs.lastTouchY = t.pageY;
+                gs.lastTouchX = px;
+                gs.lastTouchY = py;
             } else if (gs.movementTouchId === t.identifier) {
-                const dx = t.pageX - gs.lastTouchX;
-                const dy = t.pageY - gs.lastTouchY;
-                
-                // Multiplicador levemente maior para navegação ágil
+                const dx = px - gs.lastTouchX;
+                const dy = py - gs.lastTouchY;
                 gs.player.x += dx * 1.5;
                 gs.player.y += dy * 1.5;
-                
-                gs.lastTouchX = t.pageX;
-                gs.lastTouchY = t.pageY;
+                gs.lastTouchX = px;
+                gs.lastTouchY = py;
             }
             shipTouchFound = true;
-        } 
-        // 2. Dedo digitando no teclado (Parte inferior da tela)
-        else {
-            const localX = t.pageX - kbLeft;
-            const localY = t.pageY - keysTopY;
-
-            if (localX >= 0 && localX <= kbWidth && localY >= 0) {
-                const col = Math.floor(localX / (kbWidth / 3));
-                const row = Math.floor(localY / 73); // Altura de 65 + 8 de Gap
-
-                if (col >= 0 && col <= 2 && row >= 0 && row <= 3) {
-                    const layout = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['apagar', '0', 'enviar']];
-                    const key = layout[row]?.[col];
-                    if (key) keysPressedNow.add(key);
-                }
-            }
         }
     }
 
-    // Se o dedo da nave for levantado
-    if (!shipTouchFound) {
-      gs.movementTouchId = null;
-    }
+    if (!shipTouchFound) gs.movementTouchId = null;
 
-    // Gerenciador de cliques de botão do teclado
     setTeclasPressionadas(Array.from(keysPressedNow));
 
     keysPressedNow.forEach(k => {
@@ -224,6 +205,45 @@ export default function MathBlaster() {
     }
   };
 
+  // --- LEITURA DO TECLADO WASD NO NAVEGADOR ---
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!jogoAtivo) return;
+      const key = e.key;
+
+      if (key === 'w' || key === 'W' || key === 'ArrowUp') gs.keys.up = true;
+      if (key === 's' || key === 'S' || key === 'ArrowDown') gs.keys.down = true;
+      if (key === 'a' || key === 'A' || key === 'ArrowLeft') gs.keys.left = true;
+      if (key === 'd' || key === 'D' || key === 'ArrowRight') gs.keys.right = true;
+
+      if (/\d/.test(key)) lidarComTeclado(key);
+      if (key === 'Backspace') lidarComTeclado('apagar');
+      if (key === 'Enter') lidarComTeclado('enviar');
+
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(key)) {
+        e.preventDefault();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key;
+      if (key === 'w' || key === 'W' || key === 'ArrowUp') gs.keys.up = false;
+      if (key === 's' || key === 'S' || key === 'ArrowDown') gs.keys.down = false;
+      if (key === 'a' || key === 'A' || key === 'ArrowLeft') gs.keys.left = false;
+      if (key === 'd' || key === 'D' || key === 'ArrowRight') gs.keys.right = false;
+    };
+
+    window.addEventListener('keydown', handleKeyDown, { passive: false });
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [jogoAtivo]);
+
   // --- MATEMÁTICA ---
   const getRespostasAtivas = () => {
     const resps: number[] = [];
@@ -248,38 +268,27 @@ export default function MathBlaster() {
 
       if (tipo === 'soma') {
         const max = fase === 1 ? 5 : 10 + (fase * 3);
-        n1 = r(1, max); n2 = r(1, max);
-        res = n1 + n2; txt = `${n1} + ${n2}`;
+        n1 = r(1, max); n2 = r(1, max); res = n1 + n2; txt = `${n1} + ${n2}`;
       }
       else if (tipo === 'subtracao') {
         const max = fase === 1 ? 6 : 15 + (fase * 3);
         const min = fase === 1 ? 2 : 5;
-        n1 = r(min, max); n2 = r(1, n1 - 1);
-        res = n1 - n2; txt = `${n1} - ${n2}`;
+        n1 = r(min, max); n2 = r(1, n1 - 1); res = n1 - n2; txt = `${n1} - ${n2}`;
       }
       else if (tipo === 'multiplicacao') {
         const maxNum = Math.min(15, 4 + Math.floor(fase / 2));
-        n1 = r(2, maxNum); n2 = r(2, maxNum);
-        res = n1 * n2; txt = `${n1} × ${n2}`;
+        n1 = r(2, maxNum); n2 = r(2, maxNum); res = n1 * n2; txt = `${n1} × ${n2}`;
       }
       else if (tipo === 'divisao') {
         const maxDivisor = Math.min(10, 2 + Math.floor((fase - 7) / 2));
-        n2 = r(2, Math.max(5, maxDivisor)); 
-        res = r(2, 9); 
-        n1 = n2 * res; 
-        txt = `${n1} ÷ ${n2}`;
+        n2 = r(2, Math.max(5, maxDivisor)); res = r(2, 9); n1 = n2 * res; txt = `${n1} ÷ ${n2}`;
       }
       else if (tipo === 'potencia') {
-        n1 = r(2, 5);
-        n2 = n1 === 2 ? r(2, 4) : r(2, 3);
-        res = Math.pow(n1, n2);
-        const superScript: any = { 2: '²', 3: '³', 4: '⁴' };
-        txt = `${n1}${superScript[n2]}`;
+        n1 = r(2, 5); n2 = n1 === 2 ? r(2, 4) : r(2, 3); res = Math.pow(n1, n2);
+        const superScript: any = { 2: '²', 3: '³', 4: '⁴' }; txt = `${n1}${superScript[n2]}`;
       }
       else if (tipo === 'raiz') {
-        res = r(2, Math.min(15, 3 + Math.floor((fase - 8)/2))); 
-        n1 = res * res;
-        txt = `√${n1}`;
+        res = r(2, Math.min(15, 3 + Math.floor((fase - 8)/2))); n1 = res * res; txt = `√${n1}`;
       }
     } while (evitar.includes(res)); 
     
@@ -287,20 +296,13 @@ export default function MathBlaster() {
   };
 
   const iniciarJogo = () => {
-    // Uso de segurança (Fallback) para evitar quebras se a tela carregar rápido demais
     const safeWidth = layoutRef.current?.width || initialWidth;
     const safeHeight = layoutRef.current?.height || initialHeight;
     
     gs.player = { 
       x: safeWidth / 2, 
       y: safeHeight - 100, 
-      hp: 100, 
-      maxHp: 100, 
-      damage: 1, 
-      shotSize: 4, 
-      fireRate: 300, 
-      lastFire: 0, 
-      tripleShot: false,
+      hp: 100, maxHp: 100, damage: 1, shotSize: 4, fireRate: 300, lastFire: 0, tripleShot: false,
       weapons: {
         missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 45, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
@@ -312,18 +314,10 @@ export default function MathBlaster() {
     gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 3, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
-    gs.lastTouchX = 0; gs.lastTouchY = 0;
+    gs.lastTouchX = 0; gs.lastTouchY = 0; gs.keys = { up: false, down: false, left: false, right: false };
     
-    gs.timeAlive = 0;
-    gs.flawlessBossesCount = 0;
-    gs.tookDamageThisBoss = false;
-    gs.timeFreezeTimer = 0;
-    gs.forceShieldHits = 0;
-    gs.xRayTimer = 0;
-    gs.drones = {
-      normal: { active: false, level: 1, lastFire: 0, baseCooldown: 1500 },
-      advanced: { active: false, level: 1, lastFire: 0, baseCooldown: 2000 }
-    };
+    gs.timeAlive = 0; gs.flawlessBossesCount = 0; gs.tookDamageThisBoss = false; gs.timeFreezeTimer = 0; gs.forceShieldHits = 0; gs.xRayTimer = 0;
+    gs.drones = { normal: { active: false, level: 1, lastFire: 0, baseCooldown: 1500 }, advanced: { active: false, level: 1, lastFire: 0, baseCooldown: 2000 } };
     
     setResposta(''); 
     setJogoAtivo(true);
@@ -338,12 +332,10 @@ export default function MathBlaster() {
   };
 
   const criarParticulas = (x: number, y: number, color: string, qtd: number) => {
-    for(let i=0; i<qtd; i++) { 
-      gs.particles.push({ x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 15, color }); 
-    }
+    for(let i=0; i<qtd; i++) { gs.particles.push({ x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 15, color }); }
   };
 
-  const lidarComTeclado = useCallback((valor: string) => {
+  const lidarComTeclado = (valor: string) => {
     if (!jogoAtivo || !gs.player.hp || gs.player.hp <= 0) return;
     
     if (valor === 'apagar') {
@@ -430,18 +422,23 @@ export default function MathBlaster() {
     } else {
       setResposta(r => r.length < 4 ? r + valor : r);
     }
-  }, [jogoAtivo]);
+  };
 
   const gameTick = () => {
     const now = Date.now();
-    
-    // Fallback de segurança para as Dimensões na hora do loop
     const gw = layoutRef.current?.width || initialWidth; 
     const gh = layoutRef.current?.height || initialHeight;
     
     gs.timeAlive += 30;
     if (gs.timeFreezeTimer > 0) gs.timeFreezeTimer -= 30;
     if (gs.xRayTimer > 0) gs.xRayTimer -= 30;
+
+    // FÍSICA WASD NAVEGADOR
+    const keyboardSpeed = 6;
+    if (gs.keys.up) gs.player.y -= keyboardSpeed;
+    if (gs.keys.down) gs.player.y += keyboardSpeed;
+    if (gs.keys.left) gs.player.x -= keyboardSpeed;
+    if (gs.keys.right) gs.player.x += keyboardSpeed;
 
     const aplicarDano = (dano: number) => {
       if (gs.forceShieldHits > 0) {
@@ -457,12 +454,10 @@ export default function MathBlaster() {
     if (gs.player.x < 15) gs.player.x = 15; 
     if (gs.player.x > gw - 15) gs.player.x = gw - 15;
     if (gs.player.y < 15) gs.player.y = 15; 
-    
-    // Fator resolvido para a nave descer livremente sem sumir da tela
-    if (gs.player.y > gh - 35) gs.player.y = gh - 35;
+    if (gs.player.y > gh - 35) gs.player.y = gh - 35; // Mantém a nave na área visível 
 
     if (now - gs.player.lastFire > gs.player.fireRate) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 15, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       if (gs.player.tripleShot) {
         gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 8, y: gs.player.y - 12, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
         gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 8, y: gs.player.y - 12, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
@@ -471,7 +466,7 @@ export default function MathBlaster() {
     }
 
     if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 2.5, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 15, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 2.5, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
       gs.player.weapons.missile.lastFire = now;
     }
     
@@ -481,12 +476,12 @@ export default function MathBlaster() {
     }
 
     if (gs.drones.normal.active && now - gs.drones.normal.lastFire > gs.drones.normal.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 30, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 22, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       gs.drones.normal.lastFire = now;
     }
 
     if (gs.drones.advanced.active && now - gs.drones.advanced.lastFire > gs.drones.advanced.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 25, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.2, type: 'MISSILE_HOMING', life: 9999, aoeRange: 35 });
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 15, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.2, type: 'MISSILE_HOMING', life: 9999, aoeRange: 35 });
       gs.drones.advanced.lastFire = now;
     }
 
@@ -496,110 +491,52 @@ export default function MathBlaster() {
     }
 
     gs.pulses.forEach(p => {
-      p.x = gs.player.x;
-      p.y = gs.player.y;
-      p.life -= 1;
+      p.x = gs.player.x; p.y = gs.player.y; p.life -= 1;
       const currentRadius = p.maxRadius * (1 - (p.life / p.maxLife));
-
-      gs.enemyLasers.forEach(el => {
-        if (Math.pow(el.x - p.x, 2) + Math.pow(el.y - p.y, 2) < currentRadius * currentRadius) {
-          el.hp = 0;
-          criarParticulas(el.x, el.y, '#00BFFF', 3);
-        }
-      });
-
-      gs.enemies.forEach(e => {
-        if (!e.mathRequired && Math.pow(e.x - p.x, 2) + Math.pow(e.y - p.y, 2) < currentRadius * currentRadius) {
-          e.hp = -100;
-          gs.score += 10;
-          criarParticulas(e.x, e.y, '#00BFFF', 10);
-        }
-      });
-      
-      if (gs.boss.active && !gs.boss.shield && Math.pow(gs.boss.x - p.x, 2) + Math.pow(gs.boss.y - p.y, 2) < Math.pow(currentRadius + 30, 2)) {
-         gs.boss.hp -= 2; 
-         criarParticulas(p.x, gs.boss.y + 30, '#00BFFF', 1);
-      }
+      gs.enemyLasers.forEach(el => { if (Math.pow(el.x - p.x, 2) + Math.pow(el.y - p.y, 2) < currentRadius * currentRadius) { el.hp = 0; criarParticulas(el.x, el.y, '#00BFFF', 3); } });
+      gs.enemies.forEach(e => { if (!e.mathRequired && Math.pow(e.x - p.x, 2) + Math.pow(e.y - p.y, 2) < currentRadius * currentRadius) { e.hp = -100; gs.score += 10; criarParticulas(e.x, e.y, '#00BFFF', 10); } });
+      if (gs.boss.active && !gs.boss.shield && Math.pow(gs.boss.x - p.x, 2) + Math.pow(gs.boss.y - p.y, 2) < Math.pow(currentRadius + 30, 2)) { gs.boss.hp -= 2; criarParticulas(p.x, gs.boss.y + 30, '#00BFFF', 1); }
     });
     gs.pulses = gs.pulses.filter(p => p.life > 0);
 
     gs.lasers.forEach(l => {
       if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') {
         if (l.type === 'MISSILE') l.life -= 1;
-        let closest: any = null; 
-        let minDist = 999999;
-        
+        let closest: any = null; let minDist = 999999;
         gs.enemies.concat(gs.boss.active ? [gs.boss] : []).forEach(e => {
-          if (e.hp > 0 && !e.mathRequired) { 
-            let d = Math.pow(e.x - l.x, 2) + Math.pow(e.y - l.y, 2);
-            if (d < minDist) { minDist = d; closest = e; }
-          }
+          if (e.hp > 0 && !e.mathRequired) { let d = Math.pow(e.x - l.x, 2) + Math.pow(e.y - l.y, 2); if (d < minDist) { minDist = d; closest = e; } }
         });
-        
         if (closest) {
-          const dx = closest.x - l.x; 
-          const dy = closest.y - l.y;
-          const dist = Math.sqrt(dx*dx + dy*dy);
-          if (dist > 0.1) { 
-            const steer = l.type === 'MISSILE_HOMING' ? 4 : 2;
-            l.vx += (dx/dist) * steer; 
-            l.vy += (dy/dist) * steer; 
-          }
+          const dx = closest.x - l.x; const dy = closest.y - l.y; const dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist > 0.1) { const steer = l.type === 'MISSILE_HOMING' ? 4 : 2; l.vx += (dx/dist) * steer; l.vy += (dy/dist) * steer; }
         }
-        
         const maxSpeed = l.type === 'MISSILE_HOMING' ? 14 : 10;
         const speed = Math.sqrt(l.vx*l.vx + l.vy*l.vy);
-        if (speed > maxSpeed) { 
-          l.vx = (l.vx/speed)*maxSpeed; 
-          l.vy = (l.vy/speed)*maxSpeed; 
-        }
+        if (speed > maxSpeed) { l.vx = (l.vx/speed)*maxSpeed; l.vy = (l.vy/speed)*maxSpeed; }
         if (l.type === 'MISSILE' && l.life <= 0) l.y = -100; 
       }
-      l.x += l.vx; 
-      l.y += l.vy;
+      l.x += l.vx; l.y += l.vy;
     });
-    
     gs.lasers = gs.lasers.filter(l => l.type === 'MISSILE_HOMING' ? l.life > 0 : (l.y > -50 && l.x > -20 && l.x < gw + 20));
     
-    gs.mathShots.forEach(ms => {
-      ms.x += (ms.tx - ms.x) * 0.25; 
-      ms.y += (ms.ty - ms.y) * 0.25; 
-      ms.life -= 1;
-      criarParticulas(ms.x, ms.y, ms.color, 1); 
-    });
+    gs.mathShots.forEach(ms => { ms.x += (ms.tx - ms.x) * 0.25; ms.y += (ms.ty - ms.y) * 0.25; ms.life -= 1; criarParticulas(ms.x, ms.y, ms.color, 1); });
     gs.mathShots = gs.mathShots.filter(ms => ms.life > 0);
 
-    gs.floatingTexts.forEach(ft => { 
-      ft.y -= 1.5; 
-      ft.life -= 1; 
-    });
+    gs.floatingTexts.forEach(ft => { ft.y -= 1.5; ft.life -= 1; });
     gs.floatingTexts = gs.floatingTexts.filter(ft => ft.life > 0);
 
     const speedMult = gs.timeFreezeTimer > 0 ? 0.15 : 1;
 
     gs.enemyLasers.forEach(el => {
       if (el.homing) {
-        const dx = gs.player.x - el.x; 
-        const dy = gs.player.y - el.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist > 0.1) { 
-          el.vx += (dx/dist) * 0.4; 
-          el.vy += (dy/dist) * 0.4; 
-        }
+        const dx = gs.player.x - el.x; const dy = gs.player.y - el.y; const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > 0.1) { el.vx += (dx/dist) * 0.4; el.vy += (dy/dist) * 0.4; }
         const speed = Math.sqrt(el.vx*el.vx + el.vy*el.vy);
         const maxSpeed = gs.fase === 1 ? 2.5 : 2.5 + (gs.fase * 0.5); 
-        if (speed > maxSpeed) { 
-          el.vx = (el.vx/speed) * maxSpeed; 
-          el.vy = (el.vy/speed) * maxSpeed; 
-        }
+        if (speed > maxSpeed) { el.vx = (el.vx/speed) * maxSpeed; el.vy = (el.vy/speed) * maxSpeed; }
       }
-      el.x += el.vx * speedMult; 
-      el.y += el.vy * speedMult;
-
-      if (Math.abs(gs.player.x - el.x) < 20 && Math.abs(gs.player.y - el.y) < 20) {
-        aplicarDano(el.damage);
-        el.hp = 0; 
-      }
+      el.x += el.vx * speedMult; el.y += el.vy * speedMult;
+      if (Math.abs(gs.player.x - el.x) < 20 && Math.abs(gs.player.y - el.y) < 20) { aplicarDano(el.damage); el.hp = 0; }
     });
     gs.enemyLasers = gs.enemyLasers.filter(el => el.y < gh + 20 && el.x > -20 && el.x < gw + 20 && el.hp > 0);
 
@@ -609,9 +546,7 @@ export default function MathBlaster() {
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
-      
       if (gs.stateTimer % Math.max(20, 60 - gs.fase * 5) === 0) {
-        // Velocidade base do meteoro reduzida para o efeito de Zoom Out
         const meteorVy = gs.fase === 1 ? Math.random() * 1.5 + 1.5 : Math.random() * 2 + 2 + (gs.fase * 0.4);
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: meteorVy, angle: 0 });
       }
@@ -628,71 +563,47 @@ export default function MathBlaster() {
       }
 
       if (gs.stateTimer % 200 === 0 && gs.stateTimer < 1400) {
-        const cx = Math.random() * (gw - 120) + 60; 
-        const baseHp = 3 + (gs.fase * 3); 
+        const cx = Math.random() * (gw - 120) + 60; const baseHp = 3 + (gs.fase * 3); 
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx, y: -30, targetY: 100, isLeader: true, hp: baseHp * 3, vx: 0, vy: 1.5, fireTimer: 0, angle: Math.PI, evasive: true });
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 35, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 1.5, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 }); 
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 35, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 1.5, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 });
       }
 
-      if (gs.stateTimer > 1500) { 
-        gs.gameState = 'BOSS_WARNING'; 
-        gs.stateTimer = 0; 
-        gs.tookDamageThisBoss = false; 
-      }
+      if (gs.stateTimer > 1500) { gs.gameState = 'BOSS_WARNING'; gs.stateTimer = 0; gs.tookDamageThisBoss = false; }
     } 
     else if (gs.gameState === 'BOSS_WARNING') {
       if (gs.stateTimer > 90) { 
-        gs.gameState = 'BOSS'; 
-        gs.stateTimer = 0;
+        gs.gameState = 'BOSS'; gs.stateTimer = 0;
         const eq = gerarEquacao(gs.fase, getRespostasAtivas());
         gs.boss = { active: true, type: Math.floor(Math.random() * 3), x: gw / 2, y: -100, hp: 200 + (gs.fase * 120), maxHp: 200 + (gs.fase * 120), vx: 2.5 + (gs.fase * 0.5), shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
       }
     }
     else if (gs.gameState === 'BOSS') {
-      if (gs.boss.y < 90) {
-        gs.boss.y += 1.5 * speedMult;
-      } else {
+      if (gs.boss.y < 90) { gs.boss.y += 1.5 * speedMult; } 
+      else {
         gs.boss.x += gs.boss.vx * speedMult;
         if (gs.boss.x < 40 || gs.boss.x > gw - 40) gs.boss.vx *= -1;
         gs.boss.timer += 1 * speedMult;
 
-        if (gs.boss.type === 0) {
-          if (gs.boss.timer % Math.max(40, 90 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 2, size: 14, damage: 20, homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) });
-        } else if (gs.boss.type === 1) {
-          if (gs.boss.timer % 60 === 0) [-2, -1, 0, 1, 2].forEach(dir => gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: dir * 1.5, vy: 6 + gs.fase, size: 6, damage: 15, homing: false, color: '#FF0055', hp: 1 }));
-        } else {
-          if (gs.boss.timer % 120 === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 15, size: 20, damage: 30, homing: false, color: '#32CD32', hp: 99 });
-        }
+        if (gs.boss.type === 0) { if (gs.boss.timer % Math.max(40, 90 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 2, size: 14, damage: 20, homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) }); } 
+        else if (gs.boss.type === 1) { if (gs.boss.timer % 60 === 0) [-2, -1, 0, 1, 2].forEach(dir => gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: dir * 1.5, vy: 6 + gs.fase, size: 6, damage: 15, homing: false, color: '#FF0055', hp: 1 })); } 
+        else { if (gs.boss.timer % 120 === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 15, size: 20, damage: 30, homing: false, color: '#32CD32', hp: 99 }); }
 
         if (gs.boss.timer % 300 === 0 && gs.enemies.length < 2) {
           gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: gs.boss.x - 30, y: gs.boss.y, targetY: gs.boss.y + 40, isLeader: false, hp: 10 + gs.fase, vx: 0, vy: 2, fireTimer: 0, angle: Math.PI });
           gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: gs.boss.x + 30, y: gs.boss.y, targetY: gs.boss.y + 40, isLeader: false, hp: 10 + gs.fase, vx: 0, vy: 2, fireTimer: 0, angle: Math.PI });
         }
 
-        if (!gs.boss.shield && gs.boss.timer > gs.boss.nextShieldAt) {
-          const eq = gerarEquacao(gs.fase, getRespostasAtivas()); 
-          gs.boss.shield = true; gs.boss.txt = eq.txt; gs.boss.res = eq.res;
-        }
+        if (!gs.boss.shield && gs.boss.timer > gs.boss.nextShieldAt) { const eq = gerarEquacao(gs.fase, getRespostasAtivas()); gs.boss.shield = true; gs.boss.txt = eq.txt; gs.boss.res = eq.res; }
       }
       
       if (gs.boss.hp <= 0) {
-        criarParticulas(gs.boss.x, gs.boss.y, '#FFD700', 80); 
-        gs.score += 1000 * gs.fase; 
-        gs.boss.active = false; 
-        gs.gameState = 'TRANSITION'; 
-        gs.stateTimer = 0; 
-        gs.enemies = []; gs.enemyLasers = []; 
+        criarParticulas(gs.boss.x, gs.boss.y, '#FFD700', 80); gs.score += 1000 * gs.fase; gs.boss.active = false; gs.gameState = 'TRANSITION'; gs.stateTimer = 0; gs.enemies = []; gs.enemyLasers = []; 
         if (!gs.tookDamageThisBoss) gs.flawlessBossesCount += 1;
       }
     }
     else if (gs.gameState === 'TRANSITION') {
-      if (gs.stateTimer > 90) { 
-        gs.fase += 1; 
-        gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 50); 
-        gs.gameState = 'WAVES'; 
-        gs.stateTimer = 0; 
-      }
+      if (gs.stateTimer > 90) { gs.fase += 1; gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 50); gs.gameState = 'WAVES'; gs.stateTimer = 0; }
     }
 
     gs.enemies.forEach(e => {
@@ -701,158 +612,65 @@ export default function MathBlaster() {
       else if (e.type === 'SPAWNER') {
         if (e.y < e.targetY) e.y += e.vy * speedMult;
         else {
-           e.x += Math.sin(now / 500) * 0.5 * speedMult; 
-           e.spawnTimer += 1 * speedMult;
-           if (e.spawnTimer > Math.max(50, 120 - (gs.fase * 10))) {
-              gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: e.x, y: e.y + 30, targetY: e.y + 80 + Math.random() * 50, isLeader: false, hp: 1 + gs.fase, vx: (Math.random() - 0.5) * 3, vy: 4, fireTimer: 0, angle: Math.PI });
-              e.spawnTimer = 0;
-           }
+           e.x += Math.sin(now / 500) * 0.5 * speedMult; e.spawnTimer += 1 * speedMult;
+           if (e.spawnTimer > Math.max(50, 120 - (gs.fase * 10))) { gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: e.x, y: e.y + 30, targetY: e.y + 80 + Math.random() * 50, isLeader: false, hp: 1 + gs.fase, vx: (Math.random() - 0.5) * 3, vy: 4, fireTimer: 0, angle: Math.PI }); e.spawnTimer = 0; }
         }
       }
       else if (e.type === 'SQUAD') {
-        if (e.evasive) {
-          gs.lasers.forEach(l => { 
-            if (l.y > e.y && l.y - e.y < 80 && Math.abs(l.x - e.x) < 20) e.x += (e.x > l.x ? 3 : -3) * speedMult; 
-          });
-        }
+        if (e.evasive) { gs.lasers.forEach(l => { if (l.y > e.y && l.y - e.y < 80 && Math.abs(l.x - e.x) < 20) e.x += (e.x > l.x ? 3 : -3) * speedMult; }); }
         if (e.isLeader) {
-          const dx = gs.player.x - e.x; const dy = gs.player.y - e.y; const dist = Math.sqrt(dx*dx + dy*dy); 
-          e.angle = Math.atan2(dy, dx); 
+          const dx = gs.player.x - e.x; const dy = gs.player.y - e.y; const dist = Math.sqrt(dx*dx + dy*dy); e.angle = Math.atan2(dy, dx); 
           if (dist > 50) { e.x += (dx/dist) * (1.5 + gs.fase * 0.3) * speedMult; e.y += (dy/dist) * (1.0 + gs.fase * 0.2) * speedMult; }
           e.fireTimer += 1 * speedMult;
-          if (e.fireTimer > Math.max(30, 80 - (gs.fase * 8))) { 
-            gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: Math.cos(e.angle)*(2.5 + gs.fase*0.5), vy: Math.sin(e.angle)*(2.5 + gs.fase*0.5), size: 6, damage: 15, homing: false, color: '#FF00FF', hp: 1 }); 
-            e.fireTimer = 0; 
-          }
+          if (e.fireTimer > Math.max(30, 80 - (gs.fase * 8))) { gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: Math.cos(e.angle)*(2.5 + gs.fase*0.5), vy: Math.sin(e.angle)*(2.5 + gs.fase*0.5), size: 6, damage: 15, homing: false, color: '#FF00FF', hp: 1 }); e.fireTimer = 0; }
         } else {
           if (e.y < e.targetY) e.y += e.vy * speedMult; 
-          else {
-            e.x += Math.sin(now / 300) * 1.5 * speedMult; e.fireTimer += 1 * speedMult;
-            if (e.fireTimer > Math.max(60, 120 - (gs.fase * 5)) && Math.random() < 0.05) { 
-              gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: 0, vy: 2.5 + gs.fase*0.5, size: 5, damage: 10, homing: false, color: '#FF0055', hp: 1 }); 
-              e.fireTimer = 0; 
-            }
-          }
+          else { e.x += Math.sin(now / 300) * 1.5 * speedMult; e.fireTimer += 1 * speedMult; if (e.fireTimer > Math.max(60, 120 - (gs.fase * 5)) && Math.random() < 0.05) { gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: 0, vy: 2.5 + gs.fase*0.5, size: 5, damage: 10, homing: false, color: '#FF0055', hp: 1 }); e.fireTimer = 0; } }
         }
       }
-      
-      if (Math.abs(gs.player.x - e.x) < 25 && Math.abs(gs.player.y - e.y) < 25) { 
-        aplicarDano(15); 
-        if (!e.mathRequired) e.hp = -100; 
-      }
+      if (Math.abs(gs.player.x - e.x) < 20 && Math.abs(gs.player.y - e.y) < 20) { aplicarDano(15); if (!e.mathRequired) e.hp = -100; }
     });
 
     gs.lasers.forEach(l => {
       gs.enemyLasers.forEach(el => {
-        if (el.homing && el.hp > 0 && Math.abs(l.x - el.x) < 20 && Math.abs(l.y - el.y) < 20) { 
-          el.hp -= l.damage; 
-          if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; }
-          criarParticulas(el.x, el.y, '#FF8C00', 3); 
-        }
+        if (el.homing && el.hp > 0 && Math.abs(l.x - el.x) < 20 && Math.abs(l.y - el.y) < 20) { el.hp -= l.damage; if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; } criarParticulas(el.x, el.y, '#FF8C00', 3); }
       });
-
       gs.enemies.forEach(e => {
         if (!e.mathRequired && Math.abs(l.x - e.x) < 20 && Math.abs(l.y - e.y) < 20) {
-          if (e.shield && e.shield > 0) { 
-            e.shield -= l.damage; 
-            if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; } 
-            criarParticulas(e.x, e.y, '#00FFFF', 5); return; 
-          }
-          
+          if (e.shield && e.shield > 0) { e.shield -= l.damage; if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; } criarParticulas(e.x, e.y, '#00FFFF', 5); return; }
           e.hp -= l.damage;
-          if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') {
-            criarParticulas(e.x, e.y, '#FF4444', 15);
-            gs.enemies.forEach(e2 => { if (!e2.mathRequired && Math.abs(e.x - e2.x) < l.aoeRange && Math.abs(e.y - e2.y) < l.aoeRange) e2.hp -= l.damage; });
-            if (gs.boss.active && Math.abs(gs.boss.x - e.x) < l.aoeRange && Math.abs(gs.boss.y - e.y) < l.aoeRange) gs.boss.hp -= l.damage;
-            if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; 
-          } else if (l.type !== 'LASER') l.y = -100; 
+          if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') { criarParticulas(e.x, e.y, '#FF4444', 15); gs.enemies.forEach(e2 => { if (!e2.mathRequired && Math.abs(e.x - e2.x) < l.aoeRange && Math.abs(e.y - e2.y) < l.aoeRange) e2.hp -= l.damage; }); if (gs.boss.active && Math.abs(gs.boss.x - e.x) < l.aoeRange && Math.abs(gs.boss.y - e.y) < l.aoeRange) gs.boss.hp -= l.damage; if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; } else if (l.type !== 'LASER') l.y = -100; 
           criarParticulas(l.x, l.y, '#FFF', 3);
-        } else if (e.mathRequired && Math.abs(l.x - e.x) < 30 && Math.abs(l.y - e.y) < 30) {
-           if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; 
-           criarParticulas(l.x, l.y, '#00FFFF', 2); 
-        }
+        } else if (e.mathRequired && Math.abs(l.x - e.x) < 30 && Math.abs(l.y - e.y) < 30) { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; criarParticulas(l.x, l.y, '#00FFFF', 2); }
       });
-
       if (gs.boss.active && Math.abs(l.x - gs.boss.x) < 40 && Math.abs(l.y - gs.boss.y) < 35) {
         if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; }
-        
-        if (gs.boss.shield) { 
-          criarParticulas(l.x, gs.boss.y + 35, '#00FFFF', 2); 
-        } else { 
-          gs.boss.hp -= l.damage; 
-          criarParticulas(l.x, l.y, '#FFD700', 4); 
-          if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') { 
-            criarParticulas(l.x, l.y, '#FF4444', 15); 
-            if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; 
-          } 
-        }
+        if (gs.boss.shield) { criarParticulas(l.x, gs.boss.y + 35, '#00FFFF', 2); } else { gs.boss.hp -= l.damage; criarParticulas(l.x, l.y, '#FFD700', 4); if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') { criarParticulas(l.x, l.y, '#FF4444', 15); if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; } }
       }
     });
 
     if (now - gs.lastPowerupSpawn > 15000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
-      const tipos = [ 
-        { type: 'DAMAGE', color: '#FF00FF', nome: 'DANO NAVE' }, 
-        { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA UP' } 
-      ];
-      
+      const tipos = [ { type: 'DAMAGE', color: '#FF00FF', nome: 'DANO NAVE' }, { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA UP' } ];
       if (!gs.player.tripleShot) tipos.push({ type: 'TRIPLE_SHOT', color: '#FFD700', nome: 'TIRO TRIPLO' });
-      
       if (!gs.player.weapons.missile.active) tipos.push({ type: 'MISSILE_UNLOCK', color: '#FF4444', nome: 'MÍSSIL TELE' });
-      else { 
-        tipos.push({ type: 'MISSILE_COOLDOWN', color: '#FF4444', nome: 'MÍSSIL: RECARGA' }); 
-        tipos.push({ type: 'MISSILE_DAMAGE', color: '#FF4444', nome: 'MÍSSIL: DANO' }); 
-        tipos.push({ type: 'MISSILE_AOE', color: '#FF4444', nome: 'MÍSSIL: ÁREA' }); 
-      }
-
+      else { tipos.push({ type: 'MISSILE_COOLDOWN', color: '#FF4444', nome: 'MÍSSIL: RECARGA' }); tipos.push({ type: 'MISSILE_DAMAGE', color: '#FF4444', nome: 'MÍSSIL: DANO' }); tipos.push({ type: 'MISSILE_AOE', color: '#FF4444', nome: 'MÍSSIL: ÁREA' }); }
       if (!gs.player.weapons.laser.active) tipos.push({ type: 'LASER_UNLOCK', color: '#32CD32', nome: 'RAIO LASER' });
-      else { 
-        tipos.push({ type: 'LASER_COOLDOWN', color: '#32CD32', nome: 'LASER: RECARGA' }); 
-        tipos.push({ type: 'LASER_DAMAGE', color: '#32CD32', nome: 'LASER: DANO' }); 
-      }
-
+      else { tipos.push({ type: 'LASER_COOLDOWN', color: '#32CD32', nome: 'LASER: RECARGA' }); tipos.push({ type: 'LASER_DAMAGE', color: '#32CD32', nome: 'LASER: DANO' }); }
       if (!gs.player.weapons.pulsar.active) tipos.push({ type: 'PULSAR_UNLOCK', color: '#00BFFF', nome: 'AURA PULSAR' });
-      else { 
-        tipos.push({ type: 'PULSAR_COOLDOWN', color: '#00BFFF', nome: 'PULSAR: RAPIDEZ' }); 
-        tipos.push({ type: 'PULSAR_RADIUS', color: '#00BFFF', nome: 'PULSAR: RAIO' }); 
-      }
-
-      if (gs.fase >= 2 || gs.timeAlive > 60000) {
-        tipos.push({ type: 'FORCE_SHIELD', color: '#00FA9A', nome: 'ESCUDO FORÇA' });
-      }
-      if (gs.fase >= 3) {
-        tipos.push({ type: 'DRONE_NORMAL', color: '#1E90FF', nome: 'DRONE BÁSICO' });
-        tipos.push({ type: 'TIME_FREEZE', color: '#E0FFFF', nome: 'CONGELA TEMPO' });
-      }
-      if (gs.fase >= 4) {
-        tipos.push({ type: 'X_RAY', color: '#FF1493', nome: 'RAIO-X MATH' });
-      }
-
-      if (gs.flawlessBossesCount >= 3) {
-        if (!gs.drones.advanced.active) {
-            tipos.push({ type: 'DRONE_ADVANCED', color: '#FFD700', nome: 'DRONE ELITE' });
-        } else {
-            tipos.push({ type: 'DRONE_ADVANCED_UP', color: '#FFD700', nome: 'ELITE: RECARGA' });
-        }
-      }
+      else { tipos.push({ type: 'PULSAR_COOLDOWN', color: '#00BFFF', nome: 'PULSAR: RAPIDEZ' }); tipos.push({ type: 'PULSAR_RADIUS', color: '#00BFFF', nome: 'PULSAR: RAIO' }); }
+      if (gs.fase >= 2 || gs.timeAlive > 60000) tipos.push({ type: 'FORCE_SHIELD', color: '#00FA9A', nome: 'ESCUDO FORÇA' });
+      if (gs.fase >= 3) { tipos.push({ type: 'DRONE_NORMAL', color: '#1E90FF', nome: 'DRONE BÁSICO' }); tipos.push({ type: 'TIME_FREEZE', color: '#E0FFFF', nome: 'CONGELA TEMPO' }); }
+      if (gs.fase >= 4) tipos.push({ type: 'X_RAY', color: '#FF1493', nome: 'RAIO-X MATH' });
+      if (gs.flawlessBossesCount >= 3) { if (!gs.drones.advanced.active) tipos.push({ type: 'DRONE_ADVANCED', color: '#FFD700', nome: 'DRONE ELITE' }); else tipos.push({ type: 'DRONE_ADVANCED_UP', color: '#FFD700', nome: 'ELITE: RECARGA' }); }
 
       const sel = tipos[Math.floor(Math.random() * tipos.length)];
       const eq = gerarEquacao(gs.fase, getRespostasAtivas());
-      
-      gs.powerups.push({ 
-        id: Math.random().toString(), x: Math.random() * (gw - 60) + 30, y: -40, 
-        type: sel.type, color: sel.color, title: sel.nome, txt: eq.txt, res: eq.res, collected: false 
-      });
+      gs.powerups.push({ id: Math.random().toString(), x: Math.random() * (gw - 60) + 30, y: -40, type: sel.type, color: sel.color, title: sel.nome, txt: eq.txt, res: eq.res, collected: false });
       gs.lastPowerupSpawn = now;
     }
     
     gs.powerups.forEach(p => { if (!p.collected) p.y += 1.5; }); 
-
-    gs.enemies.forEach(e => { 
-      if (e.hp <= 0 && e.hp > -90) { 
-        gs.score += e.isLeader ? 50 : 20; 
-        criarParticulas(e.x, e.y, e.type === 'SQUAD' ? '#FF0055' : '#AAA', 10); 
-      } 
-    });
+    gs.enemies.forEach(e => { if (e.hp <= 0 && e.hp > -90) { gs.score += e.isLeader ? 50 : 20; criarParticulas(e.x, e.y, e.type === 'SQUAD' ? '#FF0055' : '#AAA', 10); } });
     gs.enemies = gs.enemies.filter(e => e.hp > 0 && e.y < gh + 20); 
     gs.powerups = gs.powerups.filter(p => p.y < gh + 50);
 
@@ -903,7 +721,7 @@ export default function MathBlaster() {
           <Ionicons name="rocket" size={80} color="#00FFFF" style={{ marginBottom: 20 }}/>
           <Text style={styles.tituloMenu}>SKY</Text>
           <Text style={styles.subTituloMenu}>EQUATIONS</Text>
-          <Text style={styles.instrucoes}>Câmera Afastada (Zoom Out) e Multi-Toque Absoluto Ativados!</Text>
+          <Text style={styles.instrucoes}>Zoom Out NATIVO (100% Compatível com Web). Multi-Toque absoluto para o Teclado.</Text>
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
           </TouchableOpacity>
@@ -950,22 +768,15 @@ export default function MathBlaster() {
           </View>
         </View>
 
-        <View 
-            style={styles.gameAreaWrapperContainer} 
-            onLayout={(e) => { 
-                if (layoutRef.current && e.nativeEvent?.layout) {
-                    layoutRef.current.width = e.nativeEvent.layout.width; 
-                    layoutRef.current.height = e.nativeEvent.layout.height; 
-                }
-            }}
-        >
-          {/* CAMADA DE TOQUE DA WEB (Só ativada no navegador) */}
-          <View 
-            style={[styles.gameAreaFull, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} 
-            onTouchStart={handleWebGameTouchStart} 
-            onTouchMove={handleWebGameTouchMove} 
-            onTouchEnd={handleWebGameTouchEnd} 
-            onTouchCancel={handleWebGameTouchEnd}
+        <View style={styles.gameAreaWrapperContainer} onLayout={(e) => { 
+            if (layoutRef.current && e.nativeEvent?.layout) {
+                layoutRef.current.width = e.nativeEvent.layout.width; 
+                layoutRef.current.height = e.nativeEvent.layout.height; 
+            }
+        }}>
+          {/* CAMADA DE TOQUE EXCLUSIVA PARA A WEB */}
+          <View style={[styles.gameAreaFull, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} 
+            onTouchStart={handleWebGameTouchStart} onTouchMove={handleWebGameTouchMove} onTouchEnd={handleWebGameTouchEnd} onTouchCancel={handleWebGameTouchEnd}
           >
             <View style={styles.gridOverlay}/>
             
@@ -987,13 +798,13 @@ export default function MathBlaster() {
                 );
               }
               const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
-              return (<View key={e.id} style={[styles.squadronShip, { left: e.x - 10, top: e.y - 10, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
+              return (<View key={e.id} style={[styles.squadronShip, { left: e.x - 8, top: e.y - 8, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
             })}
 
             {gs.boss.active && (
-              <View style={[styles.bossContainer, { left: gs.boss.x - 25, top: gs.boss.y - 17 }]}>
+              <View style={[styles.bossContainer, { left: gs.boss.x - 30, top: gs.boss.y - 22 }]}>
                 <View style={styles.bossHpBar}><View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]}/></View>
-                <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 25, height: 45, backgroundColor: '#006400', borderColor: '#32CD32' }]}/>
+                <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 22, height: 45, backgroundColor: '#006400', borderColor: '#32CD32' }]}/>
                 {gs.boss.shield && (
                   <View style={styles.bossShield}>
                     <Text style={styles.bossMath}>{gs.boss.txt}</Text>
@@ -1004,7 +815,7 @@ export default function MathBlaster() {
             )}
 
             {gs.powerups.map(p => (
-              <View key={p.id} style={[styles.powerupBox, { left: p.x - 30, top: p.y - 15, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
+              <View key={p.id} style={[styles.powerupBox, { left: p.x - 30, top: p.y - 14, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
                 <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
                 <Text style={styles.powerupMath}>{p.txt}</Text>
               </View>
@@ -1046,8 +857,8 @@ export default function MathBlaster() {
               <Text key={ft.id} style={[styles.floatingText, { left: ft.x - 20, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text>
             ))}
 
-            <View style={[styles.playerShape, { left: gs.player.x - 11, top: gs.player.y - 11 }]}/>
-            <View style={[styles.propulsor, { left: gs.player.x - 4, top: gs.player.y + 11, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
+            <View style={[styles.playerShape, { left: gs.player.x - 10, top: gs.player.y - 10 }]}/>
+            <View style={[styles.propulsor, { left: gs.player.x - 4, top: gs.player.y + 10, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
             
             {gs.forceShieldHits > 0 && (
               <View style={{ position: 'absolute', left: gs.player.x - 20, top: gs.player.y - 20, width: 40, height: 40, borderRadius: 20, borderWidth: 3, borderColor: '#00FA9A', backgroundColor: 'rgba(0,250,154,0.1)', zIndex: 10 }}/>
@@ -1061,9 +872,19 @@ export default function MathBlaster() {
           <View style={styles.visorRadar}>
             <Text style={styles.visorTexto}>{resposta || '_'}</Text>
           </View>
-          <View style={styles.tecladoContainer} onLayout={(e) => { 
-            if(tecladoLayoutRef.current && e.nativeEvent?.layout) tecladoLayoutRef.current.width = e.nativeEvent.layout.width; 
-          }}>
+          <View 
+            style={styles.tecladoContainer} 
+            ref={tecladoViewRef}
+            onLayout={(e) => { 
+                if(tecladoLayoutRef.current && e.nativeEvent?.layout) tecladoLayoutRef.current.width = e.nativeEvent.layout.width; 
+                
+                // Mapeia a posição global do teclado no Android/iOS (Para o Multi-touch)
+                if (Platform.OS !== 'web' && tecladoViewRef.current) {
+                    tecladoViewRef.current.measureInWindow((x, y, w, h) => {
+                        if (y > 0) tecladoGeomRef.current = { x, y, width: w, height: h };
+                    });
+                }
+            }}>
             {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((linha, i) => (
               <View key={i} style={styles.tecladoRow}>
                 {linha.map(num => <BotaoRetro key={num} valor={num} isPressed={teclasPressionadas.includes(num)} onPressWeb={lidarComTeclado}/>)}
@@ -1074,22 +895,21 @@ export default function MathBlaster() {
               <BotaoRetro valor="0" isPressed={teclasPressionadas.includes('0')} onPressWeb={lidarComTeclado}/>
               <BotaoRetro valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={lidarComTeclado}/>
             </View>
-
-            {/* CONTROLADOR MULTI-TOUCH INVISÍVEL (APENAS ANDROID/IOS) */}
-            {Platform.OS !== 'web' && (
-                <View 
-                    style={StyleSheet.absoluteFillObject} 
-                    onStartShouldSetResponder={() => true}
-                    onResponderGrant={handleUnifiedTouch} 
-                    onResponderMove={handleUnifiedTouch} 
-                    onResponderRelease={handleUnifiedTouch} 
-                    onResponderTerminate={handleUnifiedTouch} 
-                />
-            )}
           </View>
         </View>
-
       </View>
+
+      {/* CONTROLADOR MULTI-TOUCH INVISÍVEL (APENAS ANDROID/IOS) */}
+      {Platform.OS !== 'web' && (
+          <View 
+              style={StyleSheet.absoluteFillObject} 
+              onStartShouldSetResponder={() => true}
+              onResponderGrant={handleUnifiedTouch} 
+              onResponderMove={handleUnifiedTouch} 
+              onResponderRelease={handleUnifiedTouch} 
+              onResponderTerminate={handleUnifiedTouch} 
+          />
+      )}
     </SafeAreaView>
   );
 }
@@ -1131,7 +951,6 @@ const styles = StyleSheet.create({
 
   gameAreaWrapperContainer: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#050015', touchAction: 'none' as any, width: '100%', alignItems: 'center', justifyContent: 'center' },
   
-  // O Efeito Zoom Out Perfeito (Ajuste de tamanho em % ao invés de Scale)
   gameAreaFull: { 
     width: '100%', 
     height: '100%',
@@ -1150,14 +969,14 @@ const styles = StyleSheet.create({
   alertTextSuccess: { color: '#32CD32', fontSize: 30, fontWeight: '900', textShadowColor: '#32CD32', textShadowRadius: 6, textShadowOffset: { width: 1, height: 1 } },
   alertSubText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 },
 
-  // As formas menores simulam a tela maior
-  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 11, borderRightWidth: 11, borderBottomWidth: 22, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF' },
+  // As formas menores simulam a tela maior NATIVAMENTE (Solução do Zoom)
+  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 10, borderRightWidth: 10, borderBottomWidth: 20, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF' },
   propulsor: { position: 'absolute', width: 8, height: 10, backgroundColor: '#FF8C00', borderBottomLeftRadius: 4, borderBottomRightRadius: 4 },
   droneNormal: { position: 'absolute', width: 8, height: 8, backgroundColor: '#1E90FF', borderRadius: 4, borderWidth: 1, borderColor: '#FFF', zIndex: 5 },
   droneAdvanced: { position: 'absolute', width: 10, height: 10, backgroundColor: '#FFD700', borderRadius: 3, borderWidth: 1, borderColor: '#FF4444', zIndex: 5 },
   
   meteorShape: { position: 'absolute', width: 18, height: 18, backgroundColor: '#555', borderRadius: 4, borderWidth: 2, borderColor: '#777' },
-  squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 9, borderRightWidth: 9, borderTopWidth: 18, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
+  squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 16, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
   flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 12, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500' },
   miniShield: { position: 'absolute', top: -6, left: -12, width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)' },
   
