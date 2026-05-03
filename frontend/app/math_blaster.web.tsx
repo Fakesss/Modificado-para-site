@@ -10,11 +10,9 @@ import * as api from '../src/services/api';
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
 
-// DETECÇÃO DE ZOOM: Se for Web no celular, aplica o zoom de 0.5. Se for Web no PC, zoom 1.
 const isMobileWeb = Platform.OS === 'web' && initialWidth < 768;
 const BASE_ZOOM = (Platform.OS !== 'web' || isMobileWeb) ? 0.5 : 1;
 
-// --- COMPONENTE: TECLADO RETRÔ (Otimizado para Multi-Touch Nativo) ---
 const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed: boolean, onPressWeb: (v: string) => void }) => {
   const isWeb = Platform.OS === 'web';
   let customStyle = styles.teclaRetro;
@@ -42,20 +40,18 @@ export default function MathBlaster() {
   const router = useRouter();
   const { user } = useAuth();
   
-  // Controle de Telas baseado no Arcade
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [jogoAtivo, setJogoAtivo] = useState(false);
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
   
   const [hallDaFama, setHallDaFama] = useState<any[]>([]);
+  const [guestUserId, setGuestUserId] = useState<string | null>(null);
   const gameOverFired = useRef(false);
   
-  // Controle de Tela e Câmera Virtual
   const [canvasSize, setCanvasSize] = useState({ width: initialWidth, height: initialHeight });
   const canvasSizeRef = useRef({ width: initialWidth, height: initialHeight });
   
-  // ESTADOS DO MULTI-TOUCH ISOLADO
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
   const triggeredTouchesRef = useRef<Set<string>>(new Set());
   const tecladoLayoutRef = useRef({ width: 350 }); 
@@ -102,15 +98,33 @@ export default function MathBlaster() {
     }
   };
 
+  // INICIALIZAÇÃO DE AUTENTICAÇÃO VIA WEBVIEW
   useEffect(() => {
-    if (tela === 'menu') {
-      carregarHallDaFama();
-    }
+    const initWebViewAuth = async () => {
+        if (Platform.OS === 'web') {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            const uid = urlParams.get('userId');
+            
+            if (token) await AsyncStorage.setItem('token', token);
+            if (uid) setGuestUserId(uid);
+        }
+        if (tela === 'menu') {
+            carregarHallDaFama();
+        }
+    };
+    initWebViewAuth();
   }, [tela]);
 
-  // ==========================================
-  // LÓGICA DE MOVIMENTAÇÃO NAVE (MULTI-TOUCH)
-  // ==========================================
+  // COMUNICAÇÃO REVERSA: Manda fechar a WebView no App Nativo
+  const goBack = () => {
+      if (Platform.OS === 'web' && (window as any).ReactNativeWebView) {
+          (window as any).ReactNativeWebView.postMessage('GO_BACK');
+      } else {
+          router.back();
+      }
+  };
+
   const handleGameTouchStart = (e: any) => {
     const changed = e.nativeEvent.changedTouches;
     for (let i = 0; i < changed.length; i++) {
@@ -143,9 +157,6 @@ export default function MathBlaster() {
     if (!touchExists) gs.movementTouchId = null;
   };
 
-  // ==========================================
-  // LÓGICA DO TECLADO QUADRADO (MULTI-TOUCH)
-  // ==========================================
   const getTeclaFromCoords = (x: number, y: number, layoutWidth: number) => {
     const GAP = 8; 
     const KEY_W = (layoutWidth - (GAP * 2)) / 3; 
@@ -221,7 +232,6 @@ export default function MathBlaster() {
     processKeyboardTouches(evt);
   };
 
-  // --- MATEMÁTICA ---
   const getRespostasAtivas = () => {
     const resps: number[] = [];
     if (gs.boss.active && gs.boss.shield) resps.push(gs.boss.res);
@@ -326,6 +336,7 @@ export default function MathBlaster() {
     if (loopRef.current) clearInterval(loopRef.current); 
     setTela('resultado');
     
+    // Submete a pontuação de fato usando as credenciais passadas do App
     if (gs.score > 0) {
       api.submitMathBlasterScore(gs.score)
         .then(() => carregarHallDaFama())
@@ -902,12 +913,12 @@ export default function MathBlaster() {
 
   // TELA DE MENU INICIAL COM O HALL DA FAMA IDÊNTICO AO ARCADE
   if (tela === 'menu') {
-    const meuRank = hallDaFama.find(j => j.id === user?.id);
+    const meuRank = hallDaFama.find(j => j.id === (user?.id || guestUserId));
 
     return (
       <SafeAreaView style={styles.container}>
         <ScrollView style={{ width: '100%' }} contentContainerStyle={styles.menuScrollContent}>
-          <TouchableOpacity style={{ alignSelf: 'flex-start' }} onPress={() => router.back()}>
+          <TouchableOpacity style={{ alignSelf: 'flex-start' }} onPress={goBack}>
             <Ionicons name="arrow-back" size={30} color="#00FFFF"/>
           </TouchableOpacity>
           <Ionicons name="rocket" size={80} color="#00FFFF" style={{ marginBottom: 20, marginTop: 20 }}/>
@@ -915,7 +926,7 @@ export default function MathBlaster() {
           <Text style={styles.subTituloMenu}>EQUATIONS</Text>
           <Text style={styles.instrucoes}>Deslize na nave para voar e use o teclado para atirar e destruir os asteróides!</Text>
 
-          {/* HALL DA FAMA ARCADE STYLE */}
+          {/* HALL DA FAMA */}
           <View style={styles.rankingContainer}>
             <View style={styles.rankingHeaderRow}>
               <Ionicons name="trophy" size={24} color="#FFD700" />
@@ -930,7 +941,7 @@ export default function MathBlaster() {
                     else if (jogador.posicao === 2 || idx === 1) corPosicao = '#C0C0C0'; 
                     else if (jogador.posicao === 3 || idx === 2) corPosicao = '#CD7F32';
                     
-                    const isMe = jogador.id === user?.id;
+                    const isMe = jogador.id === (user?.id || guestUserId);
 
                     return (
                       <View key={jogador.posicao || Math.random().toString()} style={[styles.rankingRow, isMe && styles.rankingRowMe]}>
@@ -984,7 +995,7 @@ export default function MathBlaster() {
     );
   }
 
-  // TELA DE GAME OVER (RESULTADO)
+  // TELA DE GAME OVER
   if (tela === 'resultado') {
     return (
       <SafeAreaView style={styles.container}>
@@ -1001,7 +1012,7 @@ export default function MathBlaster() {
           <TouchableOpacity style={[styles.btnIniciar, { marginTop: 40 }]} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>TENTAR NOVAMENTE</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#555', marginTop: 15 }]} onPress={() => setTela('menu')}>
+          <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#555', marginTop: 15 }]} onPress={goBack}>
             <Text style={[styles.btnIniciarTxt, { color: '#888' }]}>VOLTAR AO MENU</Text>
           </TouchableOpacity>
         </View>
@@ -1176,19 +1187,8 @@ export default function MathBlaster() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#050015', 
-    touchAction: 'none' as any,
-    alignItems: 'center', 
-  },
-  gameWrapper: {
-    flex: 1,
-    width: '100%',
-    maxWidth: Platform.OS === 'web' ? 500 : '100%', 
-    backgroundColor: '#050015',
-    overflow: 'hidden',
-  },
+  container: { flex: 1, backgroundColor: '#050015', touchAction: 'none' as any, alignItems: 'center' },
+  gameWrapper: { flex: 1, width: '100%', maxWidth: Platform.OS === 'web' ? 500 : '100%', backgroundColor: '#050015', overflow: 'hidden' },
   
   menuScrollContent: { alignItems: 'center', paddingBottom: 20, paddingHorizontal: 20 },
   menuContainerFixed: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050015', width: '100%', maxWidth: 600, paddingHorizontal: 20 },
@@ -1199,12 +1199,10 @@ const styles = StyleSheet.create({
   btnIniciarTxt: { color: '#FFF', fontSize: 16, fontWeight: '900' },
   textoFase: { color: '#9D97B5', fontSize: 16, marginTop: 10 },
 
-  // Game Over Resultado Card
   resultadoCard: { backgroundColor: 'rgba(255, 68, 68, 0.1)', padding: 30, borderRadius: 16, alignItems: 'center', marginTop: 20, marginBottom: 10, width: '100%', borderWidth: 1, borderColor: '#FF4444' },
   resultadoPontos: { fontSize: 64, fontWeight: '900', color: '#FF4444' },
   resultadoLabel: { fontSize: 14, color: '#888', marginTop: 4 },
 
-  // Ranking Arcade Style para o Menu
   rankingContainer: { width: '100%', marginTop: 25, marginBottom: 15, backgroundColor: '#1a1a2e', borderRadius: 16, padding: 15, borderWidth: 1, borderColor: '#FFD70040' },
   rankingHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 },
   rankingTitle: { color: '#FFD700', fontSize: 18, fontWeight: '900' },
