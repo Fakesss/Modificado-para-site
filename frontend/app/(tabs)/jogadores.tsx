@@ -16,7 +16,7 @@ export default function JogadoresOnline() {
   const [aceitaConvites, setAceitaConvites] = useState(true);
   
   const [jogadorParaConvidar, setJogadorParaConvidar] = useState<any>(null);
-  const [jogoSelecionadoParaDesafio, setJogoSelecionadoParaDesafio] = useState<'arcade' | 'tugofwar' | null>(null);
+  const [jogoSelecionadoParaDesafio, setJogoSelecionadoParaDesafio] = useState<'arcade' | 'tugofwar' | 'math_blaster' | null>(null);
 
   // =====================================================================
   // CORREÇÃO DA CONDIÇÃO DE CORRIDA: REGISTRO SEGURO DE EVENTOS
@@ -99,6 +99,8 @@ export default function JogadoresOnline() {
   const assistirPartida = (roomId: string, gameType: string) => {
     if (gameType === 'arcade') {
       router.push(`/arcade_multi?spectate=${roomId}`);
+    } else if (gameType === 'math_blaster') {
+      router.push(`/math_blaster_multi?spectate=${roomId}`);
     } else if (gameType === 'tugofwar') {
       router.push(`/cabo_de_guerra?spectate=${roomId}`);
     } else {
@@ -176,7 +178,7 @@ export default function JogadoresOnline() {
           <View key={match.room_id} style={styles.card}>
             <View style={styles.info}>
               <Text style={{color: '#FFD700', fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>
-                {match.game_type === 'arcade' ? 'MATEMÁTICA TURBO' : match.game_type === 'tugofwar' ? 'CABO DE GUERRA' : 'JOGO DA VELHA'}
+                {match.game_type === 'arcade' ? 'MATEMÁTICA TURBO' : match.game_type === 'math_blaster' ? 'MATH BLASTER CO-OP' : match.game_type === 'tugofwar' ? 'CABO DE GUERRA' : 'JOGO DA VELHA'}
               </Text>
               <Text style={styles.name}>{match.player1} <Text style={{color: '#FF4444'}}>vs</Text> {match.player2}</Text>
               <Text style={styles.statusText}>👁 {match.spectators_count} assistindo</Text>
@@ -219,6 +221,15 @@ export default function JogadoresOnline() {
                     <Ionicons name="chevron-forward" size={20} color="#888" />
                 </TouchableOpacity>
 
+                <TouchableOpacity style={styles.gameOptionBtn} onPress={() => setJogoSelecionadoParaDesafio('math_blaster')}>
+                    <View style={[styles.iconContainer, {backgroundColor: '#FFD70020'}]}><Ionicons name="planet" size={28} color="#FFD700" /></View>
+                    <View style={{flex: 1}}>
+                       <Text style={styles.gameOptionText}>Math Blaster Co-op</Text>
+                       <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Escolher operação...</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#888" />
+                </TouchableOpacity>
+
                 <TouchableOpacity style={styles.gameOptionBtn} onPress={() => setJogoSelecionadoParaDesafio('tugofwar')}>
                     <View style={[styles.iconContainer, {backgroundColor: '#FF149320'}]}><Ionicons name="people" size={28} color="#FF1493" /></View>
                     <View style={{flex: 1}}>
@@ -232,7 +243,7 @@ export default function JogadoresOnline() {
               <>
                 <Text style={styles.modalTitle}>ESCOLHA A OPERAÇÃO</Text>
                 <Text style={styles.modalText}>
-                  Modo: {jogoSelecionadoParaDesafio === 'arcade' ? 'Matemática Turbo' : 'Cabo de Guerra'}
+                  Modo: {jogoSelecionadoParaDesafio === 'arcade' ? 'Matemática Turbo' : jogoSelecionadoParaDesafio === 'math_blaster' ? 'Math Blaster Co-op' : 'Cabo de Guerra'}
                 </Text>
                 
                 <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center'}}>
