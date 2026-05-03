@@ -7,9 +7,6 @@ import { useRouter } from 'expo-router';
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
 
-// NOVO: Fator de Zoom (1 = Normal na Web, 0.5 = Dobro de visão no Android)
-const ZOOM = Platform.OS === 'web' ? 1 : 0.5;
-
 // --- COMPONENTE: TECLADO RETRÔ (Otimizado para Multi-Touch Nativo) ---
 const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed: boolean, onPressWeb: (v: string) => void }) => {
   const isWeb = Platform.OS === 'web';
@@ -40,8 +37,9 @@ export default function MathBlaster() {
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
   
-  // NOVO: Estado para guardar o tamanho físico da tela para cálculo da câmera virtual
+  // Controle de Tela e Câmera Virtual
   const [canvasSize, setCanvasSize] = useState({ width: initialWidth, height: initialHeight });
+  const canvasSizeRef = useRef({ width: initialWidth, height: initialHeight });
   
   // ESTADOS DO MULTI-TOUCH ISOLADO
   const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
@@ -52,13 +50,13 @@ export default function MathBlaster() {
   const respostaRef = useRef('');
   useEffect(() => { respostaRef.current = resposta; }, [resposta]);
   
-  // NOVO: O layout de referência já inicia considerando o Zoom para não ter bugs na hora de iniciar o jogo
-  const layoutRef = useRef({ width: initialWidth / ZOOM, height: initialHeight / ZOOM });
+  const layoutRef = useRef({ width: initialWidth, height: initialHeight });
 
   const gs = useRef({
+    currentZoom: Platform.OS === 'web' ? 1 : 0.5, // O Zoom dinâmico que diminui com o tempo
     player: { 
-      x: (initialWidth / ZOOM) / 2, 
-      y: (initialHeight / ZOOM) - 60, 
+      x: initialWidth / 2, 
+      y: initialHeight - 60, 
       hp: 100, 
       maxHp: 100, 
       damage: 1, 
@@ -128,9 +126,9 @@ export default function MathBlaster() {
     if (gs.movementTouchId !== null) {
       const touch = Array.from(e.nativeEvent.touches).find((t: any) => t.identifier === gs.movementTouchId);
       if (touch) {
-        // NOVO: Ajuste de movimento levando em conta o ZOOM
-        const dx = ((touch as any).pageX - gs.lastTouchX) / ZOOM;
-        const dy = ((touch as any).pageY - gs.lastTouchY) / ZOOM;
+        // A compensação de velocidade de movimento escala junto com o zoom dinâmico!
+        const dx = ((touch as any).pageX - gs.lastTouchX) / gs.currentZoom;
+        const dy = ((touch as any).pageY - gs.lastTouchY) / gs.currentZoom;
         gs.player.x += dx * 1.5;
         gs.player.y += dy * 1.5;
         gs.lastTouchX = (touch as any).pageX;
@@ -222,7 +220,6 @@ export default function MathBlaster() {
     processKeyboardTouches(evt);
   };
 
-
   // --- MATEMÁTICA ---
   const getRespostasAtivas = () => {
     const resps: number[] = [];
@@ -286,8 +283,13 @@ export default function MathBlaster() {
   };
 
   const iniciarJogo = () => {
+    // Calcula o zoom inicial imediatamente
+    gs.currentZoom = Platform.OS === 'web' ? 1 : 0.5;
+    const initialGw = canvasSizeRef.current.width / gs.currentZoom;
+    const initialGh = canvasSizeRef.current.height / gs.currentZoom;
+
     gs.player = { 
-      x: layoutRef.current.width / 2, y: layoutRef.current.height - 100, 
+      x: initialGw / 2, y: initialGh - 100, 
       hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, 
       weapons: { 
         missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 }, 
@@ -335,6 +337,18 @@ export default function MathBlaster() {
     if (valor === 'apagar') {
       setResposta(r => r.slice(0, -1));
     } else if (valor === 'enviar') {
+      
+      // CHEAT CODE DO DESENVOLVEDOR: DRONE ELITE GRÁTIS
+      if (respostaRef.current === '3141592') {
+        gs.drones.advanced.active = true;
+        gs.drones.advanced.baseCooldown = 500; // Drone Elite Turbinado!
+        gs.score += 5000;
+        criarParticulas(gs.player.x, gs.player.y, '#FFD700', 80);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE!`, color: '#FFD700', life: 90 });
+        setResposta('');
+        return;
+      }
+
       const num = parseInt(respostaRef.current);
       let acertou = false;
 
@@ -409,18 +423,30 @@ export default function MathBlaster() {
           gs.forceShieldHits -= 1;
           criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 10);
         } else {
-          gs.player.hp = Math.max(0, gs.player.hp - 8); 
+          // O dano por erro digitação agora é progressivo (escala com a fase)
+          gs.player.hp = Math.max(0, gs.player.hp - (3 + (gs.fase * 2))); 
           criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8); 
         }
       }
       setResposta('');
     } else {
-      setResposta(r => r.length < 4 ? r + valor : r);
+      // Limite aumentado para 7 caracteres para permitir digitar o cheat code
+      setResposta(r => r.length < 7 ? r + valor : r);
     }
   }, [jogoAtivo]);
 
   const gameTick = () => {
     const now = Date.now();
+    
+    // ATUALIZAÇÃO DO ZOOM DINÂMICO! (Mínimo de 0.35 para não ficar formiga, diminui 0.03 a cada fase no celular)
+    gs.currentZoom = Platform.OS === 'web' ? 1 : Math.max(0.35, 0.5 - ((gs.fase - 1) * 0.03));
+    
+    // Atualiza o canvas virtual em tempo real
+    if (canvasSizeRef.current.width > 0) {
+        layoutRef.current.width = canvasSizeRef.current.width / gs.currentZoom;
+        layoutRef.current.height = canvasSizeRef.current.height / gs.currentZoom;
+    }
+
     const gw = layoutRef.current.width; 
     const gh = layoutRef.current.height;
     
@@ -593,12 +619,14 @@ export default function MathBlaster() {
 
     if (gs.gameState === 'WAVES') {
       
-      if (gs.stateTimer % Math.max(20, 60 - gs.fase * 5) === 0) {
-        const meteorVy = gs.fase === 1 ? Math.random() * 1.5 + 2 : Math.random() * 2 + 3 + (gs.fase * 0.6);
+      // Ajuste Dificuldade: Meteoros demoram mais no início e caem mais devagar
+      if (gs.stateTimer % Math.max(20, 100 - gs.fase * 10) === 0) {
+        const meteorVy = gs.fase === 1 ? Math.random() * 1 + 1.5 : Math.random() * 2 + 3 + (gs.fase * 0.6);
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: meteorVy, angle: 0 });
       }
 
-      if (gs.stateTimer % 180 === 0 && gs.fase >= 2) {
+      // Ajuste Dificuldade: Flankers demoram mais a nascer e começam a aparecer na fase 2
+      if (gs.stateTimer % 240 === 0 && gs.fase >= 2) {
         const isLeft = Math.random() > 0.5;
         gs.enemies.push({ id: Math.random().toString(), type: 'FLANKER', x: isLeft ? -20 : gw + 20, y: Math.random() * (gh/3), targetY: 0, hp: 2 + gs.fase * 2, vx: isLeft ? 3 + gs.fase * 1.2 : -3 - gs.fase * 1.2, vy: 1.5, angle: 0, shield: Math.random() > 0.7 ? 2 : 0 });
       }
@@ -606,12 +634,14 @@ export default function MathBlaster() {
       if (gs.stateTimer === 600 || gs.stateTimer === 1200) {
         const eq = gerarEquacao(gs.fase, getRespostasAtivas());
         const isLeft = gs.stateTimer === 600; 
-        gs.enemies.push({ id: Math.random().toString(), type: 'SPAWNER', x: isLeft ? gw * 0.25 : gw * 0.75, y: -80, targetY: 90 + Math.random() * 30, hp: 9999, mathRequired: true, solvesNeeded: Math.min(8, 3 + gs.fase), solvesDone: 0, txt: eq.txt, res: eq.res, vy: 1.5, spawnTimer: 0 });
+        // Ajuste Dificuldade: Menos contas necessárias nos níveis iniciais
+        gs.enemies.push({ id: Math.random().toString(), type: 'SPAWNER', x: isLeft ? gw * 0.25 : gw * 0.75, y: -80, targetY: 90 + Math.random() * 30, hp: 9999, mathRequired: true, solvesNeeded: Math.min(8, 2 + gs.fase), solvesDone: 0, txt: eq.txt, res: eq.res, vy: 1.5, spawnTimer: 0 });
       }
 
-      if (gs.stateTimer % 200 === 0 && gs.stateTimer < 1400) {
+      // Ajuste Dificuldade: Esquadrões começam devagar e têm menos HP
+      if (gs.stateTimer % (300 - Math.min(150, gs.fase * 20)) === 0 && gs.stateTimer < 1400) {
         const cx = Math.random() * (gw - 120) + 60; 
-        const baseHp = 3 + (gs.fase * 3); 
+        const baseHp = 1 + (gs.fase * 2); 
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx, y: -30, targetY: 100, isLeader: true, hp: baseHp * 3, vx: 0, vy: 2, fireTimer: 0, angle: Math.PI, evasive: true });
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 40, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 2, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 }); 
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 40, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 2, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 });
@@ -628,7 +658,8 @@ export default function MathBlaster() {
         gs.gameState = 'BOSS'; 
         gs.stateTimer = 0;
         const eq = gerarEquacao(gs.fase, getRespostasAtivas());
-        gs.boss = { active: true, type: Math.floor(Math.random() * 3), x: gw / 2, y: -100, hp: 200 + (gs.fase * 120), maxHp: 200 + (gs.fase * 120), vx: 3 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
+        // Ajuste Dificuldade: Boss 1 é mais fácil
+        gs.boss = { active: true, type: Math.floor(Math.random() * 3), x: gw / 2, y: -100, hp: 100 + (gs.fase * 80), maxHp: 100 + (gs.fase * 80), vx: 2 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
       }
     }
     else if (gs.gameState === 'BOSS') {
@@ -639,12 +670,13 @@ export default function MathBlaster() {
         if (gs.boss.x < 50 || gs.boss.x > gw - 50) gs.boss.vx *= -1;
         gs.boss.timer += 1 * speedMult;
 
+        // Ajuste Dificuldade: Frequência de tiros dos chefes mais amigável na fase 1
         if (gs.boss.type === 0) {
-          if (gs.boss.timer % Math.max(40, 90 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 2, size: 14, damage: 20, homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) });
+          if (gs.boss.timer % Math.max(40, 120 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 2, size: 14, damage: 5 + (gs.fase * 5), homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) });
         } else if (gs.boss.type === 1) {
-          if (gs.boss.timer % 60 === 0) [-2, -1, 0, 1, 2].forEach(dir => gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: dir * 1.5, vy: 6 + gs.fase, size: 6, damage: 15, homing: false, color: '#FF0055', hp: 1 }));
+          if (gs.boss.timer % Math.max(40, 90 - (gs.fase * 5)) === 0) [-2, -1, 0, 1, 2].forEach(dir => gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: dir * 1.5, vy: 6 + gs.fase, size: 6, damage: 5 + (gs.fase * 5), homing: false, color: '#FF0055', hp: 1 }));
         } else {
-          if (gs.boss.timer % 120 === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 15, size: 20, damage: 30, homing: false, color: '#32CD32', hp: 99 });
+          if (gs.boss.timer % Math.max(60, 150 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 15, size: 20, damage: 10 + (gs.fase * 10), homing: false, color: '#32CD32', hp: 99 });
         }
 
         if (gs.boss.timer % 300 === 0 && gs.enemies.length < 2) {
@@ -703,7 +735,7 @@ export default function MathBlaster() {
           if (dist > 50) { e.x += (dx/dist) * (1.5 + gs.fase * 0.3) * speedMult; e.y += (dy/dist) * (1.0 + gs.fase * 0.2) * speedMult; }
           e.fireTimer += 1 * speedMult;
           if (e.fireTimer > Math.max(30, 80 - (gs.fase * 8))) { 
-            gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: Math.cos(e.angle)*(3 + gs.fase*0.8), vy: Math.sin(e.angle)*(3 + gs.fase*0.8), size: 6, damage: 15, homing: false, color: '#FF00FF', hp: 1 }); 
+            gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: Math.cos(e.angle)*(3 + gs.fase*0.8), vy: Math.sin(e.angle)*(3 + gs.fase*0.8), size: 6, damage: 5 + (gs.fase * 3), homing: false, color: '#FF00FF', hp: 1 }); 
             e.fireTimer = 0; 
           }
         } else {
@@ -711,15 +743,16 @@ export default function MathBlaster() {
           else {
             e.x += Math.sin(now / 300) * 1.5 * speedMult; e.fireTimer += 1 * speedMult;
             if (e.fireTimer > Math.max(60, 120 - (gs.fase * 5)) && Math.random() < 0.05) { 
-              gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: 0, vy: 3 + gs.fase, size: 5, damage: 10, homing: false, color: '#FF0055', hp: 1 }); 
+              gs.enemyLasers.push({ id: Math.random().toString(), x: e.x, y: e.y + 10, vx: 0, vy: 3 + gs.fase, size: 5, damage: 5 + (gs.fase * 3), homing: false, color: '#FF0055', hp: 1 }); 
               e.fireTimer = 0; 
             }
           }
         }
       }
       
+      // Ajuste Dificuldade: Colisão física progressiva
       if (Math.abs(gs.player.x - e.x) < 25 && Math.abs(gs.player.y - e.y) < 25) { 
-        aplicarDano(15); 
+        aplicarDano(5 + (gs.fase * 5)); 
         if (!e.mathRequired) e.hp = -100; 
       }
     });
@@ -935,9 +968,8 @@ export default function MathBlaster() {
         <View style={[styles.gameArea, gs.timeFreezeTimer > 0 && { borderColor: '#E0FFFF', borderWidth: 2 }]} 
           onLayout={(e) => { 
             const { width, height } = e.nativeEvent.layout;
-            setCanvasSize({ width, height }); // NOVO: Guarda o tamanho real
-            layoutRef.current.width = width / ZOOM; // NOVO: Informa o tamanho virtual gigante
-            layoutRef.current.height = height / ZOOM; 
+            setCanvasSize({ width, height }); 
+            canvasSizeRef.current = { width, height }; // Atualiza a ref que o gameTick lê
           }} 
           onTouchStart={handleGameTouchStart} 
           onTouchMove={handleGameTouchMove} 
@@ -945,18 +977,17 @@ export default function MathBlaster() {
           onTouchCancel={handleGameTouchEnd}
         >
           
-          {/* Alertas mantidos FORA do Zoom para não distorcer o texto */}
           {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
           {gs.gameState === 'TRANSITION' && (<View style={styles.centerAlert}><Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text><Text style={styles.alertSubText}>PREPARANDO SALTO...</Text></View>)}
 
-          {/* NOVO: CONTAINER DA CÂMERA VIRTUAL */}
+          {/* O container interno agora usa o currentZoom que se afasta sozinho a cada fase! */}
           <View style={{
             position: 'absolute',
-            width: canvasSize.width / ZOOM,
-            height: canvasSize.height / ZOOM,
-            left: -(canvasSize.width / ZOOM - canvasSize.width) / 2,
-            top: -(canvasSize.height / ZOOM - canvasSize.height) / 2,
-            transform: [{ scale: ZOOM }],
+            width: canvasSize.width / gs.currentZoom,
+            height: canvasSize.height / gs.currentZoom,
+            left: -(canvasSize.width / gs.currentZoom - canvasSize.width) / 2,
+            top: -(canvasSize.height / gs.currentZoom - canvasSize.height) / 2,
+            transform: [{ scale: gs.currentZoom }],
           }}>
 
             <View style={styles.gridOverlay}/>
@@ -1045,8 +1076,6 @@ export default function MathBlaster() {
             {gs.drones.advanced.active && <View style={[styles.droneAdvanced, { left: gs.player.x + 20, top: gs.player.y - 5 }]}/>}
           
           </View>
-          {/* FIM DA CÂMERA VIRTUAL */}
-
         </View>
 
         <View style={styles.painelInferior} pointerEvents="box-none">
@@ -1065,7 +1094,6 @@ export default function MathBlaster() {
               <BotaoRetro valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={lidarComTeclado}/>
             </View>
 
-            {/* A INTERCEPTAÇÃO MULTI-TOUCH INVISÍVEL */}
             {Platform.OS !== 'web' && (
                 <View 
                     style={StyleSheet.absoluteFillObject} 
