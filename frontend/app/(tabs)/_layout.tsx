@@ -61,7 +61,6 @@ export default function TabsLayout() {
     } catch (error) { console.error(error); }
   };
 
-  // Motor para buscar mensagens não lidas
   useEffect(() => {
     if (!user) return;
     const fetchUnread = async () => {
@@ -98,25 +97,22 @@ export default function TabsLayout() {
     const onMatchFound = (data: any) => {
       setActiveMatchData(data);
       setConvite(null);
-
-      // CORREÇÃO: Pegando os dados vindos do servidor com fallback de snake_case para camelCase
-      const paramsParaJogo = {
-        roomId: data.room_id || data.roomId,
-        isHost: String(data.is_host ?? data.isHost ?? false),
-        opponentName: data.opponent_name || data.opponentName || data.from_name || 'Aliado',
-        opponentColor: data.opponent_color || data.opponentColor || '#FF00FF'
-      };
-
-      if (data.game_type === 'arcade') router.push('/arcade_multi');
-      else if (data.game_type === 'tugofwar') router.push('/cabo_de_guerra');
+      
+      if (data.game_type === 'arcade') {
+          router.push('/arcade_multi');
+      } 
       else if (data.game_type === 'math_blaster') {
-        // CORREÇÃO: Enviando os parâmetros via rota para o WebView conseguir capturar
-        router.push({
-          pathname: '/math_blaster_multi',
-          params: paramsParaJogo
-        });
+          // CORREÇÃO DA CONDIÇÃO DE LÍDER (isHost vs is_host do backend Python)
+          const isHostVal = data.is_host === true || data.isHost === true;
+          const encodedColor = encodeURIComponent(data.opponent_color || '#FF00FF');
+          router.push(`/math_blaster_multi?roomId=${data.room_id}&isHost=${isHostVal}&opponentName=${data.opponent_name}&opponentColor=${encodedColor}`);
       }
-      else router.push('/tictactoe'); 
+      else if (data.game_type === 'tugofwar') {
+          router.push('/cabo_de_guerra');
+      }
+      else {
+          router.push('/tictactoe'); 
+      }
     };
 
     socket.on('receive_invite', onReceiveInvite);
@@ -150,13 +146,6 @@ export default function TabsLayout() {
     setConvite(null);
   };
 
-  const getGameName = (type: string) => {
-    if (type === 'tictactoe') return 'Jogo da Velha';
-    if (type === 'arcade') return 'Matemática Turbo';
-    if (type === 'math_blaster') return 'Math Blaster';
-    return 'Cabo de Guerra';
-  };
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <OnlineHeartbeat />
@@ -171,7 +160,7 @@ export default function TabsLayout() {
             </View>
             <Text style={styles.modalTitle}>DESAFIO RECEBIDO!</Text>
             <Text style={styles.modalText}>
-              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {getGameName(convite?.game_type)}!
+              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : convite?.game_type === 'arcade' ? 'Matemática Turbo' : convite?.game_type === 'math_blaster' ? 'Math Blaster Co-op' : 'Cabo de Guerra'}!
             </Text>
             <View style={{ width: '100%', gap: 10, marginTop: 20 }}>
               <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#32CD32' }]} onPress={aceitarConvite}>
