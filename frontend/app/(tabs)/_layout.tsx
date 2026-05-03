@@ -11,6 +11,12 @@ import OnlineHeartbeat from '../../src/components/OnlineHeartbeat';
 
 import { socket, setActiveMatchData } from '../../src/services/socket';
 
+const TEAM_COLORS: Record<string, string> = {
+  'equipe-alfa': '#FFD700',
+  'equipe-delta': '#4169E1',
+  'equipe-omega': '#32CD32',
+};
+
 function AdminBanner() {
   const { user, isAdminViewingAsStudent, setAdminViewingAsStudent } = useAuth();
   const router = useRouter();
@@ -55,6 +61,7 @@ export default function TabsLayout() {
     } catch (error) { console.error(error); }
   };
 
+  // Motor para buscar mensagens não lidas
   useEffect(() => {
     if (!user) return;
     const fetchUnread = async () => {
@@ -88,25 +95,14 @@ export default function TabsLayout() {
     const onInviteError = (data: any) => Alert.alert('Aviso', data.msg);
     const onOnlineUsersList = (data: any[]) => setOnlineUsers(data);
     
-    // REDIRECIONAMENTO MASTER PARA JOGOS MULTIPLAYER
     const onMatchFound = (data: any) => {
       setActiveMatchData(data);
       setConvite(null);
-      
-      if (data.game_type === 'arcade') {
-          router.push('/arcade_multi');
-      } 
-      else if (data.game_type === 'math_blaster') {
-          const encodedColor = encodeURIComponent(data.opponent_color || '#FF00FF');
-          // Envia todos os parâmetros necessários para a WebView do celular e para o jogo na Vercel
-          router.push(`/math_blaster_multi?roomId=${data.room_id}&isHost=${data.isHost}&opponentName=${data.opponent_name}&opponentColor=${encodedColor}`);
-      }
-      else if (data.game_type === 'tugofwar') {
-          router.push('/cabo_de_guerra');
-      }
-      else {
-          router.push('/tictactoe'); 
-      }
+      // CORREÇÃO: Adicionada a rota correta para o Math Blaster Multi
+      if (data.game_type === 'arcade') router.push('/arcade_multi');
+      else if (data.game_type === 'tugofwar') router.push('/cabo_de_guerra');
+      else if (data.game_type === 'math_blaster') router.push('/math_blaster_multi');
+      else router.push('/tictactoe'); 
     };
 
     socket.on('receive_invite', onReceiveInvite);
@@ -140,6 +136,14 @@ export default function TabsLayout() {
     setConvite(null);
   };
 
+  // CORREÇÃO: Ajuste na lógica para exibir o nome correto do jogo no Modal
+  const getGameName = (type: string) => {
+    if (type === 'tictactoe') return 'Jogo da Velha';
+    if (type === 'arcade') return 'Matemática Turbo';
+    if (type === 'math_blaster') return 'Math Blaster';
+    return 'Cabo de Guerra';
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <OnlineHeartbeat />
@@ -149,10 +153,12 @@ export default function TabsLayout() {
       <Modal visible={!!convite} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.iconCircle}><Ionicons name="game-controller" size={32} color="#FFF" /></View>
+            <View style={styles.iconCircle}>
+              <Ionicons name="game-controller" size={32} color="#FFF" />
+            </View>
             <Text style={styles.modalTitle}>DESAFIO RECEBIDO!</Text>
             <Text style={styles.modalText}>
-              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : convite?.game_type === 'arcade' ? 'Matemática Turbo' : convite?.game_type === 'math_blaster' ? 'Math Blaster Co-op' : 'Cabo de Guerra'}!
+              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {getGameName(convite?.game_type)}!
             </Text>
             <View style={{ width: '100%', gap: 10, marginTop: 20 }}>
               <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#32CD32' }]} onPress={aceitarConvite}>
@@ -191,7 +197,10 @@ export default function TabsLayout() {
         <Tabs.Screen name="index" options={{ title: 'Início', tabBarIcon: ({ color, size }) => (<Ionicons name="home" size={size} color={color} />) }} />
         <Tabs.Screen name="jogadores" options={{ title: 'Online', tabBarIcon: ({ color, size }) => (<Ionicons name="radio" size={size} color={color} /> ) }} />
         <Tabs.Screen name="salas" options={{ title: 'Salas', tabBarIcon: ({ color, size }) => (<Ionicons name="chatbubbles" size={size} color={color} /> ) }} />
+        
+        {/* INBOX COM A BOLINHA VERMELHA (tabBarBadge) */}
         <Tabs.Screen name="chat" options={{ title: 'Inbox', tabBarIcon: ({ color, size }) => (<Ionicons name="mail" size={size} color={color} /> ), tabBarBadge: totalNaoLidas > 0 ? totalNaoLidas : undefined }} />
+
         <Tabs.Screen name="jogo" options={{ title: 'Jogos', tabBarIcon: ({ color, size }) => (<Ionicons name="game-controller" size={size} color={color} />), tabBarBadge: '🧪', tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 } }} />
         <Tabs.Screen name="equipe" options={{ title: 'Equipe', href: isLeader ? undefined : null, tabBarIcon: ({ color, size }) => (<Ionicons name="people" size={size} color={color} />) }} />
         
@@ -210,6 +219,7 @@ const styles = StyleSheet.create({
   adminBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a2e', paddingVertical: 12, paddingHorizontal: 16, gap: 8, borderBottomWidth: 1, borderBottomColor: '#FFD70040' },
   adminBannerText: { color: '#FFD700', fontSize: 14, fontWeight: '600' },
   neonLine: { height: 2, width: '100%', opacity: 0.6 },
+  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: '#1a1a2e', width: '100%', borderRadius: 24, padding: 25, alignItems: 'center', borderWidth: 1, borderColor: '#FFD70050' },
   iconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FFD700', justifyContent: 'center', alignItems: 'center', marginBottom: 15, marginTop: -50, borderWidth: 4, borderColor: '#1a1a2e' },
