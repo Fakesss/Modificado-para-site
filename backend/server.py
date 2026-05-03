@@ -66,6 +66,7 @@ class Usuario(BaseModel):
     pontosTotais: int = 0
     recordeJogoSingle: int = 0
     recordeJogoMulti: int = 0
+    recordeMathBlaster: int = 0  # <--- CAMPO NOVO ADICIONADO AQUI
     criadoEm: str = Field(default_factory=lambda: get_now_brt().isoformat())
     ultimoAcesso: Optional[str] = None
     dataUltimoPontoArcade: Optional[str] = None
@@ -98,9 +99,13 @@ class AdminUsuarioUpdate(BaseModel):
     ativo: Optional[bool] = None
     pontosTotais: Optional[int] = None
     recordeJogoSingle: Optional[int] = None
+    recordeMathBlaster: Optional[int] = None # <--- CAMPO NOVO ADICIONADO AQUI
     ocultoChat: Optional[bool] = None
 
 class ArcadeScore(BaseModel):
+    pontos: int
+
+class MathBlasterScore(BaseModel):  # <--- MODELO NOVO ADICIONADO AQUI
     pontos: int
 
 class Conteudo(BaseModel):
@@ -365,7 +370,7 @@ async def register(user_data: UsuarioCreate):
         nome=user_data.nome, email=user_data.email, senha=get_password_hash(user_data.senha),
         turmaId=user_data.turmaId, equipeId=user_data.equipeId, streakDias=1, 
         streakUltimoLoginData=get_now_brt().date().isoformat(),
-        ultimoAcesso=get_now_brt().isoformat(), pontosTotais=1 # 1 ponto de boas vindas
+        ultimoAcesso=get_now_brt().isoformat(), pontosTotais=1 
     )
     await db.usuarios.insert_one(usuario.dict())
     
@@ -388,7 +393,6 @@ async def login(credentials: UsuarioLogin):
         
     if not ativo: raise HTTPException(status_code=401, detail="Usuário desativado")
     
-    # Processa o Ponto Diário de Login
     user = await registrar_ponto_diario(user)
     
     access_token = create_access_token(data={"sub": user["id"]})
@@ -396,7 +400,6 @@ async def login(credentials: UsuarioLogin):
 
 @api_router.get("/auth/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
-    # Processa o Ponto Diário via Token Automático
     current_user = await registrar_ponto_diario(current_user)
     return {k: v for k, v in current_user.items() if k not in ['senha', '_id']}
 
@@ -483,7 +486,7 @@ async def admin_delete_usuario(user_id: str, current_user: dict = Depends(requir
 
 @api_router.post("/usuarios/zerar-pontos")
 async def zerar_todos_pontos(current_user: dict = Depends(require_admin)):
-    await db.usuarios.update_many({}, {"$set": {"pontosTotais": 0, "recordeJogoSingle": 0, "recordeJogoMulti": 0}})
+    await db.usuarios.update_many({}, {"$set": {"pontosTotais": 0, "recordeJogoSingle": 0, "recordeJogoMulti": 0, "recordeMathBlaster": 0}})
     await db.equipes.update_many({}, {"$set": {"pontosTotais": 0}})
     return {"message": "Todos os pontos e recordes foram zerados com sucesso."}
 
@@ -961,7 +964,53 @@ async def get_ranking_arcade():
         elif recorde > 0:
             eq = equipes.get(str(u.get("equipeId", "")))
             turma = turmas.get(str(u.get("turmaId", "")))
-            ranking.append({"id": u["id"], "nome": u.get("nome", "Aluno").split(" ")[0], "pontosMaximos": recorde, "equipe": eq.get("nome", "") if eq else "", "cor": eq.get("cor", "#888") if eq else "#888", "turma": turma.get("nome", "") if turma else "", "isProf": False})
+            ranking.append({"id": u["id"], "nome": u.get("nome", "Estudante").split(" ")[0], "pontosMaximos": recorde, "equipe": eq.get("nome", "") if eq else "", "cor": eq.get("cor", "#888") if eq else "#888", "turma": turma.get("nome", "") if turma else "", "isProf": False})
+    ranking.sort(key=lambda x: x["pontosMaximos"], reverse=True)
+    for i, r in enumerate(ranking): r["posicao"] = i + 1
+    return ranking
+
+# =========================================================
+# ROTAS DO MATH BLASTER (NOVO MODO DE JOGO)
+# =========================================================
+@api_router.post("/math_blaster/score")
+async def submit_math_blaster_score(data: MathBlasterScore, current_user: dict = Depends(get_current_user)):
+    pontos_score = data.pontos
+    if pontos_score <= 0: return {"message": "Nenhum ponto recebido"}
+    
+    current_record = current_user.get("recordeMathBlaster", 0)
+    is_new_record = pontos_score > current_record
+    
+    if is_new_record: 
+        await db.usuarios.update_one({"id": current_user["id"]}, {"$set": {"recordeMathBlaster": pontos_score}})
+        
+    return {"message": "Score processado", "newRecord": is_new_record}
+
+@api_router.get("/ranking/math_blaster")
+async def get_ranking_math_blaster():
+    usuarios = await db.usuarios.find({"ativo": True}).to_list(5000)
+    equipes = {str(e.get("id", e.get("_id", ""))): e for e in await db.equipes.find({}).to_list(100)}
+    turmas = {str(t.get("id", t.get("_id", ""))): t for t in await db.turmas.find({}).to_list(100)}
+    ranking = []
+    
+    for u in usuarios:
+        recorde = u.get("recordeMathBlaster", 0)
+        is_admin = u.get("perfil") == "ADMIN"
+        
+        if is_admin:
+            pontos_finais = recorde if recorde > 0 else 1
+            ranking.append({
+                "id": u["id"], "nome": u.get("nome", "Admin").split(" ")[0], "pontosMaximos": pontos_finais, 
+                "equipe": "", "cor": "#FFD700", "turma": "Professor", "isProf": True
+            })
+        elif recorde > 0:
+            eq = equipes.get(str(u.get("equipeId", "")))
+            turma = turmas.get(str(u.get("turmaId", "")))
+            ranking.append({
+                "id": u["id"], "nome": u.get("nome", "Estudante").split(" ")[0], "pontosMaximos": recorde, 
+                "equipe": eq.get("nome", "") if eq else "", "cor": eq.get("cor", "#888") if eq else "#888", 
+                "turma": turma.get("nome", "") if turma else "", "isProf": False
+            })
+            
     ranking.sort(key=lambda x: x["pontosMaximos"], reverse=True)
     for i, r in enumerate(ranking): r["posicao"] = i + 1
     return ranking
