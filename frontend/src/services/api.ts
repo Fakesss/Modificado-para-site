@@ -113,6 +113,10 @@ export const zerarTodosPontos = async () => (await api.post('/usuarios/zerar-pon
 export const getRankingArcade = async () => { try { return (await api.get('/ranking/arcade')).data; } catch { return []; } };
 export const submitArcadeScore = async (pontos: number) => (await api.post('/arcade/score', { pontos })).data;
 
+// ======== ROTAS DO RANKING MATH BLASTER ========
+export const getRankingMathBlaster = async () => { try { return (await api.get('/ranking/math_blaster')).data; } catch { return []; } };
+export const submitMathBlasterScore = async (pontos: number) => (await api.post('/math_blaster/score', { pontos })).data;
+
 // ======== ROTAS DE RELATÓRIO DA BNCC ========
 export const getBNCCRelatorio = async (tipo: string, turmaId?: string, equipeId?: string) => {
   try {
