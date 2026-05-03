@@ -73,7 +73,13 @@ export default function MathBlasterMulti() {
   const instanceId = useRef(Math.random().toString(36).substring(7)).current;
 
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
+  const telaRef = useRef(tela);
+  useEffect(() => { telaRef.current = tela; }, [tela]);
+
   const [jogoAtivo, setJogoAtivo] = useState(false);
+  const jogoAtivoRef = useRef(jogoAtivo);
+  useEffect(() => { jogoAtivoRef.current = jogoAtivo; }, [jogoAtivo]);
+
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
   const [hallDaFama, setHallDaFama] = useState<any[]>([]);
@@ -182,19 +188,31 @@ export default function MathBlasterMulti() {
 
     const joinRoom = () => {
         if (socket.connected) {
-            // Emite várias nomenclaturas comuns de Join Room para garantir suporte ao seu backend
             socket.emit('join_game_room', { roomId });
             socket.emit('joinRoom', roomId); 
             socket.emit('join_room', { roomId }); 
+            
+            // NOVO: Handshake de Auto-Start. Se estou no menu, aviso que estou pronto.
+            if (telaRef.current === 'menu') {
+                socket.emit('game_action', { roomId, instanceId, action: 'PLAYER_READY' });
+            }
         }
     };
 
     joinRoom(); 
     socket.on('connect', joinRoom);
+    // Intervalo garante que se o outro player se atrasar alguns segundos, ele ainda receberá o aviso
     const interval = setInterval(joinRoom, 2000);
 
     const handleSocketAcao = (payload: any) => {
       if (!payload || payload.instanceId === instanceId) return; 
+
+      // NOVO: Se o HOST receber que o Aliado está pronto no Menu, ele inicia o jogo automaticamente!
+      if (payload.action === 'PLAYER_READY') {
+          if (isHost && telaRef.current === 'menu' && !jogoAtivoRef.current) {
+              iniciarJogo();
+          }
+      }
 
       if (payload.action === 'SYNC_PLAYER') {
          gs.aliado.x = payload.data.x;
@@ -220,7 +238,10 @@ export default function MathBlasterMulti() {
       }
       
       if (payload.action === 'START_MATCH') {
-          iniciarJogo();
+          // Previne que o jogo reinicie sozinho se já estiver jogando
+          if (!jogoAtivoRef.current) {
+              iniciarJogo();
+          }
       }
     };
 
@@ -679,6 +700,8 @@ export default function MathBlasterMulti() {
   };
 
   const iniciarJogo = () => {
+    if (jogoAtivoRef.current) return; // Segurança contra double-click ou duplo evento
+
     gameOverFired.current = false;
     gs.keys = { up: false, down: false, left: false, right: false }; 
     
@@ -906,8 +929,7 @@ export default function MathBlasterMulti() {
       l.x += l.vx; 
       l.y += l.vy;
 
-      // CORREÇÃO DA COLISÃO COM INIMIGOS E BOSS
-      if (l.y > -50 && l.type !== 'LASER') { // Lasers perfuram, os outros não
+      if (l.y > -50 && l.type !== 'LASER') { 
           let hit = false;
           for (let i = 0; i < gs.enemies.length; i++) {
               let e = gs.enemies[i];
@@ -1236,7 +1258,6 @@ export default function MathBlasterMulti() {
         }
       }
       
-      // CORREÇÃO: Disparo dos Inimigos
       if ((e.type === 'SQUAD' || e.type === 'TANK' || e.type === 'ZIGZAG') && (!roomId || isHost)) {
           e.fireTimer = (e.fireTimer || 0) + 1 * speedMult;
           const rate = e.type === 'TANK' ? 80 : 150;
@@ -1379,15 +1400,20 @@ export default function MathBlasterMulti() {
             )}
           </View>
 
-          {/* CORREÇÃO: Convidado não pode iniciar a partida sozinho */}
           {(!roomId || isHost) ? (
             <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
               <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
             </TouchableOpacity>
           ) : (
             <View style={[styles.btnIniciar, { backgroundColor: '#333' }]}>
-              <Text style={[styles.btnIniciarTxt, { color: '#888' }]}>AGUARDANDO LÍDER DA SALA...</Text>
+              <Text style={[styles.btnIniciarTxt, { color: '#888' }]}>CONECTANDO AO LÍDER...</Text>
             </View>
+          )}
+
+          {roomId && isHost && tela === 'menu' && (
+            <Text style={[styles.instrucoes, { color: '#00FA9A', marginTop: 15 }]}>
+              A partida iniciará automaticamente assim que o seu aliado se conectar!
+            </Text>
           )}
 
         </ScrollView>
@@ -1408,7 +1434,6 @@ export default function MathBlasterMulti() {
           
           <Text style={styles.textoFase}>Chegou na Fase {gs.fase}</Text>
           
-          {/* O convidado também não pode reiniciar o jogo sozinho, apenas voltar */}
           {(!roomId || isHost) && (
               <TouchableOpacity style={[styles.btnIniciar, { marginTop: 40 }]} onPress={iniciarJogo}>
                 <Text style={styles.btnIniciarTxt}>TENTAR NOVAMENTE</Text>
@@ -1430,7 +1455,6 @@ export default function MathBlasterMulti() {
         <View style={styles.hud}>
           <View style={{ flex: 1, paddingRight: 10 }}>
             <Text style={styles.hudScore}>SCORE: {gs.score} {roomId ? `| ALIADO: ${gs.scoreAliado}` : ''}</Text>
-            {/* CORREÇÃO: Flex nas barrinhas para não estourarem o layout juntas */}
             <View style={{flexDirection:'row', gap: 5, width: '100%', marginTop: 2}}>
                 <View style={[styles.hpBarContainer, { flex: 1, width: 'auto' }]}>
                   <View style={[styles.hpBarFill, { width: `${porcentagemHP}%`, backgroundColor: corHP }]}/>
