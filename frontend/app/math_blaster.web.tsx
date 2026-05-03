@@ -41,12 +41,15 @@ const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed
 export default function MathBlaster() {
   const router = useRouter();
   const { user } = useAuth();
+  
+  // Controle de Telas baseado no Arcade
+  const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [jogoAtivo, setJogoAtivo] = useState(false);
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
   
-  // Estados para o Hall da Fama
   const [hallDaFama, setHallDaFama] = useState<any[]>([]);
+  const gameOverFired = useRef(false);
   
   // Controle de Tela e Câmera Virtual
   const [canvasSize, setCanvasSize] = useState({ width: initialWidth, height: initialHeight });
@@ -64,47 +67,20 @@ export default function MathBlaster() {
   const layoutRef = useRef({ width: initialWidth, height: initialHeight });
 
   const gs = useRef({
-    currentZoom: BASE_ZOOM, // O Zoom dinâmico que diminui com o tempo
+    currentZoom: BASE_ZOOM,
     player: { 
-      x: initialWidth / 2, 
-      y: initialHeight - 60, 
-      hp: 100, 
-      maxHp: 100, 
-      damage: 1, 
-      shotSize: 6,
-      fireRate: 300, 
-      lastFire: 0, 
-      tripleShot: false,
+      x: initialWidth / 2, y: initialHeight - 60, hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false,
       weapons: {
         missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
         pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 }
       }
     },
-    lasers: [] as any[], 
-    specialLasers: [] as any[],
-    mathShots: [] as any[],
-    pulses: [] as any[], 
-    floatingTexts: [] as any[], 
-    enemies: [] as any[], 
-    enemyLasers: [] as any[],
-    powerups: [] as any[], 
-    particles: [] as any[],
+    lasers: [] as any[], specialLasers: [] as any[], mathShots: [] as any[], pulses: [] as any[], floatingTexts: [] as any[], 
+    enemies: [] as any[], enemyLasers: [] as any[], powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
-    score: 0, 
-    fase: 1, 
-    gameState: 'WAVES', 
-    stateTimer: 0, 
-    lastPowerupSpawn: 0,
-    movementTouchId: null as string | null,
-    lastTouchX: 0, 
-    lastTouchY: 0,
-    timeAlive: 0,
-    flawlessBossesCount: 0,
-    tookDamageThisBoss: false,
-    timeFreezeTimer: 0,
-    forceShieldHits: 0,
-    xRayTimer: 0,
+    score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0, movementTouchId: null as string | null, lastTouchX: 0, lastTouchY: 0,
+    timeAlive: 0, flawlessBossesCount: 0, tookDamageThisBoss: false, timeFreezeTimer: 0, forceShieldHits: 0, xRayTimer: 0,
     drones: {
       normal: { active: false, level: 1, lastFire: 0, baseCooldown: 1500 },
       advanced: { active: false, level: 1, lastFire: 0, baseCooldown: 2000 }
@@ -117,19 +93,20 @@ export default function MathBlaster() {
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
 
-  // Lógica do Hall da Fama via API
   const carregarHallDaFama = async () => {
     try {
       const data = await api.getRankingMathBlaster();
       setHallDaFama(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error("Erro ao carregar ranking", e);
+      console.error("Erro ao carregar ranking do Math Blaster", e);
     }
   };
 
   useEffect(() => {
-    carregarHallDaFama();
-  }, []);
+    if (tela === 'menu') {
+      carregarHallDaFama();
+    }
+  }, [tela]);
 
   // ==========================================
   // LÓGICA DE MOVIMENTAÇÃO NAVE (MULTI-TOUCH)
@@ -307,7 +284,8 @@ export default function MathBlaster() {
   };
 
   const iniciarJogo = () => {
-    // Calcula o zoom inicial imediatamente
+    gameOverFired.current = false;
+    
     gs.currentZoom = BASE_ZOOM;
     const initialGw = canvasSizeRef.current.width / gs.currentZoom;
     const initialGh = canvasSizeRef.current.height / gs.currentZoom;
@@ -326,18 +304,14 @@ export default function MathBlaster() {
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
     
-    gs.timeAlive = 0;
-    gs.flawlessBossesCount = 0;
-    gs.tookDamageThisBoss = false;
-    gs.timeFreezeTimer = 0;
-    gs.forceShieldHits = 0;
-    gs.xRayTimer = 0;
+    gs.timeAlive = 0; gs.flawlessBossesCount = 0; gs.tookDamageThisBoss = false; gs.timeFreezeTimer = 0; gs.forceShieldHits = 0; gs.xRayTimer = 0;
     gs.drones = {
       normal: { active: false, level: 1, lastFire: 0, baseCooldown: 1500 },
       advanced: { active: false, level: 1, lastFire: 0, baseCooldown: 2000 }
     };
     
     setResposta(''); 
+    setTela('jogo');
     setJogoAtivo(true);
     
     if (loopRef.current) clearInterval(loopRef.current);
@@ -345,8 +319,12 @@ export default function MathBlaster() {
   };
 
   const gameOver = () => { 
+    if (gameOverFired.current) return;
+    gameOverFired.current = true;
+    
     setJogoAtivo(false); 
     if (loopRef.current) clearInterval(loopRef.current); 
+    setTela('resultado');
     
     if (gs.score > 0) {
       api.submitMathBlasterScore(gs.score)
@@ -369,16 +347,12 @@ export default function MathBlaster() {
     if (valor === 'apagar') {
       setResposta(r => r.slice(0, -1));
     } else if (valor === 'enviar') {
-      
-      // CHEAT CODE DO DESENVOLVEDOR: DRONE ELITE GRÁTIS
       if (respostaRef.current === '3141592') {
-        gs.drones.advanced.active = true;
-        gs.drones.advanced.baseCooldown = 500; // Drone Elite Turbinado!
-        gs.score += 500; // Pontuação reduzida
+        gs.drones.advanced.active = true; gs.drones.advanced.baseCooldown = 500;
+        gs.score += 500;
         criarParticulas(gs.player.x, gs.player.y, '#FFD700', 80);
         gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE!`, color: '#FFD700', life: 90 });
-        setResposta('');
-        return;
+        setResposta(''); return;
       }
 
       const num = parseInt(respostaRef.current);
@@ -391,7 +365,7 @@ export default function MathBlaster() {
       if (gs.boss.active && gs.boss.shield && gs.boss.res === num) {
         acertou = true; gs.boss.shield = false; gs.boss.timer = 0; gs.boss.nextShieldAt = Math.random() * 210 + 240; 
         dispararMagia(gs.boss.x, gs.boss.y, '#FFD700'); setTimeout(() => criarParticulas(gs.boss.x, gs.boss.y, '#00FFFF', 50), 350); 
-        gs.score += 5; // Pontuação balanceada para manter < 700
+        gs.score += 5;
       } 
       
       if (!acertou) {
@@ -401,7 +375,7 @@ export default function MathBlaster() {
             acertou = true; e.solvesDone += 1; dispararMagia(e.x, e.y, '#00FFFF');
             if (e.solvesDone >= e.solvesNeeded) {
                e.isDying = true; e.mathRequired = false;
-               setTimeout(() => { e.hp = -100; gs.score += 15; criarParticulas(e.x, e.y, '#00FFFF', 80); }, 350); // Pontuação reduzida
+               setTimeout(() => { e.hp = -100; gs.score += 15; criarParticulas(e.x, e.y, '#00FFFF', 80); }, 350);
             } else {
                const eq = gerarEquacao(gs.fase, getRespostasAtivas()); e.txt = eq.txt; e.res = eq.res;
             }
@@ -434,7 +408,6 @@ export default function MathBlaster() {
               else if (type === 'PULSAR_UNLOCK') gs.player.weapons.pulsar.active = true;
               else if (type === 'PULSAR_COOLDOWN') { gs.player.weapons.pulsar.baseCooldown = Math.max(4000, gs.player.weapons.pulsar.baseCooldown - 1000); gs.player.weapons.pulsar.level += 1; }
               else if (type === 'PULSAR_RADIUS') { gs.player.weapons.pulsar.radius += 20; gs.player.weapons.pulsar.level += 1; }
-              
               else if (type === 'FORCE_SHIELD') gs.forceShieldHits = 3;
               else if (type === 'DRONE_NORMAL') { if (!gs.drones.normal.active) gs.drones.normal.active = true; else gs.drones.normal.baseCooldown = Math.max(500, gs.drones.normal.baseCooldown - 200); }
               else if (type === 'TIME_FREEZE') gs.timeFreezeTimer = 5000;
@@ -443,7 +416,7 @@ export default function MathBlaster() {
               else if (type === 'DRONE_ADVANCED_UP') gs.drones.advanced.baseCooldown = Math.max(500, gs.drones.advanced.baseCooldown - 200);
 
               gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 20); 
-              gs.score += 5; p.y = 9999; // Pontuação reduzida
+              gs.score += 5; p.y = 9999;
             }, 350);
             break; 
           }
@@ -455,25 +428,20 @@ export default function MathBlaster() {
           gs.forceShieldHits -= 1;
           criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 10);
         } else {
-          // O dano por erro digitação agora é progressivo (escala com a fase)
           gs.player.hp = Math.max(0, gs.player.hp - (3 + (gs.fase * 2))); 
           criarParticulas(gs.player.x, gs.player.y, '#FF0000', 8); 
         }
       }
       setResposta('');
     } else {
-      // Limite aumentado para 7 caracteres para permitir digitar o cheat code
       setResposta(r => r.length < 7 ? r + valor : r);
     }
   }, [jogoAtivo]);
 
   const gameTick = () => {
     const now = Date.now();
-    
-    // ATUALIZAÇÃO DO ZOOM DINÂMICO! (Mínimo de 0.35 para não ficar formiga, diminui 0.03 a cada fase no celular)
     gs.currentZoom = BASE_ZOOM === 1 ? 1 : Math.max(0.35, BASE_ZOOM - ((gs.fase - 1) * 0.03));
     
-    // Atualiza o canvas virtual em tempo real
     if (canvasSizeRef.current.width > 0) {
         layoutRef.current.width = canvasSizeRef.current.width / gs.currentZoom;
         layoutRef.current.height = canvasSizeRef.current.height / gs.currentZoom;
@@ -552,7 +520,7 @@ export default function MathBlaster() {
       gs.enemies.forEach(e => {
         if (!e.mathRequired && Math.pow(e.x - p.x, 2) + Math.pow(e.y - p.y, 2) < currentRadius * currentRadius) {
           e.hp = -100;
-          gs.score += 1; // Pontuação reduzida
+          gs.score += 1;
           criarParticulas(e.x, e.y, '#00BFFF', 10);
         }
       });
@@ -650,14 +618,11 @@ export default function MathBlaster() {
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
-      
-      // Ajuste Dificuldade: Meteoros demoram mais no início e caem mais devagar
       if (gs.stateTimer % Math.max(20, 100 - gs.fase * 10) === 0) {
         const meteorVy = gs.fase === 1 ? Math.random() * 1 + 1.5 : Math.random() * 2 + 3 + (gs.fase * 0.6);
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: meteorVy, angle: 0 });
       }
 
-      // Ajuste Dificuldade: Flankers demoram mais a nascer e começam a aparecer na fase 2
       if (gs.stateTimer % 240 === 0 && gs.fase >= 2) {
         const isLeft = Math.random() > 0.5;
         gs.enemies.push({ id: Math.random().toString(), type: 'FLANKER', x: isLeft ? -20 : gw + 20, y: Math.random() * (gh/3), targetY: 0, hp: 2 + gs.fase * 2, vx: isLeft ? 3 + gs.fase * 1.2 : -3 - gs.fase * 1.2, vy: 1.5, angle: 0, shield: Math.random() > 0.7 ? 2 : 0 });
@@ -666,11 +631,9 @@ export default function MathBlaster() {
       if (gs.stateTimer === 600 || gs.stateTimer === 1200) {
         const eq = gerarEquacao(gs.fase, getRespostasAtivas());
         const isLeft = gs.stateTimer === 600; 
-        // Ajuste Dificuldade: Menos contas necessárias nos níveis iniciais
         gs.enemies.push({ id: Math.random().toString(), type: 'SPAWNER', x: isLeft ? gw * 0.25 : gw * 0.75, y: -80, targetY: 90 + Math.random() * 30, hp: 9999, mathRequired: true, solvesNeeded: Math.min(8, 2 + gs.fase), solvesDone: 0, txt: eq.txt, res: eq.res, vy: 1.5, spawnTimer: 0 });
       }
 
-      // Ajuste Dificuldade: Esquadrões começam devagar e têm menos HP
       if (gs.stateTimer % (300 - Math.min(150, gs.fase * 20)) === 0 && gs.stateTimer < 1400) {
         const cx = Math.random() * (gw - 120) + 60; 
         const baseHp = 1 + (gs.fase * 2); 
@@ -690,7 +653,6 @@ export default function MathBlaster() {
         gs.gameState = 'BOSS'; 
         gs.stateTimer = 0;
         const eq = gerarEquacao(gs.fase, getRespostasAtivas());
-        // Ajuste Dificuldade: Boss 1 é mais fácil
         gs.boss = { active: true, type: Math.floor(Math.random() * 3), x: gw / 2, y: -100, hp: 100 + (gs.fase * 80), maxHp: 100 + (gs.fase * 80), vx: 2 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
       }
     }
@@ -702,7 +664,6 @@ export default function MathBlaster() {
         if (gs.boss.x < 50 || gs.boss.x > gw - 50) gs.boss.vx *= -1;
         gs.boss.timer += 1 * speedMult;
 
-        // Ajuste Dificuldade: Frequência de tiros dos chefes mais amigável na fase 1
         if (gs.boss.type === 0) {
           if (gs.boss.timer % Math.max(40, 120 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 2, size: 14, damage: 5 + (gs.fase * 5), homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) });
         } else if (gs.boss.type === 1) {
@@ -724,7 +685,7 @@ export default function MathBlaster() {
       
       if (gs.boss.hp <= 0) {
         criarParticulas(gs.boss.x, gs.boss.y, '#FFD700', 80); 
-        gs.score += 50 * gs.fase; // Pontuação balanceada para ficar < 700 no total geral
+        gs.score += 50 * gs.fase;
         gs.boss.active = false; 
         gs.gameState = 'TRANSITION'; 
         gs.stateTimer = 0; 
@@ -782,7 +743,6 @@ export default function MathBlaster() {
         }
       }
       
-      // Ajuste Dificuldade: Colisão física progressiva
       if (Math.abs(gs.player.x - e.x) < 25 && Math.abs(gs.player.y - e.y) < 25) { 
         aplicarDano(5 + (gs.fase * 5)); 
         if (!e.mathRequired) e.hp = -100; 
@@ -896,7 +856,7 @@ export default function MathBlaster() {
 
     gs.enemies.forEach(e => { 
       if (e.hp <= 0 && e.hp > -90) { 
-        gs.score += e.isLeader ? 3 : 1; // Pontuação reduzida
+        gs.score += e.isLeader ? 3 : 1;
         criarParticulas(e.x, e.y, e.type === 'SQUAD' ? '#FF0055' : '#AAA', 10); 
       } 
     });
@@ -940,39 +900,29 @@ export default function MathBlaster() {
     );
   };
 
-  if (!jogoAtivo && gs.score === 0 && gs.player.hp === 100) {
+  // TELA DE MENU INICIAL COM O HALL DA FAMA IDÊNTICO AO ARCADE
+  if (tela === 'menu') {
+    const meuRank = hallDaFama.find(j => j.id === user?.id);
+
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.menuContainer}>
-          <TouchableOpacity style={{ position: 'absolute', top: 20, left: 20 }} onPress={() => router.back()}>
+        <ScrollView style={{ width: '100%' }} contentContainerStyle={styles.menuScrollContent}>
+          <TouchableOpacity style={{ alignSelf: 'flex-start' }} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={30} color="#00FFFF"/>
           </TouchableOpacity>
-          <Ionicons name="rocket" size={80} color="#00FFFF" style={{ marginBottom: 20 }}/>
+          <Ionicons name="rocket" size={80} color="#00FFFF" style={{ marginBottom: 20, marginTop: 20 }}/>
           <Text style={styles.tituloMenu}>SKY</Text>
           <Text style={styles.subTituloMenu}>EQUATIONS</Text>
           <Text style={styles.instrucoes}>Deslize na nave para voar e use o teclado para atirar e destruir os asteróides!</Text>
-          <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
-            <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
-  if (!jogoAtivo && gs.player.hp <= 0) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.menuContainer}>
-          <Text style={[styles.tituloMenu, { color: '#FF4444' }]}>DESTRUÍDO</Text>
-          <Text style={styles.textoScore}>Pontos: {gs.score}</Text>
-          <Text style={styles.textoFase}>Chegou na Fase {gs.fase}</Text>
-          
-          {/* SESSÃO: HALL DA FAMA AUTOMÁTICO */}
-          <View style={styles.hallDaFamaContainer}>
-            <Text style={styles.hallDaFamaTitle}>🏆 HALL DA FAMA 🏆</Text>
-            
+          {/* HALL DA FAMA ARCADE STYLE */}
+          <View style={styles.rankingContainer}>
+            <View style={styles.rankingHeaderRow}>
+              <Ionicons name="trophy" size={24} color="#FFD700" />
+              <Text style={styles.rankingTitle}>HALL DA FAMA - BLASTER</Text>
+            </View>
             <View style={styles.rankingScrollWrapper}>
-              <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 200, width: '100%' }}>
+              <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={true}>
                 {hallDaFama.length > 0 ? (
                   hallDaFama.map((jogador, idx) => {
                     let corPosicao = '#888'; 
@@ -983,7 +933,7 @@ export default function MathBlaster() {
                     const isMe = jogador.id === user?.id;
 
                     return (
-                      <View key={jogador.posicao || idx} style={[styles.rankingRow, isMe && styles.rankingRowMe]}>
+                      <View key={jogador.posicao || Math.random().toString()} style={[styles.rankingRow, isMe && styles.rankingRowMe]}>
                         <View style={styles.rankingLeft}>
                           <Text style={[styles.rankingPosText, { color: corPosicao }]}>#{jogador.posicao || idx + 1}</Text>
                           <View>
@@ -1000,24 +950,58 @@ export default function MathBlaster() {
                           </View>
                         </View>
                         <Text style={[styles.rankingScoreText, isMe && { color: '#00FFFF' }]}>
-                          {jogador.pontosMaximos !== undefined ? jogador.pontosMaximos : jogador.score} pts
+                          {jogador.pontosMaximos !== undefined ? jogador.pontosMaximos : (jogador.score || 0)} pts
                         </Text>
                       </View>
                     );
                   })
                 ) : (
-                  <Text style={{ color: '#888', fontStyle: 'italic', marginBottom: 10, textAlign: 'center' }}>
-                    Nenhum recorde ainda...
-                  </Text>
+                  <View style={{ padding: 15, alignItems: 'center' }}>
+                    <Text style={{ color: '#888', fontStyle: 'italic' }}>Nenhum jogador pontuou ainda. Seja o primeiro!</Text>
+                  </View>
                 )}
               </ScrollView>
             </View>
+            
+            {meuRank && (
+              <View style={styles.myRankingFixed}>
+                <Text style={styles.myRankingLabel}>Sua Posição Atual:</Text>
+                <View style={styles.rankingLeft}>
+                  <Text style={[styles.rankingPosText, { color: '#00FFFF' }]}>#{meuRank.posicao}</Text>
+                  <Text style={[styles.rankingScoreText, { color: '#00FFFF' }]}>
+                    {meuRank.pontosMaximos !== undefined ? meuRank.pontosMaximos : meuRank.score} pts
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
 
-          <TouchableOpacity style={[styles.btnIniciar, { marginTop: 20 }]} onPress={iniciarJogo}>
+          <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
+            <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // TELA DE GAME OVER (RESULTADO)
+  if (tela === 'resultado') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.menuContainerFixed}>
+          <Text style={[styles.tituloMenu, { color: '#FF4444' }]}>DESTRUÍDO</Text>
+          
+          <View style={styles.resultadoCard}>
+            <Text style={styles.resultadoPontos}>{gs.score}</Text>
+            <Text style={styles.resultadoLabel}>Pontos Totais</Text>
+          </View>
+          
+          <Text style={styles.textoFase}>Chegou na Fase {gs.fase}</Text>
+          
+          <TouchableOpacity style={[styles.btnIniciar, { marginTop: 40 }]} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>TENTAR NOVAMENTE</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#555', marginTop: 15 }]} onPress={() => router.back()}>
+          <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#555', marginTop: 15 }]} onPress={() => setTela('menu')}>
             <Text style={[styles.btnIniciarTxt, { color: '#888' }]}>VOLTAR AO MENU</Text>
           </TouchableOpacity>
         </View>
@@ -1025,6 +1009,7 @@ export default function MathBlaster() {
     );
   }
 
+  // TELA DO JOGO ROLANDO
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.gameWrapper}>
@@ -1204,34 +1189,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#050015',
     overflow: 'hidden',
   },
-  menuContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050015', width: '100%', maxWidth: 600, paddingHorizontal: 20 },
+  
+  menuScrollContent: { alignItems: 'center', paddingBottom: 20, paddingHorizontal: 20 },
+  menuContainerFixed: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050015', width: '100%', maxWidth: 600, paddingHorizontal: 20 },
   tituloMenu: { fontSize: 45, fontWeight: '900', color: '#00FFFF', fontStyle: 'italic' },
   subTituloMenu: { fontSize: 25, fontWeight: '900', color: '#FFF', letterSpacing: 5 },
   instrucoes: { color: '#9D97B5', textAlign: 'center', marginHorizontal: 30, marginTop: 20, fontSize: 14, fontWeight: 'bold' },
   btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 12, marginTop: 20, width: '100%', alignItems: 'center' },
   btnIniciarTxt: { color: '#FFF', fontSize: 16, fontWeight: '900' },
-  textoScore: { color: '#00FFFF', fontSize: 24, fontWeight: 'bold', marginTop: 20 },
   textoFase: { color: '#9D97B5', fontSize: 16, marginTop: 10 },
 
-  // Estilos do Hall da Fama atualizados para o padrão Arcade
-  hallDaFamaContainer: {
-    width: '100%',
-    backgroundColor: 'rgba(0, 255, 255, 0.05)',
-    borderWidth: 1,
-    borderColor: '#00FFFF',
-    borderRadius: 10,
-    padding: 15,
-    marginTop: 20,
-    alignItems: 'center'
-  },
-  hallDaFamaTitle: { color: '#FFD700', fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
-  rankingScrollWrapper: { backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8, overflow: 'hidden', width: '100%' },
-  rankingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)', width: '100%' },
-  rankingRowMe: { backgroundColor: 'rgba(0, 255, 255, 0.15)', borderRadius: 8 },
+  // Game Over Resultado Card
+  resultadoCard: { backgroundColor: 'rgba(255, 68, 68, 0.1)', padding: 30, borderRadius: 16, alignItems: 'center', marginTop: 20, marginBottom: 10, width: '100%', borderWidth: 1, borderColor: '#FF4444' },
+  resultadoPontos: { fontSize: 64, fontWeight: '900', color: '#FF4444' },
+  resultadoLabel: { fontSize: 14, color: '#888', marginTop: 4 },
+
+  // Ranking Arcade Style para o Menu
+  rankingContainer: { width: '100%', marginTop: 25, marginBottom: 15, backgroundColor: '#1a1a2e', borderRadius: 16, padding: 15, borderWidth: 1, borderColor: '#FFD70040' },
+  rankingHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 },
+  rankingTitle: { color: '#FFD700', fontSize: 18, fontWeight: '900' },
+  rankingScrollWrapper: { maxHeight: 180, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8, overflow: 'hidden' },
+  rankingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  rankingRowMe: { backgroundColor: 'rgba(0, 255, 255, 0.15)' },
   rankingLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   rankingPosText: { fontWeight: '900', fontSize: 16, width: 30 },
   rankingNameText: { color: '#FFF', fontSize: 15, fontWeight: '600' },
-  rankingScoreText: { color: '#32CD32', fontWeight: 'bold', fontSize: 15 },
+  rankingScoreText: { color: '#00FFFF', fontWeight: 'bold', fontSize: 15 },
+  myRankingFixed: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  myRankingLabel: { color: '#AAA', fontSize: 13, fontWeight: '600' },
 
   hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10, width: '100%' },
   hudScore: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1, marginBottom: 5 },
