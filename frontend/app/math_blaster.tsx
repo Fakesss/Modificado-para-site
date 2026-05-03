@@ -7,40 +7,27 @@ import { useRouter } from 'expo-router';
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
 
-const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: string) => void }) => {
-  const anim = useRef(new Animated.Value(1)).current;
-  
-  const handlePressIn = (e: any) => {
-    if (e && e.stopPropagation) e.stopPropagation();
-    Animated.spring(anim, { toValue: 0.85, useNativeDriver: true }).start();
-    onPressWeb(valor);
-  };
-  
-  const handlePressOut = (e: any) => {
-    if (e && e.stopPropagation) e.stopPropagation();
-    Animated.spring(anim, { toValue: 1, useNativeDriver: true }).start();
-  };
-
+// --- NOVO COMPONENTE DE TECLA (Otimizado para Multi-Touch Nativamente) ---
+const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed: boolean, onPressWeb: (v: string) => void }) => {
   const isWeb = Platform.OS === 'web';
-
   let customStyle = styles.teclaRetro;
   if (valor === 'apagar') customStyle = { ...styles.teclaRetro, ...styles.teclaApagar } as any;
   if (valor === 'enviar') customStyle = { ...styles.teclaRetro, ...styles.teclaEnviar } as any;
 
   return (
-    <Animated.View 
-      style={[customStyle, { transform: [{ scale: anim }], flex: 1 }]} 
-      onTouchStart={handlePressIn} 
-      onTouchEnd={handlePressOut} 
-      onTouchCancel={handlePressOut} 
-      onMouseDown={isWeb ? handlePressIn : undefined} 
-      onMouseUp={isWeb ? handlePressOut : undefined} 
-      onMouseLeave={isWeb ? handlePressOut : undefined}
+    <View 
+      style={[customStyle, isPressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }]} 
+      {...(isWeb ? {
+        onPointerDown: (e: any) => {
+            e.preventDefault();
+            onPressWeb(valor);
+        }
+      } : {})}
     >
-      {valor === 'apagar' && <Ionicons name="backspace" size={20} color="#FFF"/>}
-      {valor === 'enviar' && <Ionicons name="flash" size={20} color="#FFF"/>}
+      {valor === 'apagar' && <Ionicons name="backspace" size={26} color="#FFF"/>}
+      {valor === 'enviar' && <Ionicons name="flash" size={26} color="#FFF"/>}
       {valor !== 'apagar' && valor !== 'enviar' && <Text style={styles.teclaRetroText}>{valor}</Text>}
-    </Animated.View>
+    </View>
   );
 };
 
@@ -49,6 +36,11 @@ export default function MathBlaster() {
   const [jogoAtivo, setJogoAtivo] = useState(false);
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
+  
+  // Estados do Multi-touch
+  const [teclasPressionadas, setTeclasPressionadas] = useState<string[]>([]);
+  const triggeredTouchesRef = useRef<Set<string>>(new Set());
+  const tecladoLayoutRef = useRef({ width: 350 }); // Fallback
   
   const respostaRef = useRef('');
   useEffect(() => { respostaRef.current = resposta; }, [resposta]);
@@ -245,6 +237,58 @@ export default function MathBlaster() {
     for(let i=0; i<qtd; i++) { 
       gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color }); 
     }
+  };
+
+  // --- LÓGICA MULTI-TOUCH E TECLADO ---
+  const getTeclaFromCoords = (x: number, y: number, layoutWidth: number) => {
+    const GAP = 6; 
+    const KEY_W = (layoutWidth - (GAP * 2)) / 3; 
+    const KEY_H = 55;
+    
+    let col = -1;
+    if (x >= 0 && x <= KEY_W) col = 0; 
+    else if (x > KEY_W && x <= KEY_W * 2 + GAP) col = 1; 
+    else if (x > KEY_W * 2 + GAP) col = 2;
+
+    let row = -1;
+    if (y >= 0 && y <= KEY_H) row = 0; 
+    else if (y > KEY_H && y <= KEY_H * 2 + GAP) row = 1; 
+    else if (y > KEY_H * 2 + GAP && y <= KEY_H * 3 + GAP * 2) row = 2; 
+    else if (y > KEY_H * 3 + GAP * 2) row = 3;
+
+    if (col === -1 || row === -1) return null;
+    const layout = [['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3'], ['apagar', '0', 'enviar']];
+    return layout[row]?.[col] || null;
+  };
+
+  const handleMultiTouchTeclado = (evt: any) => {
+    if (Platform.OS === 'web') return;
+    const touches = evt.nativeEvent.touches;
+    const currentActive = new Set<string>();
+
+    for (let i = 0; i < touches.length; i++) {
+        const x = touches[i].locationX;
+        const y = touches[i].locationY;
+        
+        // Impede que toques da tela de cima se misturem aqui caso a tela falhe na medição
+        if (x >= -20 && x <= tecladoLayoutRef.current.width + 20 && y >= -20 && y <= 300) {
+            const key = getTeclaFromCoords(x, y, tecladoLayoutRef.current.width);
+            if (key) currentActive.add(key);
+        }
+    }
+    
+    setTeclasPressionadas(Array.from(currentActive));
+
+    currentActive.forEach(key => {
+        if (!triggeredTouchesRef.current.has(key)) {
+            triggeredTouchesRef.current.add(key);
+            lidarComTeclado(key);
+        }
+    });
+
+    triggeredTouchesRef.current.forEach(key => {
+        if (!currentActive.has(key)) triggeredTouchesRef.current.delete(key);
+    });
   };
 
   const lidarComTeclado = useCallback((valor: string) => {
@@ -531,7 +575,7 @@ export default function MathBlaster() {
           el.vy += (dy/dist) * 0.4; 
         }
         const speed = Math.sqrt(el.vx*el.vx + el.vy*el.vy);
-        const maxSpeed = gs.fase === 1 ? 3 : 3 + (gs.fase * 0.6); // Escala gradualmente a velocidade homing
+        const maxSpeed = gs.fase === 1 ? 3 : 3 + (gs.fase * 0.6); 
         if (speed > maxSpeed) { 
           el.vx = (el.vx/speed) * maxSpeed; 
           el.vy = (el.vy/speed) * maxSpeed; 
@@ -553,7 +597,6 @@ export default function MathBlaster() {
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
-      
       if (gs.stateTimer % Math.max(20, 60 - gs.fase * 5) === 0) {
         const meteorVy = gs.fase === 1 ? Math.random() * 1.5 + 2 : Math.random() * 2 + 3 + (gs.fase * 0.6);
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: meteorVy, angle: 0 });
@@ -993,17 +1036,29 @@ export default function MathBlaster() {
           <View style={styles.visorRadar}>
             <Text style={styles.visorTexto}>{resposta || '_'}</Text>
           </View>
-          <View style={styles.tecladoContainer}>
+          <View style={styles.tecladoContainer} onLayout={(e) => tecladoLayoutRef.current.width = e.nativeEvent.layout.width}>
             {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((linha, i) => (
               <View key={i} style={styles.tecladoRow}>
-                {linha.map(num => <BotaoRetro key={num} valor={num} onPressWeb={lidarComTeclado}/>)}
+                {linha.map(num => <BotaoRetro key={num} valor={num} isPressed={teclasPressionadas.includes(num)} onPressWeb={lidarComTeclado}/>)}
               </View>
             ))}
             <View style={styles.tecladoRow}>
-              <BotaoRetro valor="apagar" onPressWeb={lidarComTeclado}/>
-              <BotaoRetro valor="0" onPressWeb={lidarComTeclado}/>
-              <BotaoRetro valor="enviar" onPressWeb={lidarComTeclado}/>
+              <BotaoRetro valor="apagar" isPressed={teclasPressionadas.includes('apagar')} onPressWeb={lidarComTeclado}/>
+              <BotaoRetro valor="0" isPressed={teclasPressionadas.includes('0')} onPressWeb={lidarComTeclado}/>
+              <BotaoRetro valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={lidarComTeclado}/>
             </View>
+
+            {/* A GAMBIARRA DO MULTI-TOUCH */}
+            {Platform.OS !== 'web' && (
+                <View 
+                    style={StyleSheet.absoluteFillObject} 
+                    onStartShouldSetResponder={() => true} 
+                    onResponderGrant={handleMultiTouchTeclado} 
+                    onResponderMove={handleMultiTouchTeclado} 
+                    onResponderRelease={handleMultiTouchTeclado} 
+                    onResponderTerminate={handleMultiTouchTeclado} 
+                />
+            )}
           </View>
         </View>
 
@@ -1106,10 +1161,10 @@ const styles = StyleSheet.create({
   },
   visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 6, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 6 }, 
   visorTexto: { color: '#00FFFF', fontSize: 20, fontWeight: '900', letterSpacing: 3 },
-  tecladoContainer: { width: '100%', maxWidth: 350, gap: 4 }, 
-  tecladoRow: { flexDirection: 'row', gap: 4, height: 35 }, 
-  teclaRetro: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
-  teclaRetroText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' }, 
-  teclaApagar: { backgroundColor: 'rgba(255, 68, 68, 0.15)', borderColor: '#FF4444' },
-  teclaEnviar: { backgroundColor: 'rgba(255, 0, 255, 0.15)', borderColor: '#FF00FF' },
+  tecladoContainer: { width: '100%', maxWidth: 350, gap: 6 }, 
+  tecladoRow: { flexDirection: 'row', gap: 6, height: 55 }, 
+  teclaRetro: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
+  teclaRetroText: { color: '#FFF', fontSize: 22, fontWeight: 'bold' }, 
+  teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)', borderColor: '#FF4444' },
+  teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)', borderColor: '#32CD32' },
 });
