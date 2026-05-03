@@ -1,19 +1,43 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../src/context/AuthContext';
 
 export default function MathBlasterNative() {
-  // A sua URL de produção da Vercel
-  const VERCEL_URL = 'https://modificado-para-site.vercel.app/math_blaster'; 
+  const router = useRouter();
+  const { user } = useAuth();
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const prepareUrl = async () => {
+      const token = await AsyncStorage.getItem('token');
+      // Passa o token e o ID do usuário via URL para a WebView poder autenticar as requisições
+      const vercelBase = 'https://modificado-para-site.vercel.app/math_blaster';
+      setUrl(`${vercelBase}?token=${token || ''}&userId=${user?.id || ''}`);
+    };
+    prepareUrl();
+  }, [user]);
+
+  // Função que escuta mensagens vindas do site na Vercel
+  const handleMessage = (event: any) => {
+    if (event.nativeEvent.data === 'GO_BACK') {
+      router.back(); // Fecha a tela nativa e volta para o menu do app
+    }
+  };
+
+  if (!url) return null; // Aguarda carregar as credenciais
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <WebView 
-        source={{ uri: VERCEL_URL }}
+        source={{ uri: url }}
         style={styles.webview}
         javaScriptEnabled={true}
         domStorageEnabled={true}
+        onMessage={handleMessage} // Conecta o escutador de eventos
         scrollEnabled={false} 
         bounces={false}       
         scalesPageToFit={false}
