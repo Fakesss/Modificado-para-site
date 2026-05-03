@@ -33,7 +33,8 @@ lobbies: Dict[str, dict] = {}
 matchmaking_queues = {
     'tictactoe': [],
     'arcade': [],
-    'tugofwar': [] 
+    'tugofwar': [],
+    'math_blaster': [] # CORREÇÃO: Adicionada a fila do Math Blaster
 }
 
 # ====================================================
@@ -286,6 +287,9 @@ async def accept_lobby_challenge(sid, data):
             room_id = await start_arcade_match(p1_sid, sid, desafio['modo_operacao'])
         elif desafio['game_type'] == 'tugofwar': 
             room_id = await start_tugofwar_match(p1_sid, sid, desafio['modo_operacao'])
+        # CORREÇÃO: Adicionado Math Blaster para desafios em Lobbies de Chat
+        elif desafio['game_type'] == 'math_blaster': 
+            room_id = await start_math_blaster_match(p1_sid, sid, desafio['modo_operacao'])
 
         if room_id:
             desafio['room_id'] = room_id
@@ -391,10 +395,8 @@ async def accept_invite(sid, data):
         if data.get('game_type') == 'tictactoe': await start_tictactoe_match(data.get('from_sid'), sid)
         elif data.get('game_type') == 'arcade': await start_arcade_match(data.get('from_sid'), sid, data.get('modo_operacao', 'misto'))
         elif data.get('game_type') == 'tugofwar': await start_tugofwar_match(data.get('from_sid'), sid, data.get('modo_operacao', 'misto')) 
-
-@sio.event
-async def decline_invite(sid, data):
-    if data.get('from_sid') in players_online: await sio.emit('invite_error', {'msg': f"{players_online[sid]['name']} recusou o convite."}, room=data.get('from_sid'))
+        # CORREÇÃO: Adicionado Math Blaster para Desafios Diretos
+        elif data.get('game_type') == 'math_blaster': await start_math_blaster_match(data.get('from_sid'), sid, data.get('modo_operacao', 'misto'))
 
 @sio.event
 async def get_active_matches(sid):
@@ -427,6 +429,8 @@ async def find_match(sid, data):
         if game_type == 'tictactoe': await start_tictactoe_match(p1, p2)
         elif game_type == 'arcade': await start_arcade_match(p1, p2, 'misto')
         elif game_type == 'tugofwar': await start_tugofwar_match(p1, p2, 'misto') 
+        # CORREÇÃO: Adicionado Math Blaster para Procura Aleatória
+        elif game_type == 'math_blaster': await start_math_blaster_match(p1, p2, 'misto')
 
 @sio.event
 async def cancel_matchmaking(sid):
@@ -681,6 +685,51 @@ async def tugofwar_answer(sid, data):
                 await broadcast_online_users()
     except Exception as e:
         print(f"Erro em tugofwar_answer: {e}")
+
+# ====================================================
+# 🚀 SISTEMA MATH BLASTER (CORREÇÃO)
+# ====================================================
+async def start_math_blaster_match(p1_sid, p2_sid, modo_operacao):
+    room_id = f"mb_{p1_sid[:5]}_{p2_sid[:5]}"
+    rooms[room_id] = {
+        'type': 'math_blaster',
+        'modo_operacao': modo_operacao,
+        'players': [p1_sid, p2_sid],
+        'spectators': [],
+        'names': {
+            p1_sid: players_online[p1_sid]['name'],
+            p2_sid: players_online[p2_sid]['name']
+        },
+        'host_sid': p1_sid
+    }
+    await sio.enter_room(p1_sid, room_id)
+    await sio.enter_room(p2_sid, room_id)
+    players_online[p1_sid]['status'] = players_online[p2_sid]['status'] = 'JOGANDO_ONLINE'
+    await broadcast_online_users()
+
+    await sio.emit('match_found', {
+        'room_id': room_id,
+        'game_type': 'math_blaster',
+        'is_host': True,
+        'opponentName': rooms[room_id]['names'][p2_sid]
+    }, room=p1_sid)
+
+    await sio.emit('match_found', {
+        'room_id': room_id,
+        'game_type': 'math_blaster',
+        'is_host': False,
+        'opponentName': rooms[room_id]['names'][p1_sid]
+    }, room=p2_sid)
+
+    return room_id
+
+# CORREÇÃO: Listener genérico para retransmitir eventos do Math Blaster
+@sio.event
+async def game_action(sid, data):
+    room_id = data.get('roomId')
+    if room_id in rooms:
+        await sio.emit('game_action', data, room=room_id, skip_sid=sid)
+
 
 @sio.event
 async def leave_match(sid, data):
