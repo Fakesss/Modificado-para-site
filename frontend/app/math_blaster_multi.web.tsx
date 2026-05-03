@@ -188,28 +188,47 @@ export default function MathBlasterMulti() {
 
     const joinRoom = () => {
         if (socket.connected) {
+            // Emite de várias formas para garantir que o backend Python aceite a sala
             socket.emit('join_game_room', { roomId });
+            socket.emit('join_room', { room: roomId }); 
             socket.emit('joinRoom', roomId); 
-            socket.emit('join_room', { roomId }); 
             
-            // NOVO: Handshake de Auto-Start. Se estou no menu, aviso que estou pronto.
-            if (telaRef.current === 'menu') {
-                socket.emit('game_action', { roomId, instanceId, action: 'PLAYER_READY' });
+            // HANDSHAKE DE AUTO-START CONSTANTE
+            if (telaRef.current === 'menu' && !jogoAtivoRef.current) {
+                if (!isHost) {
+                    socket.emit('game_action', { roomId, instanceId, action: 'GUEST_READY' });
+                } else {
+                    socket.emit('game_action', { roomId, instanceId, action: 'HOST_READY' });
+                }
             }
         }
     };
 
     joinRoom(); 
     socket.on('connect', joinRoom);
-    // Intervalo garante que se o outro player se atrasar alguns segundos, ele ainda receberá o aviso
-    const interval = setInterval(joinRoom, 2000);
+    // Grita para o servidor a cada 1 segundo garantindo que o outro receba quando chegar
+    const interval = setInterval(joinRoom, 1000);
 
     const handleSocketAcao = (payload: any) => {
       if (!payload || payload.instanceId === instanceId) return; 
 
-      // NOVO: Se o HOST receber que o Aliado está pronto no Menu, ele inicia o jogo automaticamente!
-      if (payload.action === 'PLAYER_READY') {
+      // SE O HOST OUVIR QUE O CONVIDADO CHEGOU -> DÁ O START NA PARTIDA PRA TODO MUNDO
+      if (payload.action === 'GUEST_READY') {
           if (isHost && telaRef.current === 'menu' && !jogoAtivoRef.current) {
+              iniciarJogo();
+          }
+      }
+
+      // SE O CONVIDADO OUVIR QUE O HOST JÁ TÁ PRONTO, ELE AVISA QUE CHEGOU
+      if (payload.action === 'HOST_READY') {
+          if (!isHost && telaRef.current === 'menu' && !jogoAtivoRef.current) {
+              socket.emit('game_action', { roomId, instanceId, action: 'GUEST_READY' });
+          }
+      }
+
+      // INICIA O JOGO SE O SINAL DE START CHEGAR
+      if (payload.action === 'START_MATCH') {
+          if (!jogoAtivoRef.current) {
               iniciarJogo();
           }
       }
@@ -235,13 +254,6 @@ export default function MathBlasterMulti() {
       if (payload.action === 'SYNC_FASE' && !isHost) {
           gs.fase = payload.data.fase;
           gs.gameState = payload.data.gameState;
-      }
-      
-      if (payload.action === 'START_MATCH') {
-          // Previne que o jogo reinicie sozinho se já estiver jogando
-          if (!jogoAtivoRef.current) {
-              iniciarJogo();
-          }
       }
     };
 
@@ -700,7 +712,7 @@ export default function MathBlasterMulti() {
   };
 
   const iniciarJogo = () => {
-    if (jogoAtivoRef.current) return; // Segurança contra double-click ou duplo evento
+    if (jogoAtivoRef.current) return; 
 
     gameOverFired.current = false;
     gs.keys = { up: false, down: false, left: false, right: false }; 
@@ -736,6 +748,9 @@ export default function MathBlasterMulti() {
 
     if (roomId && isHost) {
         socket.emit('game_action', { roomId, instanceId, action: 'START_MATCH' });
+        // Dispara algumas vezes para garantir que o cliente pegue o pacote via socket
+        setTimeout(() => { if (socket.connected) socket.emit('game_action', { roomId, instanceId, action: 'START_MATCH' }); }, 500);
+        setTimeout(() => { if (socket.connected) socket.emit('game_action', { roomId, instanceId, action: 'START_MATCH' }); }, 1000);
     }
     
     if (loopRef.current) clearInterval(loopRef.current);
@@ -809,6 +824,8 @@ export default function MathBlasterMulti() {
     if (gs.keys.right) gs.player.x += movSpeed;
 
     const aplicarDano = (dano: number) => {
+      if (gs.player.hp <= 0) return; // Impede a nave zumbi de tomar mais dano
+
       if (gs.forceShieldHits > 0) {
         gs.forceShieldHits -= 1;
         criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 5);
@@ -826,44 +843,47 @@ export default function MathBlasterMulti() {
     if (gs.player.x < 20) gs.player.x = 20; if (gs.player.x > maxX) gs.player.x = maxX;
     if (gs.player.y < 20) gs.player.y = 20; if (gs.player.y > maxY) gs.player.y = maxY;
 
-    if (now - gs.player.lastFire > gs.player.fireRate) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL', isMine: true });
-      if (gs.player.tripleShot) {
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 10, y: gs.player.y - 15, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL', isMine: true });
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 10, y: gs.player.y - 15, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL', isMine: true });
-      }
-      gs.player.lastFire = now;
-    }
+    // BLOCO DE TIRO: Só atira se o player estiver vivo
+    if (gs.player.hp > 0) {
+        if (now - gs.player.lastFire > gs.player.fireRate) {
+          gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL', isMine: true });
+          if (gs.player.tripleShot) {
+            gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 10, y: gs.player.y - 15, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL', isMine: true });
+            gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 10, y: gs.player.y - 15, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL', isMine: true });
+          }
+          gs.player.lastFire = now;
+        }
 
-    if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 3, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
-      gs.player.weapons.missile.lastFire = now;
-    }
-    
-    if (gs.player.weapons.laser.active && now - gs.player.weapons.laser.lastFire > gs.player.weapons.laser.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, vx: 0, vy: -25, damage: gs.player.damage * gs.player.weapons.laser.damageMult, size: gs.player.shotSize * 2 * gs.player.weapons.laser.sizeMult, type: 'LASER' });
-      gs.player.weapons.laser.lastFire = now;
-    }
+        if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
+          gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 3, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
+          gs.player.weapons.missile.lastFire = now;
+        }
+        
+        if (gs.player.weapons.laser.active && now - gs.player.weapons.laser.lastFire > gs.player.weapons.laser.baseCooldown) {
+          gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, vx: 0, vy: -25, damage: gs.player.damage * gs.player.weapons.laser.damageMult, size: gs.player.shotSize * 2 * gs.player.weapons.laser.sizeMult, type: 'LASER' });
+          gs.player.weapons.laser.lastFire = now;
+        }
 
-    if (gs.player.weapons.electric.active && now - gs.player.weapons.electric.lastFire > gs.player.weapons.electric.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 30, vx: 0, vy: -6, damage: gs.player.damage * gs.player.weapons.electric.damageMult, size: gs.player.shotSize * 2.5, type: 'ELECTRIC', chainCount: gs.player.weapons.electric.chainCount });
-      gs.player.weapons.electric.lastFire = now;
-    }
+        if (gs.player.weapons.electric.active && now - gs.player.weapons.electric.lastFire > gs.player.weapons.electric.baseCooldown) {
+          gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 30, vx: 0, vy: -6, damage: gs.player.damage * gs.player.weapons.electric.damageMult, size: gs.player.shotSize * 2.5, type: 'ELECTRIC', chainCount: gs.player.weapons.electric.chainCount });
+          gs.player.weapons.electric.lastFire = now;
+        }
 
-    if (gs.drones.normal.active && now - gs.drones.normal.lastFire > gs.drones.normal.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 40, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
-      gs.drones.normal.lastFire = now;
-    }
+        if (gs.drones.normal.active && now - gs.drones.normal.lastFire > gs.drones.normal.baseCooldown) {
+          gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 40, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+          gs.drones.normal.lastFire = now;
+        }
 
-    if (gs.drones.advanced.active && now - gs.drones.advanced.lastFire > gs.drones.advanced.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 30, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.5, type: 'MISSILE_HOMING', life: 9999, aoeRange: 40 });
-      gs.drones.advanced.lastFire = now;
-    }
+        if (gs.drones.advanced.active && now - gs.drones.advanced.lastFire > gs.drones.advanced.baseCooldown) {
+          gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 30, y: gs.player.y, vx: 0, vy: -5, damage: gs.player.damage * 2, size: gs.player.shotSize * 1.5, type: 'MISSILE_HOMING', life: 9999, aoeRange: 40 });
+          gs.drones.advanced.lastFire = now;
+        }
 
-    if (gs.player.weapons.pulsar.active && now - gs.player.weapons.pulsar.lastFire > gs.player.weapons.pulsar.baseCooldown) {
-      gs.pulses.push({ id: Math.random().toString(), maxRadius: gs.player.weapons.pulsar.radius, life: 20, maxLife: 20 });
-      gs.player.weapons.pulsar.lastFire = now;
-    }
+        if (gs.player.weapons.pulsar.active && now - gs.player.weapons.pulsar.lastFire > gs.player.weapons.pulsar.baseCooldown) {
+          gs.pulses.push({ id: Math.random().toString(), maxRadius: gs.player.weapons.pulsar.radius, life: 20, maxLife: 20 });
+          gs.player.weapons.pulsar.lastFire = now;
+        }
+    } // FIM DO BLOCO DE TIROS
 
     gs.pulses.forEach(p => {
       p.x = gs.player.x;
@@ -1400,20 +1420,17 @@ export default function MathBlasterMulti() {
             )}
           </View>
 
-          {(!roomId || isHost) ? (
+          {/* NOVO: No Multiplayer o botão some completamente */}
+          {!roomId ? (
             <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
               <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
             </TouchableOpacity>
           ) : (
             <View style={[styles.btnIniciar, { backgroundColor: '#333' }]}>
-              <Text style={[styles.btnIniciarTxt, { color: '#888' }]}>CONECTANDO AO LÍDER...</Text>
+              <Text style={[styles.btnIniciarTxt, { color: '#888' }]}>
+                {isHost ? 'AGUARDANDO ALIADO...' : 'CONECTANDO AO LÍDER...'}
+              </Text>
             </View>
-          )}
-
-          {roomId && isHost && tela === 'menu' && (
-            <Text style={[styles.instrucoes, { color: '#00FA9A', marginTop: 15 }]}>
-              A partida iniciará automaticamente assim que o seu aliado se conectar!
-            </Text>
           )}
 
         </ScrollView>
@@ -1434,7 +1451,7 @@ export default function MathBlasterMulti() {
           
           <Text style={styles.textoFase}>Chegou na Fase {gs.fase}</Text>
           
-          {(!roomId || isHost) && (
+          {!roomId && (
               <TouchableOpacity style={[styles.btnIniciar, { marginTop: 40 }]} onPress={iniciarJogo}>
                 <Text style={styles.btnIniciarTxt}>TENTAR NOVAMENTE</Text>
               </TouchableOpacity>
