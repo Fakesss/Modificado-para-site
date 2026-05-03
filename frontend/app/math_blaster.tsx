@@ -28,10 +28,7 @@ const BotaoRetro = ({ valor, onPressWeb }: { valor: string, onPressWeb: (v: stri
   const isWeb = Platform.OS === 'web';
 
   return (
-    <Animated.View style="{[getStyle()," { transform: [{ scale: anim }], flex: 1 }]} onTouchStart="{handlePressIn}" onTouchEnd="{handlePressOut}" onTouchCancel="{handlePressOut}" onMouseDown="{isWeb" ? handlePressIn : undefined} onMouseUp="{isWeb" handlePressOut onMouseLeave="{isWeb">
-      {valor === 'apagar' && <Ionicons name="backspace" size="{20}" color="#FFF"/>}
-      {valor === 'enviar' && <Ionicons name="flash" size="{20}" color="#FFF"/>}
-      {valor !== 'apagar' && valor !== 'enviar' && <Text style="{styles.teclaRetroText}">{valor}</Text>}
+    <Animated.View style="{[getStyle()," { transform: [{ scale: anim }], flex: 1 }]} onTouchStart="{handlePressIn}" onTouchEnd="{handlePressOut}" onTouchCancel="{handlePressOut}" onMouseDown="{isWeb" ? handlePressIn : undefined} onMouseUp="{isWeb" handlePressOut onMouseLeave="{isWeb"> {valor === 'apagar' && <Ionicons name="backspace" size="{20}" color="#FFF"/>} {valor === 'enviar' && <Ionicons name="flash" size="{20}" color="#FFF"/>} {valor !== 'apagar' && valor !== 'enviar' && <Text style="{styles.teclaRetroText}">{valor}</Text>}
     </Animated.View>
   );
 };
