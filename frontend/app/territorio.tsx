@@ -1,21 +1,23 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Polygon, Text as SvgText, G } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-// --- CONFIGURAÇÕES ISOMÉTRICAS E DA GRADE AXIAL ---
-const HEX_SIZE = 38;
-const SQUASH = 0.55; 
-const THICKNESS = 14; 
-const MAP_SIZE = 9; // Tamanho da Grade Diamante (9x9)
+// --- CONFIGURAÇÕES ISOMÉTRICAS ---
+const HEX_SIZE = 40;
+const SQUASH = 0.45; 
+const THICKNESS = 18; 
+const MAP_ROWS = 12;
+const MAP_COLS = 8;
+const INCOME_PER_HEX = 0.1; // Rendimento fracionado!
 
-// A largura e altura total do mapa para o Web não distorcer o SVG
-const MAP_WIDTH = HEX_SIZE * Math.sqrt(3) * (MAP_SIZE + MAP_SIZE / 2) + 150;
-const MAP_HEIGHT = HEX_SIZE * 1.5 * MAP_SIZE * SQUASH + 150;
+const HEX_WIDTH = Math.sqrt(3) * HEX_SIZE;
+const HEX_HEIGHT = 2 * HEX_SIZE * SQUASH;
+const MAP_WIDTH = HEX_WIDTH * MAP_COLS + 100;
+const MAP_HEIGHT = HEX_SIZE * 1.5 * MAP_ROWS * SQUASH + 100;
 
-// Geometria da Ponta do Hexágono
 const getHexPoints = (cx: number, cy: number, size: number) => {
   let points = [];
   for (let i = 0; i < 6; i++) {
@@ -26,11 +28,10 @@ const getHexPoints = (cx: number, cy: number, size: number) => {
   return points.join(' ');
 };
 
-// Conversão de Coordenadas AXIAIS para Pixel (Cria a Visão Diagonal!)
-const getPixelCoords = (q: number, r: number) => {
-  const x = HEX_SIZE * Math.sqrt(3) * (q + r / 2);
-  const y = HEX_SIZE * 1.5 * r * SQUASH;
-  return { x: x + 80, y: y + 80 }; // +80 é a margem interna do SVG
+const getPixelCoords = (row: number, col: number) => {
+  const x = HEX_WIDTH * (col + 0.5 * (row & 1));
+  const y = (HEX_SIZE * 1.5 * row) * SQUASH;
+  return { x: x + 60, y: y + 60 }; 
 };
 
 // --- DADOS DAS EQUIPES ---
@@ -41,29 +42,24 @@ const EQUIPES = {
   VERDE: { id: 3, nome: 'Equipe Verde', cor: '#32CD32', sombra: '#006400' },
 };
 
-// --- GERAÇÃO DO MAPA LOSANGO (DIAGONAL) ---
 const gerarMapa = () => {
   const mapa = [];
-  // Loop q e r gera o tabuleiro em forma de diamante natural
-  for (let q = 0; q < MAP_SIZE; q++) {
-    for (let r = 0; r < MAP_SIZE; r++) {
+  for (let row = 0; row < MAP_ROWS; row++) {
+    for (let col = 0; col < MAP_COLS; col++) {
       let equipe = EQUIPES.NEUTRO;
       let hp = 0;
       let isBase = false;
 
-      // Definindo as 3 bases fixas nos cantos do diamante
-      if (q === 1 && r === 1) { equipe = EQUIPES.AZUL; hp = 999; isBase = true; }
-      else if (q === 7 && r === 1) { equipe = EQUIPES.VERMELHA; hp = 999; isBase = true; }
-      else if (q === 4 && r === 7) { equipe = EQUIPES.VERDE; hp = 999; isBase = true; }
+      if (row === 2 && col === 2) { equipe = EQUIPES.AZUL; hp = 999; isBase = true; }
+      else if (row === 2 && col === 6) { equipe = EQUIPES.VERMELHA; hp = 999; isBase = true; }
+      else if (row === 9 && col === 4) { equipe = EQUIPES.VERDE; hp = 999; isBase = true; }
       else {
-        // Territórios para dar vida ao protótipo
         const rand = Math.random();
-        if (rand > 0.88) { equipe = EQUIPES.AZUL; hp = Math.floor(Math.random() * 40) + 10; }
-        else if (rand > 0.76) { equipe = EQUIPES.VERMELHA; hp = Math.floor(Math.random() * 40) + 10; }
-        else if (rand > 0.64) { equipe = EQUIPES.VERDE; hp = Math.floor(Math.random() * 40) + 10; }
+        if (rand > 0.85) { equipe = EQUIPES.AZUL; hp = Math.floor(Math.random() * 40) + 10; }
+        else if (rand > 0.70) { equipe = EQUIPES.VERMELHA; hp = Math.floor(Math.random() * 40) + 10; }
+        else if (rand > 0.55) { equipe = EQUIPES.VERDE; hp = Math.floor(Math.random() * 40) + 10; }
       }
-
-      mapa.push({ id: `${q}-${r}`, q, r, equipe, hp, isBase });
+      mapa.push({ id: `${row}-${col}`, row, col, equipe, hp, isBase });
     }
   }
   return mapa;
@@ -76,37 +72,75 @@ export default function TerritorioMap() {
   const [mapa, setMapa] = useState(MAPA_INICIAL);
   const [hexSelecionado, setHexSelecionado] = useState<any>(null);
   
-  // Usuário Atual
   const [meusPDs, setMeusPDs] = useState(250); 
-  const [valorGastoText, setValorGastoText] = useState('10'); // Input livre usa string
-  const minhaEquipe = EQUIPES.AZUL; // Fixo para teste
+  const [valorGastoText, setValorGastoText] = useState('10'); 
+  const minhaEquipe = EQUIPES.AZUL; 
 
-  // A MATEMÁTICA CORRIGIDA DA BARRA DE PROGRESSO
+  // ESTADO DAS PARTÍCULAS FLUTUANTES (Efeito Visual de Renda)
+  const [particulas, setParticulas] = useState<any[]>([]);
+  const mapaRef = useRef(mapa);
+  
+  // Atualiza a ref do mapa sempre que ele muda para a animação ter os dados recentes
+  useEffect(() => { mapaRef.current = mapa; }, [mapa]);
+
+  // Lógica das Partículas Flutuantes
+  useEffect(() => {
+    // 1. Spawner: Cria novas partículas a cada 2 segundos nos territórios da equipe
+    const spawnInterval = setInterval(() => {
+      const territoriosDaEquipe = mapaRef.current.filter(h => h.equipe.id === minhaEquipe.id && !h.isBase);
+      if (territoriosDaEquipe.length > 0) {
+        const novasParticulas = [];
+        // Escolhe até 3 territórios aleatórios por vez para soltar a moedinha
+        const qtd = Math.min(3, territoriosDaEquipe.length);
+        for(let i=0; i<qtd; i++) {
+          const hex = territoriosDaEquipe[Math.floor(Math.random() * territoriosDaEquipe.length)];
+          const {x, y} = getPixelCoords(hex.row, hex.col);
+          novasParticulas.push({ 
+            id: Math.random().toString(), 
+            x, 
+            y: y - 10, 
+            text: `+${INCOME_PER_HEX}`, 
+            opacity: 1 
+          });
+        }
+        setParticulas(prev => [...prev, ...novasParticulas]);
+      }
+    }, 2000);
+
+    // 2. Animador: Sobe a partícula e diminui a opacidade a cada 50ms
+    const animInterval = setInterval(() => {
+      setParticulas(prev => {
+        let next = prev.map(p => ({ ...p, y: p.y - 1.5, opacity: p.opacity - 0.05 }));
+        return next.filter(p => p.opacity > 0); // Remove as que sumiram
+      });
+    }, 50);
+
+    return () => { clearInterval(spawnInterval); clearInterval(animInterval); };
+  }, []);
+
   const stats = useMemo(() => {
     let counts = { [EQUIPES.AZUL.id]: 0, [EQUIPES.VERMELHA.id]: 0, [EQUIPES.VERDE.id]: 0 };
+    let totalOcupado = 0;
     
-    // Conta apenas os territórios ocupados pelas equipes
     mapa.forEach(h => { 
         if (h.equipe.id !== EQUIPES.NEUTRO.id) {
             counts[h.equipe.id]++; 
+            totalOcupado++;
         }
     });
 
-    const totalOcupado = counts[EQUIPES.AZUL.id] + counts[EQUIPES.VERMELHA.id] + counts[EQUIPES.VERDE.id];
-
-    // Se o mapa estiver todo cinza, previne erro de divisão por zero
-    if (totalOcupado === 0) return { azul: 0, vermelha: 0, verde: 0 };
+    if (totalOcupado === 0) return { pctAzul: 0, pctVermelha: 0, pctVerde: 0, renda: 0 };
 
     return {
-      azul: (counts[EQUIPES.AZUL.id] / totalOcupado) * 100,
-      vermelha: (counts[EQUIPES.VERMELHA.id] / totalOcupado) * 100,
-      verde: (counts[EQUIPES.VERDE.id] / totalOcupado) * 100,
+      pctAzul: (counts[EQUIPES.AZUL.id] / totalOcupado) * 100,
+      pctVermelha: (counts[EQUIPES.VERMELHA.id] / totalOcupado) * 100,
+      pctVerde: (counts[EQUIPES.VERDE.id] / totalOcupado) * 100,
+      renda: counts[minhaEquipe.id] * INCOME_PER_HEX 
     };
-  }, [mapa]);
+  }, [mapa, minhaEquipe]);
 
   const handleHexClick = (hex: any) => {
     setHexSelecionado(hex);
-    setValorGastoText('10'); // Volta pro padrão ao trocar de hexágono
   };
 
   const mudarValorBotao = (delta: number) => {
@@ -118,34 +152,19 @@ export default function TerritorioMap() {
   };
 
   const handleInputValor = (texto: string) => {
-    // Remove qualquer coisa que não seja número
     let numTexto = texto.replace(/[^0-9]/g, '');
     let num = parseInt(numTexto, 10);
-    
-    if (isNaN(num)) {
-        setValorGastoText('');
-        return;
-    }
-    
-    if (num > meusPDs) num = meusPDs; // Limita ao dinheiro máximo que o jogador tem
+    if (isNaN(num)) { setValorGastoText(''); return; }
+    if (num > meusPDs) num = meusPDs;
     setValorGastoText(String(num));
   };
 
   const handleAcao = () => {
     const gastoFinal = parseInt(valorGastoText || '0', 10);
 
-    if (!hexSelecionado || gastoFinal <= 0) {
-        alert("Insira um valor válido de PDs.");
-        return;
-    }
-    if (gastoFinal > meusPDs) {
-        alert("PDs insuficientes!");
-        return;
-    }
-    if (hexSelecionado.isBase && hexSelecionado.equipe.id !== minhaEquipe.id) {
-        alert("As torres base inimigas são indestrutíveis no momento!");
-        return;
-    }
+    if (!hexSelecionado || gastoFinal <= 0) return;
+    if (gastoFinal > meusPDs) { alert("PDs insuficientes!"); return; }
+    if (hexSelecionado.isBase && hexSelecionado.equipe.id !== minhaEquipe.id) { alert("Bases inimigas são imunes!"); return; }
 
     setMeusPDs(meusPDs - gastoFinal);
 
@@ -156,26 +175,19 @@ export default function TerritorioMap() {
           let novoHp = h.hp;
 
           if (h.equipe.id === minhaEquipe.id) {
-            // Fortificar o próprio território
             novoHp += gastoFinal;
           } else if (h.equipe.id === EQUIPES.NEUTRO.id) {
-            // Conquistar vazio
             novaEquipe = minhaEquipe;
             novoHp = gastoFinal;
           } else {
-            // Combate: Subtrai o HP inimigo
             novoHp -= gastoFinal;
-            
             if (novoHp < 0) {
-              // Dano sobrou! O território agora é nosso com a vida que sobrou.
               novaEquipe = minhaEquipe;
               novoHp = Math.abs(novoHp); 
             } else if (novoHp === 0) {
-              // Empate! Ninguém fica com o território.
               novaEquipe = EQUIPES.NEUTRO;
             }
           }
-
           const atualizado = { ...h, equipe: novaEquipe, hp: novoHp };
           setHexSelecionado(atualizado); 
           return atualizado;
@@ -195,6 +207,8 @@ export default function TerritorioMap() {
           </TouchableOpacity>
           <View style={styles.headerInfo}>
             <Text style={styles.title}>Mapa de Guerra</Text>
+            {/* Exibe o valor da renda diária/horária fracionada */}
+            <Text style={styles.incomeText}>Sua Renda: +{stats.renda.toFixed(1)} PD/h</Text>
           </View>
           <View style={styles.pdBadge}>
             <Ionicons name="flash" size={16} color="#FFD700" />
@@ -202,68 +216,62 @@ export default function TerritorioMap() {
           </View>
         </View>
 
-        {/* --- BARRA DINÂMICA DE DOMÍNIO GLOBAL --- */}
         <View style={styles.progressBarContainer}>
-          <View style={[styles.progressSegment, { width: `${stats.azul}%`, backgroundColor: EQUIPES.AZUL.cor }]} />
-          <View style={[styles.progressSegment, { width: `${stats.vermelha}%`, backgroundColor: EQUIPES.VERMELHA.cor }]} />
-          <View style={[styles.progressSegment, { width: `${stats.verde}%`, backgroundColor: EQUIPES.VERDE.cor }]} />
+          <View style={[styles.progressSegment, { width: `${stats.pctAzul}%`, backgroundColor: EQUIPES.AZUL.cor }]} />
+          <View style={[styles.progressSegment, { width: `${stats.pctVermelha}%`, backgroundColor: EQUIPES.VERMELHA.cor }]} />
+          <View style={[styles.progressSegment, { width: `${stats.pctVerde}%`, backgroundColor: EQUIPES.VERDE.cor }]} />
         </View>
         <Text style={styles.progressText}>
-          Influência: Azul {stats.azul.toFixed(1)}% | Verm. {stats.vermelha.toFixed(1)}% | Verde {stats.verde.toFixed(1)}%
+          Influência: Azul {stats.pctAzul.toFixed(1)}% | Verm. {stats.pctVermelha.toFixed(1)}% | Verde {stats.pctVerde.toFixed(1)}%
         </Text>
       </View>
 
-      {/* --- MAPA ISOMÉTRICO DIAGONAL (SVG) --- */}
-      {/* O ScrollView precisa de uma View com tamanho EXATO dentro dele para evitar a distorção na Web */}
+      {/* --- MAPA ISOMÉTRICO --- */}
       <ScrollView horizontal={true} contentContainerStyle={{ flexGrow: 1 }} style={styles.mapContainer}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 10 }}>
           
           <View style={{ width: MAP_WIDTH, height: MAP_HEIGHT }}>
             <Svg width="100%" height="100%" viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}>
+              {/* RENDER DOS HEXÁGONOS */}
               {mapa.map((hex) => {
-                const { x, y } = getPixelCoords(hex.q, hex.r);
+                const { x, y } = getPixelCoords(hex.row, hex.col);
                 const isSelected = hexSelecionado?.id === hex.id;
                 
                 return (
                   <G key={hex.id} onPress={() => handleHexClick(hex)}>
-                    {/* CAMADA 1: SOMBRA DO HEXÁGONO (ALTURA 3D) */}
-                    <Polygon
-                      points={getHexPoints(x, y + THICKNESS, HEX_SIZE - 1)}
-                      fill={hex.equipe.sombra}
-                    />
-                    {/* CAMADA 2: TOPO DO HEXÁGONO */}
-                    <Polygon
-                      points={getHexPoints(x, y, HEX_SIZE - 1)}
-                      fill={hex.equipe.cor}
-                      stroke={isSelected ? '#FFF' : 'rgba(255,255,255,0.1)'}
-                      strokeWidth={isSelected ? 3 : 1}
-                    />
+                    <Polygon points={getHexPoints(x, y + THICKNESS, HEX_SIZE - 1)} fill={hex.equipe.sombra} />
+                    <Polygon points={getHexPoints(x, y, HEX_SIZE - 1)} fill={hex.equipe.cor} stroke={isSelected ? '#FFF' : 'rgba(255,255,255,0.1)'} strokeWidth={isSelected ? 3 : 1} />
                     
-                    {/* CAMADA 3: A TORRE (SE FOR BASE FIXA) */}
                     {hex.isBase && (
                       <G>
-                        <Polygon points={`${x-12},${y+5} ${x+12},${y+5} ${x+12},${y-20} ${x-12},${y-20}`} fill={hex.equipe.sombra} />
-                        <Polygon points={`${x-16},${y-20} ${x},${y-38} ${x+16},${y-20}`} fill="#FFD700" />
-                        <SvgText x={x} y={y - 8} fill="#FFF" fontSize="11" fontWeight="bold" textAnchor="middle">⭐</SvgText>
+                        <Polygon points={`${x-14},${y+6} ${x+14},${y+6} ${x+14},${y-22} ${x-14},${y-22}`} fill={hex.equipe.sombra} />
+                        <Polygon points={`${x-18},${y-22} ${x},${y-42} ${x+18},${y-22}`} fill="#FFD700" />
+                        <SvgText x={x} y={y - 8} fill="#FFF" fontSize="12" fontWeight="bold" textAnchor="middle">⭐</SvgText>
                       </G>
                     )}
 
-                    {/* CAMADA 4: TEXTO DO HP */}
                     {!hex.isBase && hex.hp > 0 && (
-                      <SvgText
-                        x={x}
-                        y={y + 5} 
-                        fill="#FFF"
-                        fontSize="14"
-                        fontWeight="bold"
-                        textAnchor="middle"
-                      >
-                        {hex.hp}
-                      </SvgText>
+                      <SvgText x={x} y={y + 5} fill="#FFF" fontSize="14" fontWeight="bold" textAnchor="middle">{hex.hp}</SvgText>
                     )}
                   </G>
                 );
               })}
+
+              {/* RENDER DAS PARTÍCULAS (No final do SVG para ficarem por cima de tudo) */}
+              {particulas.map(p => (
+                <SvgText 
+                  key={p.id} 
+                  x={p.x} 
+                  y={p.y} 
+                  fill="#32CD32" 
+                  fontSize="16" 
+                  fontWeight="900" 
+                  textAnchor="middle" 
+                  opacity={p.opacity}
+                >
+                  {p.text}
+                </SvgText>
+              ))}
             </Svg>
           </View>
 
@@ -276,7 +284,7 @@ export default function TerritorioMap() {
           <View style={styles.panelContent}>
             
             <View style={styles.hexInfo}>
-              <Text style={styles.hexCoord}>Setor {hexSelecionado.q}-{hexSelecionado.r} {hexSelecionado.isBase ? '(BASE)' : ''}</Text>
+              <Text style={styles.hexCoord}>Setor {hexSelecionado.row}-{hexSelecionado.col} {hexSelecionado.isBase ? '(BASE)' : ''}</Text>
               <Text style={[styles.hexEquipe, { color: hexSelecionado.equipe.cor }]}>
                 {hexSelecionado.equipe.nome}
               </Text>
@@ -290,11 +298,10 @@ export default function TerritorioMap() {
                     <Text style={styles.investTitle}>Investir PD:</Text>
                     
                     <View style={styles.amountSelector}>
-                        <TouchableOpacity style={styles.btnMath} onPress={() => mudarValorBotao(-10)}>
+                        <TouchableOpacity style={styles.btnMath} onPress={() => mudarValorBotao(-1)}>
                             <Ionicons name="remove" size={16} color="#FFF"/>
                         </TouchableOpacity>
                         
-                        {/* INPUT LIVRE DE VALOR */}
                         <TextInput
                             style={styles.amountInput}
                             value={valorGastoText}
@@ -304,7 +311,7 @@ export default function TerritorioMap() {
                             maxLength={5}
                         />
                         
-                        <TouchableOpacity style={styles.btnMath} onPress={() => mudarValorBotao(10)}>
+                        <TouchableOpacity style={styles.btnMath} onPress={() => mudarValorBotao(1)}>
                             <Ionicons name="add" size={16} color="#FFF"/>
                         </TouchableOpacity>
                     </View>
@@ -323,7 +330,7 @@ export default function TerritorioMap() {
             {hexSelecionado.isBase && (
                 <View style={styles.actionControls}>
                     <Text style={{color: '#888', fontStyle: 'italic', fontSize: 12, textAlign: 'right'}}>
-                        Bases indestrutíveis. Expanda pelas bordas!
+                        Bases indestrutíveis. Domine os arredores!
                     </Text>
                 </View>
             )}
@@ -332,7 +339,7 @@ export default function TerritorioMap() {
         ) : (
           <View style={styles.panelEmpty}>
             <Ionicons name="map-outline" size={32} color="#555" />
-            <Text style={styles.panelEmptyText}>Toque em um território no mapa de guerra para planejar sua estratégia.</Text>
+            <Text style={styles.panelEmptyText}>Selecione um território no mapa para planejar sua estratégia e aumentar sua renda de PDs.</Text>
           </View>
         )}
       </View>
@@ -347,6 +354,7 @@ const styles = StyleSheet.create({
   backBtn: { marginRight: 15 },
   headerInfo: { flex: 1 },
   title: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  incomeText: { color: '#32CD32', fontSize: 12, fontWeight: 'bold', marginTop: 2 },
   
   pdBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 215, 0, 0.2)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15, borderWidth: 1, borderColor: '#FFD700' },
   pdText: { color: '#FFD700', fontWeight: 'bold', marginLeft: 5 },
