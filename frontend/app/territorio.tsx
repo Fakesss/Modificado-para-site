@@ -27,7 +27,7 @@ const getPixelCoords = (row: number, col: number) => {
   return { x: x + HEX_WIDTH, y: y + HEX_HEIGHT }; 
 };
 
-// --- DADOS FALSOS (MOCK) PARA O TESTE VISUAL ---
+// --- DADOS FARSOS (MOCK) PARA O TESTE VISUAL ---
 const EQUIPES = {
   NEUTRO: { id: 0, nome: 'Neutro', cor: '#333333' },
   AZUL: { id: 1, nome: 'Equipe Azul', cor: '#4169E1' },
