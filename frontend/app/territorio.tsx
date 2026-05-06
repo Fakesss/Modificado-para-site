@@ -11,7 +11,10 @@ const SQUASH = 0.45;
 const THICKNESS = 18; 
 const MAP_ROWS = 12;
 const MAP_COLS = 8;
-const INCOME_PER_HEX = 0.1; // Rendimento fracionado!
+
+// --- CONFIGURAÇÕES DA ECONOMIA ESCASSA ---
+const FRAGMENTS_PER_POINT = 100; // 100 Fragmentos = 1 Ponto de Ranking
+const FRAGMENTS_PER_HEX_PER_HOUR = 0.5; // O que dá cerca de 1 ponto/dia para quem tem 8 territórios
 
 const HEX_WIDTH = Math.sqrt(3) * HEX_SIZE;
 const HEX_HEIGHT = 2 * HEX_SIZE * SQUASH;
@@ -76,72 +79,75 @@ export default function TerritorioMap() {
   const [valorGastoText, setValorGastoText] = useState('10'); 
   const minhaEquipe = EQUIPES.AZUL; 
 
-  // ESTADO DAS PARTÍCULAS FLUTUANTES (Efeito Visual de Renda)
+  // --- NOVOS ESTADOS DA ECONOMIA (RANKING) ---
+  // Inicia com 95 fragmentos para você ver a barra enchendo e resetando rápido no teste!
+  const [fragmentos, setFragmentos] = useState(95); 
+  const [pontosGanhosHoje, setPontosGanhosHoje] = useState(0);
+
   const [particulas, setParticulas] = useState<any[]>([]);
   const mapaRef = useRef(mapa);
-  
-  // Atualiza a ref do mapa sempre que ele muda para a animação ter os dados recentes
   useEffect(() => { mapaRef.current = mapa; }, [mapa]);
 
-  // Lógica das Partículas Flutuantes
+  // Efeito Visual de Coleta Real
   useEffect(() => {
-    // 1. Spawner: Cria novas partículas a cada 2 segundos nos territórios da equipe
+    // A cada 3.5 segundos, um território coleta 1 Fragmento real para a equipe
     const spawnInterval = setInterval(() => {
       const territoriosDaEquipe = mapaRef.current.filter(h => h.equipe.id === minhaEquipe.id && !h.isBase);
       if (territoriosDaEquipe.length > 0) {
-        const novasParticulas = [];
-        // Escolhe até 3 territórios aleatórios por vez para soltar a moedinha
-        const qtd = Math.min(3, territoriosDaEquipe.length);
-        for(let i=0; i<qtd; i++) {
-          const hex = territoriosDaEquipe[Math.floor(Math.random() * territoriosDaEquipe.length)];
-          const {x, y} = getPixelCoords(hex.row, hex.col);
-          novasParticulas.push({ 
-            id: Math.random().toString(), 
-            x, 
-            y: y - 10, 
-            text: `+${INCOME_PER_HEX}`, 
-            opacity: 1 
-          });
-        }
-        setParticulas(prev => [...prev, ...novasParticulas]);
+        const hex = territoriosDaEquipe[Math.floor(Math.random() * territoriosDaEquipe.length)];
+        const {x, y} = getPixelCoords(hex.row, hex.col);
+        
+        // Dispara a animação visual
+        setParticulas(prev => [...prev, { id: Math.random().toString(), x, y: y - 10, text: `+1 Frag`, opacity: 1 }]);
+        
+        // Enche a barra real
+        setFragmentos(prevFrag => {
+            const novoValor = prevFrag + 1;
+            // Se chegou em 100, reseta e dá 1 ponto inteiro!
+            if (novoValor >= FRAGMENTS_PER_POINT) {
+                setPontosGanhosHoje(p => p + 1);
+                return 0; // Volta pro zero
+            }
+            return novoValor;
+        });
       }
-    }, 2000);
+    }, 3500); // 3.5s no protótipo. No app real será calculado pelo backend.
 
-    // 2. Animador: Sobe a partícula e diminui a opacidade a cada 50ms
     const animInterval = setInterval(() => {
       setParticulas(prev => {
         let next = prev.map(p => ({ ...p, y: p.y - 1.5, opacity: p.opacity - 0.05 }));
-        return next.filter(p => p.opacity > 0); // Remove as que sumiram
+        return next.filter(p => p.opacity > 0);
       });
     }, 50);
 
     return () => { clearInterval(spawnInterval); clearInterval(animInterval); };
-  }, []);
+  }, [minhaEquipe.id]);
 
+  // Cálculos de Estatísticas (Influência e Renda Estimada)
   const stats = useMemo(() => {
     let counts = { [EQUIPES.AZUL.id]: 0, [EQUIPES.VERMELHA.id]: 0, [EQUIPES.VERDE.id]: 0 };
     let totalOcupado = 0;
     
     mapa.forEach(h => { 
-        if (h.equipe.id !== EQUIPES.NEUTRO.id) {
-            counts[h.equipe.id]++; 
-            totalOcupado++;
-        }
+        if (h.equipe.id !== EQUIPES.NEUTRO.id) { counts[h.equipe.id]++; totalOcupado++; }
     });
 
-    if (totalOcupado === 0) return { pctAzul: 0, pctVermelha: 0, pctVerde: 0, renda: 0 };
+    if (totalOcupado === 0) return { pctAzul: 0, pctVermelha: 0, pctVerde: 0, ptsPorDia: 0 };
+
+    // Calcula quantos Pontos Reais a equipe vai ganhar por dia com os territórios atuais
+    const fragsPorHora = counts[minhaEquipe.id] * FRAGMENTS_PER_HEX_PER_HOUR;
+    const ptsPorDia = (fragsPorHora * 24) / FRAGMENTS_PER_POINT;
 
     return {
       pctAzul: (counts[EQUIPES.AZUL.id] / totalOcupado) * 100,
       pctVermelha: (counts[EQUIPES.VERMELHA.id] / totalOcupado) * 100,
       pctVerde: (counts[EQUIPES.VERDE.id] / totalOcupado) * 100,
-      renda: counts[minhaEquipe.id] * INCOME_PER_HEX 
+      ptsPorDia: ptsPorDia 
     };
   }, [mapa, minhaEquipe]);
 
-  const handleHexClick = (hex: any) => {
-    setHexSelecionado(hex);
-  };
+  // Ações de Clique e Investimento
+  const handleHexClick = (hex: any) => setHexSelecionado(hex);
 
   const mudarValorBotao = (delta: number) => {
     let num = parseInt(valorGastoText || '0', 10);
@@ -161,7 +167,6 @@ export default function TerritorioMap() {
 
   const handleAcao = () => {
     const gastoFinal = parseInt(valorGastoText || '0', 10);
-
     if (!hexSelecionado || gastoFinal <= 0) return;
     if (gastoFinal > meusPDs) { alert("PDs insuficientes!"); return; }
     if (hexSelecionado.isBase && hexSelecionado.equipe.id !== minhaEquipe.id) { alert("Bases inimigas são imunes!"); return; }
@@ -174,19 +179,12 @@ export default function TerritorioMap() {
           let novaEquipe = h.equipe;
           let novoHp = h.hp;
 
-          if (h.equipe.id === minhaEquipe.id) {
-            novoHp += gastoFinal;
-          } else if (h.equipe.id === EQUIPES.NEUTRO.id) {
-            novaEquipe = minhaEquipe;
-            novoHp = gastoFinal;
-          } else {
+          if (h.equipe.id === minhaEquipe.id) { novoHp += gastoFinal; } 
+          else if (h.equipe.id === EQUIPES.NEUTRO.id) { novaEquipe = minhaEquipe; novoHp = gastoFinal; } 
+          else {
             novoHp -= gastoFinal;
-            if (novoHp < 0) {
-              novaEquipe = minhaEquipe;
-              novoHp = Math.abs(novoHp); 
-            } else if (novoHp === 0) {
-              novaEquipe = EQUIPES.NEUTRO;
-            }
+            if (novoHp < 0) { novaEquipe = minhaEquipe; novoHp = Math.abs(novoHp); } 
+            else if (novoHp === 0) { novaEquipe = EQUIPES.NEUTRO; }
           }
           const atualizado = { ...h, equipe: novaEquipe, hp: novoHp };
           setHexSelecionado(atualizado); 
@@ -199,7 +197,7 @@ export default function TerritorioMap() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* --- HEADER --- */}
+      {/* --- HEADER COM DUAS BARRAS --- */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -207,8 +205,8 @@ export default function TerritorioMap() {
           </TouchableOpacity>
           <View style={styles.headerInfo}>
             <Text style={styles.title}>Mapa de Guerra</Text>
-            {/* Exibe o valor da renda diária/horária fracionada */}
-            <Text style={styles.incomeText}>Sua Renda: +{stats.renda.toFixed(1)} PD/h</Text>
+            {/* Exibe a estimativa real de pontos */}
+            <Text style={styles.incomeText}>Estimativa: +{stats.ptsPorDia.toFixed(1)} Pts/dia</Text>
           </View>
           <View style={styles.pdBadge}>
             <Ionicons name="flash" size={16} color="#FFD700" />
@@ -216,6 +214,18 @@ export default function TerritorioMap() {
           </View>
         </View>
 
+        {/* 1. NOVA BARRA: Progresso de Fragmentos para Pontos de Ranking */}
+        <View style={styles.rankingBarWrapper}>
+            <View style={styles.rankingBarHeader}>
+                <Text style={styles.rankingTextTitle}>Ganhos Hoje: <Text style={{color: '#FFD700', fontWeight: '900'}}>{pontosGanhosHoje} Pts</Text></Text>
+                <Text style={styles.rankingTextProg}>Progresso: {fragmentos}/{FRAGMENTS_PER_POINT}</Text>
+            </View>
+            <View style={styles.rankingBarContainer}>
+                <View style={[styles.rankingBarFill, { width: `${(fragmentos / FRAGMENTS_PER_POINT) * 100}%` }]} />
+            </View>
+        </View>
+
+        {/* 2. BARRA DE INFLUÊNCIA GLOBAL */}
         <View style={styles.progressBarContainer}>
           <View style={[styles.progressSegment, { width: `${stats.pctAzul}%`, backgroundColor: EQUIPES.AZUL.cor }]} />
           <View style={[styles.progressSegment, { width: `${stats.pctVermelha}%`, backgroundColor: EQUIPES.VERMELHA.cor }]} />
@@ -257,7 +267,7 @@ export default function TerritorioMap() {
                 );
               })}
 
-              {/* RENDER DAS PARTÍCULAS (No final do SVG para ficarem por cima de tudo) */}
+              {/* RENDER DAS PARTÍCULAS REAIS (Os "+1 Frag") */}
               {particulas.map(p => (
                 <SvgText 
                   key={p.id} 
@@ -339,7 +349,7 @@ export default function TerritorioMap() {
         ) : (
           <View style={styles.panelEmpty}>
             <Ionicons name="map-outline" size={32} color="#555" />
-            <Text style={styles.panelEmptyText}>Selecione um território no mapa para planejar sua estratégia e aumentar sua renda de PDs.</Text>
+            <Text style={styles.panelEmptyText}>Selecione um território no mapa para planejar sua estratégia e aumentar a renda de pontos da sua equipe.</Text>
           </View>
         )}
       </View>
@@ -350,7 +360,7 @@ export default function TerritorioMap() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#050015' },
   header: { padding: 15, backgroundColor: '#1a1a2e', borderBottomWidth: 1, borderBottomColor: '#333' },
-  headerTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  headerTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   backBtn: { marginRight: 15 },
   headerInfo: { flex: 1 },
   title: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
@@ -359,6 +369,14 @@ const styles = StyleSheet.create({
   pdBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 215, 0, 0.2)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15, borderWidth: 1, borderColor: '#FFD700' },
   pdText: { color: '#FFD700', fontWeight: 'bold', marginLeft: 5 },
   
+  // Estilos da Nova Barra de Fragmentos (Ranking)
+  rankingBarWrapper: { marginBottom: 10, backgroundColor: 'rgba(255, 215, 0, 0.05)', padding: 8, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255, 215, 0, 0.2)' },
+  rankingBarHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+  rankingTextTitle: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+  rankingTextProg: { color: '#FFD700', fontSize: 12, fontWeight: 'bold' },
+  rankingBarContainer: { height: 6, width: '100%', backgroundColor: '#222', borderRadius: 3, overflow: 'hidden' },
+  rankingBarFill: { height: '100%', backgroundColor: '#FFD700' }, // Ouro puro!
+
   progressBarContainer: { flexDirection: 'row', height: 8, width: '100%', backgroundColor: '#222', borderRadius: 4, overflow: 'hidden', marginBottom: 5 },
   progressSegment: { height: '100%' },
   progressText: { color: '#888', fontSize: 10, textAlign: 'center', fontWeight: 'bold' },
