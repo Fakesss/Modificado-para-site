@@ -1,18 +1,21 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Polygon, Text as SvgText, G } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-// --- CONFIGURAÇÕES ISOMÉTRICAS DO HEXÁGONO ---
-const HEX_SIZE = 40;
-const SQUASH = 0.6; // Amassa o hexágono no eixo Y para dar a ilusão de profundidade (Isométrico)
-const THICKNESS = 12; // A altura 3D do bloco (sombra)
-const HEX_WIDTH = Math.sqrt(3) * HEX_SIZE;
-const HEX_HEIGHT = 2 * HEX_SIZE * SQUASH;
+// --- CONFIGURAÇÕES ISOMÉTRICAS E DA GRADE AXIAL ---
+const HEX_SIZE = 38;
+const SQUASH = 0.55; 
+const THICKNESS = 14; 
+const MAP_SIZE = 9; // Tamanho da Grade Diamante (9x9)
 
-// Equações para gerar as pontas
+// A largura e altura total do mapa para o Web não distorcer o SVG
+const MAP_WIDTH = HEX_SIZE * Math.sqrt(3) * (MAP_SIZE + MAP_SIZE / 2) + 150;
+const MAP_HEIGHT = HEX_SIZE * 1.5 * MAP_SIZE * SQUASH + 150;
+
+// Geometria da Ponta do Hexágono
 const getHexPoints = (cx: number, cy: number, size: number) => {
   let points = [];
   for (let i = 0; i < 6; i++) {
@@ -23,42 +26,44 @@ const getHexPoints = (cx: number, cy: number, size: number) => {
   return points.join(' ');
 };
 
-const getPixelCoords = (row: number, col: number) => {
-  const x = HEX_WIDTH * (col + 0.5 * (row & 1));
-  const y = (HEX_SIZE * 1.5 * row) * SQUASH;
-  return { x: x + HEX_WIDTH, y: y + HEX_HEIGHT + 20 }; // Offset para centralizar
+// Conversão de Coordenadas AXIAIS para Pixel (Cria a Visão Diagonal!)
+const getPixelCoords = (q: number, r: number) => {
+  const x = HEX_SIZE * Math.sqrt(3) * (q + r / 2);
+  const y = HEX_SIZE * 1.5 * r * SQUASH;
+  return { x: x + 80, y: y + 80 }; // +80 é a margem interna do SVG
 };
 
-// --- DADOS DAS EQUIPES (AGORA COM CORES DE SOMBRA PARA O 3D) ---
+// --- DADOS DAS EQUIPES ---
 const EQUIPES = {
-  NEUTRO: { id: 0, nome: 'Neutro', cor: '#444444', sombra: '#222222' },
+  NEUTRO: { id: 0, nome: 'Neutro', cor: '#3a3a3a', sombra: '#1c1c1c' },
   AZUL: { id: 1, nome: 'Equipe Azul', cor: '#4169E1', sombra: '#27408B' },
   VERMELHA: { id: 2, nome: 'Equipe Vermelha', cor: '#FF4444', sombra: '#8B0000' },
   VERDE: { id: 3, nome: 'Equipe Verde', cor: '#32CD32', sombra: '#006400' },
 };
 
-// --- GERAÇÃO DO MAPA COM BASES FIXAS ---
+// --- GERAÇÃO DO MAPA LOSANGO (DIAGONAL) ---
 const gerarMapa = () => {
   const mapa = [];
-  for (let row = 0; row < 12; row++) {
-    for (let col = 0; col < 8; col++) {
+  // Loop q e r gera o tabuleiro em forma de diamante natural
+  for (let q = 0; q < MAP_SIZE; q++) {
+    for (let r = 0; r < MAP_SIZE; r++) {
       let equipe = EQUIPES.NEUTRO;
       let hp = 0;
       let isBase = false;
 
-      // Definindo as 3 bases fixas (Torres)
-      if (row === 2 && col === 2) { equipe = EQUIPES.AZUL; hp = 999; isBase = true; }
-      else if (row === 2 && col === 6) { equipe = EQUIPES.VERMELHA; hp = 999; isBase = true; }
-      else if (row === 9 && col === 4) { equipe = EQUIPES.VERDE; hp = 999; isBase = true; }
+      // Definindo as 3 bases fixas nos cantos do diamante
+      if (q === 1 && r === 1) { equipe = EQUIPES.AZUL; hp = 999; isBase = true; }
+      else if (q === 7 && r === 1) { equipe = EQUIPES.VERMELHA; hp = 999; isBase = true; }
+      else if (q === 4 && r === 7) { equipe = EQUIPES.VERDE; hp = 999; isBase = true; }
       else {
-        // Gerando territórios aleatórios ao redor para simular um jogo em andamento
+        // Territórios para dar vida ao protótipo
         const rand = Math.random();
-        if (rand > 0.85) { equipe = EQUIPES.AZUL; hp = Math.floor(Math.random() * 40) + 10; }
-        else if (rand > 0.70) { equipe = EQUIPES.VERMELHA; hp = Math.floor(Math.random() * 40) + 10; }
-        else if (rand > 0.55) { equipe = EQUIPES.VERDE; hp = Math.floor(Math.random() * 40) + 10; }
+        if (rand > 0.88) { equipe = EQUIPES.AZUL; hp = Math.floor(Math.random() * 40) + 10; }
+        else if (rand > 0.76) { equipe = EQUIPES.VERMELHA; hp = Math.floor(Math.random() * 40) + 10; }
+        else if (rand > 0.64) { equipe = EQUIPES.VERDE; hp = Math.floor(Math.random() * 40) + 10; }
       }
 
-      mapa.push({ id: `${row}-${col}`, row, col, equipe, hp, isBase });
+      mapa.push({ id: `${q}-${r}`, q, r, equipe, hp, isBase });
     }
   }
   return mapa;
@@ -73,42 +78,76 @@ export default function TerritorioMap() {
   
   // Usuário Atual
   const [meusPDs, setMeusPDs] = useState(250); 
-  const [valorGasto, setValorGasto] = useState(10); // Controle de quanto investir
+  const [valorGastoText, setValorGastoText] = useState('10'); // Input livre usa string
   const minhaEquipe = EQUIPES.AZUL; // Fixo para teste
 
-  // Calcula a porcentagem do mapa dominado por cada equipe
+  // A MATEMÁTICA CORRIGIDA DA BARRA DE PROGRESSO
   const stats = useMemo(() => {
-    let counts = { [EQUIPES.AZUL.id]: 0, [EQUIPES.VERMELHA.id]: 0, [EQUIPES.VERDE.id]: 0, [EQUIPES.NEUTRO.id]: 0 };
-    mapa.forEach(h => { counts[h.equipe.id]++; });
-    const total = mapa.length;
+    let counts = { [EQUIPES.AZUL.id]: 0, [EQUIPES.VERMELHA.id]: 0, [EQUIPES.VERDE.id]: 0 };
+    
+    // Conta apenas os territórios ocupados pelas equipes
+    mapa.forEach(h => { 
+        if (h.equipe.id !== EQUIPES.NEUTRO.id) {
+            counts[h.equipe.id]++; 
+        }
+    });
+
+    const totalOcupado = counts[EQUIPES.AZUL.id] + counts[EQUIPES.VERMELHA.id] + counts[EQUIPES.VERDE.id];
+
+    // Se o mapa estiver todo cinza, previne erro de divisão por zero
+    if (totalOcupado === 0) return { azul: 0, vermelha: 0, verde: 0 };
+
     return {
-      azul: (counts[EQUIPES.AZUL.id] / total) * 100,
-      vermelha: (counts[EQUIPES.VERMELHA.id] / total) * 100,
-      verde: (counts[EQUIPES.VERDE.id] / total) * 100,
-      neutro: (counts[EQUIPES.NEUTRO.id] / total) * 100,
+      azul: (counts[EQUIPES.AZUL.id] / totalOcupado) * 100,
+      vermelha: (counts[EQUIPES.VERMELHA.id] / totalOcupado) * 100,
+      verde: (counts[EQUIPES.VERDE.id] / totalOcupado) * 100,
     };
   }, [mapa]);
 
   const handleHexClick = (hex: any) => {
     setHexSelecionado(hex);
-    setValorGasto(10); // Reseta o slider falso ao trocar de hex
+    setValorGastoText('10'); // Volta pro padrão ao trocar de hexágono
   };
 
-  const mudarValorGasto = (delta: number) => {
-    const novoValor = valorGasto + delta;
-    if (novoValor > 0 && novoValor <= meusPDs) {
-      setValorGasto(novoValor);
+  const mudarValorBotao = (delta: number) => {
+    let num = parseInt(valorGastoText || '0', 10);
+    let novoValor = num + delta;
+    if (novoValor < 1) novoValor = 1;
+    if (novoValor > meusPDs) novoValor = meusPDs;
+    setValorGastoText(String(novoValor));
+  };
+
+  const handleInputValor = (texto: string) => {
+    // Remove qualquer coisa que não seja número
+    let numTexto = texto.replace(/[^0-9]/g, '');
+    let num = parseInt(numTexto, 10);
+    
+    if (isNaN(num)) {
+        setValorGastoText('');
+        return;
     }
+    
+    if (num > meusPDs) num = meusPDs; // Limita ao dinheiro máximo que o jogador tem
+    setValorGastoText(String(num));
   };
 
   const handleAcao = () => {
-    if (!hexSelecionado || valorGasto <= 0 || meusPDs < valorGasto) return;
+    const gastoFinal = parseInt(valorGastoText || '0', 10);
+
+    if (!hexSelecionado || gastoFinal <= 0) {
+        alert("Insira um valor válido de PDs.");
+        return;
+    }
+    if (gastoFinal > meusPDs) {
+        alert("PDs insuficientes!");
+        return;
+    }
     if (hexSelecionado.isBase && hexSelecionado.equipe.id !== minhaEquipe.id) {
-        alert("As torres base das equipes não podem ser destruídas diretamente!");
+        alert("As torres base inimigas são indestrutíveis no momento!");
         return;
     }
 
-    setMeusPDs(meusPDs - valorGasto);
+    setMeusPDs(meusPDs - gastoFinal);
 
     setMapa(mapaAtual => 
       mapaAtual.map(h => {
@@ -118,20 +157,21 @@ export default function TerritorioMap() {
 
           if (h.equipe.id === minhaEquipe.id) {
             // Fortificar o próprio território
-            novoHp += valorGasto;
+            novoHp += gastoFinal;
           } else if (h.equipe.id === EQUIPES.NEUTRO.id) {
             // Conquistar vazio
             novaEquipe = minhaEquipe;
-            novoHp = valorGasto;
+            novoHp = gastoFinal;
           } else {
-            // Atacar território inimigo (A LÓGICA CORRIGIDA)
-            novoHp -= valorGasto;
+            // Combate: Subtrai o HP inimigo
+            novoHp -= gastoFinal;
+            
             if (novoHp < 0) {
-              // Dano foi maior que a defesa, sobrou dano para converter
+              // Dano sobrou! O território agora é nosso com a vida que sobrou.
               novaEquipe = minhaEquipe;
               novoHp = Math.abs(novoHp); 
             } else if (novoHp === 0) {
-              // Empate exato, o território vira terra de ninguém
+              // Empate! Ninguém fica com o território.
               novaEquipe = EQUIPES.NEUTRO;
             }
           }
@@ -162,68 +202,71 @@ export default function TerritorioMap() {
           </View>
         </View>
 
-        {/* --- BARRA DINÂMICA DE DOMÍNIO --- */}
+        {/* --- BARRA DINÂMICA DE DOMÍNIO GLOBAL --- */}
         <View style={styles.progressBarContainer}>
           <View style={[styles.progressSegment, { width: `${stats.azul}%`, backgroundColor: EQUIPES.AZUL.cor }]} />
           <View style={[styles.progressSegment, { width: `${stats.vermelha}%`, backgroundColor: EQUIPES.VERMELHA.cor }]} />
           <View style={[styles.progressSegment, { width: `${stats.verde}%`, backgroundColor: EQUIPES.VERDE.cor }]} />
-          <View style={[styles.progressSegment, { width: `${stats.neutro}%`, backgroundColor: EQUIPES.NEUTRO.cor }]} />
         </View>
-        <Text style={styles.progressText}>Domínio: Azul {stats.azul.toFixed(0)}% | Verm. {stats.vermelha.toFixed(0)}% | Verde {stats.verde.toFixed(0)}%</Text>
+        <Text style={styles.progressText}>
+          Influência: Azul {stats.azul.toFixed(1)}% | Verm. {stats.vermelha.toFixed(1)}% | Verde {stats.verde.toFixed(1)}%
+        </Text>
       </View>
 
-      {/* --- MAPA ISOMÉTRICO (SVG) --- */}
+      {/* --- MAPA ISOMÉTRICO DIAGONAL (SVG) --- */}
+      {/* O ScrollView precisa de uma View com tamanho EXATO dentro dele para evitar a distorção na Web */}
       <ScrollView horizontal={true} contentContainerStyle={{ flexGrow: 1 }} style={styles.mapContainer}>
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          <Svg width={HEX_WIDTH * 9} height={HEX_HEIGHT * 13 + 50} style={{ backgroundColor: '#050015' }}>
-            {mapa.map((hex) => {
-              const { x, y } = getPixelCoords(hex.row, hex.col);
-              const isSelected = hexSelecionado?.id === hex.id;
-              
-              return (
-                <G key={hex.id} onPress={() => handleHexClick(hex)}>
-                  {/* CAMADA 1: SOMBRA DO HEXÁGONO (EFEITO 3D DE ALTURA) */}
-                  <Polygon
-                    points={getHexPoints(x, y + THICKNESS, HEX_SIZE - 1)}
-                    fill={hex.equipe.sombra}
-                  />
-                  {/* CAMADA 2: TOPO DO HEXÁGONO */}
-                  <Polygon
-                    points={getHexPoints(x, y, HEX_SIZE - 1)}
-                    fill={hex.equipe.cor}
-                    stroke={isSelected ? '#FFF' : 'rgba(255,255,255,0.1)'}
-                    strokeWidth={isSelected ? 3 : 1}
-                  />
-                  
-                  {/* CAMADA 3: A TORRE (SE FOR BASE) */}
-                  {hex.isBase && (
-                    <G>
-                       {/* Corpo da torre */}
-                      <Polygon points={`${x-12},${y+5} ${x+12},${y+5} ${x+12},${y-20} ${x-12},${y-20}`} fill={hex.equipe.sombra} />
-                      {/* Teto da torre */}
-                      <Polygon points={`${x-16},${y-20} ${x},${y-35} ${x+16},${y-20}`} fill="#FFD700" />
-                      {/* Ícone ou marca no meio */}
-                      <SvgText x={x} y={y - 5} fill="#FFF" fontSize="10" fontWeight="bold" textAnchor="middle">⭐</SvgText>
-                    </G>
-                  )}
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          
+          <View style={{ width: MAP_WIDTH, height: MAP_HEIGHT }}>
+            <Svg width="100%" height="100%" viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}>
+              {mapa.map((hex) => {
+                const { x, y } = getPixelCoords(hex.q, hex.r);
+                const isSelected = hexSelecionado?.id === hex.id;
+                
+                return (
+                  <G key={hex.id} onPress={() => handleHexClick(hex)}>
+                    {/* CAMADA 1: SOMBRA DO HEXÁGONO (ALTURA 3D) */}
+                    <Polygon
+                      points={getHexPoints(x, y + THICKNESS, HEX_SIZE - 1)}
+                      fill={hex.equipe.sombra}
+                    />
+                    {/* CAMADA 2: TOPO DO HEXÁGONO */}
+                    <Polygon
+                      points={getHexPoints(x, y, HEX_SIZE - 1)}
+                      fill={hex.equipe.cor}
+                      stroke={isSelected ? '#FFF' : 'rgba(255,255,255,0.1)'}
+                      strokeWidth={isSelected ? 3 : 1}
+                    />
+                    
+                    {/* CAMADA 3: A TORRE (SE FOR BASE FIXA) */}
+                    {hex.isBase && (
+                      <G>
+                        <Polygon points={`${x-12},${y+5} ${x+12},${y+5} ${x+12},${y-20} ${x-12},${y-20}`} fill={hex.equipe.sombra} />
+                        <Polygon points={`${x-16},${y-20} ${x},${y-38} ${x+16},${y-20}`} fill="#FFD700" />
+                        <SvgText x={x} y={y - 8} fill="#FFF" fontSize="11" fontWeight="bold" textAnchor="middle">⭐</SvgText>
+                      </G>
+                    )}
 
-                  {/* CAMADA 4: TEXTO DO HP (Se não for base, para não poluir) */}
-                  {!hex.isBase && hex.hp > 0 && (
-                    <SvgText
-                      x={x}
-                      y={y + 5} // Centraliza devido ao squash
-                      fill="#FFF"
-                      fontSize="14"
-                      fontWeight="bold"
-                      textAnchor="middle"
-                    >
-                      {hex.hp}
-                    </SvgText>
-                  )}
-                </G>
-              );
-            })}
-          </Svg>
+                    {/* CAMADA 4: TEXTO DO HP */}
+                    {!hex.isBase && hex.hp > 0 && (
+                      <SvgText
+                        x={x}
+                        y={y + 5} 
+                        fill="#FFF"
+                        fontSize="14"
+                        fontWeight="bold"
+                        textAnchor="middle"
+                      >
+                        {hex.hp}
+                      </SvgText>
+                    )}
+                  </G>
+                );
+              })}
+            </Svg>
+          </View>
+
         </ScrollView>
       </ScrollView>
 
@@ -232,9 +275,8 @@ export default function TerritorioMap() {
         {hexSelecionado ? (
           <View style={styles.panelContent}>
             
-            {/* Info do Lado Esquerdo */}
             <View style={styles.hexInfo}>
-              <Text style={styles.hexCoord}>Setor {hexSelecionado.row}-{hexSelecionado.col} {hexSelecionado.isBase ? '(BASE)' : ''}</Text>
+              <Text style={styles.hexCoord}>Setor {hexSelecionado.q}-{hexSelecionado.r} {hexSelecionado.isBase ? '(BASE)' : ''}</Text>
               <Text style={[styles.hexEquipe, { color: hexSelecionado.equipe.cor }]}>
                 {hexSelecionado.equipe.nome}
               </Text>
@@ -243,19 +285,26 @@ export default function TerritorioMap() {
               </Text>
             </View>
 
-            {/* Ações do Lado Direito */}
             {!hexSelecionado.isBase && (
                 <View style={styles.actionControls}>
                     <Text style={styles.investTitle}>Investir PD:</Text>
                     
                     <View style={styles.amountSelector}>
-                        <TouchableOpacity style={styles.btnMath} onPress={() => mudarValorGasto(-10)}>
+                        <TouchableOpacity style={styles.btnMath} onPress={() => mudarValorBotao(-10)}>
                             <Ionicons name="remove" size={16} color="#FFF"/>
                         </TouchableOpacity>
                         
-                        <Text style={styles.amountText}>{valorGasto}</Text>
+                        {/* INPUT LIVRE DE VALOR */}
+                        <TextInput
+                            style={styles.amountInput}
+                            value={valorGastoText}
+                            onChangeText={handleInputValor}
+                            keyboardType="numeric"
+                            selectTextOnFocus={true}
+                            maxLength={5}
+                        />
                         
-                        <TouchableOpacity style={styles.btnMath} onPress={() => mudarValorGasto(10)}>
+                        <TouchableOpacity style={styles.btnMath} onPress={() => mudarValorBotao(10)}>
                             <Ionicons name="add" size={16} color="#FFF"/>
                         </TouchableOpacity>
                     </View>
@@ -274,7 +323,7 @@ export default function TerritorioMap() {
             {hexSelecionado.isBase && (
                 <View style={styles.actionControls}>
                     <Text style={{color: '#888', fontStyle: 'italic', fontSize: 12, textAlign: 'right'}}>
-                        Bases não podem ser atacadas. Expanda as fronteiras.
+                        Bases indestrutíveis. Expanda pelas bordas!
                     </Text>
                 </View>
             )}
@@ -283,7 +332,7 @@ export default function TerritorioMap() {
         ) : (
           <View style={styles.panelEmpty}>
             <Ionicons name="map-outline" size={32} color="#555" />
-            <Text style={styles.panelEmptyText}>Toque em um território (hexágono) no mapa de guerra para planejar sua estratégia.</Text>
+            <Text style={styles.panelEmptyText}>Toque em um território no mapa de guerra para planejar sua estratégia.</Text>
           </View>
         )}
       </View>
@@ -302,7 +351,6 @@ const styles = StyleSheet.create({
   pdBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 215, 0, 0.2)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 15, borderWidth: 1, borderColor: '#FFD700' },
   pdText: { color: '#FFD700', fontWeight: 'bold', marginLeft: 5 },
   
-  // Estilos da Barra de Progresso Global
   progressBarContainer: { flexDirection: 'row', height: 8, width: '100%', backgroundColor: '#222', borderRadius: 4, overflow: 'hidden', marginBottom: 5 },
   progressSegment: { height: '100%' },
   progressText: { color: '#888', fontSize: 10, textAlign: 'center', fontWeight: 'bold' },
@@ -317,12 +365,12 @@ const styles = StyleSheet.create({
   hexEquipe: { fontSize: 20, fontWeight: '900', marginTop: 2 },
   hexHp: { color: '#FFF', fontSize: 14, marginTop: 5, fontWeight: '600' },
   
-  actionControls: { alignItems: 'flex-end', width: 140 },
+  actionControls: { alignItems: 'flex-end', width: 150 },
   investTitle: { color: '#888', fontSize: 10, fontWeight: 'bold', marginBottom: 5, textTransform: 'uppercase' },
   
-  amountSelector: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#050015', borderRadius: 8, borderWidth: 1, borderColor: '#333', marginBottom: 8 },
-  btnMath: { padding: 5, paddingHorizontal: 10 },
-  amountText: { color: '#FFD700', fontWeight: '900', fontSize: 16, width: 40, textAlign: 'center' },
+  amountSelector: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#050015', borderRadius: 8, borderWidth: 1, borderColor: '#333', marginBottom: 8, width: '100%', justifyContent: 'space-between' },
+  btnMath: { padding: 8 },
+  amountInput: { color: '#FFD700', fontWeight: '900', fontSize: 16, minWidth: 40, textAlign: 'center', padding: 0 },
   
   actionBtn: { paddingHorizontal: 15, paddingVertical: 10, borderRadius: 8, elevation: 5, width: '100%', alignItems: 'center' },
   actionBtnText: { color: '#FFF', fontWeight: '900', fontSize: 14 },
