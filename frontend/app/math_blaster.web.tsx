@@ -80,7 +80,7 @@ export default function MathBlaster() {
       }
     },
     lasers: [] as any[], specialLasers: [] as any[], mathShots: [] as any[], pulses: [] as any[], floatingTexts: [] as any[],
-    chainBolts: [] as any[], mines: [] as any[],
+    chainBolts: [] as any[], mines: [] as any[], bgSymbols: [] as any[],
     enemies: [] as any[], enemyLasers: [] as any[], powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0, movementTouchId: null as string | null, lastTouchX: 0, lastTouchY: 0,
@@ -177,6 +177,22 @@ export default function MathBlaster() {
     return closest;
   };
 
+  // Símbolos matemáticos flutuando no fundo (decorativo, sem colisão)
+  const novoSimboloFundo = (gw: number, gh: number, yFixo?: number) => {
+    const simbolos = ['+', '-', '×', '÷', '=', 'π', '√', '∞', '%'];
+    const cores = ['#00FFFF', '#FF00FF', '#7FFF00', '#FFD700'];
+    return {
+      id: Math.random().toString(),
+      x: Math.random() * gw,
+      y: yFixo !== undefined ? yFixo : Math.random() * gh,
+      vy: 0.2 + Math.random() * 0.5,
+      char: simbolos[Math.floor(Math.random() * simbolos.length)],
+      size: 16 + Math.random() * 22,
+      opacity: 0.08 + Math.random() * 0.14,
+      color: cores[Math.floor(Math.random() * cores.length)],
+    };
+  };
+
   const lidarComTeclado = useCallback((valor: string) => {
     if (!jogoAtivo) return;
     
@@ -261,6 +277,39 @@ export default function MathBlaster() {
         if (gs.fase < 10) gs.fase = 10;
         criarParticulas(gs.player.x, gs.player.y, '#FFFFFF', 20);
         gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! NAVE ÔMEGA`, color: '#FFD700', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 9: INVOCAR NAVE MÃE PENTÁGONO (visual de teste, usa a habilidade da nave mãe tipo 0)
+      if (respostaRef.current === '505050') {
+        const gw = layoutRef.current.width;
+        const eq = gerarEquacao(gs.fase, getRespostasAtivas());
+        gs.boss = { active: true, type: 3, x: gw / 2, y: -100, hp: 100 + (gs.fase * 80), maxHp: 100 + (gs.fase * 80), vx: 2 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
+        gs.gameState = 'BOSS'; gs.stateTimer = 0; gs.tookDamageThisBoss = false;
+        criarParticulas(gs.player.x, gs.player.y, '#00E5FF', 20);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! NAVE PENTÁGONO`, color: '#00E5FF', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 10: INVOCAR NAVE MÃE HEXÁGONO (visual de teste, usa a habilidade da nave mãe tipo 1)
+      if (respostaRef.current === '606060') {
+        const gw = layoutRef.current.width;
+        const eq = gerarEquacao(gs.fase, getRespostasAtivas());
+        gs.boss = { active: true, type: 4, x: gw / 2, y: -100, hp: 100 + (gs.fase * 80), maxHp: 100 + (gs.fase * 80), vx: 2 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
+        gs.gameState = 'BOSS'; gs.stateTimer = 0; gs.tookDamageThisBoss = false;
+        criarParticulas(gs.player.x, gs.player.y, '#FFD700', 20);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! NAVE HEXÁGONO`, color: '#FFD700', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 11: INVOCAR NAVE MÃE ESTRELA (visual de teste, usa a habilidade da nave mãe tipo 2)
+      if (respostaRef.current === '707070') {
+        const gw = layoutRef.current.width;
+        const eq = gerarEquacao(gs.fase, getRespostasAtivas());
+        gs.boss = { active: true, type: 5, x: gw / 2, y: -100, hp: 100 + (gs.fase * 80), maxHp: 100 + (gs.fase * 80), vx: 2 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
+        gs.gameState = 'BOSS'; gs.stateTimer = 0; gs.tookDamageThisBoss = false;
+        criarParticulas(gs.player.x, gs.player.y, '#FF3300', 20);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! NAVE ESTRELA`, color: '#FF3300', life: 90 });
         setResposta(''); return;
       }
 
@@ -609,6 +658,7 @@ export default function MathBlaster() {
     };
     gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.pulses = []; gs.floatingTexts = [];
     gs.chainBolts = []; gs.mines = [];
+    gs.bgSymbols = Array.from({ length: 16 }, () => novoSimboloFundo(initialGw, initialGh));
     gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
@@ -868,6 +918,14 @@ export default function MathBlaster() {
     gs.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 1; });
     gs.particles = gs.particles.filter(p => p.life > 0);
 
+    gs.bgSymbols.forEach((s: any) => {
+      s.y += s.vy * speedMult;
+      if (s.y > gh + 20) {
+        const novo = novoSimboloFundo(gw, gh, -20 - Math.random() * 40);
+        s.x = novo.x; s.y = novo.y; s.vy = novo.vy; s.char = novo.char; s.size = novo.size; s.opacity = novo.opacity; s.color = novo.color;
+      }
+    });
+
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
@@ -946,9 +1004,10 @@ export default function MathBlaster() {
         if (gs.boss.x < 50 || gs.boss.x > gw - 50) gs.boss.vx *= -1;
         gs.boss.timer += 1 * speedMult;
 
-        if (gs.boss.type === 0) {
+        const bossAbility = gs.boss.type % 3;
+        if (bossAbility === 0) {
           if (gs.boss.timer % Math.max(40, 120 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 2, size: 14, damage: 5 + (gs.fase * 5), homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) });
-        } else if (gs.boss.type === 1) {
+        } else if (bossAbility === 1) {
           if (gs.boss.timer % Math.max(40, 90 - (gs.fase * 5)) === 0) [-2, -1, 0, 1, 2].forEach(dir => gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: dir * 1.5, vy: 6 + gs.fase, size: 6, damage: 5 + (gs.fase * 5), homing: false, color: '#FF0055', hp: 1 }));
         } else {
           if (gs.boss.timer % Math.max(60, 150 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 15, size: 20, damage: 10 + (gs.fase * 10), homing: false, color: '#32CD32', hp: 99 });
@@ -1429,6 +1488,12 @@ export default function MathBlaster() {
 
             <View style={styles.gridOverlay}/>
 
+            <View style={styles.bgSymbolsLayer} pointerEvents="none">
+              {gs.bgSymbols.map((s: any) => (
+                <Text key={s.id} style={[styles.bgSymbolText, { left: s.x, top: s.y, fontSize: s.size, color: s.color, opacity: s.opacity }]}>{s.char}</Text>
+              ))}
+            </View>
+
             {gs.enemies.map(e => {
               if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 12, top: e.y - 12, transform: [{ rotate: `${e.angle || 0}deg` }] }]}/>;
               if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 7, top: e.y - 12, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
@@ -1472,7 +1537,7 @@ export default function MathBlaster() {
               }
               const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad';
               return (
-                <View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>
+                <View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', shadowColor: e.isLeader ? '#FF00FF' : '#FF0055', shadowRadius: 6, shadowOpacity: 0.7, transform: [{ rotate: rot }] }]}>
                   <View style={[styles.squadShadow, { left: -4, top: 4 }]}/>
                   {e.shield > 0 && <View style={styles.miniShield}/>}
                 </View>
@@ -1482,7 +1547,23 @@ export default function MathBlaster() {
             {gs.boss.active && (
               <View style={[styles.bossContainer, { left: gs.boss.x - 40, top: gs.boss.y - 30 }]}>
                 <View style={styles.bossHpBar}><View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]}/></View>
-                <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 30, height: 60, backgroundColor: '#006400', borderColor: '#32CD32' }]}/>
+                {gs.boss.type <= 2 ? (
+                  <View style={[
+                    styles.bossShip,
+                    gs.boss.type === 0 && { shadowColor: '#FF4444', shadowRadius: 12, shadowOpacity: 0.9 },
+                    gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF', shadowColor: '#FF00FF', shadowRadius: 12, shadowOpacity: 0.9 },
+                    gs.boss.type === 2 && { borderRadius: 30, height: 60, backgroundColor: '#006400', borderColor: '#32CD32', shadowColor: '#32CD32', shadowRadius: 12, shadowOpacity: 0.9 },
+                  ]}/>
+                ) : (
+                  <View style={[
+                    styles.bossPoligono,
+                    gs.boss.type === 3 && styles.bossPentagono,
+                    gs.boss.type === 4 && styles.bossHexagono,
+                    gs.boss.type === 5 && styles.bossEstrela,
+                  ]}>
+                    <View style={styles.bossPoligonoNucleo}/>
+                  </View>
+                )}
                 {gs.boss.shield && (
                   <View style={styles.bossShield}>
                     <Text style={styles.bossMath}>{gs.boss.txt}</Text>
@@ -1493,22 +1574,26 @@ export default function MathBlaster() {
             )}
 
             {gs.powerups.map(p => (
-              <View key={p.id} style={[styles.powerupBox, { left: p.x - 40, top: p.y - 18, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
+              <View key={p.id} style={[styles.powerupBox, { left: p.x - 40, top: p.y - 18, borderColor: p.color, shadowColor: p.color, shadowRadius: 8, shadowOpacity: 0.8, opacity: p.collected ? 0.4 : 1 }]}>
                 <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
                 <Text style={styles.powerupMath}>{p.txt}</Text>
               </View>
             ))}
 
-            {gs.lasers.map(l => (
-              <View key={l.id} style={[styles.laserNormal, { 
-                left: l.x - (l.size/2), 
-                top: l.y, 
-                width: l.size, 
-                height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3)), 
-                backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : '#00FFFF', 
-                borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') ? l.size / 2 : 5 
-              }]}/>
-            ))}
+            {gs.lasers.map(l => {
+              const corTiro = l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : '#00FFFF';
+              return (
+                <View key={l.id} style={[styles.laserNormal, {
+                  left: l.x - (l.size/2),
+                  top: l.y,
+                  width: l.size,
+                  height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3)),
+                  backgroundColor: corTiro,
+                  shadowColor: corTiro, shadowRadius: 6, shadowOpacity: 0.9,
+                  borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') ? l.size / 2 : 5
+                }]}/>
+              );
+            })}
 
             {gs.chainBolts.map((b: any) => {
               const dx = b.x - b.prevX; const dy = b.y - b.prevY;
@@ -1541,7 +1626,7 @@ export default function MathBlaster() {
             ))}
 
             {gs.enemyLasers.map(el => (
-              <View key={el.id} style={[el.homing ? styles.cannonBall : styles.enemyLaser, { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color }]}>
+              <View key={el.id} style={[el.homing ? styles.cannonBall : styles.enemyLaser, { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color, shadowColor: el.color, shadowRadius: 6, shadowOpacity: 0.9 }]}>
                 {el.homing && el.hp < 5 && <View style={{width:'100%', height:'100%', backgroundColor:'rgba(255,255,255,0.5)', borderRadius: 20}}/>}
               </View>
             ))}
@@ -1627,10 +1712,10 @@ const styles = StyleSheet.create({
   
   menuScrollContent: { alignItems: 'center', paddingBottom: 20, paddingHorizontal: 20 },
   menuContainerFixed: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050015', width: '100%', maxWidth: 600, paddingHorizontal: 20 },
-  tituloMenu: { fontSize: 45, fontWeight: '900', color: '#00FFFF', fontStyle: 'italic' },
+  tituloMenu: { fontSize: 45, fontWeight: '900', color: '#00FFFF', fontStyle: 'italic', textShadowColor: '#00FFFF', textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   subTituloMenu: { fontSize: 25, fontWeight: '900', color: '#FFF', letterSpacing: 5 },
   instrucoes: { color: '#9D97B5', textAlign: 'center', marginHorizontal: 30, marginTop: 20, fontSize: 14, fontWeight: 'bold' },
-  btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 12, marginTop: 20, width: '100%', alignItems: 'center' },
+  btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 12, marginTop: 20, width: '100%', alignItems: 'center', shadowColor: '#FF00FF', shadowRadius: 10, shadowOpacity: 0.6 },
   btnIniciarTxt: { color: '#FFF', fontSize: 16, fontWeight: '900' },
   textoFase: { color: '#9D97B5', fontSize: 16, marginTop: 10 },
 
@@ -1651,11 +1736,11 @@ const styles = StyleSheet.create({
   myRankingFixed: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   myRankingLabel: { color: '#AAA', fontSize: 13, fontWeight: '600' },
 
-  hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10, width: '100%' },
-  hudScore: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1, marginBottom: 5 },
+  hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10, width: '100%', shadowColor: '#00FFFF', shadowRadius: 10, shadowOpacity: 0.5 },
+  hudScore: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1, marginBottom: 5, textShadowColor: '#00FFFF', textShadowRadius: 4, textShadowOffset: { width: 0, height: 0 } },
   hpBarContainer: { width: '100%', height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' },
   hpBarFill: { height: '100%', borderRadius: 4 },
-  hudFase: { color: '#FF00FF', fontSize: 20, fontWeight: '900', fontStyle: 'italic' },
+  hudFase: { color: '#FF00FF', fontSize: 20, fontWeight: '900', fontStyle: 'italic', textShadowColor: '#FF00FF', textShadowRadius: 6, textShadowOffset: { width: 0, height: 0 } },
   
   buffContainer: { flexDirection: 'row', gap: 5, marginTop: 5 },
   buffText: { fontSize: 9, fontWeight: 'bold', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 4, borderRadius: 4 },
@@ -1665,19 +1750,22 @@ const styles = StyleSheet.create({
 
   gameArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#050015', touchAction: 'none' as any, width: '100%' },
   
-  gridOverlay: Platform.OS === 'web' ? { 
+  gridOverlay: Platform.OS === 'web' ? {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    opacity: 0.1, 
-    backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)' as any, 
-    backgroundSize: '30px 30px' as any 
+    opacity: 0.1,
+    backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)' as any,
+    backgroundSize: '30px 30px' as any
   } : { display: 'none' },
-  
+
+  bgSymbolsLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  bgSymbolText: { position: 'absolute', fontWeight: '900' },
+
   centerAlert: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
   alertTextDanger: { color: '#FF0055', fontSize: 35, fontWeight: '900', textShadowColor: '#FF0055', textShadowRadius: 8, textShadowOffset: { width: 1, height: 1 } },
   alertTextSuccess: { color: '#32CD32', fontSize: 35, fontWeight: '900', textShadowColor: '#32CD32', textShadowRadius: 8, textShadowOffset: { width: 1, height: 1 } },
   alertSubText: { color: '#FFF', fontSize: 14, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 },
 
-  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 15, borderRightWidth: 15, borderBottomWidth: 30, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF' },
+  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 15, borderRightWidth: 15, borderBottomWidth: 30, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF', shadowColor: '#00FFFF', shadowRadius: 8, shadowOpacity: 0.7 },
   playerShapeOmega: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 15, borderRightWidth: 15, borderBottomWidth: 30, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#E0FFFF', shadowColor: '#00FFFF', shadowRadius: 14, shadowOpacity: 1 },
   propulsor: { position: 'absolute', width: 10, height: 12, backgroundColor: '#FF8C00', borderBottomLeftRadius: 5, borderBottomRightRadius: 5 },
   propulsorSecundario: { position: 'absolute', width: 6, height: 8, backgroundColor: '#FFA500', borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
@@ -1687,18 +1775,18 @@ const styles = StyleSheet.create({
   naveWingTip: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: '#7DF9FF', top: 16, left: -3, shadowColor: '#7DF9FF', shadowRadius: 4, shadowOpacity: 1 },
   naveAuraTras: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 19, borderRightWidth: 19, borderBottomWidth: 38, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#AA00AA', opacity: 0.55, shadowColor: '#FF00FF', shadowRadius: 10, shadowOpacity: 0.9 },
   naveNucleo: { position: 'absolute', width: 26, height: 26, backgroundColor: '#FFD700', borderWidth: 2, borderColor: '#FFFACD', transform: [{ rotate: '45deg' }], shadowColor: '#FFD700', shadowRadius: 12, shadowOpacity: 1 },
-  droneNormal: { position: 'absolute', width: 10, height: 10, backgroundColor: '#1E90FF', borderRadius: 5, borderWidth: 1, borderColor: '#FFF', zIndex: 5 },
-  droneAdvanced: { position: 'absolute', width: 12, height: 12, backgroundColor: '#FFD700', borderRadius: 3, borderWidth: 1, borderColor: '#FF4444', zIndex: 5 },
+  droneNormal: { position: 'absolute', width: 10, height: 10, backgroundColor: '#1E90FF', borderRadius: 5, borderWidth: 1, borderColor: '#FFF', zIndex: 5, shadowColor: '#1E90FF', shadowRadius: 4, shadowOpacity: 0.8 },
+  droneAdvanced: { position: 'absolute', width: 12, height: 12, backgroundColor: '#FFD700', borderRadius: 3, borderWidth: 1, borderColor: '#FF4444', zIndex: 5, shadowColor: '#FFD700', shadowRadius: 5, shadowOpacity: 0.9 },
   
-  meteorShape: { position: 'absolute', width: 24, height: 24, backgroundColor: '#555', borderRadius: 4, borderWidth: 2, borderColor: '#777' },
+  meteorShape: { position: 'absolute', width: 24, height: 24, backgroundColor: '#555', borderRadius: 4, borderWidth: 2, borderColor: '#777', shadowColor: '#FF6600', shadowRadius: 5, shadowOpacity: 0.5 },
   squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
   squadShadow: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: 'rgba(255,0,85,0.35)' },
-  flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500' },
-  miniShield: { position: 'absolute', top: -8, left: -16, width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)' },
+  flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500', shadowColor: '#FFA500', shadowRadius: 6, shadowOpacity: 0.7 },
+  miniShield: { position: 'absolute', top: -8, left: -16, width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)', shadowColor: '#00FFFF', shadowRadius: 6, shadowOpacity: 0.7 },
   spawnerNode: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#00FFFF', shadowColor: '#00FFFF', shadowRadius: 4, shadowOpacity: 1 },
-  rareRing: { position: 'absolute', width: 16, height: 16, borderWidth: 2, borderColor: '#FFD700', backgroundColor: 'transparent' },
-  shieldTankBody: { position: 'absolute', left: 0, top: 0, width: 30, height: 30, backgroundColor: '#37474F', borderWidth: 2, borderColor: '#90A4AE', transform: [{ rotate: '45deg' }] },
-  shieldTankTop: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 7, borderRightWidth: 7, borderBottomWidth: 12, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#90A4AE' },
+  rareRing: { position: 'absolute', width: 16, height: 16, borderWidth: 2, borderColor: '#FFD700', backgroundColor: 'transparent', shadowColor: '#FFD700', shadowRadius: 6, shadowOpacity: 0.9 },
+  shieldTankBody: { position: 'absolute', left: 0, top: 0, width: 30, height: 30, backgroundColor: '#37474F', borderWidth: 2, borderColor: '#90A4AE', transform: [{ rotate: '45deg' }], shadowColor: '#90A4AE', shadowRadius: 6, shadowOpacity: 0.6 },
+  shieldTankTop: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 7, borderRightWidth: 7, borderBottomWidth: 12, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#90A4AE', shadowColor: '#90A4AE', shadowRadius: 5, shadowOpacity: 0.6 },
   swarmlingShape: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: '#7FFF00', shadowColor: '#7FFF00', shadowRadius: 3, shadowOpacity: 0.8 },
 
   spawnerShape: { position: 'absolute', width: 60, height: 45, backgroundColor: 'rgba(0, 255, 255, 0.2)', borderWidth: 2, borderColor: '#00FFFF', borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: 'transparent', zIndex: 15 },
@@ -1709,8 +1797,15 @@ const styles = StyleSheet.create({
   bossShip: { width: 60, height: 40, backgroundColor: '#8B0000', borderRadius: 15, borderWidth: 2, borderColor: '#FF4444' },
   bossHpBar: { width: '100%', height: 5, backgroundColor: '#333', marginBottom: 4, borderRadius: 2, overflow: 'hidden' },
   bossHpFill: { height: '100%', backgroundColor: '#FF0055' },
-  bossShield: { position: 'absolute', top: -10, width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
+  bossShield: { position: 'absolute', top: -10, width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center', shadowColor: '#00FFFF', shadowRadius: 10, shadowOpacity: 0.8 },
   bossMath: { color: '#FFF', fontSize: 20, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 4, textShadowOffset: { width: 1, height: 1 } },
+
+  // Naves mãe experimentais (pentágono/hexágono/estrela) - apenas visual, ainda sem habilidade própria
+  bossPoligono: { width: 70, height: 70, alignItems: 'center', justifyContent: 'center' },
+  bossPentagono: { backgroundColor: '#00E5FF', clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)' as any, filter: 'drop-shadow(0 0 10px #00E5FF)' as any },
+  bossHexagono: { backgroundColor: '#FFD700', clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)' as any, filter: 'drop-shadow(0 0 10px #FFD700)' as any },
+  bossEstrela: { backgroundColor: '#FF3300', clipPath: 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)' as any, filter: 'drop-shadow(0 0 10px #FF3300)' as any },
+  bossPoligonoNucleo: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#FFFFFF', shadowColor: '#FFFFFF', shadowRadius: 8, shadowOpacity: 1 },
 
   powerupBox: { position: 'absolute', width: 80, height: 35, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   powerupTitle: { fontSize: 7, fontWeight: '900', position: 'absolute', top: -8, backgroundColor: '#050015', paddingHorizontal: 3 },
@@ -1732,14 +1827,17 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'android' ? 10 : 8, 
     alignItems: 'center',
     width: '100%',
-    flexShrink: 1, 
+    flexShrink: 1,
+    shadowColor: '#FF00FF',
+    shadowRadius: 10,
+    shadowOpacity: 0.5,
   },
-  visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 6, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 6 }, 
+  visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 6, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 6, shadowColor: '#00FFFF', shadowRadius: 8, shadowOpacity: 0.7 },
   visorTexto: { color: '#00FFFF', fontSize: 16, fontWeight: '900', letterSpacing: 3 },
   tecladoContainer: { width: '100%', maxWidth: 350, gap: 8 }, 
   tecladoRow: { flexDirection: 'row', gap: 8, height: 45 }, 
   teclaRetro: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
   teclaRetroText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' }, 
-  teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)', borderColor: '#FF4444' },
-  teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)', borderColor: '#32CD32' },
+  teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)', borderColor: '#FF4444', shadowColor: '#FF4444', shadowRadius: 6, shadowOpacity: 0.6 },
+  teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)', borderColor: '#32CD32', shadowColor: '#32CD32', shadowRadius: 6, shadowOpacity: 0.6 },
 });
