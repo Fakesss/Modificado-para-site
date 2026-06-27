@@ -658,7 +658,7 @@ export default function MathBlaster() {
     };
     gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.pulses = []; gs.floatingTexts = [];
     gs.chainBolts = []; gs.mines = [];
-    gs.bgSymbols = Array.from({ length: 16 }, () => novoSimboloFundo(initialGw, initialGh));
+    gs.bgSymbols = Array.from({ length: 16 }, () => novoSimboloFundo(layoutRef.current.width, layoutRef.current.height));
     gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
@@ -1536,8 +1536,9 @@ export default function MathBlaster() {
                 );
               }
               const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad';
+              const corNave = e.isLeader ? '#FF00FF' : '#FF0055';
               return (
-                <View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', shadowColor: e.isLeader ? '#FF00FF' : '#FF0055', shadowRadius: 6, shadowOpacity: 0.7, transform: [{ rotate: rot }] }]}>
+                <View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: corNave, filter: `drop-shadow(0 0 6px ${corNave})` as any, transform: [{ rotate: rot }] }]}>
                   <View style={[styles.squadShadow, { left: -4, top: 4 }]}/>
                   {e.shield > 0 && <View style={styles.miniShield}/>}
                 </View>
@@ -1781,7 +1782,7 @@ const styles = StyleSheet.create({
   meteorShape: { position: 'absolute', width: 24, height: 24, backgroundColor: '#555', borderRadius: 4, borderWidth: 2, borderColor: '#777', shadowColor: '#FF6600', shadowRadius: 5, shadowOpacity: 0.5 },
   squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
   squadShadow: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: 'rgba(255,0,85,0.35)' },
-  flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500', shadowColor: '#FFA500', shadowRadius: 6, shadowOpacity: 0.7 },
+  flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500', filter: 'drop-shadow(0 0 6px #FFA500)' as any },
   miniShield: { position: 'absolute', top: -8, left: -16, width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)', shadowColor: '#00FFFF', shadowRadius: 6, shadowOpacity: 0.7 },
   spawnerNode: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#00FFFF', shadowColor: '#00FFFF', shadowRadius: 4, shadowOpacity: 1 },
   rareRing: { position: 'absolute', width: 16, height: 16, borderWidth: 2, borderColor: '#FFD700', backgroundColor: 'transparent', shadowColor: '#FFD700', shadowRadius: 6, shadowOpacity: 0.9 },
