@@ -208,6 +208,62 @@ export default function MathBlaster() {
         setResposta(''); return;
       }
 
+      // CHEAT CODE 3: INVOCAR BLINDADO PESADO (SHIELD_TANK)
+      if (respostaRef.current === '444000') {
+        const gw = layoutRef.current.width;
+        gs.enemies.push({ id: Math.random().toString(), type: 'SHIELD_TANK', x: gw / 2, y: -40, vy: 0.8 + gs.fase * 0.15, hp: 15 + gs.fase * 4, armorReduction: 0.5 });
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! BLINDADO`, color: '#90A4AE', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 4: INVOCAR ENXAME (SWARMLING)
+      if (respostaRef.current === '777000') {
+        const gw = layoutRef.current.width;
+        const cx = Math.random() * (gw - 100) + 50;
+        for (let i = 0; i < 6; i++) {
+          gs.enemies.push({ id: Math.random().toString(), type: 'SWARMLING', x: cx + (Math.random() - 0.5) * 60, y: -30 - Math.random() * 60, vy: 2.5 + gs.fase * 0.3, hp: 1, seed: Math.random() * 100 });
+        }
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! ENXAME`, color: '#7FFF00', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 5: DESBLOQUEAR E TURBINAR RAIO CADEIA
+      if (respostaRef.current === '121212') {
+        gs.player.weapons.chain.active = true;
+        gs.player.weapons.chain.baseCooldown = 4000;
+        gs.player.weapons.chain.bounces = 6;
+        criarParticulas(gs.player.x, gs.player.y, '#9D00FF', 15);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! RAIO CADEIA`, color: '#9D00FF', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 6: DESBLOQUEAR E TURBINAR MINA DE PROXIMIDADE
+      if (respostaRef.current === '666000') {
+        gs.player.weapons.mine.active = true;
+        gs.player.weapons.mine.baseCooldown = 5000;
+        gs.player.weapons.mine.blastRadius = 100;
+        gs.player.weapons.mine.count = 2;
+        criarParticulas(gs.player.x, gs.player.y, '#FFA500', 15);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! MINA`, color: '#FFA500', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 7: CASCO NO MÁXIMO (HULL_UPGRADE instantâneo)
+      if (respostaRef.current === '220220') {
+        gs.player.maxHp = 220; gs.player.hp = 220;
+        criarParticulas(gs.player.x, gs.player.y, '#7CFC00', 15);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! CASCO MÁXIMO`, color: '#7CFC00', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 8: EVOLUÇÃO INSTANTÂNEA DA NAVE (NAVE ÔMEGA)
+      if (respostaRef.current === '101010') {
+        if (gs.fase < 10) gs.fase = 10;
+        criarParticulas(gs.player.x, gs.player.y, '#FFFFFF', 20);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! NAVE ÔMEGA`, color: '#FFD700', life: 90 });
+        setResposta(''); return;
+      }
+
       const num = parseInt(respostaRef.current);
       let acertou = false;
 
