@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/context/AuthContext';
+import * as api from '../src/services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -134,6 +135,7 @@ export default function CaboDeGuerraOffline() {
   const [operacao, setOperacao] = useState<{ texto: string, resposta: number } | null>(null);
   const [resposta, setResposta] = useState('');
   const [ganhador, setGanhador] = useState<'player' | 'bot' | 'empate' | null>(null);
+  const [pontosEquipeGanhos, setPontosEquipeGanhos] = useState<{ pontosGanhos: number; limiteAtingido: boolean } | null>(null);
   const [ropePosition, setRopePosition] = useState(0);
   const [tempoRestante, setTempoRestante] = useState(120);
 
@@ -298,6 +300,7 @@ export default function CaboDeGuerraOffline() {
       playerTimes.current = [];
       isGameOver.current = false;
       setGanhador(null);
+      setPontosEquipeGanhos(null);
       setLeftState('idle');
       setRightState('idle');
       Animated.spring(ropeAnim, { toValue: 0, useNativeDriver: false }).start();
@@ -317,6 +320,10 @@ export default function CaboDeGuerraOffline() {
 
       setGanhador(vencedor);
       setTimeout(() => setTela('resultado'), 1500);
+
+      if (vencedor === 'player') {
+        api.pontuarJogo('cabo_de_guerra', 4).then(r => { if (r) setPontosEquipeGanhos(r); }).catch(() => {});
+      }
 
       // RISADA SONORA DO ROBÔ (AGORA EM MP3 PARA FUNCIONAR NA WEB)
       if (vencedor === 'bot') {
@@ -472,6 +479,15 @@ export default function CaboDeGuerraOffline() {
               {empate ? 'Nenhum dos dois teve força suficiente para vencer a tempo.' : 
                 (venci ? 'Você foi muito rápido!' : 'A Inteligência Artificial foi mais veloz desta vez.')}
           </Text>
+
+          {venci && pontosEquipeGanhos && (
+            <View style={{ backgroundColor: pontosEquipeGanhos.pontosGanhos > 0 ? '#FFD70020' : '#88888820', borderRadius: 16, padding: 14, marginBottom: 20 }}>
+              <Text style={{ color: '#FFD700', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
+                {pontosEquipeGanhos.pontosGanhos > 0 ? `+${pontosEquipeGanhos.pontosGanhos} pts pra equipe!` : 'Limite diário já atingido'}
+              </Text>
+              {pontosEquipeGanhos.limiteAtingido && <Text style={{ color: '#AAA', fontSize: 13, marginTop: 4, textAlign: 'center' }}>Volte amanhã pra ganhar mais pontos neste jogo 😉</Text>}
+            </View>
+          )}
           
           <View style={{ flexDirection: 'row', gap: 15 }}>
              <TouchableOpacity style={[styles.btnAcao, { backgroundColor: '#333' }]} onPress={() => setTela('menu')}>

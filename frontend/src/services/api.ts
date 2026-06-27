@@ -109,6 +109,13 @@ export const getRankingPorTurma = async (turmaId: string) => { try { return (awa
 export const getMeuProgresso = async () => { try { return (await api.get('/usuarios/progresso')).data; } catch { return null; } };
 export const zerarTodosPontos = async () => (await api.post('/usuarios/zerar-pontos')).data;
 
+// ======== PONTUAÇÃO DE EQUIPE (usado por TODOS os jogos) ========
+// jogo: 'arcade' | 'math_blaster' | 'cabo_de_guerra' | 'tictactoe'
+// pontos: pontuação bruta da partida (o backend converte e aplica o limite diário)
+export const pontuarJogo = async (jogo: string, pontos: number): Promise<{ pontosGanhos: number; pontosHojeNesseJogo: number; limiteDiario: number; limiteAtingido: boolean } | null> => {
+  try { return (await api.post('/jogos/pontuar', { jogo, pontos })).data; } catch { return null; }
+};
+
 // ======== ROTAS DO RANKING ARCADE ========
 export const getRankingArcade = async () => { try { return (await api.get('/ranking/arcade')).data; } catch { return []; } };
 export const submitArcadeScore = async (pontos: number) => (await api.post('/arcade/score', { pontos })).data;

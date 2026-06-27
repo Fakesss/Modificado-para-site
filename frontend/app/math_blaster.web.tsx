@@ -44,6 +44,7 @@ export default function MathBlaster() {
   const [jogoAtivo, setJogoAtivo] = useState(false);
   const [frames, setFrames] = useState(0); 
   const [resposta, setResposta] = useState('');
+  const [pontosEquipeGanhos, setPontosEquipeGanhos] = useState<{ pontosGanhos: number; limiteAtingido: boolean } | null>(null);
   
   const [hallDaFama, setHallDaFama] = useState<any[]>([]);
   const [guestUserId, setGuestUserId] = useState<string | null>(null);
@@ -508,6 +509,7 @@ export default function MathBlaster() {
 
   const iniciarJogo = () => {
     gameOverFired.current = false;
+    setPontosEquipeGanhos(null);
     gs.keys = { up: false, down: false, left: false, right: false }; // Zera teclas pressionadas ao reiniciar
     
     gs.currentZoom = BASE_ZOOM;
@@ -557,6 +559,9 @@ export default function MathBlaster() {
             .catch(() => carregarHallDaFama());
       } else {
           carregarHallDaFama();
+      }
+      if (typeof (api as any).pontuarJogo === 'function') {
+        (api as any).pontuarJogo('math_blaster', gs.score).then((r: any) => { if (r) setPontosEquipeGanhos(r); }).catch(() => {});
       }
     } else {
       carregarHallDaFama();
@@ -1138,6 +1143,15 @@ export default function MathBlaster() {
             <Text style={styles.resultadoPontos}>{gs.score}</Text>
             <Text style={styles.resultadoLabel}>Pontos Totais</Text>
           </View>
+
+          {pontosEquipeGanhos && (
+            <View style={[styles.resultadoCard, { backgroundColor: pontosEquipeGanhos.pontosGanhos > 0 ? '#FFD70020' : '#88888820', marginTop: 12 }]}>
+              <Text style={[styles.resultadoPontos, { color: '#FFD700', fontSize: 26 }]}>
+                {pontosEquipeGanhos.pontosGanhos > 0 ? `+${pontosEquipeGanhos.pontosGanhos} pts pra equipe!` : 'Limite diário já atingido'}
+              </Text>
+              {pontosEquipeGanhos.limiteAtingido && <Text style={[styles.resultadoLabel, { marginTop: 4 }]}>Volte amanhã pra ganhar mais pontos de equipe neste jogo 😉</Text>}
+            </View>
+          )}
           
           <Text style={styles.textoFase}>Chegou na Fase {gs.fase}</Text>
           

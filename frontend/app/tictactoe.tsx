@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../src/context/AuthContext';
+import * as api from '../src/services/api';
 
 // IMPORTA A CONEXÃO E A MEMÓRIA GLOBAL DO JOGO
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
@@ -47,8 +48,19 @@ export default function TicTacToe() {
   const [celulaSelecionada, setCelulaSelecionada] = useState<number | null>(null);
   const [respostaInput, setRespostaInput] = useState('');
   const [ganhador, setGanhador] = useState<'X' | 'O' | 'Empate' | null>(null);
+  const [pontosEquipeGanhos, setPontosEquipeGanhos] = useState<{ pontosGanhos: number; limiteAtingido: boolean } | null>(null);
+  const pontuacaoEnviada = useRef(false);
 
   const roomIdRef = useRef<string>('');
+
+  // Dá ponto de equipe quando o jogador vence (uma única vez por partida)
+  useEffect(() => {
+    if (tela === 'resultado' && modo !== 'espectador' && ganhador === minhaPeca && !pontuacaoEnviada.current) {
+      pontuacaoEnviada.current = true;
+      const pontosBase = modo === 'multi' ? 6 : 3;
+      api.pontuarJogo('tictactoe', pontosBase).then(r => { if (r) setPontosEquipeGanhos(r); }).catch(() => {});
+    }
+  }, [tela, ganhador]);
 
   // ==========================================
   // O CÉREBRO DO JOGO ONLINE & ESPECTADOR
@@ -137,6 +149,7 @@ export default function TicTacToe() {
       setVidas(3);
       setVidasOponente(3);
       setTela('jogando');
+      setPontosEquipeGanhos(null); pontuacaoEnviada.current = false;
   };
 
   const iniciarMultiplayerRandom = () => {
@@ -191,6 +204,7 @@ export default function TicTacToe() {
     const pecas = ['X', 'O'];
     const sorteada = pecas[Math.floor(Math.random() * 2)];
     setMinhaPeca(sorteada as 'X' | 'O'); setVez('X'); setGanhador(null);
+    setPontosEquipeGanhos(null); pontuacaoEnviada.current = false;
     const novoBoard = []; for(let i=0; i<9; i++) { novoBoard.push({ id: i, ...gerarOperacaoBot() }); }
     setBoard(novoBoard); setTela('jogando');
   };
@@ -289,6 +303,14 @@ export default function TicTacToe() {
         <View style={styles.resultadoContainer}>
           <Text style={{ fontSize: 64 }}>{isEmpate ? '🤝' : (isVitoria ? '🏆' : '💀')}</Text>
           <Text style={styles.resultadoTitle}>{isEmpate ? 'Deu Velha!' : (isVitoria ? 'Você Venceu!' : (modo === 'espectador' ? 'Fim de Jogo' : 'Você Perdeu!'))}</Text>
+          {isVitoria && pontosEquipeGanhos && (
+            <View style={{ backgroundColor: pontosEquipeGanhos.pontosGanhos > 0 ? '#FFD70020' : '#88888820', borderRadius: 16, padding: 14, marginTop: 10 }}>
+              <Text style={{ color: '#FFD700', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
+                {pontosEquipeGanhos.pontosGanhos > 0 ? `+${pontosEquipeGanhos.pontosGanhos} pts pra equipe!` : 'Limite diário já atingido'}
+              </Text>
+              {pontosEquipeGanhos.limiteAtingido && <Text style={{ color: '#AAA', fontSize: 13, marginTop: 4, textAlign: 'center' }}>Volte amanhã pra ganhar mais pontos neste jogo 😉</Text>}
+            </View>
+          )}
           <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: '#FFD700', marginTop: 30 }]} onPress={() => {
               setActiveMatchData(null);
               router.back();

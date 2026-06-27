@@ -177,6 +177,8 @@ export default function CaboDeGuerraOnline() {
   const [operacao, setOperacao] = useState<{ texto: string, resposta: number } | null>(null);
   const [resposta, setResposta] = useState('');
   const [ganhador, setGanhador] = useState<string | null>(null);
+  const [pontosEquipeGanhos, setPontosEquipeGanhos] = useState<{ pontosGanhos: number; limiteAtingido: boolean } | null>(null);
+  const pontuacaoEnviada = useRef(false);
   
   const [leftState, setLeftState] = useState('idle');
   const [rightState, setRightState] = useState('idle');
@@ -192,6 +194,14 @@ export default function CaboDeGuerraOnline() {
   useEffect(() => {
     api.getEquipes().then(data => setEquipesDb(data)).catch(console.error);
   }, []);
+
+  // Dá ponto de equipe quando o jogador vence (uma única vez por partida)
+  useEffect(() => {
+    if (tela === 'resultado' && ganhador === socket.id && !pontuacaoEnviada.current) {
+      pontuacaoEnviada.current = true;
+      api.pontuarJogo('cabo_de_guerra', 8).then(r => { if (r) setPontosEquipeGanhos(r); }).catch(() => {});
+    }
+  }, [tela, ganhador]);
 
   const getTeamConfig = (equipeId: string, perfil: string, email: string, isLocalPlayer: boolean, opponentEquipeId: string) => {
     // Se for administrador
@@ -451,6 +461,14 @@ export default function CaboDeGuerraOnline() {
         <View style={styles.resultadoContainer}>
           <Text style={styles.resultadoTitle}>{venci ? 'Sua Equipe Venceu!' : 'Vocês Foram Puxados!'}</Text>
           <Ionicons name={venci ? 'trophy' : 'sad'} size={90} color={finalColor} style={{ marginBottom: 20 }} />
+          {venci && pontosEquipeGanhos && (
+            <View style={{ backgroundColor: pontosEquipeGanhos.pontosGanhos > 0 ? '#FFD70020' : '#88888820', borderRadius: 16, padding: 14, marginBottom: 16 }}>
+              <Text style={{ color: '#FFD700', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
+                {pontosEquipeGanhos.pontosGanhos > 0 ? `+${pontosEquipeGanhos.pontosGanhos} pts pra equipe!` : 'Limite diário já atingido'}
+              </Text>
+              {pontosEquipeGanhos.limiteAtingido && <Text style={{ color: '#AAA', fontSize: 13, marginTop: 4, textAlign: 'center' }}>Volte amanhã pra ganhar mais pontos neste jogo 😉</Text>}
+            </View>
+          )}
           <AnimatedTeam isLeft={!venci} config={venci ? rightConfig : leftConfig} teamState="win" />
           <TouchableOpacity style={[styles.btnVoltar, { backgroundColor: finalColor === '#888' ? '#333' : finalColor }]} onPress={() => { performLeaveMatch(); router.replace('/salas'); }}>
             <Text style={[styles.btnVoltarText, { color: venci ? '#000' : '#FFF' }]}>Voltar ao Menu</Text>

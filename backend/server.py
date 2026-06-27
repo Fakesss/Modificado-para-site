@@ -114,6 +114,68 @@ class PremiacaoRequest(BaseModel):
     pts2: int
     pts3: int
 
+class PontuacaoJogo(BaseModel):
+    jogo: str    # "arcade" | "math_blaster" | "cabo_de_guerra" | "tictactoe"
+    pontos: int  # pontuação BRUTA da partida (calculada pelo próprio jogo)
+
+# =========================================================================
+# CONFIGURAÇÃO DE PONTOS POR JOGO (painel de ajuste manual)
+# -------------------------------------------------------------------------
+# "divisor"       -> a pontuação bruta enviada pelo jogo é dividida por isso
+#                    antes de virar ponto de equipe (deixa o número "justo")
+# "limite_diario" -> quantos pontos de EQUIPE cada aluno pode gerar POR DIA
+#                    em cada jogo (e não por partida!). Depois de bater o
+#                    limite, o aluno pode continuar jogando à vontade, só
+#                    não soma mais ponto pra equipe naquele dia. Isso é o
+#                    que evita a pontuação de "inflacionar" com grinding.
+# Pra ajustar a dificuldade/generosidade de um jogo no futuro, só mude os
+# números aqui — não precisa tocar em mais nada.
+# =========================================================================
+CONFIG_PONTOS_JOGOS: Dict[str, Dict[str, int]] = {
+    "arcade":         {"divisor": 10, "limite_diario": 40},
+    "math_blaster":   {"divisor": 25, "limite_diario": 40},
+    "cabo_de_guerra": {"divisor": 1,  "limite_diario": 24},
+    "tictactoe":      {"divisor": 1,  "limite_diario": 18},
+}
+
+async def aplicar_pontos_diarios_jogo(usuario_id: str, equipe_id: Optional[str], jogo: str, pontos_brutos: int) -> dict:
+    """Converte a pontuação bruta de uma partida em ponto de equipe,
+    respeitando um limite diário por aluno+jogo. Retorna quanto foi
+    realmente concedido (pode ser menos do que o calculado, ou zero,
+    se o limite do dia já tiver sido atingido)."""
+    cfg = CONFIG_PONTOS_JOGOS.get(jogo, {"divisor": 10, "limite_diario": 20})
+    divisor = max(1, cfg["divisor"])
+    limite = cfg["limite_diario"]
+
+    pontos_calculados = int(pontos_brutos // divisor)
+    if pontos_calculados <= 0:
+        return {"pontosGanhos": 0, "pontosHojeNesseJogo": 0, "limiteDiario": limite, "limiteAtingido": False}
+
+    data_hoje = get_now_brt().strftime("%Y-%m-%d")
+    filtro = {"usuarioId": usuario_id, "jogo": jogo, "data": data_hoje}
+    registro = await db.pontos_diarios_jogos.find_one(filtro)
+    ja_ganho_hoje = registro.get("pontosHoje", 0) if registro else 0
+
+    espaco_restante = max(limite - ja_ganho_hoje, 0)
+    pontos_validos = max(min(pontos_calculados, espaco_restante), 0)
+
+    if pontos_validos > 0:
+        await db.pontos_diarios_jogos.update_one(
+            filtro, {"$inc": {"pontosHoje": pontos_validos}, "$setOnInsert": {"id": str(uuid.uuid4())}},
+            upsert=True
+        )
+        await db.usuarios.update_one({"id": usuario_id}, {"$inc": {"pontosTotais": pontos_validos}})
+        if equipe_id:
+            await db.equipes.update_one({"id": str(equipe_id).strip()}, {"$inc": {"pontosTotais": pontos_validos}})
+
+    total_hoje = ja_ganho_hoje + pontos_validos
+    return {
+        "pontosGanhos": pontos_validos,
+        "pontosHojeNesseJogo": total_hoje,
+        "limiteDiario": limite,
+        "limiteAtingido": total_hoje >= limite,
+    }
+
 class Conteudo(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tipo: str
@@ -932,6 +994,18 @@ async def get_ranking_turma(turma_id: str):
     equipes_ranking.sort(key=lambda x: x["pontosTotais"], reverse=True)
     for i, e in enumerate(equipes_ranking): e["posicao"] = i + 1
     return equipes_ranking
+
+@api_router.post("/jogos/pontuar")
+async def pontuar_jogo(dados: PontuacaoJogo, current_user: dict = Depends(get_current_user)):
+    """Endpoint único usado por TODOS os jogos (arcade, math blaster, cabo
+    de guerra, jogo da velha...) pra dar ponto de equipe, já respeitando o
+    limite diário anti-inflação configurado em CONFIG_PONTOS_JOGOS."""
+    if dados.pontos <= 0:
+        return {"pontosGanhos": 0, "mensagem": "Nenhum ponto recebido"}
+    jogo = dados.jogo.strip().lower()
+    eq_id = current_user.get("equipeId")
+    resultado = await aplicar_pontos_diarios_jogo(current_user["id"], eq_id, jogo, dados.pontos)
+    return resultado
 
 @api_router.post("/arcade/score")
 async def submit_arcade_score(data: ArcadeScore, current_user: dict = Depends(get_current_user)):

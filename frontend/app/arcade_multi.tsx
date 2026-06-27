@@ -6,6 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
 import { Audio } from 'expo-av'; 
 import Slider from '@react-native-community/slider';
+import * as api from '../src/services/api';
 
 const { width, height } = Dimensions.get('window');
 const GAME_AREA_HEIGHT = height * 0.62; 
@@ -56,6 +57,17 @@ export default function ArcadeMultiplayer() {
   const [player1Name, setPlayer1Name] = useState('Player 1');
   const [meuStatus, setMeuStatus] = useState<'vivo' | 'morto'>('vivo');
   const [ganhador, setGanhador] = useState<string | null>(null);
+  const [pontosEquipeGanhos, setPontosEquipeGanhos] = useState<{ pontosGanhos: number; limiteAtingido: boolean } | null>(null);
+  const pontuacaoEnviada = useRef(false);
+
+  // Dá ponto de equipe quando o jogador vence o duelo (uma única vez por partida)
+  useEffect(() => {
+    if (tela === 'resultado' && ganhador === socket.id && !pontuacaoEnviada.current) {
+      pontuacaoEnviada.current = true;
+      api.pontuarJogo('arcade', 150).then(r => { if (r) setPontosEquipeGanhos(r); }).catch(() => {});
+    }
+  }, [tela, ganhador]);
+
   
   const roomIdRef = useRef<string>('');
   const [resposta, setResposta] = useState('');

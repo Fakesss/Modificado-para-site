@@ -71,6 +71,7 @@ export default function MathBlasterMulti() {
   const instanceId = useRef(Math.random().toString(36).substring(7)).current;
 
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
+  const [pontosEquipeGanhos, setPontosEquipeGanhos] = useState<{ pontosGanhos: number; limiteAtingido: boolean } | null>(null);
   const telaRef = useRef(tela);
   useEffect(() => { telaRef.current = tela; }, [tela]);
 
@@ -713,6 +714,7 @@ export default function MathBlasterMulti() {
     if (jogoAtivoRef.current) return; 
 
     gameOverFired.current = false;
+    setPontosEquipeGanhos(null);
     gs.keys = { up: false, down: false, left: false, right: false }; 
     
     gs.player = { 
@@ -768,6 +770,9 @@ export default function MathBlasterMulti() {
             } else {
                 carregarHallDaFama();
             }
+            if (typeof (apiRoutes as any).pontuarJogo === 'function') {
+              (apiRoutes as any).pontuarJogo('math_blaster', gs.score + gs.scoreAliado).then((r: any) => { if (r) setPontosEquipeGanhos(r); }).catch(() => {});
+            }
         } else {
             carregarHallDaFama();
         }
@@ -779,6 +784,9 @@ export default function MathBlasterMulti() {
                 .catch(() => carregarHallDaFama());
           } else {
               carregarHallDaFama();
+          }
+          if (typeof (apiRoutes as any).pontuarJogo === 'function') {
+            (apiRoutes as any).pontuarJogo('math_blaster', gs.score).then((r: any) => { if (r) setPontosEquipeGanhos(r); }).catch(() => {});
           }
         } else {
           carregarHallDaFama();
@@ -1438,6 +1446,15 @@ export default function MathBlasterMulti() {
             <Text style={styles.resultadoPontos}>{gs.score}</Text>
             <Text style={styles.resultadoLabel}>Pontos Totais</Text>
           </View>
+
+          {pontosEquipeGanhos && (
+            <View style={[styles.resultadoCard, { backgroundColor: pontosEquipeGanhos.pontosGanhos > 0 ? '#FFD70020' : '#88888820', marginTop: 12 }]}>
+              <Text style={[styles.resultadoPontos, { color: '#FFD700', fontSize: 26 }]}>
+                {pontosEquipeGanhos.pontosGanhos > 0 ? `+${pontosEquipeGanhos.pontosGanhos} pts pra equipe!` : 'Limite diário já atingido'}
+              </Text>
+              {pontosEquipeGanhos.limiteAtingido && <Text style={[styles.resultadoLabel, { marginTop: 4 }]}>Volte amanhã pra ganhar mais pontos de equipe neste jogo 😉</Text>}
+            </View>
+          )}
           
           <Text style={styles.textoFase}>Chegou na Fase {gs.fase}</Text>
           

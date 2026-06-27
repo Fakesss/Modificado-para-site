@@ -90,6 +90,7 @@ export default function Arcade() {
   const [tela, setTela] = useState<'menu' | 'jogo' | 'resultado'>('menu');
   const [pontos, setPontos] = useState(0);
   const pontosRef = useRef(0);
+  const [pontosEquipeGanhos, setPontosEquipeGanhos] = useState<{ pontosGanhos: number; limiteAtingido: boolean } | null>(null);
   const [vidas, setVidas] = useState(5); 
   const [resposta, setResposta] = useState('');
   const [operacoes, setOperacoes] = useState<any[]>([]); 
@@ -397,7 +398,10 @@ export default function Arcade() {
   };
 
   const sairDoJogo = () => {
-    if (modoRef.current === 'single' && pontosRef.current > 0) api.submitArcadeScore(pontosRef.current).catch(()=>{});
+    if (modoRef.current === 'single' && pontosRef.current > 0) {
+      api.submitArcadeScore(pontosRef.current).catch(()=>{});
+      api.pontuarJogo('arcade', pontosRef.current).then(r => { if (r) setPontosEquipeGanhos(r); }).catch(()=>{});
+    }
     jogoAtivoRef.current = false; jogoPausadoRef.current = false; transicaoAtivaRef.current = false; fasePendenteRef.current = false;
     setPausado(false); setMostrarFase(false); setMostrarVolume(false); if (spawnTimer.current) clearTimeout(spawnTimer.current);
     pararBGM();
@@ -418,7 +422,7 @@ export default function Arcade() {
     if (spawnTimer.current) clearTimeout(spawnTimer.current);
     if (botTimer.current) clearInterval(botTimer.current);
     
-    setOperacoes([]); setExplosoes([]); setPontos(0); pontosRef.current = 0; 
+    setOperacoes([]); setExplosoes([]); setPontos(0); pontosRef.current = 0; setPontosEquipeGanhos(null);
     setResposta(''); setPowerUpDisponivel(false); setPausado(false); setMostrarFase(false); setFaseAtualVisor(1); setMostrarVolume(false);
     
     operacoesAtuaisRef.current = []; ultimasRespostasRef.current = []; desempenhoOcultoRef.current = 0; questoesEmJogoRef.current = 0;
@@ -539,7 +543,10 @@ export default function Arcade() {
   const gameOver = () => { 
     jogoAtivoRef.current = false; jogoPausadoRef.current = false; transicaoAtivaRef.current = false; fasePendenteRef.current = false; setPausado(false); setMostrarVolume(false);
     if (spawnTimer.current) clearTimeout(spawnTimer.current); setOperacoes([]); setExplosoes([]);
-    if (modoRef.current === 'single' && pontosRef.current > 0) api.submitArcadeScore(pontosRef.current).catch(()=>{});
+    if (modoRef.current === 'single' && pontosRef.current > 0) {
+      api.submitArcadeScore(pontosRef.current).catch(()=>{});
+      api.pontuarJogo('arcade', pontosRef.current).then(r => { if (r) setPontosEquipeGanhos(r); }).catch(()=>{});
+    }
     pararBGM();
     setTela('resultado'); 
   };
@@ -705,6 +712,14 @@ export default function Arcade() {
           <Text style={styles.resultadoTitle}>{venceu ? '🎯 Missão Cumprida!' : 'Fim de Jogo!'}</Text>
           {venceu && <View style={[styles.resultadoCard, {backgroundColor: '#32CD3220'}]}><Text style={[styles.resultadoPontos, {color: '#32CD32', fontSize:32}]}>+{missaoAtualRef.current?.recompensa} Pts Bônus</Text></View>}
           <View style={styles.resultadoCard}><Text style={styles.resultadoPontos}>{pontos}</Text><Text style={styles.resultadoLabel}>Pontos Totais</Text></View>
+          {pontosEquipeGanhos && (
+            <View style={[styles.resultadoCard, {backgroundColor: pontosEquipeGanhos.pontosGanhos > 0 ? '#FFD70020' : '#88888820', marginTop: 12}]}>
+              <Text style={[styles.resultadoPontos, {color: '#FFD700', fontSize: 26}]}>
+                {pontosEquipeGanhos.pontosGanhos > 0 ? `+${pontosEquipeGanhos.pontosGanhos} pts pra equipe!` : 'Limite diário já atingido'}
+              </Text>
+              {pontosEquipeGanhos.limiteAtingido && <Text style={[styles.resultadoLabel, {marginTop: 4}]}>Volte amanhã pra ganhar mais pontos de equipe neste jogo 😉</Text>}
+            </View>
+          )}
           <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => setTela('menu')}><Ionicons name="home" size={22} color="#000" /><Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
