@@ -536,6 +536,14 @@ export default function ArcadeMultiplayer() {
         <View style={styles.resultadoContainer}>
           <Text style={styles.resultadoTitle}>{titulo}</Text>
           <View style={styles.resultadoCard}><Text style={styles.resultadoPontos}>{pontos}</Text><Text style={styles.resultadoLabel}>Seus Pontos Totais</Text></View>
+          {ganhador === socket.id && pontosEquipeGanhos && (
+            <View style={{ backgroundColor: pontosEquipeGanhos.pontosGanhos > 0 ? '#FFD70020' : '#88888820', borderRadius: 16, padding: 14, marginTop: 10 }}>
+              <Text style={{ color: '#FFD700', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
+                {pontosEquipeGanhos.pontosGanhos > 0 ? `+${pontosEquipeGanhos.pontosGanhos} pts pra equipe!` : 'Limite diário já atingido'}
+              </Text>
+              {pontosEquipeGanhos.limiteAtingido && <Text style={{ color: '#AAA', fontSize: 13, marginTop: 4, textAlign: 'center' }}>Volte amanhã pra ganhar mais pontos neste jogo 😉</Text>}
+            </View>
+          )}
           <TouchableOpacity style={styles.jogarNovamenteButton} onPress={() => { setActiveMatchData(null); socket.emit('update_status', { status: 'MENU' }); router.back(); }}>
             <Ionicons name="home" size={22} color="#000" /><Text style={styles.jogarNovamenteText}>Voltar ao Menu</Text>
           </TouchableOpacity>
