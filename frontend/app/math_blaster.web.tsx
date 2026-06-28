@@ -74,13 +74,17 @@ export default function MathBlaster() {
       weapons: {
         missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
-        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 }
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 },
+        chain: { active: false, level: 1, baseCooldown: 9000, lastFire: 0, damageMult: 2, bounces: 3, range: 140 },
+        mine: { active: false, level: 1, baseCooldown: 11000, lastFire: 0, damageMult: 4, fuse: 1500, blastRadius: 70, count: 1 }
       }
     },
-    lasers: [] as any[], specialLasers: [] as any[], mathShots: [] as any[], pulses: [] as any[], floatingTexts: [] as any[], 
+    lasers: [] as any[], specialLasers: [] as any[], mathShots: [] as any[], pulses: [] as any[], floatingTexts: [] as any[],
+    chainBolts: [] as any[], mines: [] as any[], bgSymbols: [] as any[],
     enemies: [] as any[], enemyLasers: [] as any[], powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0, movementTouchId: null as string | null, lastTouchX: 0, lastTouchY: 0,
+    waveFlavor: 'CLASSICA' as string,
     timeAlive: 0, flawlessBossesCount: 0, tookDamageThisBoss: false, timeFreezeTimer: 0, forceShieldHits: 0, xRayTimer: 0,
     drones: {
       normal: { active: false, level: 1, lastFire: 0, baseCooldown: 1500 },
@@ -156,9 +160,37 @@ export default function MathBlaster() {
 
   const criarParticulas = (x: number, y: number, color: string, qtd: number) => {
     // QUANTIDADE DE PARTÍCULAS DRASTICAMENTE REDUZIDA PARA EVITAR TRAVAMENTO DO NAVEGADOR
-    for(let i=0; i<qtd; i++) { 
-      gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color }); 
+    for(let i=0; i<qtd; i++) {
+      gs.particles.push({ x, y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 15, color });
     }
+  };
+
+  const acharInimigoMaisProximoDentroDoRaio = (x: number, y: number, raio: number, excluir: Set<string>) => {
+    let closest: any = null;
+    let minDist = raio * raio;
+    gs.enemies.forEach((e: any) => {
+      if (e.hp > 0 && !e.mathRequired && !excluir.has(e.id)) {
+        const d = Math.pow(e.x - x, 2) + Math.pow(e.y - y, 2);
+        if (d < minDist) { minDist = d; closest = e; }
+      }
+    });
+    return closest;
+  };
+
+  // Símbolos matemáticos flutuando no fundo (decorativo, sem colisão)
+  const novoSimboloFundo = (gw: number, gh: number, yFixo?: number) => {
+    const simbolos = ['+', '-', '×', '÷', '=', 'π', '√', '∞', '%'];
+    const cores = ['#00FFFF', '#FF00FF', '#7FFF00', '#FFD700'];
+    return {
+      id: Math.random().toString(),
+      x: Math.random() * gw,
+      y: yFixo !== undefined ? yFixo : Math.random() * gh,
+      vy: 0.2 + Math.random() * 0.5,
+      char: simbolos[Math.floor(Math.random() * simbolos.length)],
+      size: 16 + Math.random() * 22,
+      opacity: 0.08 + Math.random() * 0.14,
+      color: cores[Math.floor(Math.random() * cores.length)],
+    };
   };
 
   const lidarComTeclado = useCallback((valor: string) => {
@@ -189,6 +221,95 @@ export default function MathBlaster() {
         gs.score += 500;
         criarParticulas(gs.player.x, gs.player.y, '#FFD700', 15);
         gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE!`, color: '#FFD700', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 3: INVOCAR BLINDADO PESADO (SHIELD_TANK)
+      if (respostaRef.current === '444000') {
+        const gw = layoutRef.current.width;
+        gs.enemies.push({ id: Math.random().toString(), type: 'SHIELD_TANK', x: gw / 2, y: -40, vy: 0.8 + gs.fase * 0.15, hp: 15 + gs.fase * 4, armorReduction: 0.5 });
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! BLINDADO`, color: '#90A4AE', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 4: INVOCAR ENXAME (SWARMLING)
+      if (respostaRef.current === '777000') {
+        const gw = layoutRef.current.width;
+        const cx = Math.random() * (gw - 100) + 50;
+        for (let i = 0; i < 6; i++) {
+          gs.enemies.push({ id: Math.random().toString(), type: 'SWARMLING', x: cx + (Math.random() - 0.5) * 60, y: -30 - Math.random() * 60, vy: 2.5 + gs.fase * 0.3, hp: 1, seed: Math.random() * 100 });
+        }
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! ENXAME`, color: '#7FFF00', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 5: DESBLOQUEAR E TURBINAR RAIO CADEIA
+      if (respostaRef.current === '121212') {
+        gs.player.weapons.chain.active = true;
+        gs.player.weapons.chain.baseCooldown = 4000;
+        gs.player.weapons.chain.bounces = 6;
+        criarParticulas(gs.player.x, gs.player.y, '#9D00FF', 15);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! RAIO CADEIA`, color: '#9D00FF', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 6: DESBLOQUEAR E TURBINAR MINA DE PROXIMIDADE
+      if (respostaRef.current === '666000') {
+        gs.player.weapons.mine.active = true;
+        gs.player.weapons.mine.baseCooldown = 5000;
+        gs.player.weapons.mine.blastRadius = 100;
+        gs.player.weapons.mine.count = 2;
+        criarParticulas(gs.player.x, gs.player.y, '#FFA500', 15);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! MINA`, color: '#FFA500', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 7: CASCO NO MÁXIMO (HULL_UPGRADE instantâneo)
+      if (respostaRef.current === '220220') {
+        gs.player.maxHp = 220; gs.player.hp = 220;
+        criarParticulas(gs.player.x, gs.player.y, '#7CFC00', 15);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! CASCO MÁXIMO`, color: '#7CFC00', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 8: EVOLUÇÃO INSTANTÂNEA DA NAVE (NAVE ÔMEGA)
+      if (respostaRef.current === '101010') {
+        if (gs.fase < 10) gs.fase = 10;
+        criarParticulas(gs.player.x, gs.player.y, '#FFFFFF', 20);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! NAVE ÔMEGA`, color: '#FFD700', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 9: INVOCAR NAVE MÃE PENTÁGONO (visual de teste, usa a habilidade da nave mãe tipo 0)
+      if (respostaRef.current === '505050') {
+        const gw = layoutRef.current.width;
+        const eq = gerarEquacao(gs.fase, getRespostasAtivas());
+        gs.boss = { active: true, type: 3, x: gw / 2, y: -100, hp: 100 + (gs.fase * 80), maxHp: 100 + (gs.fase * 80), vx: 2 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
+        gs.gameState = 'BOSS'; gs.stateTimer = 0; gs.tookDamageThisBoss = false;
+        criarParticulas(gs.player.x, gs.player.y, '#00E5FF', 20);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! NAVE PENTÁGONO`, color: '#00E5FF', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 10: INVOCAR NAVE MÃE HEXÁGONO (visual de teste, usa a habilidade da nave mãe tipo 1)
+      if (respostaRef.current === '606060') {
+        const gw = layoutRef.current.width;
+        const eq = gerarEquacao(gs.fase, getRespostasAtivas());
+        gs.boss = { active: true, type: 4, x: gw / 2, y: -100, hp: 100 + (gs.fase * 80), maxHp: 100 + (gs.fase * 80), vx: 2 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
+        gs.gameState = 'BOSS'; gs.stateTimer = 0; gs.tookDamageThisBoss = false;
+        criarParticulas(gs.player.x, gs.player.y, '#FFD700', 20);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! NAVE HEXÁGONO`, color: '#FFD700', life: 90 });
+        setResposta(''); return;
+      }
+
+      // CHEAT CODE 11: INVOCAR NAVE MÃE ESTRELA (visual de teste, usa a habilidade da nave mãe tipo 2)
+      if (respostaRef.current === '707070') {
+        const gw = layoutRef.current.width;
+        const eq = gerarEquacao(gs.fase, getRespostasAtivas());
+        gs.boss = { active: true, type: 5, x: gw / 2, y: -100, hp: 100 + (gs.fase * 80), maxHp: 100 + (gs.fase * 80), vx: 2 + gs.fase, shield: false, txt: eq.txt, res: eq.res, timer: 0, nextShieldAt: 100 };
+        gs.gameState = 'BOSS'; gs.stateTimer = 0; gs.tookDamageThisBoss = false;
+        criarParticulas(gs.player.x, gs.player.y, '#FF3300', 20);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `CHEAT CODE! NAVE ESTRELA`, color: '#FF3300', life: 90 });
         setResposta(''); return;
       }
 
@@ -254,6 +375,14 @@ export default function MathBlaster() {
               else if (type === 'PULSAR_UNLOCK') gs.player.weapons.pulsar.active = true;
               else if (type === 'PULSAR_COOLDOWN') { gs.player.weapons.pulsar.baseCooldown = Math.max(4000, gs.player.weapons.pulsar.baseCooldown - 1000); gs.player.weapons.pulsar.level += 1; }
               else if (type === 'PULSAR_RADIUS') { gs.player.weapons.pulsar.radius += 20; gs.player.weapons.pulsar.level += 1; }
+              else if (type === 'CHAIN_UNLOCK') gs.player.weapons.chain.active = true;
+              else if (type === 'CHAIN_COOLDOWN') { gs.player.weapons.chain.baseCooldown = Math.max(4000, gs.player.weapons.chain.baseCooldown - 1000); gs.player.weapons.chain.level += 1; }
+              else if (type === 'CHAIN_BOUNCE') { gs.player.weapons.chain.bounces += 1; gs.player.weapons.chain.level += 1; }
+              else if (type === 'MINE_UNLOCK') gs.player.weapons.mine.active = true;
+              else if (type === 'MINE_COOLDOWN') { gs.player.weapons.mine.baseCooldown = Math.max(5000, gs.player.weapons.mine.baseCooldown - 1500); gs.player.weapons.mine.level += 1; }
+              else if (type === 'MINE_BLAST') { gs.player.weapons.mine.blastRadius += 15; gs.player.weapons.mine.level += 1; }
+              else if (type === 'MINE_COUNT') gs.player.weapons.mine.count += 1;
+              else if (type === 'HULL_UPGRADE') { gs.player.maxHp = Math.min(220, gs.player.maxHp + 20); gs.player.hp = gs.player.maxHp; }
               else if (type === 'FORCE_SHIELD') gs.forceShieldHits = 3;
               else if (type === 'DRONE_NORMAL') { if (!gs.drones.normal.active) gs.drones.normal.active = true; else gs.drones.normal.baseCooldown = Math.max(500, gs.drones.normal.baseCooldown - 200); }
               else if (type === 'TIME_FREEZE') gs.timeFreezeTimer = 5000;
@@ -519,16 +648,21 @@ export default function MathBlaster() {
     gs.player = { 
       x: initialGw / 2, y: initialGh - 100, 
       hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, 
-      weapons: { 
-        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 }, 
+      weapons: {
+        missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
-        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 } 
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 },
+        chain: { active: false, level: 1, baseCooldown: 9000, lastFire: 0, damageMult: 2, bounces: 3, range: 140 },
+        mine: { active: false, level: 1, baseCooldown: 11000, lastFire: 0, damageMult: 4, fuse: 1500, blastRadius: 70, count: 1 }
       }
     };
     gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.pulses = []; gs.floatingTexts = [];
+    gs.chainBolts = []; gs.mines = [];
+    gs.bgSymbols = Array.from({ length: 16 }, () => novoSimboloFundo(layoutRef.current.width, layoutRef.current.height));
     gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
+    gs.waveFlavor = 'CLASSICA';
     
     gs.timeAlive = 0; gs.flawlessBossesCount = 0; gs.tookDamageThisBoss = false; gs.timeFreezeTimer = 0; gs.forceShieldHits = 0; gs.xRayTimer = 0;
     gs.drones = {
@@ -626,6 +760,24 @@ export default function MathBlaster() {
       gs.player.weapons.laser.lastFire = now;
     }
 
+    if (gs.player.weapons.chain.active && now - gs.player.weapons.chain.lastFire > gs.player.weapons.chain.baseCooldown) {
+      const cw = gs.player.weapons.chain;
+      const primeiroAlvo = acharInimigoMaisProximoDentroDoRaio(gs.player.x, gs.player.y, cw.range * 2, new Set());
+      gs.chainBolts.push({
+        id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, prevX: gs.player.x, prevY: gs.player.y - 20,
+        hitIds: new Set(), bouncesLeft: cw.bounces, damage: gs.player.damage * cw.damageMult, range: cw.range,
+        targetX: primeiroAlvo ? primeiroAlvo.x : gs.player.x, targetY: primeiroAlvo ? primeiroAlvo.y : gs.player.y - 260,
+        resolved: !primeiroAlvo, life: 25
+      });
+      cw.lastFire = now;
+    }
+
+    if (gs.player.weapons.mine.active && now - gs.player.weapons.mine.lastFire > gs.player.weapons.mine.baseCooldown && gs.mines.filter((m: any) => !m.exploded).length < gs.player.weapons.mine.count) {
+      const mw = gs.player.weapons.mine;
+      gs.mines.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y + 30, armedAt: now + mw.fuse, exploded: false, damage: gs.player.damage * mw.damageMult, blastRadius: mw.blastRadius });
+      mw.lastFire = now;
+    }
+
     if (gs.drones.normal.active && now - gs.drones.normal.lastFire > gs.drones.normal.baseCooldown) {
       gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 40, y: gs.player.y, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
       gs.drones.normal.lastFire = now;
@@ -668,6 +820,20 @@ export default function MathBlaster() {
       }
     });
     gs.pulses = gs.pulses.filter(p => p.life > 0);
+
+    gs.mines.forEach((m: any) => {
+      if (m.exploded) return;
+      if (now < m.armedAt) return;
+      const gatilho = gs.enemies.some((e: any) => !e.mathRequired && Math.pow(e.x - m.x, 2) + Math.pow(e.y - m.y, 2) < m.blastRadius * m.blastRadius);
+      const bossGatilho = gs.boss.active && !gs.boss.shield && Math.pow(gs.boss.x - m.x, 2) + Math.pow(gs.boss.y - m.y, 2) < Math.pow(m.blastRadius + 30, 2);
+      if (gatilho || bossGatilho) {
+        gs.enemies.forEach((e: any) => { if (!e.mathRequired && Math.pow(e.x - m.x, 2) + Math.pow(e.y - m.y, 2) < m.blastRadius * m.blastRadius) e.hp -= m.damage; });
+        if (bossGatilho) gs.boss.hp -= m.damage;
+        criarParticulas(m.x, m.y, '#FFA500', 15);
+        m.exploded = true;
+      }
+    });
+    gs.mines = gs.mines.filter((m: any) => !m.exploded);
 
     gs.lasers.forEach(l => {
       if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') {
@@ -752,6 +918,14 @@ export default function MathBlaster() {
     gs.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 1; });
     gs.particles = gs.particles.filter(p => p.life > 0);
 
+    gs.bgSymbols.forEach((s: any) => {
+      s.y += s.vy * speedMult;
+      if (s.y > gh + 20) {
+        const novo = novoSimboloFundo(gw, gh, -20 - Math.random() * 40);
+        s.x = novo.x; s.y = novo.y; s.vy = novo.vy; s.char = novo.char; s.size = novo.size; s.opacity = novo.opacity; s.color = novo.color;
+      }
+    });
+
     gs.stateTimer += 1;
 
     if (gs.gameState === 'WAVES') {
@@ -767,14 +941,31 @@ export default function MathBlaster() {
           }
       }
 
-      if (gs.stateTimer % Math.max(20, 100 - gs.fase * 10) === 0) {
+      const meteorBase = Math.max(20, 100 - gs.fase * 10);
+      const meteorInterval = gs.waveFlavor === 'CHUVA_METEOROS' ? Math.max(6, Math.floor(meteorBase / 4)) : gs.waveFlavor === 'ENXAME' ? meteorBase * 4 : meteorBase;
+      if (gs.waveFlavor !== 'BLINDADOS' && gs.stateTimer % meteorInterval === 0) {
         const meteorVy = gs.fase === 1 ? Math.random() * 1 + 1.5 : Math.random() * 2 + 3 + (gs.fase * 0.6);
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: meteorVy, angle: 0 });
       }
 
-      if (gs.stateTimer % 240 === 0 && gs.fase >= 2) {
+      if (gs.stateTimer % 240 === 0 && gs.fase >= 2 && (gs.waveFlavor !== 'CHUVA_METEOROS' || Math.random() < 0.15)) {
         const isLeft = Math.random() > 0.5;
-        gs.enemies.push({ id: Math.random().toString(), type: 'FLANKER', x: isLeft ? -20 : gw + 20, y: Math.random() * (gh/3), targetY: 0, hp: 2 + gs.fase * 2, vx: isLeft ? 3 + gs.fase * 1.2 : -3 - gs.fase * 1.2, vy: 1.5, angle: 0, shield: Math.random() > 0.7 ? 2 : 0 });
+        const shieldThreshold = gs.waveFlavor === 'BLINDADOS' ? 0.3 : 0.7;
+        gs.enemies.push({ id: Math.random().toString(), type: 'FLANKER', x: isLeft ? -20 : gw + 20, y: Math.random() * (gh/3), targetY: 0, hp: 2 + gs.fase * 2, vx: isLeft ? 3 + gs.fase * 1.2 : -3 - gs.fase * 1.2, vy: 1.5, angle: 0, shield: Math.random() > shieldThreshold ? 2 : 0 });
+      }
+
+      const tankInterval = gs.waveFlavor === 'BLINDADOS' ? 100 : 280;
+      if (gs.stateTimer % tankInterval === 0 && gs.fase >= 4 && gs.stateTimer < 1400) {
+        gs.enemies.push({ id: Math.random().toString(), type: 'SHIELD_TANK', x: Math.random() * (gw - 60) + 30, y: -40, vy: 0.8 + gs.fase * 0.15, hp: 15 + gs.fase * 4, armorReduction: 0.5 });
+      }
+
+      const swarmInterval = gs.waveFlavor === 'ENXAME' ? 90 : 260;
+      if (gs.waveFlavor !== 'BLINDADOS' && gs.stateTimer % swarmInterval === 0 && gs.fase >= 3 && gs.stateTimer < 1400) {
+        const qtd = gs.waveFlavor === 'ENXAME' ? 6 + Math.floor(Math.random() * 5) : 5 + Math.floor(Math.random() * 4);
+        const cx = Math.random() * (gw - 80) + 40;
+        for (let i = 0; i < qtd; i++) {
+          gs.enemies.push({ id: Math.random().toString(), type: 'SWARMLING', x: cx + (Math.random() - 0.5) * 60, y: -30 - Math.random() * 60, vy: 2.5 + gs.fase * 0.3, hp: 1, seed: Math.random() * 100 });
+        }
       }
 
       if (gs.stateTimer === 600 || gs.stateTimer === 1200) {
@@ -783,8 +974,8 @@ export default function MathBlaster() {
         gs.enemies.push({ id: Math.random().toString(), type: 'SPAWNER', x: isLeft ? gw * 0.25 : gw * 0.75, y: -80, targetY: 90 + Math.random() * 30, hp: 9999, mathRequired: true, solvesNeeded: Math.min(8, 2 + gs.fase), solvesDone: 0, txt: eq.txt, res: eq.res, vy: 1.5, spawnTimer: 0 });
       }
 
-      if (gs.stateTimer % (300 - Math.min(150, gs.fase * 20)) === 0 && gs.stateTimer < 1400) {
-        const cx = Math.random() * (gw - 120) + 60; 
+      if (gs.waveFlavor !== 'ENXAME' && (gs.waveFlavor !== 'CHUVA_METEOROS' || Math.random() < 0.15) && gs.stateTimer % (300 - Math.min(150, gs.fase * 20)) === 0 && gs.stateTimer < 1400) {
+        const cx = Math.random() * (gw - 120) + 60;
         const baseHp = 1 + (gs.fase * 2); 
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx, y: -30, targetY: 100, isLeader: true, hp: baseHp * 3, vx: 0, vy: 2, fireTimer: 0, angle: Math.PI, evasive: true });
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx - 40, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 2, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 }); 
@@ -813,9 +1004,10 @@ export default function MathBlaster() {
         if (gs.boss.x < 50 || gs.boss.x > gw - 50) gs.boss.vx *= -1;
         gs.boss.timer += 1 * speedMult;
 
-        if (gs.boss.type === 0) {
+        const bossAbility = gs.boss.type % 3;
+        if (bossAbility === 0) {
           if (gs.boss.timer % Math.max(40, 120 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 2, size: 14, damage: 5 + (gs.fase * 5), homing: true, color: '#FF8C00', hp: 5 + (gs.fase * 4) });
-        } else if (gs.boss.type === 1) {
+        } else if (bossAbility === 1) {
           if (gs.boss.timer % Math.max(40, 90 - (gs.fase * 5)) === 0) [-2, -1, 0, 1, 2].forEach(dir => gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: dir * 1.5, vy: 6 + gs.fase, size: 6, damage: 5 + (gs.fase * 5), homing: false, color: '#FF0055', hp: 1 }));
         } else {
           if (gs.boss.timer % Math.max(60, 150 - (gs.fase * 10)) === 0) gs.enemyLasers.push({ id: Math.random().toString(), x: gs.boss.x, y: gs.boss.y + 20, vx: 0, vy: 15, size: 20, damage: 10 + (gs.fase * 10), homing: false, color: '#32CD32', hp: 99 });
@@ -833,27 +1025,35 @@ export default function MathBlaster() {
       }
       
       if (gs.boss.hp <= 0) {
-        criarParticulas(gs.boss.x, gs.boss.y, '#FFD700', 30); 
+        criarParticulas(gs.boss.x, gs.boss.y, '#FFD700', 30);
         gs.score += 50 * gs.fase;
-        gs.boss.active = false; 
-        gs.gameState = 'TRANSITION'; 
-        gs.stateTimer = 0; 
-        gs.enemies = []; gs.enemyLasers = []; 
+        gs.boss.active = false;
+        gs.gameState = 'TRANSITION';
+        gs.stateTimer = 0;
+        gs.enemies = []; gs.enemyLasers = [];
         if (!gs.tookDamageThisBoss) gs.flawlessBossesCount += 1;
+
+        const proximaFase = gs.fase + 1;
+        const saboresDisponiveis = ['CLASSICA', 'CHUVA_METEOROS'];
+        if (proximaFase >= 3) saboresDisponiveis.push('ENXAME');
+        if (proximaFase >= 5) saboresDisponiveis.push('BLINDADOS');
+        gs.waveFlavor = saboresDisponiveis[Math.floor(Math.random() * saboresDisponiveis.length)];
       }
     }
     else if (gs.gameState === 'TRANSITION') {
-      if (gs.stateTimer > 90) { 
-        gs.fase += 1; 
-        gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 50); 
-        gs.gameState = 'WAVES'; 
-        gs.stateTimer = 0; 
+      if (gs.stateTimer > 90) {
+        gs.fase += 1;
+        gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 50);
+        gs.gameState = 'WAVES';
+        gs.stateTimer = 0;
       }
     }
 
     gs.enemies.forEach(e => {
-      if (e.type === 'METEOR') { e.y += e.vy * speedMult; } 
+      if (e.type === 'METEOR') { e.y += e.vy * speedMult; e.angle = (e.angle || 0) + 2 * speedMult; }
       else if (e.type === 'FLANKER') { e.x += e.vx * speedMult; e.y += e.vy * speedMult; }
+      else if (e.type === 'SHIELD_TANK') { e.y += e.vy * speedMult; }
+      else if (e.type === 'SWARMLING') { e.x += Math.sin((now + e.seed * 100) / 90) * 4 * speedMult; e.y += e.vy * speedMult; }
       else if (e.type === 'SPAWNER' || e.type === 'RARE_ENEMY') {
         if (e.y < e.targetY) e.y += e.vy * speedMult;
         else {
@@ -917,7 +1117,7 @@ export default function MathBlaster() {
             criarParticulas(e.x, e.y, '#00FFFF', 5); return; 
           }
           
-          e.hp -= l.damage;
+          e.hp -= (e.type === 'SHIELD_TANK' && l.type !== 'MISSILE' && l.type !== 'MISSILE_HOMING') ? l.damage * (1 - e.armorReduction) : l.damage;
           if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') {
             criarParticulas(e.x, e.y, '#FF4444', 10);
             gs.enemies.forEach(e2 => { if (!e2.mathRequired && Math.abs(e.x - e2.x) < l.aoeRange && Math.abs(e.y - e2.y) < l.aoeRange) e2.hp -= l.damage; });
@@ -942,15 +1142,53 @@ export default function MathBlaster() {
           if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') { 
             criarParticulas(l.x, l.y, '#FF4444', 10); 
             if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; 
-          } 
+          }
         }
       }
     });
 
+    gs.chainBolts.forEach((b: any) => {
+      if (b.resolved) { b.life -= 2; return; }
+      b.x += (b.targetX - b.x) * 0.4;
+      b.y += (b.targetY - b.y) * 0.4;
+      b.life -= 1;
+      const distSq = Math.pow(b.targetX - b.x, 2) + Math.pow(b.targetY - b.y, 2);
+      if (distSq < 400) {
+        const alvo = gs.enemies.find((e: any) => e.hp > 0 && !e.mathRequired && Math.abs(e.x - b.targetX) < 20 && Math.abs(e.y - b.targetY) < 20);
+        if (alvo) {
+          if (alvo.shield && alvo.shield > 0) { alvo.shield -= b.damage; }
+          else if (alvo.type === 'SHIELD_TANK') { alvo.hp -= b.damage * (1 - alvo.armorReduction); }
+          else { alvo.hp -= b.damage; }
+          criarParticulas(alvo.x, alvo.y, '#9D00FF', 5);
+          b.hitIds.add(alvo.id);
+        }
+        if (gs.boss.active && !gs.boss.shield && Math.abs(gs.boss.x - b.targetX) < 45 && Math.abs(gs.boss.y - b.targetY) < 35) {
+          gs.boss.hp -= b.damage;
+          criarParticulas(b.targetX, b.targetY, '#9D00FF', 5);
+        }
+        if (b.bouncesLeft > 0) {
+          const proximo = acharInimigoMaisProximoDentroDoRaio(b.targetX, b.targetY, b.range, b.hitIds);
+          if (proximo) {
+            b.prevX = b.targetX; b.prevY = b.targetY;
+            b.targetX = proximo.x; b.targetY = proximo.y;
+            b.bouncesLeft -= 1;
+            b.damage *= 0.7;
+            b.life = 25;
+          } else {
+            b.resolved = true;
+          }
+        } else {
+          b.resolved = true;
+        }
+      }
+    });
+    gs.chainBolts = gs.chainBolts.filter((b: any) => b.life > 0);
+
     if (now - gs.lastPowerupSpawn > 15000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
-      const tipos = [ 
-        { type: 'DAMAGE', color: '#FF00FF', nome: 'DANO NAVE' }, 
-        { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA UP' } 
+      const tipos = [
+        { type: 'DAMAGE', color: '#FF00FF', nome: 'DANO NAVE' },
+        { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA UP' },
+        { type: 'HULL_UPGRADE', color: '#7CFC00', nome: 'CASCO REFORÇADO' }
       ];
       
       if (!gs.player.tripleShot) tipos.push({ type: 'TRIPLE_SHOT', color: '#FFD700', nome: 'TIRO TRIPLO' });
@@ -969,9 +1207,21 @@ export default function MathBlaster() {
       }
 
       if (!gs.player.weapons.pulsar.active) tipos.push({ type: 'PULSAR_UNLOCK', color: '#00BFFF', nome: 'AURA PULSAR' });
-      else { 
-        tipos.push({ type: 'PULSAR_COOLDOWN', color: '#00BFFF', nome: 'PULSAR: RAPIDEZ' }); 
-        tipos.push({ type: 'PULSAR_RADIUS', color: '#00BFFF', nome: 'PULSAR: RAIO' }); 
+      else {
+        tipos.push({ type: 'PULSAR_COOLDOWN', color: '#00BFFF', nome: 'PULSAR: RAPIDEZ' });
+        tipos.push({ type: 'PULSAR_RADIUS', color: '#00BFFF', nome: 'PULSAR: RAIO' });
+      }
+
+      if (!gs.player.weapons.chain.active) tipos.push({ type: 'CHAIN_UNLOCK', color: '#9D00FF', nome: 'RAIO CADEIA' });
+      else {
+        tipos.push({ type: 'CHAIN_COOLDOWN', color: '#9D00FF', nome: 'CADEIA: RECARGA' });
+        tipos.push({ type: 'CHAIN_BOUNCE', color: '#9D00FF', nome: 'CADEIA: SALTOS' });
+      }
+
+      if (!gs.player.weapons.mine.active) tipos.push({ type: 'MINE_UNLOCK', color: '#FFA500', nome: 'MINA PROXIMIDADE' });
+      else {
+        tipos.push({ type: 'MINE_COOLDOWN', color: '#FFA500', nome: 'MINA: RECARGA' });
+        tipos.push({ type: 'MINE_BLAST', color: '#FFA500', nome: 'MINA: EXPLOSÃO' });
       }
 
       if (gs.fase >= 2 || gs.timeAlive > 60000) {
@@ -983,6 +1233,9 @@ export default function MathBlaster() {
       }
       if (gs.fase >= 4) {
         tipos.push({ type: 'X_RAY', color: '#FF1493', nome: 'RAIO-X MATH' });
+      }
+      if (gs.fase >= 5 && gs.player.weapons.mine.active) {
+        tipos.push({ type: 'MINE_COUNT', color: '#FFA500', nome: 'MINA: QUANTIDADE' });
       }
 
       if (gs.flawlessBossesCount >= 3) {
@@ -1020,18 +1273,33 @@ export default function MathBlaster() {
 
   const porcentagemHP = Math.max(0, (gs.player.hp / gs.player.maxHp) * 100);
   const corHP = porcentagemHP > 50 ? '#32CD32' : porcentagemHP > 25 ? '#FFD700' : '#FF4444';
+  const naveStage = gs.fase >= 10 ? 4 : gs.fase >= 6 ? 3 : gs.fase >= 3 ? 2 : 1;
+
+  const getFlavorLabel = (flavor: string) => {
+    if (flavor === 'CHUVA_METEOROS') return 'CHUVA DE METEOROS';
+    if (flavor === 'ENXAME') return 'ENXAME HOSTIL';
+    if (flavor === 'BLINDADOS') return 'ESQUADRÃO BLINDADO';
+    return 'ONDA CLÁSSICA';
+  };
+  const getFlavorColor = (flavor: string) => {
+    if (flavor === 'CHUVA_METEOROS') return '#AAAAAA';
+    if (flavor === 'ENXAME') return '#7FFF00';
+    if (flavor === 'BLINDADOS') return '#90A4AE';
+    return '#32CD32';
+  };
 
   const renderBuffs = () => (
     <View style={styles.buffContainer}>
       <Text style={[styles.buffText, { color: '#FF00FF' }]}>ATK: {gs.player.damage.toFixed(1)}</Text>
       <Text style={[styles.buffText, { color: '#00FFFF' }]}>TIRO: {(gs.player.fireRate / 1000).toFixed(2)}s</Text>
+      {gs.player.maxHp > 100 && <Text style={[styles.buffText, { color: '#7CFC00' }]}>CASCO +{gs.player.maxHp - 100}</Text>}
       {gs.player.tripleShot && <Text style={[styles.buffText, { color: '#FFD700' }]}>TRIPLO</Text>}
       {gs.timeFreezeTimer > 0 && <Text style={[styles.buffText, { color: '#E0FFFF' }]}>GELO</Text>}
       {gs.xRayTimer > 0 && <Text style={[styles.buffText, { color: '#FF1493' }]}>RAIO-X</Text>}
     </View>
   );
 
-  const renderCooldownBox = (weaponKey: 'missile' | 'laser' | 'pulsar', color: string, icon: string) => {
+  const renderCooldownBox = (weaponKey: 'missile' | 'laser' | 'pulsar' | 'chain' | 'mine', color: string, icon: string) => {
     const w = gs.player.weapons[weaponKey];
     if (!w.active) return null;
     const pct = Math.max(0, Math.min(100, ((Date.now() - w.lastFire) / w.baseCooldown) * 100));
@@ -1182,7 +1450,9 @@ export default function MathBlaster() {
             <Text style={[styles.hudFase, { alignSelf: 'flex-start', marginTop: 15, marginRight: 5 }]}>FASE {gs.fase}</Text>
             {renderCooldownBox('missile', '#FF4444', 'rocket')}
             {renderCooldownBox('laser', '#32CD32', 'flash')}
-            {renderCooldownBox('pulsar', '#00BFFF', 'shield')} 
+            {renderCooldownBox('pulsar', '#00BFFF', 'shield')}
+            {renderCooldownBox('chain', '#9D00FF', 'link')}
+            {renderCooldownBox('mine', '#FFA500', 'disc')} 
           </View>
         </View>
 
@@ -1199,7 +1469,13 @@ export default function MathBlaster() {
         >
           
           {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
-          {gs.gameState === 'TRANSITION' && (<View style={styles.centerAlert}><Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text><Text style={styles.alertSubText}>PREPARANDO SALTO...</Text></View>)}
+          {gs.gameState === 'TRANSITION' && (
+            <View style={styles.centerAlert}>
+              <Text style={styles.alertTextSuccess}>FASE CONCLUÍDA</Text>
+              <Text style={styles.alertSubText}>PREPARANDO SALTO...</Text>
+              <Text style={[styles.alertSubText, { color: getFlavorColor(gs.waveFlavor), marginTop: 8 }]}>PRÓXIMA ONDA: {getFlavorLabel(gs.waveFlavor)}</Text>
+            </View>
+          )}
 
           <View style={{
             position: 'absolute',
@@ -1212,22 +1488,45 @@ export default function MathBlaster() {
 
             <View style={styles.gridOverlay}/>
 
+            <View style={styles.bgSymbolsLayer} pointerEvents="none">
+              {gs.bgSymbols.map((s: any) => (
+                <Text key={s.id} style={[styles.bgSymbolText, { left: s.x, top: s.y, fontSize: s.size, color: s.color, opacity: s.opacity }]}>{s.char}</Text>
+              ))}
+            </View>
+
             {gs.enemies.map(e => {
-              if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 12, top: e.y - 12 }]}/>;
-              if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 10, top: e.y - 8, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
-              
+              if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 12, top: e.y - 12, transform: [{ rotate: `${e.angle || 0}deg` }] }]}/>;
+              if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 7, top: e.y - 12, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
+
               if (e.type === 'RARE_ENEMY') {
                 return (
                    <View key={e.id} style={[styles.spawnerShape, { left: e.x - 35, top: e.y - 25, backgroundColor: 'rgba(255, 215, 0, 0.2)', borderColor: '#FFD700', shadowColor: 'transparent' }]}>
+                      <View style={[styles.rareRing, { left: 22, top: 14, transform: [{ rotate: `${(Date.now() / 20) % 360}deg` }] }]}/>
                       <Text style={[styles.spawnerMath, { color: '#FFD700' }]}>{e.txt}</Text>
                       {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{e.res}</Text>}
                    </View>
                 );
               }
 
+              if (e.type === 'SHIELD_TANK') {
+                return (
+                  <View key={e.id} style={{ position: 'absolute', left: e.x - 15, top: e.y - 15, width: 30, height: 30 }}>
+                    <View style={styles.shieldTankBody}/>
+                    <View style={[styles.shieldTankTop, { left: 8, top: -10 }]}/>
+                  </View>
+                );
+              }
+
+              if (e.type === 'SWARMLING') return <View key={e.id} style={[styles.swarmlingShape, { left: e.x - 6, top: e.y - 6 }]}/>;
+
               if (e.type === 'SPAWNER') {
+                const nodePulso = 0.4 + Math.abs(Math.sin(Date.now() / 200)) * 0.6;
                 return (
                    <View key={e.id} style={[styles.spawnerShape, { left: e.x - 30, top: e.y - 22 }]}>
+                      <View style={[styles.spawnerNode, { left: -4, top: -4, opacity: nodePulso }]}/>
+                      <View style={[styles.spawnerNode, { right: -4, top: -4, opacity: nodePulso }]}/>
+                      <View style={[styles.spawnerNode, { left: -4, bottom: -4, opacity: nodePulso }]}/>
+                      <View style={[styles.spawnerNode, { right: -4, bottom: -4, opacity: nodePulso }]}/>
                       <Text style={styles.spawnerMath}>{e.txt}</Text>
                       {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{e.res}</Text>}
                       <View style={styles.powerupDots}>
@@ -1236,14 +1535,36 @@ export default function MathBlaster() {
                    </View>
                 );
               }
-              const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad'; 
-              return (<View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: e.isLeader ? '#FF00FF' : '#FF0055', transform: [{ rotate: rot }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
+              const rot = e.isLeader ? (e.angle - Math.PI/2) + 'rad' : '0rad';
+              const corNave = e.isLeader ? '#FF00FF' : '#FF0055';
+              return (
+                <View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: corNave, filter: `drop-shadow(0 0 6px ${corNave})` as any, transform: [{ rotate: rot }] }]}>
+                  <View style={[styles.squadShadow, { left: -4, top: 4 }]}/>
+                  {e.shield > 0 && <View style={styles.miniShield}/>}
+                </View>
+              );
             })}
 
             {gs.boss.active && (
               <View style={[styles.bossContainer, { left: gs.boss.x - 40, top: gs.boss.y - 30 }]}>
                 <View style={styles.bossHpBar}><View style={[styles.bossHpFill, { width: `${Math.max(0, (gs.boss.hp / gs.boss.maxHp) * 100)}%` }]}/></View>
-                <View style={[styles.bossShip, gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF' }, gs.boss.type === 2 && { borderRadius: 30, height: 60, backgroundColor: '#006400', borderColor: '#32CD32' }]}/>
+                {gs.boss.type <= 2 ? (
+                  <View style={[
+                    styles.bossShip,
+                    gs.boss.type === 0 && { shadowColor: '#FF4444', shadowRadius: 12, shadowOpacity: 0.9 },
+                    gs.boss.type === 1 && { borderRadius: 0, backgroundColor: '#4B0082', borderColor: '#FF00FF', shadowColor: '#FF00FF', shadowRadius: 12, shadowOpacity: 0.9 },
+                    gs.boss.type === 2 && { borderRadius: 30, height: 60, backgroundColor: '#006400', borderColor: '#32CD32', shadowColor: '#32CD32', shadowRadius: 12, shadowOpacity: 0.9 },
+                  ]}/>
+                ) : (
+                  <View style={[
+                    styles.bossPoligono,
+                    gs.boss.type === 3 && styles.bossPentagono,
+                    gs.boss.type === 4 && styles.bossHexagono,
+                    gs.boss.type === 5 && styles.bossEstrela,
+                  ]}>
+                    <View style={styles.bossPoligonoNucleo}/>
+                  </View>
+                )}
                 {gs.boss.shield && (
                   <View style={styles.bossShield}>
                     <Text style={styles.bossMath}>{gs.boss.txt}</Text>
@@ -1254,22 +1575,45 @@ export default function MathBlaster() {
             )}
 
             {gs.powerups.map(p => (
-              <View key={p.id} style={[styles.powerupBox, { left: p.x - 40, top: p.y - 18, borderColor: p.color, opacity: p.collected ? 0.4 : 1 }]}>
+              <View key={p.id} style={[styles.powerupBox, { left: p.x - 40, top: p.y - 18, borderColor: p.color, shadowColor: p.color, shadowRadius: 8, shadowOpacity: 0.8, opacity: p.collected ? 0.4 : 1 }]}>
                 <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
                 <Text style={styles.powerupMath}>{p.txt}</Text>
               </View>
             ))}
 
-            {gs.lasers.map(l => (
-              <View key={l.id} style={[styles.laserNormal, { 
-                left: l.x - (l.size/2), 
-                top: l.y, 
-                width: l.size, 
-                height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3)), 
-                backgroundColor: l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : '#00FFFF', 
-                borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') ? l.size / 2 : 5 
-              }]}/>
-            ))}
+            {gs.lasers.map(l => {
+              const corTiro = l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : '#00FFFF';
+              return (
+                <View key={l.id} style={[styles.laserNormal, {
+                  left: l.x - (l.size/2),
+                  top: l.y,
+                  width: l.size,
+                  height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3)),
+                  backgroundColor: corTiro,
+                  shadowColor: corTiro, shadowRadius: 6, shadowOpacity: 0.9,
+                  borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') ? l.size / 2 : 5
+                }]}/>
+              );
+            })}
+
+            {gs.chainBolts.map((b: any) => {
+              const dx = b.x - b.prevX; const dy = b.y - b.prevY;
+              const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+              const angle = Math.atan2(dy, dx);
+              const midX = (b.prevX + b.x) / 2;
+              const midY = (b.prevY + b.y) / 2;
+              return (
+                <View key={b.id} style={{ position: 'absolute', left: midX - dist / 2, top: midY - 2, width: dist, height: 4, backgroundColor: '#9D00FF', borderRadius: 2, opacity: b.resolved ? Math.max(0, b.life / 25) : 1, transform: [{ rotate: angle + 'rad' }], shadowColor: '#9D00FF', shadowRadius: 6, shadowOpacity: 0.9, zIndex: 6 }}/>
+              );
+            })}
+
+            {gs.mines.map((m: any) => {
+              const armado = Date.now() >= m.armedAt;
+              const pulso = 0.5 + Math.abs(Math.sin(Date.now() / (armado ? 100 : 250))) * 0.5;
+              return (
+                <View key={m.id} style={{ position: 'absolute', left: m.x - 10, top: m.y - 10, width: 20, height: 20, backgroundColor: armado ? '#FF4500' : '#FFA500', borderWidth: 2, borderColor: armado ? '#FF0000' : '#FFD700', opacity: pulso, transform: [{ rotate: '45deg' }], zIndex: 4 }}/>
+              );
+            })}
 
             {gs.pulses.map(p => {
               const currentRadius = p.maxRadius * (1 - (p.life / p.maxLife));
@@ -1283,7 +1627,7 @@ export default function MathBlaster() {
             ))}
 
             {gs.enemyLasers.map(el => (
-              <View key={el.id} style={[el.homing ? styles.cannonBall : styles.enemyLaser, { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color }]}>
+              <View key={el.id} style={[el.homing ? styles.cannonBall : styles.enemyLaser, { left: el.x - (el.size/2), top: el.y - (el.size/2), width: el.size, height: el.size, backgroundColor: el.color, shadowColor: el.color, shadowRadius: 6, shadowOpacity: 0.9 }]}>
                 {el.homing && el.hp < 5 && <View style={{width:'100%', height:'100%', backgroundColor:'rgba(255,255,255,0.5)', borderRadius: 20}}/>}
               </View>
             ))}
@@ -1296,9 +1640,31 @@ export default function MathBlaster() {
               <Text key={ft.id} style={[styles.floatingText, { left: ft.x - 30, top: ft.y, color: ft.color, opacity: ft.life / 60 }]}>{ft.text}</Text>
             ))}
 
-            <View style={[styles.playerShape, { left: gs.player.x - 15, top: gs.player.y - 15 }]}/>
+            {naveStage >= 4 && (
+              <View style={[styles.naveNucleo, { left: gs.player.x - 13, top: gs.player.y + 2, opacity: 0.5 + Math.abs(Math.sin(Date.now() / 180)) * 0.5 }]}/>
+            )}
+            {naveStage >= 3 && (
+              <View style={[styles.naveAuraTras, { left: gs.player.x - 19, top: gs.player.y - 9 }]}/>
+            )}
+            {naveStage >= 2 && (
+              <View style={[styles.naveWingLeft, naveStage >= 3 && styles.naveWingGrown, { left: gs.player.x - 23, top: gs.player.y + 4, transform: [{ rotate: '-15deg' }] }]}>
+                {naveStage >= 4 && <View style={styles.naveWingTip}/>}
+              </View>
+            )}
+            {naveStage >= 2 && (
+              <View style={[styles.naveWingRight, naveStage >= 3 && styles.naveWingGrown, { left: gs.player.x + 11, top: gs.player.y + 4, transform: [{ rotate: '15deg' }] }]}>
+                {naveStage >= 4 && <View style={styles.naveWingTip}/>}
+              </View>
+            )}
+            <View style={[naveStage >= 4 ? styles.playerShapeOmega : styles.playerShape, { left: gs.player.x - 15, top: gs.player.y - 15 }]}/>
             <View style={[styles.propulsor, { left: gs.player.x - 5, top: gs.player.y + 15, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
-            
+            {naveStage >= 2 && (
+              <View style={[styles.propulsorSecundario, { left: gs.player.x - 14, top: gs.player.y + 13, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
+            )}
+            {naveStage >= 3 && (
+              <View style={[styles.propulsorSecundario, { left: gs.player.x + 8, top: gs.player.y + 13, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
+            )}
+
             {gs.forceShieldHits > 0 && (
               <View style={{ position: 'absolute', left: gs.player.x - 25, top: gs.player.y - 25, width: 50, height: 50, borderRadius: 25, borderWidth: 3, borderColor: '#00FA9A', backgroundColor: 'rgba(0,250,154,0.1)', zIndex: 10 }}/>
             )}
@@ -1347,10 +1713,10 @@ const styles = StyleSheet.create({
   
   menuScrollContent: { alignItems: 'center', paddingBottom: 20, paddingHorizontal: 20 },
   menuContainerFixed: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#050015', width: '100%', maxWidth: 600, paddingHorizontal: 20 },
-  tituloMenu: { fontSize: 45, fontWeight: '900', color: '#00FFFF', fontStyle: 'italic' },
+  tituloMenu: { fontSize: 45, fontWeight: '900', color: '#00FFFF', fontStyle: 'italic', textShadowColor: '#00FFFF', textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   subTituloMenu: { fontSize: 25, fontWeight: '900', color: '#FFF', letterSpacing: 5 },
   instrucoes: { color: '#9D97B5', textAlign: 'center', marginHorizontal: 30, marginTop: 20, fontSize: 14, fontWeight: 'bold' },
-  btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 12, marginTop: 20, width: '100%', alignItems: 'center' },
+  btnIniciar: { backgroundColor: '#FF00FF', paddingVertical: 15, paddingHorizontal: 30, borderRadius: 12, marginTop: 20, width: '100%', alignItems: 'center', shadowColor: '#FF00FF', shadowRadius: 10, shadowOpacity: 0.6 },
   btnIniciarTxt: { color: '#FFF', fontSize: 16, fontWeight: '900' },
   textoFase: { color: '#9D97B5', fontSize: 16, marginTop: 10 },
 
@@ -1371,11 +1737,11 @@ const styles = StyleSheet.create({
   myRankingFixed: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   myRankingLabel: { color: '#AAA', fontSize: 13, fontWeight: '600' },
 
-  hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10, width: '100%' },
-  hudScore: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1, marginBottom: 5 },
+  hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10, width: '100%', shadowColor: '#00FFFF', shadowRadius: 10, shadowOpacity: 0.5 },
+  hudScore: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1, marginBottom: 5, textShadowColor: '#00FFFF', textShadowRadius: 4, textShadowOffset: { width: 0, height: 0 } },
   hpBarContainer: { width: '100%', height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' },
   hpBarFill: { height: '100%', borderRadius: 4 },
-  hudFase: { color: '#FF00FF', fontSize: 20, fontWeight: '900', fontStyle: 'italic' },
+  hudFase: { color: '#FF00FF', fontSize: 20, fontWeight: '900', fontStyle: 'italic', textShadowColor: '#FF00FF', textShadowRadius: 6, textShadowOffset: { width: 0, height: 0 } },
   
   buffContainer: { flexDirection: 'row', gap: 5, marginTop: 5 },
   buffText: { fontSize: 9, fontWeight: 'bold', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 4, borderRadius: 4 },
@@ -1385,28 +1751,45 @@ const styles = StyleSheet.create({
 
   gameArea: { flex: 1, position: 'relative', overflow: 'hidden', backgroundColor: '#050015', touchAction: 'none' as any, width: '100%' },
   
-  gridOverlay: Platform.OS === 'web' ? { 
+  gridOverlay: Platform.OS === 'web' ? {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    opacity: 0.1, 
-    backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)' as any, 
-    backgroundSize: '30px 30px' as any 
+    opacity: 0.1,
+    backgroundImage: 'linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px)' as any,
+    backgroundSize: '30px 30px' as any
   } : { display: 'none' },
-  
+
+  bgSymbolsLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  bgSymbolText: { position: 'absolute', fontWeight: '900' },
+
   centerAlert: { position: 'absolute', top: '40%', width: '100%', alignItems: 'center', zIndex: 50 },
   alertTextDanger: { color: '#FF0055', fontSize: 35, fontWeight: '900', textShadowColor: '#FF0055', textShadowRadius: 8, textShadowOffset: { width: 1, height: 1 } },
   alertTextSuccess: { color: '#32CD32', fontSize: 35, fontWeight: '900', textShadowColor: '#32CD32', textShadowRadius: 8, textShadowOffset: { width: 1, height: 1 } },
   alertSubText: { color: '#FFF', fontSize: 14, fontWeight: 'bold', letterSpacing: 2, marginTop: 5 },
 
-  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 15, borderRightWidth: 15, borderBottomWidth: 30, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF' },
+  playerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 15, borderRightWidth: 15, borderBottomWidth: 30, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#00FFFF', shadowColor: '#00FFFF', shadowRadius: 8, shadowOpacity: 0.7 },
+  playerShapeOmega: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 15, borderRightWidth: 15, borderBottomWidth: 30, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#E0FFFF', shadowColor: '#00FFFF', shadowRadius: 14, shadowOpacity: 1 },
   propulsor: { position: 'absolute', width: 10, height: 12, backgroundColor: '#FF8C00', borderBottomLeftRadius: 5, borderBottomRightRadius: 5 },
-  droneNormal: { position: 'absolute', width: 10, height: 10, backgroundColor: '#1E90FF', borderRadius: 5, borderWidth: 1, borderColor: '#FFF', zIndex: 5 },
-  droneAdvanced: { position: 'absolute', width: 12, height: 12, backgroundColor: '#FFD700', borderRadius: 3, borderWidth: 1, borderColor: '#FF4444', zIndex: 5 },
+  propulsorSecundario: { position: 'absolute', width: 6, height: 8, backgroundColor: '#FFA500', borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
+  naveWingLeft: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 14, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#0099AA' },
+  naveWingRight: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 14, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#0099AA' },
+  naveWingGrown: { borderLeftWidth: 9, borderRightWidth: 9, borderBottomWidth: 20 },
+  naveWingTip: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: '#7DF9FF', top: 16, left: -3, shadowColor: '#7DF9FF', shadowRadius: 4, shadowOpacity: 1 },
+  naveAuraTras: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 19, borderRightWidth: 19, borderBottomWidth: 38, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#AA00AA', opacity: 0.55, shadowColor: '#FF00FF', shadowRadius: 10, shadowOpacity: 0.9 },
+  naveNucleo: { position: 'absolute', width: 26, height: 26, backgroundColor: '#FFD700', borderWidth: 2, borderColor: '#FFFACD', transform: [{ rotate: '45deg' }], shadowColor: '#FFD700', shadowRadius: 12, shadowOpacity: 1 },
+  droneNormal: { position: 'absolute', width: 10, height: 10, backgroundColor: '#1E90FF', borderRadius: 5, borderWidth: 1, borderColor: '#FFF', zIndex: 5, shadowColor: '#1E90FF', shadowRadius: 4, shadowOpacity: 0.8 },
+  droneAdvanced: { position: 'absolute', width: 12, height: 12, backgroundColor: '#FFD700', borderRadius: 3, borderWidth: 1, borderColor: '#FF4444', zIndex: 5, shadowColor: '#FFD700', shadowRadius: 5, shadowOpacity: 0.9 },
   
-  meteorShape: { position: 'absolute', width: 24, height: 24, backgroundColor: '#555', borderRadius: 4, borderWidth: 2, borderColor: '#777' },
+  meteorShape: { position: 'absolute', width: 24, height: 24, backgroundColor: '#555', borderRadius: 4, borderWidth: 2, borderColor: '#777', shadowColor: '#FF6600', shadowRadius: 5, shadowOpacity: 0.5 },
   squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
-  flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 16, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500' },
-  miniShield: { position: 'absolute', top: -8, left: -16, width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)' },
-  
+  squadShadow: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: 'rgba(255,0,85,0.35)' },
+  flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500', filter: 'drop-shadow(0 0 6px #FFA500)' as any },
+  miniShield: { position: 'absolute', top: -8, left: -16, width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)', shadowColor: '#00FFFF', shadowRadius: 6, shadowOpacity: 0.7 },
+  spawnerNode: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#00FFFF', shadowColor: '#00FFFF', shadowRadius: 4, shadowOpacity: 1 },
+  rareRing: { position: 'absolute', width: 16, height: 16, borderWidth: 2, borderColor: '#FFD700', backgroundColor: 'transparent', shadowColor: '#FFD700', shadowRadius: 6, shadowOpacity: 0.9 },
+  shieldTankBody: { position: 'absolute', left: 0, top: 0, width: 30, height: 30, backgroundColor: '#37474F', borderWidth: 2, borderColor: '#90A4AE', transform: [{ rotate: '45deg' }], shadowColor: '#90A4AE', shadowRadius: 6, shadowOpacity: 0.6 },
+  shieldTankTop: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 7, borderRightWidth: 7, borderBottomWidth: 12, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#90A4AE', shadowColor: '#90A4AE', shadowRadius: 5, shadowOpacity: 0.6 },
+  swarmlingShape: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: '#7FFF00', shadowColor: '#7FFF00', shadowRadius: 3, shadowOpacity: 0.8 },
+
   spawnerShape: { position: 'absolute', width: 60, height: 45, backgroundColor: 'rgba(0, 255, 255, 0.2)', borderWidth: 2, borderColor: '#00FFFF', borderRadius: 10, justifyContent: 'center', alignItems: 'center', shadowColor: 'transparent', zIndex: 15 },
   spawnerMath: { color: '#FFF', fontSize: 15, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 1, height: 1 } },
   xrayText: { position: 'absolute', top: -20, color: '#FF1493', fontSize: 14, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 2, textShadowOffset: { width: 1, height: 1 } },
@@ -1415,8 +1798,15 @@ const styles = StyleSheet.create({
   bossShip: { width: 60, height: 40, backgroundColor: '#8B0000', borderRadius: 15, borderWidth: 2, borderColor: '#FF4444' },
   bossHpBar: { width: '100%', height: 5, backgroundColor: '#333', marginBottom: 4, borderRadius: 2, overflow: 'hidden' },
   bossHpFill: { height: '100%', backgroundColor: '#FF0055' },
-  bossShield: { position: 'absolute', top: -10, width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
+  bossShield: { position: 'absolute', top: -10, width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#00FFFF', backgroundColor: 'rgba(0, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center', shadowColor: '#00FFFF', shadowRadius: 10, shadowOpacity: 0.8 },
   bossMath: { color: '#FFF', fontSize: 20, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 4, textShadowOffset: { width: 1, height: 1 } },
+
+  // Naves mãe experimentais (pentágono/hexágono/estrela) - apenas visual, ainda sem habilidade própria
+  bossPoligono: { width: 70, height: 70, alignItems: 'center', justifyContent: 'center' },
+  bossPentagono: { backgroundColor: '#00E5FF', clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)' as any, filter: 'drop-shadow(0 0 10px #00E5FF)' as any },
+  bossHexagono: { backgroundColor: '#FFD700', clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)' as any, filter: 'drop-shadow(0 0 10px #FFD700)' as any },
+  bossEstrela: { backgroundColor: '#FF3300', clipPath: 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)' as any, filter: 'drop-shadow(0 0 10px #FF3300)' as any },
+  bossPoligonoNucleo: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#FFFFFF', shadowColor: '#FFFFFF', shadowRadius: 8, shadowOpacity: 1 },
 
   powerupBox: { position: 'absolute', width: 80, height: 35, backgroundColor: 'rgba(0,0,0,0.8)', borderWidth: 2, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   powerupTitle: { fontSize: 7, fontWeight: '900', position: 'absolute', top: -8, backgroundColor: '#050015', paddingHorizontal: 3 },
@@ -1438,14 +1828,17 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'android' ? 10 : 8, 
     alignItems: 'center',
     width: '100%',
-    flexShrink: 1, 
+    flexShrink: 1,
+    shadowColor: '#FF00FF',
+    shadowRadius: 10,
+    shadowOpacity: 0.5,
   },
-  visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 6, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 6 }, 
+  visorRadar: { width: '100%', maxWidth: 350, backgroundColor: '#050015', paddingVertical: 6, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#00FFFF', marginBottom: 6, shadowColor: '#00FFFF', shadowRadius: 8, shadowOpacity: 0.7 },
   visorTexto: { color: '#00FFFF', fontSize: 16, fontWeight: '900', letterSpacing: 3 },
   tecladoContainer: { width: '100%', maxWidth: 350, gap: 8 }, 
   tecladoRow: { flexDirection: 'row', gap: 8, height: 45 }, 
   teclaRetro: { flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
   teclaRetroText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' }, 
-  teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)', borderColor: '#FF4444' },
-  teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)', borderColor: '#32CD32' },
+  teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)', borderColor: '#FF4444', shadowColor: '#FF4444', shadowRadius: 6, shadowOpacity: 0.6 },
+  teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)', borderColor: '#32CD32', shadowColor: '#32CD32', shadowRadius: 6, shadowOpacity: 0.6 },
 });

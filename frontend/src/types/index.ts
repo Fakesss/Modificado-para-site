@@ -28,6 +28,20 @@ export interface Equipe {
   turmaId?: string;
 }
 
+export interface Construcao {
+  id: string;
+  tipo: 'CASTELO' | 'TORRE' | 'MURALHA' | 'ESTANDARTE' | 'DECORACAO';
+  slot: number;
+  nivel: number;
+}
+
+export interface Reino {
+  equipeId: string;
+  moedas: number;
+  construcoes: Construcao[];
+  slotsDisponiveis: number;
+}
+
 export interface RankingItem {
   id: string;
   nome: string;

@@ -185,6 +185,12 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/reino')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#7B68EE30' }]}><Ionicons name="flag" size={24} color="#7B68EE" /></View>
+          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Reino (beta)</Text><Text style={styles.menuDescription}>Construir e testar o reino das equipes</Text></View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/cor-admin')}>
           <View style={[styles.menuIcon, { backgroundColor: '#00CED130' }]}><Ionicons name="color-wand" size={24} color="#00CED1" /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Cor da Prévia</Text><Text style={styles.menuDescription}>Escolher sua cor para "Ver como aluno"</Text></View>
