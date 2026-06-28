@@ -118,6 +118,24 @@ class PontuacaoJogo(BaseModel):
     jogo: str    # "arcade" | "math_blaster" | "cabo_de_guerra" | "tictactoe"
     pontos: int  # pontuação BRUTA da partida (calculada pelo próprio jogo)
 
+class Construcao(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tipo: str
+    slot: int
+    nivel: int = 1
+
+class Reino(BaseModel):
+    equipeId: str
+    moedas: int = 0
+    construcoes: List[Construcao] = []
+
+class ReinoConstruirRequest(BaseModel):
+    tipo: str
+    slot: int
+
+class ReinoUpgradeRequest(BaseModel):
+    construcaoId: str
+
 # =========================================================================
 # CONFIGURAÇÃO DE PONTOS POR JOGO (painel de ajuste manual)
 # -------------------------------------------------------------------------
@@ -137,6 +155,29 @@ CONFIG_PONTOS_JOGOS: Dict[str, Dict[str, int]] = {
     "cabo_de_guerra": {"divisor": 1,  "limite_diario": 24},
     "tictactoe":      {"divisor": 1,  "limite_diario": 18},
 }
+
+# =========================================================================
+# CATÁLOGO DO REINO (construções que uma equipe pode erguer/evoluir)
+# -------------------------------------------------------------------------
+# "custoBase"    -> custo em moedas pra construir pela primeira vez
+# "custoUpgrade" -> custo base pra subir de nível (custo = custoUpgrade *
+#                   nível atual da construção)
+# "nivelMax"     -> nível máximo que essa construção pode atingir
+# O CASTELO é especial: vem grátis no terreno 0 de todo reino novo e define
+# quantos terrenos a equipe tem disponíveis (8 + (nívelCastelo-1)*4).
+# =========================================================================
+CATALOGO_REINO: Dict[str, Dict[str, Any]] = {
+    "CASTELO":    {"nome": "Castelo",        "icone": "business", "custoBase": 0,  "custoUpgrade": 100, "nivelMax": 10},
+    "TORRE":      {"nome": "Torre do Saber", "icone": "school",   "custoBase": 50, "custoUpgrade": 40,  "nivelMax": 5},
+    "MURALHA":    {"nome": "Muralha",        "icone": "shield",   "custoBase": 60, "custoUpgrade": 50,  "nivelMax": 5},
+    "ESTANDARTE": {"nome": "Estandarte",     "icone": "flag",     "custoBase": 30, "custoUpgrade": 25,  "nivelMax": 3},
+    "DECORACAO":  {"nome": "Jardim",         "icone": "leaf",     "custoBase": 20, "custoUpgrade": 15,  "nivelMax": 3},
+}
+
+def calcular_slots_disponiveis(construcoes: List[dict]) -> int:
+    castelo = next((c for c in construcoes if c["tipo"] == "CASTELO"), None)
+    nivel_castelo = castelo["nivel"] if castelo else 1
+    return 8 + (nivel_castelo - 1) * 4
 
 async def aplicar_pontos_diarios_jogo(usuario_id: str, equipe_id: Optional[str], jogo: str, pontos_brutos: int) -> dict:
     """Converte a pontuação bruta de uma partida em ponto de equipe,
@@ -515,6 +556,92 @@ async def update_equipe(equipe_id: str, update_data: EquipeUpdate, current_user:
 async def delete_equipe(equipe_id: str, current_user: dict = Depends(require_admin)):
     await db.equipes.update_one({"id": equipe_id}, {"$set": {"ativa": False}})
     return {"message": "Equipe desativada"}
+
+# ============== REINO (vila/progresso visual da equipe) ==============
+@api_router.get("/reino/{equipe_id}")
+async def get_reino(equipe_id: str, current_user: dict = Depends(get_current_user)):
+    reino = await db.reinos.find_one({"equipeId": equipe_id})
+    if not reino:
+        castelo = Construcao(tipo="CASTELO", slot=0, nivel=1)
+        novo_reino = Reino(equipeId=equipe_id, moedas=0, construcoes=[castelo])
+        await db.reinos.insert_one(novo_reino.dict())
+        reino = novo_reino.dict()
+    reino_limpo = {k: v for k, v in reino.items() if k != '_id'}
+    reino_limpo["slotsDisponiveis"] = calcular_slots_disponiveis(reino_limpo["construcoes"])
+    return reino_limpo
+
+@api_router.post("/reino/{equipe_id}/construir")
+async def construir_reino(equipe_id: str, dados: ReinoConstruirRequest, current_user: dict = Depends(get_current_user)):
+    is_admin = current_user.get("perfil") == "ADMIN"
+    if not is_admin and current_user.get("equipeId") != equipe_id:
+        raise HTTPException(status_code=403, detail="Você só pode construir no reino da sua própria equipe")
+
+    if dados.tipo not in CATALOGO_REINO or dados.tipo == "CASTELO":
+        raise HTTPException(status_code=400, detail="Tipo de construção inválido")
+
+    reino = await db.reinos.find_one({"equipeId": equipe_id})
+    if not reino:
+        raise HTTPException(status_code=404, detail="Reino não encontrado")
+
+    construcoes = reino.get("construcoes", [])
+    if any(c["slot"] == dados.slot for c in construcoes):
+        raise HTTPException(status_code=400, detail="Terreno já ocupado")
+
+    slots_disponiveis = calcular_slots_disponiveis(construcoes)
+    if dados.slot < 0 or dados.slot >= slots_disponiveis:
+        raise HTTPException(status_code=400, detail="Terreno fora dos limites do reino")
+
+    custo = CATALOGO_REINO[dados.tipo]["custoBase"]
+    moedas_atuais = reino.get("moedas", 0)
+    if not is_admin:
+        if moedas_atuais < custo:
+            raise HTTPException(status_code=400, detail="Moedas insuficientes")
+        moedas_atuais -= custo
+
+    nova_construcao = Construcao(tipo=dados.tipo, slot=dados.slot, nivel=1)
+    await db.reinos.update_one(
+        {"equipeId": equipe_id},
+        {"$push": {"construcoes": nova_construcao.dict()}, "$set": {"moedas": moedas_atuais}}
+    )
+    reino_atualizado = await db.reinos.find_one({"equipeId": equipe_id})
+    reino_limpo = {k: v for k, v in reino_atualizado.items() if k != '_id'}
+    reino_limpo["slotsDisponiveis"] = calcular_slots_disponiveis(reino_limpo["construcoes"])
+    return reino_limpo
+
+@api_router.post("/reino/{equipe_id}/upgrade")
+async def upgrade_reino(equipe_id: str, dados: ReinoUpgradeRequest, current_user: dict = Depends(get_current_user)):
+    is_admin = current_user.get("perfil") == "ADMIN"
+    if not is_admin and current_user.get("equipeId") != equipe_id:
+        raise HTTPException(status_code=403, detail="Você só pode evoluir o reino da sua própria equipe")
+
+    reino = await db.reinos.find_one({"equipeId": equipe_id})
+    if not reino:
+        raise HTTPException(status_code=404, detail="Reino não encontrado")
+
+    construcoes = reino.get("construcoes", [])
+    construcao = next((c for c in construcoes if c["id"] == dados.construcaoId), None)
+    if not construcao:
+        raise HTTPException(status_code=404, detail="Construção não encontrada")
+
+    catalogo_item = CATALOGO_REINO[construcao["tipo"]]
+    if construcao["nivel"] >= catalogo_item["nivelMax"]:
+        raise HTTPException(status_code=400, detail="Construção já está no nível máximo")
+
+    custo = catalogo_item["custoUpgrade"] * construcao["nivel"]
+    moedas_atuais = reino.get("moedas", 0)
+    if not is_admin:
+        if moedas_atuais < custo:
+            raise HTTPException(status_code=400, detail="Moedas insuficientes")
+        moedas_atuais -= custo
+
+    await db.reinos.update_one(
+        {"equipeId": equipe_id, "construcoes.id": dados.construcaoId},
+        {"$inc": {"construcoes.$.nivel": 1}, "$set": {"moedas": moedas_atuais}}
+    )
+    reino_atualizado = await db.reinos.find_one({"equipeId": equipe_id})
+    reino_limpo = {k: v for k, v in reino_atualizado.items() if k != '_id'}
+    reino_limpo["slotsDisponiveis"] = calcular_slots_disponiveis(reino_limpo["construcoes"])
+    return reino_limpo
 
 @api_router.get("/usuarios")
 async def get_usuarios(current_user: dict = Depends(get_current_user)):

@@ -66,6 +66,11 @@ export const createEquipe = async (nome: string, cor: string) => (await api.post
 export const updateEquipe = async (id: string, d: any) => (await api.put(`/equipes/${id}`, d)).data;
 export const deleteEquipe = async (id: string) => (await api.delete(`/equipes/${id}`)).data;
 
+// REINO (vila/progresso visual da equipe)
+export const getReino = async (equipeId: string) => { try { return (await api.get(`/reino/${equipeId}`)).data; } catch { return null; } };
+export const construirReino = async (equipeId: string, tipo: string, slot: number) => (await api.post(`/reino/${equipeId}/construir`, { tipo, slot })).data;
+export const upgradeReino = async (equipeId: string, construcaoId: string) => (await api.post(`/reino/${equipeId}/upgrade`, { construcaoId })).data;
+
 // CONTEÚDOS E PASTAS
 export const getConteudos = async (cat?: string) => { const r = await api.get('/conteudos', { params: { categoria: cat } }); return r.data; };
 export const getPastas = async (turmaId?: string) => { try { return (await api.get('/pastas', { params: { turmaId } })).data; } catch { return []; } };
