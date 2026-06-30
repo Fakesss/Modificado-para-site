@@ -83,6 +83,20 @@ export interface Exercicio {
   questoes?: Questao[];
 }
 
+export interface SudokuSessaoAPI {
+  puzzle: number[];
+  solution: number[];
+  userBoard: number[];
+  pencilMarks: number[][];
+  hintedCells: number[];
+  lives: number;
+  hintsLeft: number;
+  difficulty: string;
+  elapsedSeconds: number;
+  completed: boolean;
+  lost: boolean;
+}
+
 export interface Conteudo {
   id: string;
   tipo: 'VIDEO' | 'LINK' | 'MATERIAL';

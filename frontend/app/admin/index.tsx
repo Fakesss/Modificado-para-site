@@ -185,6 +185,17 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/sudoku')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#00897B' }]}>
+            <Ionicons name="grid-outline" size={26} color="#fff" />
+          </View>
+          <View style={styles.menuInfo}>
+            <Text style={styles.menuTitle}>Sudoku (beta)</Text>
+            <Text style={styles.menuDescription}>Testar o jogo de Sudoku</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#555" />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/reino')}>
           <View style={[styles.menuIcon, { backgroundColor: '#7B68EE30' }]}><Ionicons name="flag" size={24} color="#7B68EE" /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Reino (beta)</Text><Text style={styles.menuDescription}>Construir e testar o reino das equipes</Text></View>
