@@ -163,4 +163,11 @@ export const adminApagarMensagem = async (msgId: string) => (await api.delete(`/
 export const adminBloquearConversa = async (user1: string, user2: string) => (await api.post('/admin/chat/bloquear', { usuarioId1: user1, usuarioId2: user2 })).data;
 export const adminDesbloquearConversa = async (user1: string, user2: string) => (await api.post('/admin/chat/desbloquear', { usuarioId1: user1, usuarioId2: user2 })).data;
 
+// ======== SUDOKU ========
+export const getSudokuSessao = async () => { try { return (await api.get('/sudoku/sessao')).data; } catch { return null; } };
+export const saveSudokuSessao = async (sessao: any) => { try { await api.put('/sudoku/sessao', sessao); } catch {} };
+export const deleteSudokuSessao = async () => { try { await api.delete('/sudoku/sessao'); } catch {} };
+export const concluirSudoku = async (dados: { difficulty: string; elapsedSeconds: number; hintsUsed: number }) => { try { await api.post('/sudoku/concluir', dados); } catch {} };
+export const getSudokuRanking = async (difficulty: string) => { try { return (await api.get(`/sudoku/ranking/${difficulty}`)).data; } catch { return []; } };
+
 export default api;

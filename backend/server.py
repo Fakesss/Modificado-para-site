@@ -136,6 +136,24 @@ class ReinoConstruirRequest(BaseModel):
 class ReinoUpgradeRequest(BaseModel):
     construcaoId: str
 
+class SudokuSessao(BaseModel):
+    puzzle: List[int]
+    solution: List[int]
+    userBoard: List[int]
+    pencilMarks: List[List[int]]
+    hintedCells: List[int] = []
+    lives: int = 3
+    hintsLeft: int = 3
+    difficulty: str
+    elapsedSeconds: int = 0
+    completed: bool = False
+    lost: bool = False
+
+class SudokuConclusao(BaseModel):
+    difficulty: str
+    elapsedSeconds: int
+    hintsUsed: int
+
 # =========================================================================
 # CONFIGURAÇÃO DE PONTOS POR JOGO (painel de ajuste manual)
 # -------------------------------------------------------------------------
@@ -1305,6 +1323,49 @@ async def concluir_missao(missao_id: str, current_user: dict = Depends(get_curre
     eq_raw = current_user.get("equipeId")
     if eq_raw: await db.equipes.update_one({"id": str(eq_raw).strip()}, {"$inc": {"pontosTotais": pontos}})
     return {"message": "Missão concluída", "pontos": pontos}
+
+# ===== SUDOKU =====
+@api_router.get("/sudoku/sessao")
+async def get_sudoku_sessao(current_user: dict = Depends(get_current_user)):
+    sessao = await db.sudoku_sessoes.find_one({"usuarioId": current_user["id"]})
+    if not sessao:
+        return None
+    return {k: v for k, v in sessao.items() if k != '_id'}
+
+@api_router.put("/sudoku/sessao")
+async def save_sudoku_sessao(sessao: SudokuSessao, current_user: dict = Depends(get_current_user)):
+    doc = sessao.dict()
+    doc["usuarioId"] = current_user["id"]
+    await db.sudoku_sessoes.replace_one({"usuarioId": current_user["id"]}, doc, upsert=True)
+    return {"message": "ok"}
+
+@api_router.delete("/sudoku/sessao")
+async def delete_sudoku_sessao(current_user: dict = Depends(get_current_user)):
+    await db.sudoku_sessoes.delete_one({"usuarioId": current_user["id"]})
+    return {"message": "ok"}
+
+@api_router.post("/sudoku/concluir")
+async def concluir_sudoku(dados: SudokuConclusao, current_user: dict = Depends(get_current_user)):
+    doc = dados.dict()
+    doc["usuarioId"] = current_user["id"]
+    doc["concluidoEm"] = get_now_brt().isoformat()
+    await db.sudoku_ranking.insert_one(doc)
+    await db.sudoku_sessoes.delete_one({"usuarioId": current_user["id"]})
+    return {"message": "ok"}
+
+@api_router.get("/sudoku/ranking/{difficulty}")
+async def get_sudoku_ranking(difficulty: str):
+    resultados = await db.sudoku_ranking.find({"difficulty": difficulty}).sort("elapsedSeconds", 1).to_list(100)
+    out = []
+    for r in resultados:
+        usuario = await db.usuarios.find_one({"id": r["usuarioId"]})
+        out.append({
+            "nome": usuario.get("nome", "?") if usuario else "?",
+            "elapsedSeconds": r["elapsedSeconds"],
+            "hintsUsed": r["hintsUsed"],
+            "concluidoEm": r.get("concluidoEm"),
+        })
+    return out
 
 @api_router.post("/online/ping")
 async def ping_online(): return {"status": "ok"}
