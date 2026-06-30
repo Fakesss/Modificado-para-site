@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as api from '../src/services/api';
 import { SudokuSessaoAPI } from '../src/types';
 
@@ -145,13 +146,16 @@ export default function SudokuScreen() {
 
   // ── load saved session ──
   useEffect(() => {
-    api.getSudokuSessao().then((data: SudokuSessaoAPI | null) => {
-      if (data && !data.completed && !data.lost && data.puzzle?.length === 81) {
-        setSavedData(data);
-        setPhase('resume');
-      } else {
-        setPhase('select');
-      }
+    AsyncStorage.getItem('sudoku_sessao').then(raw => {
+      try {
+        const data: SudokuSessaoAPI = raw ? JSON.parse(raw) : null;
+        if (data && !data.completed && !data.lost && data.puzzle?.length === 81) {
+          setSavedData(data);
+          setPhase('resume');
+          return;
+        }
+      } catch {}
+      setPhase('select');
     });
   }, []);
 
@@ -178,13 +182,13 @@ export default function SudokuScreen() {
   const doSave = () => {
     const s = stateRef.current;
     if (!s.given.some(v => v > 0)) return;
-    api.saveSudokuSessao({
+    AsyncStorage.setItem('sudoku_sessao', JSON.stringify({
       puzzle: s.given, solution: s.solution, userBoard: s.userBoard,
       pencilMarks: s.pencilMarks, hintedCells: Array.from(s.hintedCells),
       lives: s.lives, hintsLeft: s.hintsLeft, difficulty: s.difficulty,
       elapsedSeconds: elapsedRef.current,
       completed: s.phase === 'won', lost: s.phase === 'lost',
-    });
+    }));
   };
 
   const scheduleSave = () => {
@@ -296,7 +300,7 @@ export default function SudokuScreen() {
       setLives(newLives);
       if (newLives <= 0) {
         setPhase('lost');
-        api.saveSudokuSessao({ puzzle: given, solution, userBoard: nb, pencilMarks: npm, hintedCells: Array.from(hintedCells), lives: 0, hintsLeft, difficulty, elapsedSeconds: elapsedRef.current, completed: false, lost: true });
+        AsyncStorage.setItem('sudoku_sessao', JSON.stringify({ puzzle: given, solution, userBoard: nb, pencilMarks: npm, hintedCells: Array.from(hintedCells), lives: 0, hintsLeft, difficulty, elapsedSeconds: elapsedRef.current, completed: false, lost: true }));
       } else {
         scheduleSave();
       }
@@ -335,12 +339,12 @@ export default function SudokuScreen() {
     setPencilMarks(npm);
     setHintedCells(nh);
     setHintsLeft(hl);
-    api.saveSudokuSessao({ puzzle: given, solution, userBoard: nb, pencilMarks: npm, hintedCells: Array.from(nh), lives, hintsLeft: hl, difficulty, elapsedSeconds: elapsedRef.current, completed: false, lost: false });
+    AsyncStorage.setItem('sudoku_sessao', JSON.stringify({ puzzle: given, solution, userBoard: nb, pencilMarks: npm, hintedCells: Array.from(nh), lives, hintsLeft: hl, difficulty, elapsedSeconds: elapsedRef.current, completed: false, lost: false }));
     checkWin(nb, nh, lives, hl, difficulty);
   };
 
   const handleRestart = () => {
-    api.deleteSudokuSessao();
+    AsyncStorage.removeItem('sudoku_sessao');
     setPhase('select');
   };
 
@@ -473,7 +477,7 @@ export default function SudokuScreen() {
               <Ionicons name="play" size={18} color="#000" />
               <Text style={styles.resumeBtnText}>Continuar partida</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.resumeNewBtn} onPress={() => { api.deleteSudokuSessao(); setPhase('select'); }}>
+            <TouchableOpacity style={styles.resumeNewBtn} onPress={() => { AsyncStorage.removeItem('sudoku_sessao'); setPhase('select'); }}>
               <Text style={styles.resumeNewText}>Nova partida</Text>
             </TouchableOpacity>
           </View>
@@ -613,7 +617,7 @@ export default function SudokuScreen() {
                 <Text style={styles.statKey}>Dicas</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => { api.deleteSudokuSessao(); setPhase('select'); }}>
+            <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => { AsyncStorage.removeItem('sudoku_sessao'); setPhase('select'); }}>
               <Text style={styles.modalPrimaryText}>Nova Partida</Text>
             </TouchableOpacity>
           </View>
@@ -632,7 +636,7 @@ export default function SudokuScreen() {
             <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => startGame(difficulty)}>
               <Text style={styles.modalPrimaryText}>Tentar novamente</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.modalSecondaryBtn} onPress={() => { api.deleteSudokuSessao(); setPhase('select'); }}>
+            <TouchableOpacity style={styles.modalSecondaryBtn} onPress={() => { AsyncStorage.removeItem('sudoku_sessao'); setPhase('select'); }}>
               <Text style={styles.modalSecondaryText}>Escolher dificuldade</Text>
             </TouchableOpacity>
           </View>
