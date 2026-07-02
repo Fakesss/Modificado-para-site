@@ -69,14 +69,17 @@ export default function MathBlaster() {
   const gs = useRef({
     currentZoom: BASE_ZOOM,
     keys: { up: false, down: false, left: false, right: false },
-    player: { 
+    dynamicVisualsUnlocked: false, // Cheat code 40028922: fundo dinâmico + alerta de chefe (desativado por padrão)
+    player: {
       x: initialWidth / 2, y: initialHeight - 60, hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false,
+      fireMode: 'PROJETIL' as 'PROJETIL' | 'CONTINUO', beamIntensity: 0,
       weapons: {
         missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
-        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 },
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 70, damageMult: 6 },
         chain: { active: false, level: 1, baseCooldown: 9000, lastFire: 0, damageMult: 2, bounces: 3, range: 140 },
-        mine: { active: false, level: 1, baseCooldown: 11000, lastFire: 0, damageMult: 4, fuse: 1500, blastRadius: 70, count: 1 }
+        mine: { active: false, level: 1, baseCooldown: 11000, lastFire: 0, damageMult: 4, fuse: 1500, blastRadius: 70, count: 1 },
+        electric: { active: false, level: 1, baseCooldown: 4000, lastFire: 0, damageMult: 0.6, bounces: 3, range: 150 }
       }
     },
     lasers: [] as any[], specialLasers: [] as any[], mathShots: [] as any[], pulses: [] as any[], floatingTexts: [] as any[],
@@ -175,6 +178,25 @@ export default function MathBlaster() {
       }
     });
     return closest;
+  };
+
+  // Powerups adaptativos: cadência e tiro triplo só valem pra arma primária por projétil (PROJETIL).
+  // Preparado para uma futura arma primária de tiro contínuo (ex.: feixe laser) via player.fireMode.
+  const POWERUPS_EXCLUSIVOS_PROJETIL = new Set(['FIRE_RATE', 'TRIPLE_SHOT']);
+
+  const converterBuffsDeModo = (modoNovo: 'PROJETIL' | 'CONTINUO') => {
+    const jogador = gs.player;
+    if (jogador.fireMode === modoNovo) return;
+    if (modoNovo === 'CONTINUO') {
+      const bonusCadenciaAcumulado = Math.max(0, 300 - jogador.fireRate);
+      jogador.beamIntensity += bonusCadenciaAcumulado / 20 + (jogador.tripleShot ? 3 : 0);
+      jogador.fireRate = 300;
+      jogador.tripleShot = false;
+    } else {
+      jogador.fireRate = Math.max(100, 300 - jogador.beamIntensity * 20);
+      jogador.beamIntensity = 0;
+    }
+    jogador.fireMode = modoNovo;
   };
 
   // Símbolos matemáticos flutuando no fundo (decorativo, sem colisão)
@@ -313,6 +335,14 @@ export default function MathBlaster() {
         setResposta(''); return;
       }
 
+      // CHEAT CODE 12: ALTERNA VISUAIS DINÂMICOS (fundo progressivo + alerta pulsante de chefe)
+      if (respostaRef.current === '40028922') {
+        gs.dynamicVisualsUnlocked = !gs.dynamicVisualsUnlocked;
+        criarParticulas(gs.player.x, gs.player.y, '#FFDD00', 15);
+        gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: gs.dynamicVisualsUnlocked ? `CHEAT CODE! VISUAIS DINÂMICOS ON` : `VISUAIS DINÂMICOS OFF`, color: '#FFDD00', life: 90 });
+        setResposta(''); return;
+      }
+
       const num = parseInt(respostaRef.current);
       let acertou = false;
 
@@ -375,9 +405,13 @@ export default function MathBlaster() {
               else if (type === 'PULSAR_UNLOCK') gs.player.weapons.pulsar.active = true;
               else if (type === 'PULSAR_COOLDOWN') { gs.player.weapons.pulsar.baseCooldown = Math.max(4000, gs.player.weapons.pulsar.baseCooldown - 1000); gs.player.weapons.pulsar.level += 1; }
               else if (type === 'PULSAR_RADIUS') { gs.player.weapons.pulsar.radius += 20; gs.player.weapons.pulsar.level += 1; }
+              else if (type === 'PULSAR_DAMAGE') { gs.player.weapons.pulsar.damageMult += 1; gs.player.weapons.pulsar.level += 1; }
               else if (type === 'CHAIN_UNLOCK') gs.player.weapons.chain.active = true;
               else if (type === 'CHAIN_COOLDOWN') { gs.player.weapons.chain.baseCooldown = Math.max(4000, gs.player.weapons.chain.baseCooldown - 1000); gs.player.weapons.chain.level += 1; }
               else if (type === 'CHAIN_BOUNCE') { gs.player.weapons.chain.bounces += 1; gs.player.weapons.chain.level += 1; }
+              else if (type === 'ELECTRIC_UNLOCK') gs.player.weapons.electric.active = true;
+              else if (type === 'ELECTRIC_COOLDOWN') { gs.player.weapons.electric.baseCooldown = Math.max(1500, gs.player.weapons.electric.baseCooldown - 500); gs.player.weapons.electric.level += 1; }
+              else if (type === 'ELECTRIC_BOUNCE') { gs.player.weapons.electric.bounces += 1; gs.player.weapons.electric.level += 1; }
               else if (type === 'MINE_UNLOCK') gs.player.weapons.mine.active = true;
               else if (type === 'MINE_COOLDOWN') { gs.player.weapons.mine.baseCooldown = Math.max(5000, gs.player.weapons.mine.baseCooldown - 1500); gs.player.weapons.mine.level += 1; }
               else if (type === 'MINE_BLAST') { gs.player.weapons.mine.blastRadius += 15; gs.player.weapons.mine.level += 1; }
@@ -645,15 +679,17 @@ export default function MathBlaster() {
     const initialGw = canvasSizeRef.current.width / gs.currentZoom;
     const initialGh = canvasSizeRef.current.height / gs.currentZoom;
 
-    gs.player = { 
-      x: initialGw / 2, y: initialGh - 100, 
-      hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false, 
+    gs.player = {
+      x: initialGw / 2, y: initialGh - 100,
+      hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false,
+      fireMode: 'PROJETIL' as 'PROJETIL' | 'CONTINUO', beamIntensity: 0,
       weapons: {
         missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
-        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 45, damageMult: 1 },
+        pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 70, damageMult: 6 },
         chain: { active: false, level: 1, baseCooldown: 9000, lastFire: 0, damageMult: 2, bounces: 3, range: 140 },
-        mine: { active: false, level: 1, baseCooldown: 11000, lastFire: 0, damageMult: 4, fuse: 1500, blastRadius: 70, count: 1 }
+        mine: { active: false, level: 1, baseCooldown: 11000, lastFire: 0, damageMult: 4, fuse: 1500, blastRadius: 70, count: 1 },
+        electric: { active: false, level: 1, baseCooldown: 4000, lastFire: 0, damageMult: 0.6, bounces: 3, range: 150 }
       }
     };
     gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.pulses = []; gs.floatingTexts = [];
@@ -767,9 +803,23 @@ export default function MathBlaster() {
         id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, prevX: gs.player.x, prevY: gs.player.y - 20,
         hitIds: new Set(), bouncesLeft: cw.bounces, damage: gs.player.damage * cw.damageMult, range: cw.range,
         targetX: primeiroAlvo ? primeiroAlvo.x : gs.player.x, targetY: primeiroAlvo ? primeiroAlvo.y : gs.player.y - 260,
-        resolved: !primeiroAlvo, life: 25
+        resolved: !primeiroAlvo, life: 25, color: '#9D00FF', stun: false
       });
       cw.lastFire = now;
+    }
+
+    // BALAS ELÉTRICAS: dano base menor que os tiros convencionais, salta entre inimigos próximos
+    // e atordoa (impede de atirar) no exato instante em que a eletricidade encosta neles.
+    if (gs.player.weapons.electric.active && now - gs.player.weapons.electric.lastFire > gs.player.weapons.electric.baseCooldown) {
+      const ew = gs.player.weapons.electric;
+      const primeiroAlvo = acharInimigoMaisProximoDentroDoRaio(gs.player.x, gs.player.y, ew.range * 2, new Set());
+      gs.chainBolts.push({
+        id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, prevX: gs.player.x, prevY: gs.player.y - 20,
+        hitIds: new Set(), bouncesLeft: ew.bounces, damage: gs.player.damage * ew.damageMult, range: ew.range,
+        targetX: primeiroAlvo ? primeiroAlvo.x : gs.player.x, targetY: primeiroAlvo ? primeiroAlvo.y : gs.player.y - 260,
+        resolved: !primeiroAlvo, life: 25, color: '#FFFF00', stun: true
+      });
+      ew.lastFire = now;
     }
 
     if (gs.player.weapons.mine.active && now - gs.player.weapons.mine.lastFire > gs.player.weapons.mine.baseCooldown && gs.mines.filter((m: any) => !m.exploded).length < gs.player.weapons.mine.count) {
@@ -798,7 +848,9 @@ export default function MathBlaster() {
       p.y = gs.player.y;
       p.life -= 1;
       const currentRadius = p.maxRadius * (1 - (p.life / p.maxLife));
+      const pulsarDamage = gs.player.damage * gs.player.weapons.pulsar.damageMult;
 
+      // Efeito defensivo: destrói automaticamente tiros inimigos que entram no raio
       gs.enemyLasers.forEach(el => {
         if (Math.pow(el.x - p.x, 2) + Math.pow(el.y - p.y, 2) < currentRadius * currentRadius) {
           el.hp = 0;
@@ -806,16 +858,18 @@ export default function MathBlaster() {
         }
       });
 
+      // Efeito ofensivo: dano contínuo a quem tocar/permanecer no raio, respeitando escudo/blindagem
       gs.enemies.forEach(e => {
         if (!e.mathRequired && Math.pow(e.x - p.x, 2) + Math.pow(e.y - p.y, 2) < currentRadius * currentRadius) {
-          e.hp = -100;
-          gs.score += 1;
-          criarParticulas(e.x, e.y, '#00BFFF', 5);
+          if (e.shield && e.shield > 0) { e.shield -= pulsarDamage; }
+          else if (e.type === 'SHIELD_TANK') { e.hp -= pulsarDamage * (1 - e.armorReduction); }
+          else { e.hp -= pulsarDamage; }
+          criarParticulas(e.x, e.y, '#00BFFF', 3);
         }
       });
-      
+
       if (gs.boss.active && !gs.boss.shield && Math.pow(gs.boss.x - p.x, 2) + Math.pow(gs.boss.y - p.y, 2) < Math.pow(currentRadius + 30, 2)) {
-         gs.boss.hp -= 2; 
+         gs.boss.hp -= pulsarDamage;
          criarParticulas(p.x, gs.boss.y + 30, '#00BFFF', 1);
       }
     });
@@ -1159,12 +1213,14 @@ export default function MathBlaster() {
           if (alvo.shield && alvo.shield > 0) { alvo.shield -= b.damage; }
           else if (alvo.type === 'SHIELD_TANK') { alvo.hp -= b.damage * (1 - alvo.armorReduction); }
           else { alvo.hp -= b.damage; }
-          criarParticulas(alvo.x, alvo.y, '#9D00FF', 5);
+          // Atordoamento: só impede o inimigo de atirar no exato momento em que a eletricidade encosta nele
+          if (b.stun) alvo.fireTimer = 0;
+          criarParticulas(alvo.x, alvo.y, b.color || '#9D00FF', 5);
           b.hitIds.add(alvo.id);
         }
         if (gs.boss.active && !gs.boss.shield && Math.abs(gs.boss.x - b.targetX) < 45 && Math.abs(gs.boss.y - b.targetY) < 35) {
           gs.boss.hp -= b.damage;
-          criarParticulas(b.targetX, b.targetY, '#9D00FF', 5);
+          criarParticulas(b.targetX, b.targetY, b.color || '#9D00FF', 5);
         }
         if (b.bouncesLeft > 0) {
           const proximo = acharInimigoMaisProximoDentroDoRaio(b.targetX, b.targetY, b.range, b.hitIds);
@@ -1185,14 +1241,18 @@ export default function MathBlaster() {
     gs.chainBolts = gs.chainBolts.filter((b: any) => b.life > 0);
 
     if (now - gs.lastPowerupSpawn > 15000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
-      const tipos = [
+      const tipos: { type: string; color: string; nome: string }[] = [
         { type: 'DAMAGE', color: '#FF00FF', nome: 'DANO NAVE' },
-        { type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA UP' },
         { type: 'HULL_UPGRADE', color: '#7CFC00', nome: 'CASCO REFORÇADO' }
       ];
-      
-      if (!gs.player.tripleShot) tipos.push({ type: 'TRIPLE_SHOT', color: '#FFD700', nome: 'TIRO TRIPLO' });
-      
+
+      // Powerups adaptativos: cadência e tiro triplo só valem pra arma primária por projétil.
+      // Preparado pra uma futura arma primária de tiro contínuo — nesse modo eles somem do mapa
+      // sozinhos, e os buffs acumulados são convertidos via converterBuffsDeModo().
+      const modoAtualCompativel = (tipoPowerup: string) => !POWERUPS_EXCLUSIVOS_PROJETIL.has(tipoPowerup) || gs.player.fireMode === 'PROJETIL';
+      if (modoAtualCompativel('FIRE_RATE')) tipos.push({ type: 'FIRE_RATE', color: '#00FFFF', nome: 'CADÊNCIA UP' });
+      if (modoAtualCompativel('TRIPLE_SHOT') && !gs.player.tripleShot) tipos.push({ type: 'TRIPLE_SHOT', color: '#FFD700', nome: 'TIRO TRIPLO' });
+
       if (!gs.player.weapons.missile.active) tipos.push({ type: 'MISSILE_UNLOCK', color: '#FF4444', nome: 'MÍSSIL TELE' });
       else { 
         tipos.push({ type: 'MISSILE_COOLDOWN', color: '#FF4444', nome: 'MÍSSIL: RECARGA' }); 
@@ -1210,12 +1270,19 @@ export default function MathBlaster() {
       else {
         tipos.push({ type: 'PULSAR_COOLDOWN', color: '#00BFFF', nome: 'PULSAR: RAPIDEZ' });
         tipos.push({ type: 'PULSAR_RADIUS', color: '#00BFFF', nome: 'PULSAR: RAIO' });
+        tipos.push({ type: 'PULSAR_DAMAGE', color: '#00BFFF', nome: 'PULSAR: DANO' });
       }
 
       if (!gs.player.weapons.chain.active) tipos.push({ type: 'CHAIN_UNLOCK', color: '#9D00FF', nome: 'RAIO CADEIA' });
       else {
         tipos.push({ type: 'CHAIN_COOLDOWN', color: '#9D00FF', nome: 'CADEIA: RECARGA' });
         tipos.push({ type: 'CHAIN_BOUNCE', color: '#9D00FF', nome: 'CADEIA: SALTOS' });
+      }
+
+      if (!gs.player.weapons.electric.active) tipos.push({ type: 'ELECTRIC_UNLOCK', color: '#FFFF00', nome: 'BALAS ELÉTRICAS' });
+      else {
+        tipos.push({ type: 'ELECTRIC_COOLDOWN', color: '#FFFF00', nome: 'ELÉTRICA: RECARGA' });
+        tipos.push({ type: 'ELECTRIC_BOUNCE', color: '#FFFF00', nome: 'ELÉTRICA: SALTOS' });
       }
 
       if (!gs.player.weapons.mine.active) tipos.push({ type: 'MINE_UNLOCK', color: '#FFA500', nome: 'MINA PROXIMIDADE' });
@@ -1288,6 +1355,16 @@ export default function MathBlaster() {
     return '#32CD32';
   };
 
+  // Progressão visual sutil da malha de fundo conforme a fase avança (só ativa via cheat code 40028922)
+  const CORES_MALHA_POR_FASE = ['#00FFFF', '#00E5FF', '#33CCFF', '#6699FF', '#9966FF', '#CC66FF', '#FF66CC', '#FF6699', '#FF6666', '#FFAA33'];
+  const gridEstiloDinamico = (fase: number) => {
+    const cor = CORES_MALHA_POR_FASE[Math.min(CORES_MALHA_POR_FASE.length - 1, Math.max(0, fase - 1))];
+    return {
+      backgroundImage: `linear-gradient(${cor} 1px, transparent 1px), linear-gradient(90deg, ${cor} 1px, transparent 1px)`,
+      opacity: 0.08 + Math.min(0.1, fase * 0.008),
+    };
+  };
+
   const renderBuffs = () => (
     <View style={styles.buffContainer}>
       <Text style={[styles.buffText, { color: '#FF00FF' }]}>ATK: {gs.player.damage.toFixed(1)}</Text>
@@ -1299,11 +1376,11 @@ export default function MathBlaster() {
     </View>
   );
 
-  const renderCooldownBox = (weaponKey: 'missile' | 'laser' | 'pulsar' | 'chain' | 'mine', color: string, icon: string) => {
+  const renderCooldownBox = (weaponKey: 'missile' | 'laser' | 'pulsar' | 'chain' | 'mine' | 'electric', color: string, icon: string) => {
     const w = gs.player.weapons[weaponKey];
     if (!w.active) return null;
     const pct = Math.max(0, Math.min(100, ((Date.now() - w.lastFire) / w.baseCooldown) * 100));
-    const totalDamage = weaponKey === 'pulsar' ? 'MAX' : (gs.player.damage * w.damageMult).toFixed(1);
+    const totalDamage = (gs.player.damage * w.damageMult).toFixed(1);
     const cooldownSecs = (w.baseCooldown / 1000).toFixed(1);
 
     return (
@@ -1452,7 +1529,8 @@ export default function MathBlaster() {
             {renderCooldownBox('laser', '#32CD32', 'flash')}
             {renderCooldownBox('pulsar', '#00BFFF', 'shield')}
             {renderCooldownBox('chain', '#9D00FF', 'link')}
-            {renderCooldownBox('mine', '#FFA500', 'disc')} 
+            {renderCooldownBox('mine', '#FFA500', 'disc')}
+            {renderCooldownBox('electric', '#FFFF00', 'flash-outline')} 
           </View>
         </View>
 
@@ -1468,6 +1546,15 @@ export default function MathBlaster() {
           onTouchCancel={handleGameTouchEnd}
         >
           
+          {gs.dynamicVisualsUnlocked && (gs.gameState === 'BOSS' || gs.gameState === 'BOSS_WARNING') && (
+            <View pointerEvents="none" style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 60,
+              borderWidth: 6,
+              borderColor: `rgba(255, 221, 0, ${(0.3 + 0.55 * Math.abs(Math.sin(Date.now() / 260))).toFixed(2)})`,
+              shadowColor: '#FFDD00', shadowRadius: 20, shadowOpacity: 0.5 + 0.4 * Math.abs(Math.sin(Date.now() / 260)),
+            }}/>
+          )}
+
           {gs.gameState === 'BOSS_WARNING' && (<View style={styles.centerAlert}><Text style={styles.alertTextDanger}>ATENÇÃO</Text><Text style={styles.alertSubText}>NAVE MÃE SE APROXIMANDO</Text></View>)}
           {gs.gameState === 'TRANSITION' && (
             <View style={styles.centerAlert}>
@@ -1486,7 +1573,7 @@ export default function MathBlaster() {
             transform: [{ scale: gs.currentZoom }],
           }}>
 
-            <View style={styles.gridOverlay}/>
+            <View style={[styles.gridOverlay, gs.dynamicVisualsUnlocked && (gridEstiloDinamico(gs.fase) as any)]}/>
 
             <View style={styles.bgSymbolsLayer} pointerEvents="none">
               {gs.bgSymbols.map((s: any) => (
@@ -1602,8 +1689,9 @@ export default function MathBlaster() {
               const angle = Math.atan2(dy, dx);
               const midX = (b.prevX + b.x) / 2;
               const midY = (b.prevY + b.y) / 2;
+              const corBolt = b.color || '#9D00FF';
               return (
-                <View key={b.id} style={{ position: 'absolute', left: midX - dist / 2, top: midY - 2, width: dist, height: 4, backgroundColor: '#9D00FF', borderRadius: 2, opacity: b.resolved ? Math.max(0, b.life / 25) : 1, transform: [{ rotate: angle + 'rad' }], shadowColor: '#9D00FF', shadowRadius: 6, shadowOpacity: 0.9, zIndex: 6 }}/>
+                <View key={b.id} style={{ position: 'absolute', left: midX - dist / 2, top: midY - 2, width: dist, height: 4, backgroundColor: corBolt, borderRadius: 2, opacity: b.resolved ? Math.max(0, b.life / 25) : 1, transform: [{ rotate: angle + 'rad' }], shadowColor: corBolt, shadowRadius: 6, shadowOpacity: 0.9, zIndex: 6 }}/>
               );
             })}
 
