@@ -154,6 +154,42 @@ class SudokuConclusao(BaseModel):
     elapsedSeconds: int
     hintsUsed: int
 
+class HangarPerfil(BaseModel):
+    usuarioId: str
+    moedas: int = 0
+    armaInicial: str = "PADRAO"  # PADRAO | ELETRICA | PLASMA | LEQUE
+    armasDesbloqueadas: List[str] = ["PADRAO"]
+    nivelCDR: int = 0
+    nivelVelocidade: int = 0
+    nivelDano: int = 0
+    corNave: str = "#00FFFF"
+    habilidadeSecretaDesbloqueada: bool = False
+
+class HangarUpgradeRequest(BaseModel):
+    atributo: str  # "cdr" | "velocidade" | "dano"
+
+class HangarArmaRequest(BaseModel):
+    arma: str
+
+class HangarCorRequest(BaseModel):
+    cor: str
+
+class HangarCodigoRequest(BaseModel):
+    codigo: str
+
+class HangarInjetarMoedasRequest(BaseModel):
+    codigoMaster: str
+    quantidade: int
+
+class HangarGanharMoedasRequest(BaseModel):
+    pontos: int
+
+class ConfiguracaoJogo(BaseModel):
+    jogoId: str = "math_blaster"
+    dropRateMultiplier: float = 1.0
+    powerupsHabilitados: List[str] = []
+    spawnChancePorInimigo: Dict[str, int] = {}
+
 # =========================================================================
 # CONFIGURAÇÃO DE PONTOS POR JOGO (painel de ajuste manual)
 # -------------------------------------------------------------------------
@@ -196,6 +232,54 @@ def calcular_slots_disponiveis(construcoes: List[dict]) -> int:
     castelo = next((c for c in construcoes if c["tipo"] == "CASTELO"), None)
     nivel_castelo = castelo["nivel"] if castelo else 1
     return 8 + (nivel_castelo - 1) * 4
+
+# =========================================================================
+# HANGAR DA NAVE (progressão permanente do jogador no Math Blaster)
+# -------------------------------------------------------------------------
+# Curva de progressão amortecida (soft-cap): cada nível custa mais que o
+# anterior (custoBase * fatorCrescimento^nivelAtual) e o EFEITO de cada
+# atributo também é limitado (ver aplicação em math_blaster.web.tsx), pra
+# não deixar a nave overpower rapidamente mesmo com muitas moedas.
+# =========================================================================
+HANGAR_CUSTO_BASE: Dict[str, int] = {"cdr": 40, "velocidade": 35, "dano": 45}
+HANGAR_FATOR_CRESCIMENTO = 1.4
+HANGAR_NIVEL_MAX = 8
+
+def custo_upgrade_hangar(atributo: str, nivel_atual: int) -> int:
+    base = HANGAR_CUSTO_BASE.get(atributo, 40)
+    return int(base * (HANGAR_FATOR_CRESCIMENTO ** nivel_atual))
+
+HANGAR_ARMAS_CATALOGO: Dict[str, Dict[str, Any]] = {
+    "PADRAO":   {"nome": "Padrão",        "descricao": "Tiro simples e equilibrado.",              "custo": 0},
+    "ELETRICA": {"nome": "Elétrica",      "descricao": "Salta entre inimigos próximos.",           "custo": 80},
+    "PLASMA":   {"nome": "Plasma Burst",  "descricao": "Cadência lenta, dano alto.",               "custo": 150},
+    "LEQUE":    {"nome": "Spread Shot",   "descricao": "Três projéteis em leque, sempre ativo.",   "custo": 150},
+}
+
+HANGAR_CORES_DISPONIVEIS = ["#00FFFF", "#FF00FF", "#7FFF00", "#FFD700", "#FF4444", "#BB77FF", "#FF7055", "#FFFFFF"]
+
+HANGAR_CODIGO_SECRETO = "OVERDRIVE"        # desbloqueia o slot de habilidade secreta (digitado na tela do Hangar)
+ADMIN_SANDBOX_MASTER_CODE = "SANDBOX9000"  # backdoor do admin pra injetar moedas de teste
+
+async def get_or_create_hangar_perfil(usuario_id: str) -> dict:
+    perfil = await db.hangar_perfis.find_one({"usuarioId": usuario_id})
+    if not perfil:
+        novo = HangarPerfil(usuarioId=usuario_id)
+        await db.hangar_perfis.insert_one(novo.dict())
+        perfil = novo.dict()
+    return perfil
+
+# =========================================================================
+# CONFIGURAÇÃO GLOBAL DE PARTIDA (painel "live tweaking" do admin)
+# =========================================================================
+DEFAULT_POWERUP_FAMILIES = [
+    "DAMAGE", "FIRE_RATE", "TRIPLE_SHOT", "HULL_UPGRADE", "MISSILE", "LASER",
+    "PULSAR", "CHAIN", "ELECTRIC", "MINE", "FORCE_SHIELD", "DRONE", "TIME_FREEZE", "X_RAY"
+]
+DEFAULT_ENEMY_SPAWN_CHANCE = {
+    "METEOR": 100, "FLANKER": 100, "SHIELD_TANK": 100, "SWARMLING": 100,
+    "SQUAD": 100, "SPAWNER": 100, "GHOST": 100,
+}
 
 async def aplicar_pontos_diarios_jogo(usuario_id: str, equipe_id: Optional[str], jogo: str, pontos_brutos: int) -> dict:
     """Converte a pontuação bruta de uma partida em ponto de equipe,
@@ -1366,6 +1450,115 @@ async def get_sudoku_ranking(difficulty: str):
             "concluidoEm": r.get("concluidoEm"),
         })
     return out
+
+@api_router.get("/hangar/perfil")
+async def get_hangar_perfil(current_user: dict = Depends(get_current_user)):
+    perfil = await get_or_create_hangar_perfil(current_user["id"])
+    return {k: v for k, v in perfil.items() if k != '_id'}
+
+@api_router.post("/hangar/upgrade")
+async def hangar_upgrade(dados: HangarUpgradeRequest, current_user: dict = Depends(get_current_user)):
+    campo_nivel = {"cdr": "nivelCDR", "velocidade": "nivelVelocidade", "dano": "nivelDano"}.get(dados.atributo)
+    if not campo_nivel:
+        raise HTTPException(status_code=400, detail="Atributo inválido")
+
+    perfil = await get_or_create_hangar_perfil(current_user["id"])
+    nivel_atual = perfil.get(campo_nivel, 0)
+    if nivel_atual >= HANGAR_NIVEL_MAX:
+        raise HTTPException(status_code=400, detail="Atributo já está no nível máximo")
+
+    custo = custo_upgrade_hangar(dados.atributo, nivel_atual)
+    moedas_atuais = perfil.get("moedas", 0)
+    if moedas_atuais < custo:
+        raise HTTPException(status_code=400, detail="Moedas insuficientes")
+    moedas_atuais -= custo
+
+    await db.hangar_perfis.update_one(
+        {"usuarioId": current_user["id"]},
+        {"$inc": {campo_nivel: 1}, "$set": {"moedas": moedas_atuais}}
+    )
+    perfil_atualizado = await db.hangar_perfis.find_one({"usuarioId": current_user["id"]})
+    return {k: v for k, v in perfil_atualizado.items() if k != '_id'}
+
+@api_router.post("/hangar/equipar_arma")
+async def hangar_equipar_arma(dados: HangarArmaRequest, current_user: dict = Depends(get_current_user)):
+    if dados.arma not in HANGAR_ARMAS_CATALOGO:
+        raise HTTPException(status_code=400, detail="Arma inválida")
+
+    perfil = await get_or_create_hangar_perfil(current_user["id"])
+    desbloqueadas = perfil.get("armasDesbloqueadas", ["PADRAO"])
+
+    if dados.arma not in desbloqueadas:
+        custo = HANGAR_ARMAS_CATALOGO[dados.arma]["custo"]
+        moedas_atuais = perfil.get("moedas", 0)
+        if moedas_atuais < custo:
+            raise HTTPException(status_code=400, detail="Moedas insuficientes para desbloquear essa arma")
+        moedas_atuais -= custo
+        desbloqueadas = desbloqueadas + [dados.arma]
+        await db.hangar_perfis.update_one(
+            {"usuarioId": current_user["id"]},
+            {"$set": {"armasDesbloqueadas": desbloqueadas, "moedas": moedas_atuais, "armaInicial": dados.arma}}
+        )
+    else:
+        await db.hangar_perfis.update_one({"usuarioId": current_user["id"]}, {"$set": {"armaInicial": dados.arma}})
+
+    perfil_atualizado = await db.hangar_perfis.find_one({"usuarioId": current_user["id"]})
+    return {k: v for k, v in perfil_atualizado.items() if k != '_id'}
+
+@api_router.post("/hangar/cor")
+async def hangar_cor(dados: HangarCorRequest, current_user: dict = Depends(get_current_user)):
+    if dados.cor not in HANGAR_CORES_DISPONIVEIS:
+        raise HTTPException(status_code=400, detail="Cor inválida")
+    await get_or_create_hangar_perfil(current_user["id"])
+    await db.hangar_perfis.update_one({"usuarioId": current_user["id"]}, {"$set": {"corNave": dados.cor}})
+    return {"message": "ok", "corNave": dados.cor}
+
+@api_router.post("/hangar/codigo_secreto")
+async def hangar_codigo_secreto(dados: HangarCodigoRequest, current_user: dict = Depends(get_current_user)):
+    if dados.codigo.strip().upper() != HANGAR_CODIGO_SECRETO:
+        raise HTTPException(status_code=400, detail="Código inválido")
+    await get_or_create_hangar_perfil(current_user["id"])
+    await db.hangar_perfis.update_one({"usuarioId": current_user["id"]}, {"$set": {"habilidadeSecretaDesbloqueada": True}})
+    return {"message": "Habilidade secreta desbloqueada!"}
+
+@api_router.post("/hangar/admin_injetar_moedas")
+async def hangar_admin_injetar_moedas(dados: HangarInjetarMoedasRequest, current_user: dict = Depends(require_admin)):
+    """Backdoor de testes: só funciona pra quem já é ADMIN (checado no backend) E
+    sabe o código master. Só injeta moedas na própria conta de quem está logado."""
+    if dados.codigoMaster != ADMIN_SANDBOX_MASTER_CODE:
+        raise HTTPException(status_code=403, detail="Código master incorreto")
+    if dados.quantidade < 0 or dados.quantidade > 999999:
+        raise HTTPException(status_code=400, detail="Quantidade inválida")
+    await get_or_create_hangar_perfil(current_user["id"])
+    await db.hangar_perfis.update_one({"usuarioId": current_user["id"]}, {"$set": {"moedas": dados.quantidade}})
+    return {"message": "Moedas injetadas", "moedas": dados.quantidade}
+
+@api_router.post("/hangar/ganhar_moedas")
+async def hangar_ganhar_moedas(dados: HangarGanharMoedasRequest, current_user: dict = Depends(get_current_user)):
+    """Chamado no fim de uma partida do Math Blaster: converte parte do score em
+    moedas do hangar (progressão permanente do jogador, separada da pontuação de equipe)."""
+    if dados.pontos <= 0:
+        return {"moedasGanhas": 0}
+    moedas_ganhas = max(0, dados.pontos // 10)
+    await get_or_create_hangar_perfil(current_user["id"])
+    await db.hangar_perfis.update_one({"usuarioId": current_user["id"]}, {"$inc": {"moedas": moedas_ganhas}})
+    return {"moedasGanhas": moedas_ganhas}
+
+# ===== CONFIGURAÇÃO GLOBAL DE PARTIDA (dashboard "live tweaking" do admin) =====
+@api_router.get("/configuracoes")
+async def get_configuracoes(jogoId: str = "math_blaster"):
+    cfg = await db.configuracoes_jogo.find_one({"jogoId": jogoId})
+    if not cfg:
+        novo = ConfiguracaoJogo(jogoId=jogoId, powerupsHabilitados=list(DEFAULT_POWERUP_FAMILIES), spawnChancePorInimigo=dict(DEFAULT_ENEMY_SPAWN_CHANCE))
+        await db.configuracoes_jogo.insert_one(novo.dict())
+        cfg = novo.dict()
+    return {k: v for k, v in cfg.items() if k != '_id'}
+
+@api_router.post("/configuracoes")
+async def salvar_configuracoes(dados: ConfiguracaoJogo, current_user: dict = Depends(require_admin)):
+    doc = dados.dict()
+    await db.configuracoes_jogo.replace_one({"jogoId": dados.jogoId}, doc, upsert=True)
+    return doc
 
 @api_router.post("/online/ping")
 async def ping_online(): return {"status": "ok"}

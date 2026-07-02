@@ -97,6 +97,27 @@ export interface SudokuSessaoAPI {
   lost: boolean;
 }
 
+export type ArmaHangar = 'PADRAO' | 'ELETRICA' | 'PLASMA' | 'LEQUE';
+
+export interface HangarPerfil {
+  usuarioId: string;
+  moedas: number;
+  armaInicial: ArmaHangar;
+  armasDesbloqueadas: ArmaHangar[];
+  nivelCDR: number;
+  nivelVelocidade: number;
+  nivelDano: number;
+  corNave: string;
+  habilidadeSecretaDesbloqueada: boolean;
+}
+
+export interface ConfiguracaoJogo {
+  jogoId: string;
+  dropRateMultiplier: number;
+  powerupsHabilitados: string[];
+  spawnChancePorInimigo: Record<string, number>;
+}
+
 export interface Conteudo {
   id: string;
   tipo: 'VIDEO' | 'LINK' | 'MATERIAL';

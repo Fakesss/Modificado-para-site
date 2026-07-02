@@ -6,12 +6,20 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/context/AuthContext';
 import * as api from '../src/services/api';
+import { HangarPerfil, ConfiguracaoJogo } from '../src/types';
 
 const initialWidth = Dimensions.get('window').width;
 const initialHeight = Dimensions.get('window').height * 0.75;
 
 const isMobileWeb = Platform.OS === 'web' && initialWidth < 768;
 const BASE_ZOOM = (Platform.OS !== 'web' || isMobileWeb) ? 0.5 : 1;
+
+// >>> DIAL DO RITMO FRENÉTICO DO JOGO <<<
+// O tick do loop principal é fixo em 30ms (ver `setInterval(gameTick, 30)`, dentro de iniciarJogo).
+// Este multiplicador afeta o movimento do jogador e de inimigos/tiros inimigos/símbolos de fundo
+// (é aplicado em `movSpeed` e em `speedMult`, dentro de gameTick). Valor 1 = ritmo atual, sem
+// nenhuma mudança de velocidade — é só o ponto único pra acelerar/desacelerar o jogo no futuro.
+const VELOCIDADE_BASE_MULT = 1;
 
 const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed: boolean, onPressWeb: (v: string) => void }) => {
   const isWeb = Platform.OS === 'web';
@@ -52,7 +60,12 @@ export default function MathBlaster() {
   
   // Limite Diário de Spawn do Inimigo Raro
   const dailySpawnsRef = useRef(0);
-  
+
+  // Loadout do Hangar (arma inicial, upgrades, cor) e configuração global do admin (drop rate,
+  // powerups habilitados, chance de spawn por inimigo) — carregados uma vez e aplicados em iniciarJogo
+  const hangarPerfilRef = useRef<HangarPerfil | null>(null);
+  const configJogoRef = useRef<ConfiguracaoJogo | null>(null);
+
   const [canvasSize, setCanvasSize] = useState({ width: initialWidth, height: initialHeight });
   const canvasSizeRef = useRef({ width: initialWidth, height: initialHeight });
   
@@ -73,6 +86,9 @@ export default function MathBlaster() {
     player: {
       x: initialWidth / 2, y: initialHeight - 60, hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false,
       fireMode: 'PROJETIL' as 'PROJETIL' | 'CONTINUO', beamIntensity: 0,
+      // Loadout carregado do Hangar (ver hangarPerfilRef, aplicado em iniciarJogo)
+      armaInicial: 'PADRAO' as 'PADRAO' | 'ELETRICA' | 'PLASMA' | 'LEQUE',
+      cdr: 0, speedBonus: 0, corNave: '#00FFFF', secretSkillUnlocked: false, secretSkillUsedThisGame: false,
       weapons: {
         missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
@@ -89,6 +105,7 @@ export default function MathBlaster() {
     score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0, movementTouchId: null as string | null, lastTouchX: 0, lastTouchY: 0,
     waveFlavor: 'CLASSICA' as string,
     timeAlive: 0, flawlessBossesCount: 0, tookDamageThisBoss: false, timeFreezeTimer: 0, forceShieldHits: 0, xRayTimer: 0,
+    overdriveTimer: 0, overdriveStoredDamage: 0, overdriveStoredFireRate: 0, // Habilidade secreta do Hangar (ver hangarCodigoSecreto)
     drones: {
       normal: { active: false, level: 1, lastFire: 0, baseCooldown: 1500 },
       advanced: { active: false, level: 1, lastFire: 0, baseCooldown: 2000 }
@@ -112,6 +129,9 @@ export default function MathBlaster() {
        }
     };
     loadDailyLimit();
+
+    api.getHangarPerfil().then((p: any) => { if (p) hangarPerfilRef.current = p; });
+    api.getConfiguracaoJogo('math_blaster').then((c: any) => { if (c) configJogoRef.current = c; });
 
     return () => { if (loopRef.current) clearInterval(loopRef.current); };
   }, []);
@@ -197,6 +217,25 @@ export default function MathBlaster() {
       jogador.beamIntensity = 0;
     }
     jogador.fireMode = modoNovo;
+  };
+
+  // Reduz um tipo granular de powerup (ex.: "MISSILE_COOLDOWN") à sua família (ex.: "MISSILE"),
+  // que é o nível de granularidade usado pelo Painel de Partida do admin pra habilitar/desabilitar.
+  const familiaDoPowerup = (tipo: string): string => {
+    const semSufixo = ['DAMAGE', 'FIRE_RATE', 'TRIPLE_SHOT', 'HULL_UPGRADE', 'FORCE_SHIELD', 'TIME_FREEZE', 'X_RAY'];
+    if (semSufixo.includes(tipo)) return tipo;
+    for (const familia of ['MISSILE', 'LASER', 'PULSAR', 'CHAIN', 'ELECTRIC', 'MINE', 'DRONE']) {
+      if (tipo.startsWith(familia)) return familia;
+    }
+    return tipo;
+  };
+
+  // Painel de Partida do admin: 100 = frequência padrão, 0 = nunca aparece, 200 = o dobro da frequência
+  const chanceSpawn = (tipo: string): number => configJogoRef.current?.spawnChancePorInimigo?.[tipo] ?? 100;
+  const intervaloAjustado = (intervaloBase: number, tipo: string): number => {
+    const chance = chanceSpawn(tipo);
+    if (chance <= 0) return Infinity;
+    return Math.max(10, Math.round(intervaloBase * (100 / chance)));
   };
 
   // Símbolos matemáticos flutuando no fundo (decorativo, sem colisão)
@@ -343,6 +382,23 @@ export default function MathBlaster() {
         setResposta(''); return;
       }
 
+      // ATIVAÇÃO DA HABILIDADE SECRETA (OVERDRIVE): só funciona se desbloqueada no Hangar
+      // (código digitado lá, ver hangarCodigoSecreto) e só uma vez por partida.
+      if (respostaRef.current === '77778888') {
+        if (gs.player.secretSkillUnlocked && !gs.player.secretSkillUsedThisGame && gs.overdriveTimer <= 0) {
+          gs.player.secretSkillUsedThisGame = true;
+          gs.overdriveTimer = 8000;
+          gs.overdriveStoredDamage = gs.player.damage;
+          gs.overdriveStoredFireRate = gs.player.fireRate;
+          gs.player.damage *= 2.2;
+          gs.player.fireRate = Math.max(60, gs.player.fireRate / 3);
+          gs.forceShieldHits = Math.max(gs.forceShieldHits, 5);
+          criarParticulas(gs.player.x, gs.player.y, '#FFD700', 30);
+          gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y, text: `OVERDRIVE ATIVADO!`, color: '#FFD700', life: 90 });
+        }
+        setResposta(''); return;
+      }
+
       const num = parseInt(respostaRef.current);
       let acertou = false;
 
@@ -360,10 +416,19 @@ export default function MathBlaster() {
         for (let i = 0; i < gs.enemies.length; i++) {
           let e = gs.enemies[i];
           if (e.mathRequired && !e.isDying && e.res === num) {
-            acertou = true; e.solvesDone += 1; dispararMagia(e.x, e.y, '#00FFFF');
+            acertou = true; dispararMagia(e.x, e.y, '#00FFFF');
+            if (e.type === 'GHOST') {
+              // Resolveu a conta: o fantasma vira VISIVEL (vulnerável) por alguns segundos
+              e.mathRequired = false;
+              e.estadoFantasma = 'VISIVEL';
+              e.visibleUntil = Date.now() + 6000;
+              criarParticulas(e.x, e.y, '#7FFFD4', 12);
+              break;
+            }
+            e.solvesDone += 1;
             if (e.solvesDone >= e.solvesNeeded) {
                e.isDying = true; e.mathRequired = false;
-               
+
                // PREMIAÇÃO: PONTO GLOBAL NA HORA E PARA A EQUIPE!
                if (e.type === 'RARE_ENEMY') {
                    if (typeof (api as any).submitMathBlasterRareKill === 'function') {
@@ -443,7 +508,8 @@ export default function MathBlaster() {
       }
       setResposta('');
     } else {
-      setResposta(r => r.length < 7 ? r + valor : r);
+      // Limite de 8 dígitos: comporta o maior cheat code atual (40028922) sem travar respostas normais
+      setResposta(r => r.length < 8 ? r + valor : r);
     }
   }, [jogoAtivo]);
 
@@ -683,6 +749,9 @@ export default function MathBlaster() {
       x: initialGw / 2, y: initialGh - 100,
       hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false,
       fireMode: 'PROJETIL' as 'PROJETIL' | 'CONTINUO', beamIntensity: 0,
+      // Loadout carregado do Hangar (ver hangarPerfilRef, aplicado em iniciarJogo)
+      armaInicial: 'PADRAO' as 'PADRAO' | 'ELETRICA' | 'PLASMA' | 'LEQUE',
+      cdr: 0, speedBonus: 0, corNave: '#00FFFF', secretSkillUnlocked: false, secretSkillUsedThisGame: false,
       weapons: {
         missile: { active: false, level: 1, baseCooldown: 8000, lastFire: 0, damageMult: 3, aoeRange: 60, life: 80 },
         laser: { active: false, level: 1, baseCooldown: 10000, lastFire: 0, damageMult: 2, sizeMult: 1 },
@@ -692,6 +761,21 @@ export default function MathBlaster() {
         electric: { active: false, level: 1, baseCooldown: 4000, lastFire: 0, damageMult: 0.6, bounces: 3, range: 150 }
       }
     };
+
+    // Aplica o loadout do Hangar (se já carregado). Efeitos com soft-cap pra não deixar a nave
+    // overpower rapidamente, mesmo com muitas moedas: CDR até 40%, velocidade até +48%, dano até +64%.
+    const hp = hangarPerfilRef.current;
+    if (hp) {
+      gs.player.armaInicial = hp.armaInicial || 'PADRAO';
+      gs.player.cdr = Math.min(0.5, (hp.nivelCDR || 0) * 0.05);
+      gs.player.speedBonus = Math.min(0.6, (hp.nivelVelocidade || 0) * 0.06);
+      gs.player.damage = 1 * (1 + Math.min(0.8, (hp.nivelDano || 0) * 0.08));
+      gs.player.corNave = hp.corNave || '#00FFFF';
+      gs.player.secretSkillUnlocked = !!hp.habilidadeSecretaDesbloqueada;
+      if (gs.player.armaInicial === 'LEQUE') gs.player.tripleShot = true;
+    }
+    gs.player.secretSkillUsedThisGame = false;
+
     gs.lasers = []; gs.specialLasers = []; gs.mathShots = []; gs.pulses = []; gs.floatingTexts = [];
     gs.chainBolts = []; gs.mines = [];
     gs.bgSymbols = Array.from({ length: 16 }, () => novoSimboloFundo(layoutRef.current.width, layoutRef.current.height));
@@ -701,6 +785,7 @@ export default function MathBlaster() {
     gs.waveFlavor = 'CLASSICA';
     
     gs.timeAlive = 0; gs.flawlessBossesCount = 0; gs.tookDamageThisBoss = false; gs.timeFreezeTimer = 0; gs.forceShieldHits = 0; gs.xRayTimer = 0;
+    gs.overdriveTimer = 0; gs.overdriveStoredDamage = 0; gs.overdriveStoredFireRate = 0;
     gs.drones = {
       normal: { active: false, level: 1, lastFire: 0, baseCooldown: 1500 },
       advanced: { active: false, level: 1, lastFire: 0, baseCooldown: 2000 }
@@ -711,7 +796,7 @@ export default function MathBlaster() {
     setJogoAtivo(true);
     
     if (loopRef.current) clearInterval(loopRef.current);
-    loopRef.current = setInterval(gameTick, 30); 
+    loopRef.current = setInterval(gameTick, 30); // Tick rate / delta-time fixo — não alterado (ver VELOCIDADE_BASE_MULT no topo do arquivo)
   };
 
   const gameOver = () => { 
@@ -733,6 +818,10 @@ export default function MathBlaster() {
       if (typeof (api as any).pontuarJogo === 'function') {
         (api as any).pontuarJogo('math_blaster', gs.score).then((r: any) => { if (r) setPontosEquipeGanhos(r); }).catch(() => {});
       }
+      // Moedas do Hangar: progressão permanente do jogador, separada da pontuação de equipe
+      api.hangarGanharMoedas(gs.score).then((r: any) => {
+        if (r && hangarPerfilRef.current) hangarPerfilRef.current.moedas += (r.moedasGanhas || 0);
+      });
     } else {
       carregarHallDaFama();
     }
@@ -747,15 +836,26 @@ export default function MathBlaster() {
         layoutRef.current.height = canvasSizeRef.current.height / gs.currentZoom;
     }
 
-    const gw = layoutRef.current.width; 
+    const gw = layoutRef.current.width;
     const gh = layoutRef.current.height;
-    
+
+    // Guarda o HP máximo na primeira vez que o inimigo aparece pro jogo, pra dar pra calcular
+    // a porcentagem da barra de vida flutuante (ver TAREFA 3 — UI Overlays)
+    gs.enemies.forEach((e: any) => { if (e.maxHp === undefined) e.maxHp = e.hp; });
+
     gs.timeAlive += 30;
     if (gs.timeFreezeTimer > 0) gs.timeFreezeTimer -= 30;
     if (gs.xRayTimer > 0) gs.xRayTimer -= 30;
+    if (gs.overdriveTimer > 0) {
+      gs.overdriveTimer -= 30;
+      if (gs.overdriveTimer <= 0) {
+        gs.player.damage = gs.overdriveStoredDamage;
+        gs.player.fireRate = gs.overdriveStoredFireRate;
+      }
+    }
 
-    // APLICAR MOVIMENTO DO TECLADO FÍSICO
-    const movSpeed = 6 / gs.currentZoom;
+    // APLICAR MOVIMENTO DO TECLADO FÍSICO (bônus de velocidade do Hangar aplicado aqui)
+    const movSpeed = (6 / gs.currentZoom) * VELOCIDADE_BASE_MULT * (1 + gs.player.speedBonus);
     if (gs.keys.up) gs.player.y -= movSpeed;
     if (gs.keys.down) gs.player.y += movSpeed;
     if (gs.keys.left) gs.player.x -= movSpeed;
@@ -777,26 +877,46 @@ export default function MathBlaster() {
     if (gs.player.y < 20) gs.player.y = 20; 
     if (gs.player.y > gh - 20) gs.player.y = gh - 20;
 
-    if (now - gs.player.lastFire > gs.player.fireRate) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
-      if (gs.player.tripleShot) {
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 10, y: gs.player.y - 15, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
-        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 10, y: gs.player.y - 15, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+    // Arquétipo de arma inicial (escolhido no Hangar): muda o comportamento do tiro primário.
+    // PADRAO/LEQUE usam o tiro normal (LEQUE só força tripleShot=true desde o início, em iniciarJogo).
+    // PLASMA atira mais devagar (cadência x2.5) e mais forte (dano x3). ELETRICA salta pra inimigos
+    // próximos a cada disparo, com dano reduzido e atordoamento — reaproveita o sistema de chainBolts.
+    const fireRateEfetivo = gs.player.fireRate * (gs.player.armaInicial === 'PLASMA' ? 2.5 : 1);
+    if (now - gs.player.lastFire > fireRateEfetivo) {
+      if (gs.player.armaInicial === 'ELETRICA') {
+        const primeiroAlvo = acharInimigoMaisProximoDentroDoRaio(gs.player.x, gs.player.y, 260, new Set());
+        gs.chainBolts.push({
+          id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, prevX: gs.player.x, prevY: gs.player.y - 20,
+          hitIds: new Set(), bouncesLeft: 1, damage: gs.player.damage * 0.5, range: 130,
+          targetX: primeiroAlvo ? primeiroAlvo.x : gs.player.x, targetY: primeiroAlvo ? primeiroAlvo.y : gs.player.y - 260,
+          resolved: !primeiroAlvo, life: 25, color: '#FFFF00', stun: true
+        });
+      } else if (gs.player.armaInicial === 'PLASMA') {
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -13, damage: gs.player.damage * 3, size: gs.player.shotSize * 3.5, type: 'PLASMA' });
+      } else {
+        gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -15, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+        if (gs.player.tripleShot) {
+          gs.lasers.push({ id: Math.random().toString(), x: gs.player.x - 10, y: gs.player.y - 15, vx: -3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+          gs.lasers.push({ id: Math.random().toString(), x: gs.player.x + 10, y: gs.player.y - 15, vx: 3, vy: -14, damage: gs.player.damage, size: gs.player.shotSize, type: 'NORMAL' });
+        }
       }
       gs.player.lastFire = now;
     }
 
-    if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown) {
-      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 3, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange }); 
+    // CDR (Redução de Recarga do Hangar) reduz o cooldown de todas as armas especiais abaixo
+    const cdrMult = 1 - gs.player.cdr;
+
+    if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown * cdrMult) {
+      gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx: 0, vy: -8, damage: gs.player.damage * gs.player.weapons.missile.damageMult, size: gs.player.shotSize * 3, type: 'MISSILE', life: gs.player.weapons.missile.life, aoeRange: gs.player.weapons.missile.aoeRange });
       gs.player.weapons.missile.lastFire = now;
     }
-    
-    if (gs.player.weapons.laser.active && now - gs.player.weapons.laser.lastFire > gs.player.weapons.laser.baseCooldown) {
+
+    if (gs.player.weapons.laser.active && now - gs.player.weapons.laser.lastFire > gs.player.weapons.laser.baseCooldown * cdrMult) {
       gs.lasers.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, vx: 0, vy: -25, damage: gs.player.damage * gs.player.weapons.laser.damageMult, size: gs.player.shotSize * 2 * gs.player.weapons.laser.sizeMult, type: 'LASER' });
       gs.player.weapons.laser.lastFire = now;
     }
 
-    if (gs.player.weapons.chain.active && now - gs.player.weapons.chain.lastFire > gs.player.weapons.chain.baseCooldown) {
+    if (gs.player.weapons.chain.active && now - gs.player.weapons.chain.lastFire > gs.player.weapons.chain.baseCooldown * cdrMult) {
       const cw = gs.player.weapons.chain;
       const primeiroAlvo = acharInimigoMaisProximoDentroDoRaio(gs.player.x, gs.player.y, cw.range * 2, new Set());
       gs.chainBolts.push({
@@ -810,7 +930,7 @@ export default function MathBlaster() {
 
     // BALAS ELÉTRICAS: dano base menor que os tiros convencionais, salta entre inimigos próximos
     // e atordoa (impede de atirar) no exato instante em que a eletricidade encosta neles.
-    if (gs.player.weapons.electric.active && now - gs.player.weapons.electric.lastFire > gs.player.weapons.electric.baseCooldown) {
+    if (gs.player.weapons.electric.active && now - gs.player.weapons.electric.lastFire > gs.player.weapons.electric.baseCooldown * cdrMult) {
       const ew = gs.player.weapons.electric;
       const primeiroAlvo = acharInimigoMaisProximoDentroDoRaio(gs.player.x, gs.player.y, ew.range * 2, new Set());
       gs.chainBolts.push({
@@ -822,7 +942,7 @@ export default function MathBlaster() {
       ew.lastFire = now;
     }
 
-    if (gs.player.weapons.mine.active && now - gs.player.weapons.mine.lastFire > gs.player.weapons.mine.baseCooldown && gs.mines.filter((m: any) => !m.exploded).length < gs.player.weapons.mine.count) {
+    if (gs.player.weapons.mine.active && now - gs.player.weapons.mine.lastFire > gs.player.weapons.mine.baseCooldown * cdrMult && gs.mines.filter((m: any) => !m.exploded).length < gs.player.weapons.mine.count) {
       const mw = gs.player.weapons.mine;
       gs.mines.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y + 30, armedAt: now + mw.fuse, exploded: false, damage: gs.player.damage * mw.damageMult, blastRadius: mw.blastRadius });
       mw.lastFire = now;
@@ -838,7 +958,7 @@ export default function MathBlaster() {
       gs.drones.advanced.lastFire = now;
     }
 
-    if (gs.player.weapons.pulsar.active && now - gs.player.weapons.pulsar.lastFire > gs.player.weapons.pulsar.baseCooldown) {
+    if (gs.player.weapons.pulsar.active && now - gs.player.weapons.pulsar.lastFire > gs.player.weapons.pulsar.baseCooldown * cdrMult) {
       gs.pulses.push({ id: Math.random().toString(), maxRadius: gs.player.weapons.pulsar.radius, life: 20, maxLife: 20 });
       gs.player.weapons.pulsar.lastFire = now;
     }
@@ -864,6 +984,7 @@ export default function MathBlaster() {
           if (e.shield && e.shield > 0) { e.shield -= pulsarDamage; }
           else if (e.type === 'SHIELD_TANK') { e.hp -= pulsarDamage * (1 - e.armorReduction); }
           else { e.hp -= pulsarDamage; }
+          e.lastPowerupHitAt = now; // barra de vida flutuante temporária (ver render)
           criarParticulas(e.x, e.y, '#00BFFF', 3);
         }
       });
@@ -881,7 +1002,7 @@ export default function MathBlaster() {
       const gatilho = gs.enemies.some((e: any) => !e.mathRequired && Math.pow(e.x - m.x, 2) + Math.pow(e.y - m.y, 2) < m.blastRadius * m.blastRadius);
       const bossGatilho = gs.boss.active && !gs.boss.shield && Math.pow(gs.boss.x - m.x, 2) + Math.pow(gs.boss.y - m.y, 2) < Math.pow(m.blastRadius + 30, 2);
       if (gatilho || bossGatilho) {
-        gs.enemies.forEach((e: any) => { if (!e.mathRequired && Math.pow(e.x - m.x, 2) + Math.pow(e.y - m.y, 2) < m.blastRadius * m.blastRadius) e.hp -= m.damage; });
+        gs.enemies.forEach((e: any) => { if (!e.mathRequired && Math.pow(e.x - m.x, 2) + Math.pow(e.y - m.y, 2) < m.blastRadius * m.blastRadius) { e.hp -= m.damage; e.lastPowerupHitAt = now; } });
         if (bossGatilho) gs.boss.hp -= m.damage;
         criarParticulas(m.x, m.y, '#FFA500', 15);
         m.exploded = true;
@@ -941,7 +1062,7 @@ export default function MathBlaster() {
     });
     gs.floatingTexts = gs.floatingTexts.filter(ft => ft.life > 0);
 
-    const speedMult = gs.timeFreezeTimer > 0 ? 0.15 : 1;
+    const speedMult = (gs.timeFreezeTimer > 0 ? 0.15 : 1) * VELOCIDADE_BASE_MULT;
 
     gs.enemyLasers.forEach(el => {
       if (el.homing) {
@@ -996,25 +1117,25 @@ export default function MathBlaster() {
       }
 
       const meteorBase = Math.max(20, 100 - gs.fase * 10);
-      const meteorInterval = gs.waveFlavor === 'CHUVA_METEOROS' ? Math.max(6, Math.floor(meteorBase / 4)) : gs.waveFlavor === 'ENXAME' ? meteorBase * 4 : meteorBase;
-      if (gs.waveFlavor !== 'BLINDADOS' && gs.stateTimer % meteorInterval === 0) {
+      const meteorInterval = intervaloAjustado(gs.waveFlavor === 'CHUVA_METEOROS' ? Math.max(6, Math.floor(meteorBase / 4)) : gs.waveFlavor === 'ENXAME' ? meteorBase * 4 : meteorBase, 'METEOR');
+      if (chanceSpawn('METEOR') > 0 && gs.waveFlavor !== 'BLINDADOS' && gs.stateTimer % meteorInterval === 0) {
         const meteorVy = gs.fase === 1 ? Math.random() * 1 + 1.5 : Math.random() * 2 + 3 + (gs.fase * 0.6);
         gs.enemies.push({ id: Math.random().toString(), type: 'METEOR', x: Math.random() * (gw - 40) + 20, y: -30, hp: 1 + Math.floor(gs.fase/2), vy: meteorVy, angle: 0 });
       }
 
-      if (gs.stateTimer % 240 === 0 && gs.fase >= 2 && (gs.waveFlavor !== 'CHUVA_METEOROS' || Math.random() < 0.15)) {
+      if (chanceSpawn('FLANKER') > 0 && gs.stateTimer % intervaloAjustado(240, 'FLANKER') === 0 && gs.fase >= 2 && (gs.waveFlavor !== 'CHUVA_METEOROS' || Math.random() < 0.15)) {
         const isLeft = Math.random() > 0.5;
         const shieldThreshold = gs.waveFlavor === 'BLINDADOS' ? 0.3 : 0.7;
         gs.enemies.push({ id: Math.random().toString(), type: 'FLANKER', x: isLeft ? -20 : gw + 20, y: Math.random() * (gh/3), targetY: 0, hp: 2 + gs.fase * 2, vx: isLeft ? 3 + gs.fase * 1.2 : -3 - gs.fase * 1.2, vy: 1.5, angle: 0, shield: Math.random() > shieldThreshold ? 2 : 0 });
       }
 
-      const tankInterval = gs.waveFlavor === 'BLINDADOS' ? 100 : 280;
-      if (gs.stateTimer % tankInterval === 0 && gs.fase >= 4 && gs.stateTimer < 1400) {
+      const tankInterval = intervaloAjustado(gs.waveFlavor === 'BLINDADOS' ? 100 : 280, 'SHIELD_TANK');
+      if (chanceSpawn('SHIELD_TANK') > 0 && gs.stateTimer % tankInterval === 0 && gs.fase >= 4 && gs.stateTimer < 1400) {
         gs.enemies.push({ id: Math.random().toString(), type: 'SHIELD_TANK', x: Math.random() * (gw - 60) + 30, y: -40, vy: 0.8 + gs.fase * 0.15, hp: 15 + gs.fase * 4, armorReduction: 0.5 });
       }
 
-      const swarmInterval = gs.waveFlavor === 'ENXAME' ? 90 : 260;
-      if (gs.waveFlavor !== 'BLINDADOS' && gs.stateTimer % swarmInterval === 0 && gs.fase >= 3 && gs.stateTimer < 1400) {
+      const swarmInterval = intervaloAjustado(gs.waveFlavor === 'ENXAME' ? 90 : 260, 'SWARMLING');
+      if (chanceSpawn('SWARMLING') > 0 && gs.waveFlavor !== 'BLINDADOS' && gs.stateTimer % swarmInterval === 0 && gs.fase >= 3 && gs.stateTimer < 1400) {
         const qtd = gs.waveFlavor === 'ENXAME' ? 6 + Math.floor(Math.random() * 5) : 5 + Math.floor(Math.random() * 4);
         const cx = Math.random() * (gw - 80) + 40;
         for (let i = 0; i < qtd; i++) {
@@ -1022,13 +1143,26 @@ export default function MathBlaster() {
         }
       }
 
-      if (gs.stateTimer === 600 || gs.stateTimer === 1200) {
+      if ((gs.stateTimer === 600 || gs.stateTimer === 1200) && Math.random() * 100 < chanceSpawn('SPAWNER')) {
         const eq = gerarEquacao(gs.fase, getRespostasAtivas());
-        const isLeft = gs.stateTimer === 600; 
+        const isLeft = gs.stateTimer === 600;
         gs.enemies.push({ id: Math.random().toString(), type: 'SPAWNER', x: isLeft ? gw * 0.25 : gw * 0.75, y: -80, targetY: 90 + Math.random() * 30, hp: 9999, mathRequired: true, solvesNeeded: Math.min(8, 2 + gs.fase), solvesDone: 0, txt: eq.txt, res: eq.res, vy: 1.5, spawnTimer: 0 });
       }
 
-      if (gs.waveFlavor !== 'ENXAME' && (gs.waveFlavor !== 'CHUVA_METEOROS' || Math.random() < 0.15) && gs.stateTimer % (300 - Math.min(150, gs.fase * 20)) === 0 && gs.stateTimer < 1400) {
+      // FANTASMA MATEMÁTICO: começa INVISIVEL (indestrutível/não colidível). Resolver a conta
+      // torna ele VISIVEL (vulnerável) por alguns segundos; se não for derrotado, volta a ficar
+      // invisível com uma equação nova. Dificuldade da equação escala com a fase (gerarEquacao).
+      if (gs.stateTimer === 850 && gs.fase >= 2 && Math.random() * 100 < chanceSpawn('GHOST')) {
+        const eq = gerarEquacao(gs.fase, getRespostasAtivas());
+        const hpFantasma = 3 + Math.floor(gs.fase / 2);
+        gs.enemies.push({
+          id: Math.random().toString(), type: 'GHOST', x: Math.random() * (gw - 80) + 40, y: 100 + Math.random() * 100,
+          hp: hpFantasma, maxHp: hpFantasma, mathRequired: true, estadoFantasma: 'INVISIVEL',
+          txt: eq.txt, res: eq.res, visibleUntil: 0, seed: Math.random() * 100,
+        });
+      }
+
+      if (chanceSpawn('SQUAD') > 0 && gs.waveFlavor !== 'ENXAME' && (gs.waveFlavor !== 'CHUVA_METEOROS' || Math.random() < 0.15) && gs.stateTimer % intervaloAjustado(300 - Math.min(150, gs.fase * 20), 'SQUAD') === 0 && gs.stateTimer < 1400) {
         const cx = Math.random() * (gw - 120) + 60;
         const baseHp = 1 + (gs.fase * 2); 
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx, y: -30, targetY: 100, isLeader: true, hp: baseHp * 3, vx: 0, vy: 2, fireTimer: 0, angle: Math.PI, evasive: true });
@@ -1104,6 +1238,15 @@ export default function MathBlaster() {
     }
 
     gs.enemies.forEach(e => {
+      // Rastro fantasma (efeito puramente visual, sem hitbox/colisão nem ataque): guarda a
+      // posição de alguns ticks atrás pra desenhar sprites "fantasmas" com atraso (ver render)
+      if (e.type === 'METEOR' || e.type === 'FLANKER' || e.type === 'SHIELD_TANK' || e.type === 'SWARMLING' || e.type === 'SQUAD') {
+        if (!e.trail) e.trail = [];
+        if (gs.timeAlive % 120 === 0) {
+          e.trail.unshift({ x: e.x, y: e.y });
+          if (e.trail.length > 2) e.trail.length = 2;
+        }
+      }
       if (e.type === 'METEOR') { e.y += e.vy * speedMult; e.angle = (e.angle || 0) + 2 * speedMult; }
       else if (e.type === 'FLANKER') { e.x += e.vx * speedMult; e.y += e.vy * speedMult; }
       else if (e.type === 'SHIELD_TANK') { e.y += e.vy * speedMult; }
@@ -1147,10 +1290,25 @@ export default function MathBlaster() {
           }
         }
       }
-      
-      if (Math.abs(gs.player.x - e.x) < 25 && Math.abs(gs.player.y - e.y) < 25) { 
-        aplicarDano(5 + (gs.fase * 5)); 
-        if (!e.mathRequired) e.hp = -100; 
+      else if (e.type === 'GHOST') {
+        // Flutuação suave, igual nas duas fases (INVISIVEL/VISIVEL)
+        e.x += Math.sin((now + e.seed * 100) / 400) * 1.2 * speedMult;
+        e.y += Math.cos((now + e.seed * 100) / 500) * 0.6 * speedMult;
+        if (e.estadoFantasma === 'VISIVEL' && now > e.visibleUntil) {
+          // Esgotou o tempo sem ser derrotado: volta a ficar invisível com uma equação nova
+          e.estadoFantasma = 'INVISIVEL';
+          e.mathRequired = true;
+          e.hp = e.maxHp;
+          const eq = gerarEquacao(gs.fase, getRespostasAtivas());
+          e.txt = eq.txt; e.res = eq.res;
+          criarParticulas(e.x, e.y, '#7FFFD4', 8);
+        }
+      }
+
+      // Fantasma invisível não é colidível — nem toma dano de contato nem machuca o jogador
+      if (Math.abs(gs.player.x - e.x) < 25 && Math.abs(gs.player.y - e.y) < 25 && !(e.type === 'GHOST' && e.mathRequired)) {
+        aplicarDano(5 + (gs.fase * 5));
+        if (!e.mathRequired) e.hp = -100;
       }
     });
 
@@ -1165,19 +1323,21 @@ export default function MathBlaster() {
 
       gs.enemies.forEach(e => {
         if (!e.mathRequired && Math.abs(l.x - e.x) < 20 && Math.abs(l.y - e.y) < 20) {
-          if (e.shield && e.shield > 0) { 
-            e.shield -= l.damage; 
-            if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; } 
-            criarParticulas(e.x, e.y, '#00FFFF', 5); return; 
+          if (e.shield && e.shield > 0) {
+            e.shield -= l.damage;
+            if (l.type !== 'NORMAL') e.lastPowerupHitAt = now; // barra de vida flutuante temporária
+            if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; }
+            criarParticulas(e.x, e.y, '#00FFFF', 5); return;
           }
-          
+
           e.hp -= (e.type === 'SHIELD_TANK' && l.type !== 'MISSILE' && l.type !== 'MISSILE_HOMING') ? l.damage * (1 - e.armorReduction) : l.damage;
+          if (l.type !== 'NORMAL') e.lastPowerupHitAt = now; // barra de vida flutuante temporária
           if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') {
             criarParticulas(e.x, e.y, '#FF4444', 10);
-            gs.enemies.forEach(e2 => { if (!e2.mathRequired && Math.abs(e.x - e2.x) < l.aoeRange && Math.abs(e.y - e2.y) < l.aoeRange) e2.hp -= l.damage; });
+            gs.enemies.forEach(e2 => { if (!e2.mathRequired && Math.abs(e.x - e2.x) < l.aoeRange && Math.abs(e.y - e2.y) < l.aoeRange) { e2.hp -= l.damage; e2.lastPowerupHitAt = now; } });
             if (gs.boss.active && Math.abs(gs.boss.x - e.x) < l.aoeRange && Math.abs(gs.boss.y - e.y) < l.aoeRange) gs.boss.hp -= l.damage;
-            if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; 
-          } else if (l.type !== 'LASER') l.y = -100; 
+            if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100;
+          } else if (l.type !== 'LASER') l.y = -100;
           criarParticulas(l.x, l.y, '#FFF', 3);
         } else if (e.mathRequired && Math.abs(l.x - e.x) < 30 && Math.abs(l.y - e.y) < 30) {
            if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; 
@@ -1213,6 +1373,7 @@ export default function MathBlaster() {
           if (alvo.shield && alvo.shield > 0) { alvo.shield -= b.damage; }
           else if (alvo.type === 'SHIELD_TANK') { alvo.hp -= b.damage * (1 - alvo.armorReduction); }
           else { alvo.hp -= b.damage; }
+          alvo.lastPowerupHitAt = now; // barra de vida flutuante temporária
           // Atordoamento: só impede o inimigo de atirar no exato momento em que a eletricidade encosta nele
           if (b.stun) alvo.fireTimer = 0;
           criarParticulas(alvo.x, alvo.y, b.color || '#9D00FF', 5);
@@ -1240,7 +1401,8 @@ export default function MathBlaster() {
     });
     gs.chainBolts = gs.chainBolts.filter((b: any) => b.life > 0);
 
-    if (now - gs.lastPowerupSpawn > 15000 && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
+    const intervaloPowerupEfetivo = 15000 / (configJogoRef.current?.dropRateMultiplier || 1);
+    if (now - gs.lastPowerupSpawn > intervaloPowerupEfetivo && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
       const tipos: { type: string; color: string; nome: string }[] = [
         { type: 'DAMAGE', color: '#FF00FF', nome: 'DANO NAVE' },
         { type: 'HULL_UPGRADE', color: '#7CFC00', nome: 'CASCO REFORÇADO' }
@@ -1313,13 +1475,21 @@ export default function MathBlaster() {
         }
       }
 
-      const sel = tipos[Math.floor(Math.random() * tipos.length)];
-      const eq = gerarEquacao(gs.fase, getRespostasAtivas());
-      
-      gs.powerups.push({ 
-        id: Math.random().toString(), x: Math.random() * (gw - 60) + 30, y: -40, 
-        type: sel.type, color: sel.color, title: sel.nome, txt: eq.txt, res: eq.res, collected: false 
-      });
+      // Painel de Partida do admin: só deixa aparecer powerups de famílias habilitadas.
+      // habilitados === null/undefined significa "configuração não carregada" (mostra tudo);
+      // uma lista vazia É uma escolha válida do admin (desmarcou tudo — não aparece nada).
+      const habilitados = configJogoRef.current?.powerupsHabilitados;
+      const tiposFiltrados = habilitados == null ? tipos : tipos.filter(t => habilitados.includes(familiaDoPowerup(t.type)));
+
+      if (tiposFiltrados.length > 0) {
+        const sel = tiposFiltrados[Math.floor(Math.random() * tiposFiltrados.length)];
+        const eq = gerarEquacao(gs.fase, getRespostasAtivas());
+
+        gs.powerups.push({
+          id: Math.random().toString(), x: Math.random() * (gw - 60) + 30, y: -40,
+          type: sel.type, color: sel.color, title: sel.nome, txt: eq.txt, res: eq.res, collected: false
+        });
+      }
       gs.lastPowerupSpawn = now;
     }
     
@@ -1365,6 +1535,24 @@ export default function MathBlaster() {
     };
   };
 
+  // Ghost Trail: sprite "fantasma" idêntico ao inimigo, opacidade fixa em 20%, sem hitbox/ataque —
+  // reaproveita exatamente os mesmos estilos do inimigo real, só que numa posição antiga (e.trail)
+  const renderGhostSombra = (e: any, pos: { x: number; y: number }, key: string) => {
+    if (e.type === 'METEOR') return <View key={key} pointerEvents="none" style={[styles.meteorShape, { left: pos.x - 12, top: pos.y - 12, opacity: 0.2, transform: [{ rotate: `${e.angle || 0}deg` }] }]}/>;
+    if (e.type === 'FLANKER') return <View key={key} pointerEvents="none" style={[styles.flankerShape, { left: pos.x - 7, top: pos.y - 12, opacity: 0.2, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}/>;
+    if (e.type === 'SHIELD_TANK') return (
+      <View key={key} pointerEvents="none" style={{ position: 'absolute', left: pos.x - 15, top: pos.y - 15, width: 30, height: 30, opacity: 0.2 }}>
+        <View style={styles.shieldTankBody}/>
+      </View>
+    );
+    if (e.type === 'SWARMLING') return <View key={key} pointerEvents="none" style={[styles.swarmlingShape, { left: pos.x - 6, top: pos.y - 6, opacity: 0.2 }]}/>;
+    if (e.type === 'SQUAD') {
+      const corNave = e.isLeader ? '#FF00FF' : '#FF0055';
+      return <View key={key} pointerEvents="none" style={[styles.squadronShip, { left: pos.x - 12, top: pos.y - 12, borderTopColor: corNave, opacity: 0.2 }]}/>;
+    }
+    return null;
+  };
+
   const renderBuffs = () => (
     <View style={styles.buffContainer}>
       <Text style={[styles.buffText, { color: '#FF00FF' }]}>ATK: {gs.player.damage.toFixed(1)}</Text>
@@ -1373,6 +1561,7 @@ export default function MathBlaster() {
       {gs.player.tripleShot && <Text style={[styles.buffText, { color: '#FFD700' }]}>TRIPLO</Text>}
       {gs.timeFreezeTimer > 0 && <Text style={[styles.buffText, { color: '#E0FFFF' }]}>GELO</Text>}
       {gs.xRayTimer > 0 && <Text style={[styles.buffText, { color: '#FF1493' }]}>RAIO-X</Text>}
+      {gs.overdriveTimer > 0 && <Text style={[styles.buffText, { color: '#FFD700' }]}>OVERDRIVE {Math.ceil(gs.overdriveTimer / 1000)}s</Text>}
     </View>
   );
 
@@ -1472,6 +1661,10 @@ export default function MathBlaster() {
 
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#00FFFF', marginTop: 12, flexDirection: 'row', justifyContent: 'center', gap: 8 }]} onPress={() => router.push('/hangar' as any)}>
+            <Ionicons name="construct-outline" size={18} color="#00FFFF" />
+            <Text style={[styles.btnIniciarTxt, { color: '#00FFFF' }]}>HANGAR</Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
@@ -1581,6 +1774,8 @@ export default function MathBlaster() {
               ))}
             </View>
 
+            {gs.enemies.map((e: any) => e.trail ? e.trail.map((pos: any, i: number) => renderGhostSombra(e, pos, `ghost-${e.id}-${i}`)) : null)}
+
             {gs.enemies.map(e => {
               if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 12, top: e.y - 12, transform: [{ rotate: `${e.angle || 0}deg` }] }]}/>;
               if (e.type === 'FLANKER') return ( <View key={e.id} style={[styles.flankerShape, { left: e.x - 7, top: e.y - 12, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}>{e.shield > 0 && <View style={styles.miniShield}/>}</View>);
@@ -1605,6 +1800,22 @@ export default function MathBlaster() {
               }
 
               if (e.type === 'SWARMLING') return <View key={e.id} style={[styles.swarmlingShape, { left: e.x - 6, top: e.y - 6 }]}/>;
+
+              if (e.type === 'GHOST') {
+                const invisivel = e.estadoFantasma === 'INVISIVEL';
+                return (
+                  <View key={e.id} style={{ position: 'absolute', left: e.x - 24, top: e.y - 24, width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{
+                      width: 40, height: 40, borderRadius: 20,
+                      backgroundColor: invisivel ? 'rgba(127,255,212,0.08)' : 'rgba(127,255,212,0.35)',
+                      borderWidth: 2, borderColor: invisivel ? 'rgba(127,255,212,0.25)' : '#7FFFD4',
+                      shadowColor: '#7FFFD4', shadowRadius: invisivel ? 4 : 14, shadowOpacity: invisivel ? 0.3 : 1,
+                    }}/>
+                    <Text style={{ position: 'absolute', top: -22, color: invisivel ? 'rgba(127,255,212,0.6)' : '#7FFFD4', fontSize: 12, fontWeight: '900', backgroundColor: '#050015', paddingHorizontal: 4 }}>{e.txt}</Text>
+                    {gs.xRayTimer > 0 && <Text style={styles.xrayText}>{e.res}</Text>}
+                  </View>
+                );
+              }
 
               if (e.type === 'SPAWNER') {
                 const nodePulso = 0.4 + Math.abs(Math.sin(Date.now() / 200)) * 0.6;
@@ -1661,6 +1872,17 @@ export default function MathBlaster() {
               </View>
             )}
 
+            {gs.enemies.map((e: any) => {
+              if (!e.lastPowerupHitAt || Date.now() - e.lastPowerupHitAt >= 1500) return null;
+              const opacidade = 1 - (Date.now() - e.lastPowerupHitAt) / 1500;
+              const pct = Math.max(0, Math.min(1, e.hp / (e.maxHp || e.hp || 1)));
+              return (
+                <View key={'hpbar-' + e.id} pointerEvents="none" style={{ position: 'absolute', left: e.x - 16, top: e.y - 26, width: 32, height: 5, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 3, opacity: opacidade, zIndex: 15, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' }}>
+                  <View style={{ width: `${pct * 100}%`, height: '100%', backgroundColor: pct > 0.5 ? '#32CD32' : pct > 0.25 ? '#FFD700' : '#FF4444', borderRadius: 2 }}/>
+                </View>
+              );
+            })}
+
             {gs.powerups.map(p => (
               <View key={p.id} style={[styles.powerupBox, { left: p.x - 40, top: p.y - 18, borderColor: p.color, shadowColor: p.color, shadowRadius: 8, shadowOpacity: 0.8, opacity: p.collected ? 0.4 : 1 }]}>
                 <Text style={[styles.powerupTitle, { color: p.color }]}>{p.title}</Text>
@@ -1669,16 +1891,16 @@ export default function MathBlaster() {
             ))}
 
             {gs.lasers.map(l => {
-              const corTiro = l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : '#00FFFF';
+              const corTiro = l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : l.type === 'PLASMA' ? '#FF6600' : '#00FFFF';
               return (
                 <View key={l.id} style={[styles.laserNormal, {
                   left: l.x - (l.size/2),
                   top: l.y,
                   width: l.size,
-                  height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.size * 3)),
+                  height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.type === 'PLASMA' ? l.size * 1.6 : l.size * 3)),
                   backgroundColor: corTiro,
-                  shadowColor: corTiro, shadowRadius: 6, shadowOpacity: 0.9,
-                  borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') ? l.size / 2 : 5
+                  shadowColor: corTiro, shadowRadius: l.type === 'PLASMA' ? 12 : 6, shadowOpacity: 0.9,
+                  borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING' || l.type === 'PLASMA') ? l.size / 2 : 5
                 }]}/>
               );
             })}
@@ -1735,16 +1957,16 @@ export default function MathBlaster() {
               <View style={[styles.naveAuraTras, { left: gs.player.x - 19, top: gs.player.y - 9 }]}/>
             )}
             {naveStage >= 2 && (
-              <View style={[styles.naveWingLeft, naveStage >= 3 && styles.naveWingGrown, { left: gs.player.x - 23, top: gs.player.y + 4, transform: [{ rotate: '-15deg' }] }]}>
+              <View style={[styles.naveWingLeft, naveStage >= 3 && styles.naveWingGrown, { left: gs.player.x - 23, top: gs.player.y + 4, transform: [{ rotate: '-15deg' }], borderBottomColor: gs.player.corNave }]}>
                 {naveStage >= 4 && <View style={styles.naveWingTip}/>}
               </View>
             )}
             {naveStage >= 2 && (
-              <View style={[styles.naveWingRight, naveStage >= 3 && styles.naveWingGrown, { left: gs.player.x + 11, top: gs.player.y + 4, transform: [{ rotate: '15deg' }] }]}>
+              <View style={[styles.naveWingRight, naveStage >= 3 && styles.naveWingGrown, { left: gs.player.x + 11, top: gs.player.y + 4, transform: [{ rotate: '15deg' }], borderBottomColor: gs.player.corNave }]}>
                 {naveStage >= 4 && <View style={styles.naveWingTip}/>}
               </View>
             )}
-            <View style={[naveStage >= 4 ? styles.playerShapeOmega : styles.playerShape, { left: gs.player.x - 15, top: gs.player.y - 15 }]}/>
+            <View style={[naveStage >= 4 ? styles.playerShapeOmega : styles.playerShape, { left: gs.player.x - 15, top: gs.player.y - 15, borderBottomColor: gs.player.corNave, shadowColor: gs.player.corNave }]}/>
             <View style={[styles.propulsor, { left: gs.player.x - 5, top: gs.player.y + 15, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
             {naveStage >= 2 && (
               <View style={[styles.propulsorSecundario, { left: gs.player.x - 14, top: gs.player.y + 13, opacity: Math.random() > 0.5 ? 1 : 0.4 }]} />
