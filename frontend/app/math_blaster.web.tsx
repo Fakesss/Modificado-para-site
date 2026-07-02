@@ -1238,15 +1238,6 @@ export default function MathBlaster() {
     }
 
     gs.enemies.forEach(e => {
-      // Rastro fantasma (efeito puramente visual, sem hitbox/colisão nem ataque): guarda a
-      // posição de alguns ticks atrás pra desenhar sprites "fantasmas" com atraso (ver render)
-      if (e.type === 'METEOR' || e.type === 'FLANKER' || e.type === 'SHIELD_TANK' || e.type === 'SWARMLING' || e.type === 'SQUAD') {
-        if (!e.trail) e.trail = [];
-        if (gs.timeAlive % 120 === 0) {
-          e.trail.unshift({ x: e.x, y: e.y });
-          if (e.trail.length > 2) e.trail.length = 2;
-        }
-      }
       if (e.type === 'METEOR') { e.y += e.vy * speedMult; e.angle = (e.angle || 0) + 2 * speedMult; }
       else if (e.type === 'FLANKER') { e.x += e.vx * speedMult; e.y += e.vy * speedMult; }
       else if (e.type === 'SHIELD_TANK') { e.y += e.vy * speedMult; }
@@ -1535,24 +1526,6 @@ export default function MathBlaster() {
     };
   };
 
-  // Ghost Trail: sprite "fantasma" idêntico ao inimigo, opacidade fixa em 20%, sem hitbox/ataque —
-  // reaproveita exatamente os mesmos estilos do inimigo real, só que numa posição antiga (e.trail)
-  const renderGhostSombra = (e: any, pos: { x: number; y: number }, key: string) => {
-    if (e.type === 'METEOR') return <View key={key} pointerEvents="none" style={[styles.meteorShape, { left: pos.x - 12, top: pos.y - 12, opacity: 0.2, transform: [{ rotate: `${e.angle || 0}deg` }] }]}/>;
-    if (e.type === 'FLANKER') return <View key={key} pointerEvents="none" style={[styles.flankerShape, { left: pos.x - 7, top: pos.y - 12, opacity: 0.2, transform: [{ rotate: e.vx > 0 ? '90deg' : '-90deg' }] }]}/>;
-    if (e.type === 'SHIELD_TANK') return (
-      <View key={key} pointerEvents="none" style={{ position: 'absolute', left: pos.x - 15, top: pos.y - 15, width: 30, height: 30, opacity: 0.2 }}>
-        <View style={styles.shieldTankBody}/>
-      </View>
-    );
-    if (e.type === 'SWARMLING') return <View key={key} pointerEvents="none" style={[styles.swarmlingShape, { left: pos.x - 6, top: pos.y - 6, opacity: 0.2 }]}/>;
-    if (e.type === 'SQUAD') {
-      const corNave = e.isLeader ? '#FF00FF' : '#FF0055';
-      return <View key={key} pointerEvents="none" style={[styles.squadronShip, { left: pos.x - 12, top: pos.y - 12, borderTopColor: corNave, opacity: 0.2 }]}/>;
-    }
-    return null;
-  };
-
   const renderBuffs = () => (
     <View style={styles.buffContainer}>
       <Text style={[styles.buffText, { color: '#FF00FF' }]}>ATK: {gs.player.damage.toFixed(1)}</Text>
@@ -1773,8 +1746,6 @@ export default function MathBlaster() {
                 <Text key={s.id} style={[styles.bgSymbolText, { left: s.x, top: s.y, fontSize: s.size, color: s.color, opacity: s.opacity }]}>{s.char}</Text>
               ))}
             </View>
-
-            {gs.enemies.map((e: any) => e.trail ? e.trail.map((pos: any, i: number) => renderGhostSombra(e, pos, `ghost-${e.id}-${i}`)) : null)}
 
             {gs.enemies.map(e => {
               if (e.type === 'METEOR') return <View key={e.id} style={[styles.meteorShape, { left: e.x - 12, top: e.y - 12, transform: [{ rotate: `${e.angle || 0}deg` }] }]}/>;

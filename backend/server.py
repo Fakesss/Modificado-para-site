@@ -252,8 +252,8 @@ def custo_upgrade_hangar(atributo: str, nivel_atual: int) -> int:
 HANGAR_ARMAS_CATALOGO: Dict[str, Dict[str, Any]] = {
     "PADRAO":   {"nome": "Padrão",        "descricao": "Tiro simples e equilibrado.",              "custo": 0},
     "ELETRICA": {"nome": "Elétrica",      "descricao": "Salta entre inimigos próximos.",           "custo": 80},
-    "PLASMA":   {"nome": "Plasma Burst",  "descricao": "Cadência lenta, dano alto.",               "custo": 150},
-    "LEQUE":    {"nome": "Spread Shot",   "descricao": "Três projéteis em leque, sempre ativo.",   "custo": 150},
+    "PLASMA":   {"nome": "Rajada de Plasma", "descricao": "Cadência lenta, dano alto.",               "custo": 150},
+    "LEQUE":    {"nome": "Tiro em Leque",    "descricao": "Três projéteis em leque, sempre ativo.",   "custo": 150},
 }
 
 HANGAR_CORES_DISPONIVEIS = ["#00FFFF", "#FF00FF", "#7FFF00", "#FFD700", "#FF4444", "#BB77FF", "#FF7055", "#FFFFFF"]
