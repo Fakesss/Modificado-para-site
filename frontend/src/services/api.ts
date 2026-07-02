@@ -146,7 +146,7 @@ export const limparRelatorioBNCC = async (tipo: string, alvoId?: string) => { re
 
 export const getRankingAlunosEquipe = async (equipeId?: string) => { try { return (await api.get(`/ranking/equipe/${equipeId}`)).data; } catch { return []; } };
 export const getAlunoBNCC = async (alunoId: string) => { try { return (await api.get(`/relatorios/bncc/aluno/${alunoId}`)).data; } catch { return null; } };
-export const getConfiguracaoJogo = async () => { try { return (await api.get('/configuracoes')).data; } catch { return null; } };
+export const getConfiguracaoJogo = async (jogoId: string = 'math_blaster') => { try { return (await api.get('/configuracoes', { params: { jogoId } })).data; } catch { return null; } };
 export const salvarConfiguracaoJogo = async (dados: any) => { try { return (await api.post('/configuracoes', dados)).data; } catch { return null; } };
 export const limparItensExpirados = async () => { try { return (await api.post('/admin/limpar-expirados')).data; } catch { return null; } };
 
@@ -167,5 +167,14 @@ export const adminDesbloquearConversa = async (user1: string, user2: string) => 
 // Sessão salva localmente no dispositivo (AsyncStorage) — sem servidor
 export const concluirSudoku = async (dados: { difficulty: string; elapsedSeconds: number; hintsUsed: number }) => { try { await api.post('/sudoku/concluir', dados); } catch {} };
 export const getSudokuRanking = async (difficulty: string) => { try { return (await api.get(`/sudoku/ranking/${difficulty}`)).data; } catch { return []; } };
+
+// ======== HANGAR DA NAVE (progressão permanente do Math Blaster) ========
+export const getHangarPerfil = async () => { try { return (await api.get('/hangar/perfil')).data; } catch { return null; } };
+export const hangarUpgrade = async (atributo: 'cdr' | 'velocidade' | 'dano') => { try { return (await api.post('/hangar/upgrade', { atributo })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao evoluir'); } };
+export const hangarEquiparArma = async (arma: string) => { try { return (await api.post('/hangar/equipar_arma', { arma })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao equipar arma'); } };
+export const hangarCor = async (cor: string) => { try { return (await api.post('/hangar/cor', { cor })).data; } catch { return null; } };
+export const hangarCodigoSecreto = async (codigo: string) => { try { return (await api.post('/hangar/codigo_secreto', { codigo })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Código inválido'); } };
+export const hangarAdminInjetarMoedas = async (codigoMaster: string, quantidade: number) => { try { return (await api.post('/hangar/admin_injetar_moedas', { codigoMaster, quantidade })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao injetar moedas'); } };
+export const hangarGanharMoedas = async (pontos: number) => { try { return (await api.post('/hangar/ganhar_moedas', { pontos })).data; } catch { return null; } };
 
 export default api;

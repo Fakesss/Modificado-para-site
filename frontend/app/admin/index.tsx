@@ -202,6 +202,12 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/config_jogo')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#FFD70030' }]}><Ionicons name="options" size={24} color="#FFD700" /></View>
+          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Painel de Partida (beta)</Text><Text style={styles.menuDescription}>Ajustar powerups e inimigos do Math Blaster ao vivo</Text></View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/cor-admin')}>
           <View style={[styles.menuIcon, { backgroundColor: '#00CED130' }]}><Ionicons name="color-wand" size={24} color="#00CED1" /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Cor da Prévia</Text><Text style={styles.menuDescription}>Escolher sua cor para "Ver como aluno"</Text></View>
