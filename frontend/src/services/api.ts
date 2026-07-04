@@ -168,6 +168,13 @@ export const adminDesbloquearConversa = async (user1: string, user2: string) => 
 export const concluirSudoku = async (dados: { difficulty: string; elapsedSeconds: number; hintsUsed: number }) => { try { await api.post('/sudoku/concluir', dados); } catch {} };
 export const getSudokuRanking = async (difficulty: string) => { try { return (await api.get(`/sudoku/ranking/${difficulty}`)).data; } catch { return []; } };
 
+// ======== TRILHA DA TABUADA (método Leitner) ========
+export const getTabuadaCards = async () => { try { return (await api.get('/tabuada/cards')).data; } catch { return null; } };
+export const enviarTabuadaSessao = async (dados: { modulo: string; respostas: any[] }) => (await api.post('/tabuada/sessao', dados)).data;
+export const getTabuadaEvolucao = async () => { try { return (await api.get('/tabuada/evolucao')).data; } catch { return null; } };
+export const getTabuadaRelatorio = async (turmaId?: string) => { try { return (await api.get('/tabuada/relatorio', { params: turmaId ? { turma_id: turmaId } : {} })).data; } catch { return []; } };
+export const getTabuadaRelatorioAluno = async (alunoId: string) => { try { return (await api.get(`/tabuada/relatorio/aluno/${alunoId}`)).data; } catch { return null; } };
+
 // ======== HANGAR DA NAVE (progressão permanente do Math Blaster) ========
 export const getHangarPerfil = async () => { try { return (await api.get('/hangar/perfil')).data; } catch { return null; } };
 export const hangarUpgrade = async (atributo: 'cdr' | 'velocidade' | 'dano') => { try { return (await api.post('/hangar/upgrade', { atributo })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao evoluir'); } };

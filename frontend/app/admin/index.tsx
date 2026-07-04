@@ -208,6 +208,18 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/tabuada')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#FFB30030' }]}><Ionicons name="trail-sign" size={24} color="#FFB300" /></View>
+          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Trilha da Tabuada (beta)</Text><Text style={styles.menuDescription}>Testar o treino de tabuada com repetição espaçada</Text></View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/tabuada_relatorio')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#7FD4FF30' }]}><Ionicons name="analytics" size={24} color="#7FD4FF" /></View>
+          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Relatório da Tabuada</Text><Text style={styles.menuDescription}>Progresso dos alunos no método Leitner, por turma</Text></View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/cor-admin')}>
           <View style={[styles.menuIcon, { backgroundColor: '#00CED130' }]}><Ionicons name="color-wand" size={24} color="#00CED1" /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Cor da Prévia</Text><Text style={styles.menuDescription}>Escolher sua cor para "Ver como aluno"</Text></View>

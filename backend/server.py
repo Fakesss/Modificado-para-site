@@ -190,6 +190,24 @@ class ConfiguracaoJogo(BaseModel):
     powerupsHabilitados: List[str] = []
     spawnChancePorInimigo: Dict[str, int] = {}
 
+class TabuadaRespostaItem(BaseModel):
+    operacao: str            # "7x8"
+    fator1: int
+    fator2: int
+    respostaCorreta: int
+    respostaDada: int
+    acertou: bool
+    tempoResposta: float     # segundos
+    nivelAntes: int          # nível Leitner antes da resposta (1..5)
+    nivelDepois: int         # nível Leitner depois da resposta (1..5)
+    proximaRevisao: str      # ISO, calculada pelo módulo Leitner do app
+    classificacao: str = "NORMAL"  # ERRO | LENTA | NORMAL | RAPIDA
+    respondidoEm: str        # ISO, momento em que o aluno respondeu
+
+class TabuadaSessaoRequest(BaseModel):
+    modulo: str = "tabuada"
+    respostas: List[TabuadaRespostaItem]
+
 # =========================================================================
 # CONFIGURAÇÃO DE PONTOS POR JOGO (painel de ajuste manual)
 # -------------------------------------------------------------------------
@@ -1450,6 +1468,262 @@ async def get_sudoku_ranking(difficulty: str):
             "concluidoEm": r.get("concluidoEm"),
         })
     return out
+
+# =========================================================================
+# TRILHA DA TABUADA (método Leitner de repetição espaçada)
+# -------------------------------------------------------------------------
+# A matemática do método (níveis, revisões, seleção de cards) vive num
+# módulo único e testado no app (frontend/src/services/leitner.ts). O
+# backend guarda o estado dos cards e TODO o histórico de respostas, e
+# calcula os relatórios/gráficos a partir desse histórico real.
+# Coleções: db.tabuada_cards (1 doc por aluno+operação) e
+#           db.tabuada_respostas (1 doc por resposta dada).
+# =========================================================================
+TABUADA_TOTAL_CARDS = 100  # 1..10 × 1..10 (7x8 e 8x7 são cards distintos)
+
+def _tabuada_clamp_nivel(nivel: int) -> int:
+    return max(1, min(5, int(nivel or 1)))
+
+@api_router.get("/tabuada/cards")
+async def get_tabuada_cards(current_user: dict = Depends(get_current_user)):
+    cards = await db.tabuada_cards.find({"usuarioId": current_user["id"]}).to_list(300)
+    return [{k: v for k, v in c.items() if k != '_id'} for c in cards]
+
+@api_router.post("/tabuada/sessao")
+async def registrar_tabuada_sessao(dados: TabuadaSessaoRequest, current_user: dict = Depends(get_current_user)):
+    """Recebe o lote de respostas de uma sessão de treino: grava cada resposta
+    no histórico e atualiza o estado (nível/próxima revisão) de cada card."""
+    if not dados.respostas:
+        return {"message": "Sessão vazia"}
+    agora = get_now_brt().isoformat()
+    sessao_id = str(uuid.uuid4())
+
+    for r in dados.respostas:
+        nivel_antes = _tabuada_clamp_nivel(r.nivelAntes)
+        nivel_depois = _tabuada_clamp_nivel(r.nivelDepois)
+        await db.tabuada_respostas.insert_one({
+            "id": str(uuid.uuid4()),
+            "sessaoId": sessao_id,
+            "usuarioId": current_user["id"],
+            "turmaId": current_user.get("turmaId"),
+            "modulo": dados.modulo,
+            "operacao": r.operacao,
+            "fator1": r.fator1,
+            "fator2": r.fator2,
+            "respostaCorreta": r.respostaCorreta,
+            "respostaDada": r.respostaDada,
+            "acertou": r.acertou,
+            "tempoResposta": r.tempoResposta,
+            "nivelAntes": nivel_antes,
+            "nivelDepois": nivel_depois,
+            "proximaRevisao": r.proximaRevisao,
+            "classificacao": r.classificacao,
+            "respondidoEm": r.respondidoEm,
+            "registradoEm": agora,
+        })
+        update: Dict[str, Any] = {
+            "$set": {
+                "nivel": nivel_depois,
+                "proximaRevisao": r.proximaRevisao,
+                "fator1": r.fator1,
+                "fator2": r.fator2,
+                "ultimaRespostaEm": agora,
+            },
+            "$inc": {"vezesVista": 1, "vezesErrada": 0 if r.acertou else 1},
+            "$setOnInsert": {"id": str(uuid.uuid4()), "criadoEm": agora, "modulo": dados.modulo},
+        }
+        if not r.acertou:
+            update["$set"]["ultimoErroEm"] = agora
+        await db.tabuada_cards.update_one(
+            {"usuarioId": current_user["id"], "operacao": r.operacao}, update, upsert=True
+        )
+
+    return {"message": "ok", "sessaoId": sessao_id, "respostasRegistradas": len(dados.respostas)}
+
+def _tabuada_evolucao_pct(niveis_por_card: Dict[str, int]) -> float:
+    """Evolução Leitner (%) = soma de (nível-1) ÷ (total de cards × 4) × 100.
+    Cards nunca estudados contam como nível 1 (contribuem 0)."""
+    soma = sum(_tabuada_clamp_nivel(n) - 1 for n in niveis_por_card.values())
+    return round(soma / (TABUADA_TOTAL_CARDS * 4) * 100, 1)
+
+async def calcular_evolucao_tabuada(usuario_id: str) -> Dict[str, Any]:
+    """Monta todos os dados de evolução de um aluno a partir do histórico REAL
+    de respostas. Usado tanto pela tela 'Minha Evolução' do aluno quanto pelo
+    relatório individual do professor."""
+    respostas = await db.tabuada_respostas.find({"usuarioId": usuario_id}).sort("registradoEm", 1).to_list(50000)
+    cards = await db.tabuada_cards.find({"usuarioId": usuario_id}).to_list(300)
+
+    # --- Estado atual ---
+    niveis_atuais = {c["operacao"]: c.get("nivel", 1) for c in cards if c.get("vezesVista", 0) > 0}
+    dominados = sum(1 for n in niveis_atuais.values() if _tabuada_clamp_nivel(n) == 5)
+    evolucao_atual = _tabuada_evolucao_pct(niveis_atuais)
+
+    tempos_acertos = [r["tempoResposta"] for r in respostas if r.get("acertou")]
+    tempo_medio = round(sum(tempos_acertos) / len(tempos_acertos), 1) if tempos_acertos else 0.0
+
+    # --- Séries por sessão (ordem cronológica) ---
+    sessoes_ordem: List[str] = []
+    por_sessao: Dict[str, Dict[str, Any]] = {}
+    for r in respostas:
+        sid = r.get("sessaoId", "?")
+        if sid not in por_sessao:
+            sessoes_ordem.append(sid)
+            por_sessao[sid] = {"acertos": 0, "total": 0, "temposAcertos": [], "data": r.get("registradoEm", "")[:10]}
+        s = por_sessao[sid]
+        s["total"] += 1
+        if r.get("acertou"):
+            s["acertos"] += 1
+            s["temposAcertos"].append(r["tempoResposta"])
+    acertos_por_sessao = []
+    tempo_por_sessao = []
+    for sid in sessoes_ordem:
+        s = por_sessao[sid]
+        acertos_por_sessao.append({"data": s["data"], "valor": round(s["acertos"] / s["total"] * 100, 1) if s["total"] else 0})
+        media = round(sum(s["temposAcertos"]) / len(s["temposAcertos"]), 1) if s["temposAcertos"] else 0
+        tempo_por_sessao.append({"data": s["data"], "valor": media})
+
+    # --- Série da Evolução Leitner por dia (replay do histórico real) ---
+    evolucao_por_dia = []
+    dominados_por_dia = []
+    niveis_replay: Dict[str, int] = {}
+    dia_atual: Optional[str] = None
+    for r in respostas:
+        dia = r.get("registradoEm", "")[:10]
+        if dia_atual is not None and dia != dia_atual:
+            evolucao_por_dia.append({"data": dia_atual, "valor": _tabuada_evolucao_pct(niveis_replay)})
+            dominados_por_dia.append({"data": dia_atual, "valor": sum(1 for n in niveis_replay.values() if _tabuada_clamp_nivel(n) == 5)})
+        dia_atual = dia
+        niveis_replay[r["operacao"]] = r.get("nivelDepois", 1)
+    if dia_atual is not None:
+        evolucao_por_dia.append({"data": dia_atual, "valor": _tabuada_evolucao_pct(niveis_replay)})
+        dominados_por_dia.append({"data": dia_atual, "valor": sum(1 for n in niveis_replay.values() if _tabuada_clamp_nivel(n) == 5)})
+
+    # --- Dificuldades: operações e tabuadas (fator) com mais erros ---
+    stats_op: Dict[str, Dict[str, int]] = {}
+    stats_fator: Dict[int, Dict[str, int]] = {}
+    for r in respostas:
+        op = r["operacao"]
+        if op not in stats_op:
+            stats_op[op] = {"erros": 0, "total": 0}
+        stats_op[op]["total"] += 1
+        if not r.get("acertou"):
+            stats_op[op]["erros"] += 1
+        for fator in (r.get("fator1"), r.get("fator2")):
+            if fator is None:
+                continue
+            if fator not in stats_fator:
+                stats_fator[fator] = {"erros": 0, "total": 0}
+            stats_fator[fator]["total"] += 1
+            if not r.get("acertou"):
+                stats_fator[fator]["erros"] += 1
+
+    operacoes_dificeis = sorted(
+        [{"operacao": op, "erros": s["erros"], "total": s["total"]} for op, s in stats_op.items() if s["erros"] > 0],
+        key=lambda x: (-x["erros"], -(x["erros"] / x["total"]))
+    )[:5]
+
+    tabuadas_dificeis = sorted(
+        [{"tabuada": f, "erros": s["erros"], "total": s["total"], "taxaErro": round(s["erros"] / s["total"] * 100, 1)}
+         for f, s in stats_fator.items() if s["total"] >= 3 and s["erros"] > 0],
+        key=lambda x: -x["taxaErro"]
+    )[:3]
+
+    ultimos_erros = [r["operacao"] for r in reversed(respostas) if not r.get("acertou")][:5]
+
+    if tabuadas_dificeis:
+        nomes = " e ".join(f"do {t['tabuada']}" for t in tabuadas_dificeis[:2])
+        recomendacao = f"Revisar tabuadas {nomes}"
+    elif dominados >= TABUADA_TOTAL_CARDS:
+        recomendacao = "Parabéns! Todas as operações dominadas — continue treinando para manter."
+    elif not respostas:
+        recomendacao = "Comece seu primeiro treino!"
+    else:
+        recomendacao = "Continue treinando todos os dias!"
+
+    # Cards vencidos hoje (pra mostrar 'operações que precisam ser revisadas')
+    agora_iso = get_now_brt().isoformat()
+    vencidos = sorted(
+        [c["operacao"] for c in cards if c.get("vezesVista", 0) > 0 and str(c.get("proximaRevisao", "")) <= agora_iso],
+    )[:10]
+
+    return {
+        "dominados": dominados,
+        "totalCards": TABUADA_TOTAL_CARDS,
+        "evolucaoPct": evolucao_atual,
+        "tempoMedio": tempo_medio,
+        "totalRespostas": len(respostas),
+        "totalSessoes": len(sessoes_ordem),
+        "acertosPorSessao": acertos_por_sessao,
+        "tempoPorSessao": tempo_por_sessao,
+        "evolucaoPorDia": evolucao_por_dia,
+        "dominadosPorDia": dominados_por_dia,
+        "operacoesDificeis": operacoes_dificeis,
+        "tabuadasDificeis": tabuadas_dificeis,
+        "ultimosErros": ultimos_erros,
+        "cardsVencidos": vencidos,
+        "recomendacao": recomendacao,
+    }
+
+@api_router.get("/tabuada/evolucao")
+async def get_tabuada_evolucao(current_user: dict = Depends(get_current_user)):
+    return await calcular_evolucao_tabuada(current_user["id"])
+
+@api_router.get("/tabuada/relatorio")
+async def get_tabuada_relatorio(turma_id: Optional[str] = None, current_user: dict = Depends(require_admin)):
+    """Visão geral do professor: uma linha por aluno com progresso, dificuldades e
+    ranking por evolução (não por velocidade)."""
+    filtro_usuarios: Dict[str, Any] = {"ativo": True, "perfil": {"$ne": "ADMIN"}}
+    if turma_id:
+        filtro_usuarios["turmaId"] = turma_id
+    usuarios = await db.usuarios.find(filtro_usuarios).to_list(5000)
+    turmas = {str(t.get("id")): t for t in await db.turmas.find({}).to_list(100)}
+
+    ids = [u["id"] for u in usuarios]
+    todos_cards = await db.tabuada_cards.find({"usuarioId": {"$in": ids}}).to_list(50000)
+    cards_por_aluno: Dict[str, list] = {}
+    for c in todos_cards:
+        cards_por_aluno.setdefault(c["usuarioId"], []).append(c)
+
+    # Estatística de erros por tabuada, calculada dos cards (leve o suficiente pra lista)
+    linhas = []
+    for u in usuarios:
+        cards = cards_por_aluno.get(u["id"], [])
+        vistos = [c for c in cards if c.get("vezesVista", 0) > 0]
+        niveis = {c["operacao"]: c.get("nivel", 1) for c in vistos}
+        dominados = sum(1 for n in niveis.values() if _tabuada_clamp_nivel(n) == 5)
+        erros_fator: Dict[int, int] = {}
+        for c in vistos:
+            if c.get("vezesErrada", 0) > 0:
+                for fator in (c.get("fator1"), c.get("fator2")):
+                    if fator is not None:
+                        erros_fator[fator] = erros_fator.get(fator, 0) + c["vezesErrada"]
+        piores = [f for f, _ in sorted(erros_fator.items(), key=lambda kv: -kv[1])[:2]]
+        turma = turmas.get(str(u.get("turmaId", "")))
+        linhas.append({
+            "id": u["id"],
+            "nome": u.get("nome", "?"),
+            "turma": turma.get("nome", "") if turma else "",
+            "dominados": dominados,
+            "totalCards": TABUADA_TOTAL_CARDS,
+            "evolucaoPct": _tabuada_evolucao_pct(niveis),
+            "cardsEstudados": len(vistos),
+            "pioresTabuadas": piores,
+        })
+
+    linhas.sort(key=lambda x: -x["evolucaoPct"])
+    for i, linha in enumerate(linhas):
+        linha["posicao"] = i + 1
+    return linhas
+
+@api_router.get("/tabuada/relatorio/aluno/{aluno_id}")
+async def get_tabuada_relatorio_aluno(aluno_id: str, current_user: dict = Depends(require_admin)):
+    aluno = await db.usuarios.find_one({"id": aluno_id})
+    if not aluno:
+        raise HTTPException(status_code=404, detail="Aluno não encontrado")
+    turma = await db.turmas.find_one({"id": aluno.get("turmaId", "")}) if aluno.get("turmaId") else None
+    evolucao = await calcular_evolucao_tabuada(aluno_id)
+    evolucao["aluno"] = {"id": aluno["id"], "nome": aluno.get("nome", "?"), "turma": turma.get("nome", "") if turma else ""}
+    return evolucao
 
 @api_router.get("/hangar/perfil")
 async def get_hangar_perfil(current_user: dict = Depends(get_current_user)):
