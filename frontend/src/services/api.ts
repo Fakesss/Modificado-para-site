@@ -178,6 +178,7 @@ export const getTabuadaRelatorioAluno = async (alunoId: string) => { try { retur
 // ======== FLASH CARDS PERSONALIZADOS (criados pelo próprio aluno) ========
 export const getTabuadaFlashcards = async () => { try { return (await api.get('/tabuada/flashcards')).data; } catch { return []; } };
 export const criarTabuadaFlashcard = async (dados: { tipo: 'CONTA' | 'TEXTO'; enunciado: string; respostaCorreta: number; dica?: string | null; opcoes?: number[] | null }) => (await api.post('/tabuada/flashcards', dados)).data;
+export const atualizarTabuadaFlashcard = async (id: string, dados: { tipo: 'CONTA' | 'TEXTO'; enunciado: string; respostaCorreta: number; dica?: string | null; opcoes?: number[] | null }) => (await api.put(`/tabuada/flashcards/${id}`, dados)).data;
 export const deletarTabuadaFlashcard = async (id: string) => (await api.delete(`/tabuada/flashcards/${id}`)).data;
 
 // ======== HANGAR DA NAVE (progressão permanente do Math Blaster) ========

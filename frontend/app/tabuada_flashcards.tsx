@@ -20,6 +20,8 @@ export default function MeusFlashcards() {
   const [carregando, setCarregando] = useState(true);
   const [criando, setCriando] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
 
   const [tipo, setTipo] = useState<'CONTA' | 'TEXTO'>('CONTA');
   const [enunciado, setEnunciado] = useState('');
@@ -44,6 +46,31 @@ export default function MeusFlashcards() {
     setOpcoes(['', '', '', '']);
   };
 
+  const abrirCriacao = () => {
+    limparForm();
+    setEditandoId(null);
+    setCriando(v => !v);
+  };
+
+  const abrirEdicao = (fc: FlashcardPersonalizado) => {
+    setTipo(fc.tipo);
+    setEnunciado(fc.enunciado);
+    setRespostaCorreta(String(fc.respostaCorreta));
+    setDica(fc.dica ?? '');
+    const jaTinha = fc.opcoes ?? [];
+    setOpcoes([0, 1, 2, 3].map(i => (jaTinha[i] != null ? String(jaTinha[i]) : '')));
+    setEditandoId(fc.id);
+    setCriando(true);
+  };
+
+  const alternarExpandido = (id: string) => {
+    setExpandidos(prev => {
+      const novo = new Set(prev);
+      if (novo.has(id)) novo.delete(id); else novo.add(id);
+      return novo;
+    });
+  };
+
   const salvar = async () => {
     const enunciadoLimpo = enunciado.trim();
     const correta = parseInt(respostaCorreta, 10);
@@ -59,18 +86,21 @@ export default function MeusFlashcards() {
     if (opcoesNumeros.length > 0 && !opcoesNumeros.includes(correta)) {
       opcoesNumeros.push(correta);
     }
+    const payload = {
+      tipo,
+      enunciado: enunciadoLimpo,
+      respostaCorreta: correta,
+      dica: dica.trim() || null,
+      opcoes: opcoesNumeros.length > 0 ? opcoesNumeros : null,
+    };
 
     setSalvando(true);
     try {
-      await api.criarTabuadaFlashcard({
-        tipo,
-        enunciado: enunciadoLimpo,
-        respostaCorreta: correta,
-        dica: dica.trim() || null,
-        opcoes: opcoesNumeros.length > 0 ? opcoesNumeros : null,
-      });
+      if (editandoId) await api.atualizarTabuadaFlashcard(editandoId, payload);
+      else await api.criarTabuadaFlashcard(payload);
       limparForm();
       setCriando(false);
+      setEditandoId(null);
       await carregar();
     } catch {
       Alert.alert('Não deu certo', 'Não foi possível salvar agora. Tente de novo.');
@@ -97,7 +127,7 @@ export default function MeusFlashcards() {
           <Ionicons name="arrow-back" size={26} color="#7FD4FF" />
         </TouchableOpacity>
         <Text style={styles.headerTitulo}>Meus Flash Cards</Text>
-        <TouchableOpacity onPress={() => { limparForm(); setCriando(v => !v); }}>
+        <TouchableOpacity onPress={abrirCriacao}>
           <Ionicons name={criando ? 'close' : 'add-circle'} size={28} color="#7FD4FF" />
         </TouchableOpacity>
       </View>
@@ -106,7 +136,7 @@ export default function MeusFlashcards() {
         <ScrollView contentContainerStyle={styles.scroll}>
           {criando && (
             <View style={styles.formCard}>
-              <Text style={styles.formTitulo}>Novo flash card</Text>
+              <Text style={styles.formTitulo}>{editandoId ? 'Editar flash card' : 'Novo flash card'}</Text>
 
               <View style={styles.tipoRow}>
                 <TouchableOpacity style={[styles.tipoChip, tipo === 'CONTA' && styles.tipoChipAtivo]} onPress={() => setTipo('CONTA')}>
@@ -164,7 +194,7 @@ export default function MeusFlashcards() {
                 {salvando ? <ActivityIndicator size="small" color="#04141a" /> : (
                   <>
                     <Ionicons name="checkmark" size={18} color="#04141a" />
-                    <Text style={styles.btnSalvarTexto}>SALVAR FLASH CARD</Text>
+                    <Text style={styles.btnSalvarTexto}>{editandoId ? 'SALVAR ALTERAÇÕES' : 'SALVAR FLASH CARD'}</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -179,24 +209,43 @@ export default function MeusFlashcards() {
               <Text style={styles.vazioTexto}>Você ainda não criou nenhum flash card. Toque no + para criar o primeiro!</Text>
             </View>
           ) : (
-            lista.map(fc => (
-              <View key={fc.id} style={styles.itemCard}>
-                <View style={styles.itemTopo}>
-                  <View style={[styles.itemBadge, fc.tipo === 'TEXTO' && styles.itemBadgeTexto]}>
-                    <Text style={styles.itemBadgeTexto2}>{fc.tipo === 'CONTA' ? 'Conta' : 'Texto'}</Text>
+            lista.map(fc => {
+              const expandido = expandidos.has(fc.id);
+              return (
+                <TouchableOpacity
+                  key={fc.id}
+                  style={styles.itemCard}
+                  onPress={() => alternarExpandido(fc.id)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.itemTopo}>
+                    <View style={[styles.itemBadge, fc.tipo === 'TEXTO' && styles.itemBadgeTipoTexto]}>
+                      <Text style={styles.itemBadgeLabel}>{fc.tipo === 'CONTA' ? 'Conta' : 'Texto'}</Text>
+                    </View>
+                    <View style={styles.itemAcoes}>
+                      <TouchableOpacity style={styles.itemBtnIcone} onPress={() => abrirEdicao(fc)}>
+                        <Ionicons name="pencil" size={13} color="#7FD4FF" />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.itemBtnIcone} onPress={() => excluir(fc)}>
+                        <Ionicons name="trash-outline" size={15} color="#FF7055" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <TouchableOpacity onPress={() => excluir(fc)}>
-                    <Ionicons name="trash-outline" size={18} color="#FF7055" />
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.itemEnunciado}>{fc.enunciado}</Text>
-                <Text style={styles.itemResposta}>Resposta: {fc.respostaCorreta}</Text>
-                {fc.dica ? <Text style={styles.itemDica}>💡 {fc.dica}</Text> : null}
-                {fc.opcoes && fc.opcoes.length > 0 ? (
-                  <Text style={styles.itemOpcoes}>Opções: {fc.opcoes.join(', ')}</Text>
-                ) : null}
-              </View>
-            ))
+                  <Text style={styles.itemEnunciado}>{fc.enunciado}</Text>
+                  {expandido ? (
+                    <View style={styles.itemDetalhe}>
+                      <Text style={styles.itemResposta}>Resposta: {fc.respostaCorreta}</Text>
+                      {fc.dica ? <Text style={styles.itemDica}>💡 {fc.dica}</Text> : null}
+                      {fc.opcoes && fc.opcoes.length > 0 ? (
+                        <Text style={styles.itemOpcoes}>Opções: {fc.opcoes.join(', ')}</Text>
+                      ) : null}
+                    </View>
+                  ) : (
+                    <Text style={styles.itemToque}>Toque para ver a resposta</Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -230,10 +279,14 @@ const styles = StyleSheet.create({
   itemCard: { backgroundColor: '#14142e', borderRadius: 14, borderWidth: 1, borderColor: '#26264a', padding: 14, marginBottom: 12 },
   itemTopo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   itemBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10, backgroundColor: '#1c3040' },
-  itemBadgeTexto: { backgroundColor: '#2a1e40' },
-  itemBadgeTexto2: { color: '#7FD4FF', fontSize: 10, fontWeight: '800' },
-  itemEnunciado: { color: '#FFF', fontSize: 17, fontWeight: '800', marginBottom: 4 },
-  itemResposta: { color: '#32CD32', fontSize: 12, fontWeight: '700', marginBottom: 2 },
+  itemBadgeTipoTexto: { backgroundColor: '#2a1e40' },
+  itemBadgeLabel: { color: '#7FD4FF', fontSize: 10, fontWeight: '800' },
+  itemAcoes: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  itemBtnIcone: { padding: 4 },
+  itemEnunciado: { color: '#FFF', fontSize: 17, fontWeight: '800' },
+  itemToque: { color: '#556', fontSize: 11, fontStyle: 'italic', marginTop: 4 },
+  itemDetalhe: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#1e1e3a' },
+  itemResposta: { color: '#32CD32', fontSize: 13, fontWeight: '700', marginBottom: 2 },
   itemDica: { color: '#FFD700', fontSize: 12, marginTop: 2 },
   itemOpcoes: { color: '#889', fontSize: 12, marginTop: 2 },
 });

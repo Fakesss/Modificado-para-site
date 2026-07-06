@@ -1577,6 +1577,26 @@ async def criar_tabuada_flashcard(dados: TabuadaFlashcardCreate, current_user: d
     await db.tabuada_flashcards_personalizados.insert_one(novo)
     return {k: v for k, v in novo.items() if k != '_id'}
 
+@api_router.put("/tabuada/flashcards/{flashcard_id}")
+async def atualizar_tabuada_flashcard(flashcard_id: str, dados: TabuadaFlashcardCreate, current_user: dict = Depends(get_current_user)):
+    card = await db.tabuada_flashcards_personalizados.find_one({"id": flashcard_id, "usuarioId": current_user["id"]})
+    if not card:
+        raise HTTPException(status_code=404, detail="Flash card não encontrado")
+    if dados.tipo not in ("CONTA", "TEXTO"):
+        raise HTTPException(status_code=400, detail="Tipo inválido")
+    if not dados.enunciado.strip():
+        raise HTTPException(status_code=400, detail="Enunciado obrigatório")
+    atualizacao = {
+        "tipo": dados.tipo,
+        "enunciado": dados.enunciado.strip(),
+        "respostaCorreta": dados.respostaCorreta,
+        "dica": dados.dica,
+        "opcoes": dados.opcoes,
+    }
+    await db.tabuada_flashcards_personalizados.update_one({"id": flashcard_id}, {"$set": atualizacao})
+    card.update(atualizacao)
+    return {k: v for k, v in card.items() if k != '_id'}
+
 @api_router.delete("/tabuada/flashcards/{flashcard_id}")
 async def deletar_tabuada_flashcard(flashcard_id: str, current_user: dict = Depends(get_current_user)):
     card = await db.tabuada_flashcards_personalizados.find_one({"id": flashcard_id, "usuarioId": current_user["id"]})
