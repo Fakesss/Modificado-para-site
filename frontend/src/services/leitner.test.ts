@@ -24,6 +24,7 @@ import {
   selecionarCardsDaSessao,
   todasAsOperacoes,
   TabuadaCardEstado,
+  FlashcardPersonalizado,
   NIVEL_MAX,
   NIVEL_MIN,
   TOTAL_CARDS,
@@ -179,6 +180,39 @@ console.log('\n[12] Classificação nas bordas de tempo');
   verificar('10.0s → NORMAL', classificarResposta(true, 10.0) === 'NORMAL');
   verificar('10.01s → LENTA', classificarResposta(true, 10.01) === 'LENTA');
   verificar('erro com qualquer tempo → ERRO', classificarResposta(false, 1) === 'ERRO');
+}
+
+console.log('\n[13] Flash cards personalizados entram no universo da sessão e da evolução');
+{
+  const dica: FlashcardPersonalizado = { id: 'abc', tipo: 'TEXTO', enunciado: 'Qual é o dobro de 8?', respostaCorreta: 16, dica: 'Some 8 + 8', opcoes: [14, 15, 16, 18] };
+
+  // tamanhoSessao=10: cobre o bloco inteiro de embaralhamento (blocos de 10), então o
+  // card personalizado (que ordena para o início por ter fator1*fator2 = 0) é
+  // garantido estar entre os 10 primeiros mesmo após o embaralhamento do bloco.
+  const selecao = selecionarCardsDaSessao([], AGORA, 10, [dica]);
+  verificar('card personalizado nunca estudado pode entrar na sessão',
+    selecao.some(s => s.operacao === 'custom:abc'));
+  const item = selecao.find(s => s.operacao === 'custom:abc');
+  verificar('card selecionado carrega a referência ao personalizado', item?.personalizado?.id === 'abc');
+
+  const semPersonalizado = calcularEvolucaoLeitnerPct([], []);
+  const comPersonalizadoNaoEstudado = calcularEvolucaoLeitnerPct([], [dica]);
+  verificar('personalizado nunca estudado não muda a % (denominador cresce, numerador não)',
+    semPersonalizado === 0 && comPersonalizadoNaoEstudado === 0);
+
+  const cardCustomDominado = cardTeste({ operacao: 'custom:abc', fator1: 0, fator2: 0, nivel: 5, vezesVista: 3 });
+  const pctComCustomDominado = calcularEvolucaoLeitnerPct([cardCustomDominado], [dica]);
+  // 1 personalizado dominado (nível 5) entre 101 cards no total: 4/(101×4)×100
+  const esperado = Math.round((4 / (101 * 4)) * 100 * 10) / 10;
+  verificar('1 personalizado dominado entre 101 cards (100 fixos + 1) calcula corretamente',
+    Math.round(pctComCustomDominado * 10) / 10 === esperado,
+    `esperado ${esperado}, veio ${pctComCustomDominado}`);
+
+  const vencidoCustom: FlashcardPersonalizado = { id: 'xyz', tipo: 'CONTA', enunciado: '12 ÷ 3', respostaCorreta: 4 };
+  const cardVencidoCustom = cardTeste({ operacao: 'custom:xyz', fator1: 0, fator2: 0, nivel: 2, proximaRevisao: '2020-01-01T00:00:00Z' });
+  const selecaoComVencido = selecionarCardsDaSessao([cardVencidoCustom], AGORA, 3, [vencidoCustom]);
+  verificar('personalizado vencido aparece primeiro (mesma prioridade dos fixos)',
+    selecaoComVencido[0].operacao === 'custom:xyz');
 }
 
 console.log(`\n========================================`);

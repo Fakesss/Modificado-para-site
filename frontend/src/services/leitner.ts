@@ -49,6 +49,19 @@ export interface TabuadaCardEstado {
   ultimoErroEm: string | null;
 }
 
+// ----- Flash card personalizado (criado pelo próprio aluno) -----
+// Entra no jogo com operacao = "custom:<id>" e usa a MESMA máquina de estado
+// Leitner dos cards fixos (nível, revisão, vezesVista/Errada) — só a seleção de
+// sessão e o total de cards (denominador da evolução) precisam saber dele.
+export interface FlashcardPersonalizado {
+  id: string;
+  tipo: 'CONTA' | 'TEXTO';
+  enunciado: string;         // "7 x 8" ou "Qual é o dobro de 8?"
+  respostaCorreta: number;
+  dica?: string | null;
+  opcoes?: number[] | null;  // 3-4 alternativas (não precisa incluir a correta)
+}
+
 // ----- Universo de cards: tabuada do 1 ao 10, 7x8 e 8x7 são cards distintos -----
 export const TOTAL_CARDS = 100;
 
@@ -115,15 +128,22 @@ const DIAS_ERRO_RECENTE = 3;
 export function selecionarCardsDaSessao(
   cards: TabuadaCardEstado[],
   agoraISO: string,
-  tamanhoSessao: number
-): { operacao: string; fator1: number; fator2: number }[] {
+  tamanhoSessao: number,
+  cardsPersonalizados: FlashcardPersonalizado[] = []
+): { operacao: string; fator1: number; fator2: number; personalizado?: FlashcardPersonalizado }[] {
   const agora = new Date(agoraISO).getTime();
   const limiteErroRecente = agora - DIAS_ERRO_RECENTE * 24 * 60 * 60 * 1000;
 
   const porOperacao = new Map<string, TabuadaCardEstado>();
   cards.forEach(c => porOperacao.set(c.operacao, c));
 
-  const universo = todasAsOperacoes();
+  const porPersonalizado = new Map<string, FlashcardPersonalizado>();
+  cardsPersonalizados.forEach(fc => porPersonalizado.set(`custom:${fc.id}`, fc));
+
+  const universo = [
+    ...todasAsOperacoes(),
+    ...cardsPersonalizados.map(fc => ({ operacao: `custom:${fc.id}`, fator1: 0, fator2: 0 })),
+  ];
 
   const vencidos: TabuadaCardEstado[] = [];
   const erroRecente: TabuadaCardEstado[] = [];
@@ -174,12 +194,17 @@ export function selecionarCardsDaSessao(
   }
   manutencao.sort((a, b) => new Date(a.proximaRevisao).getTime() - new Date(b.proximaRevisao).getTime());
 
+  const comPersonalizado = (c: { operacao: string; fator1: number; fator2: number }) => {
+    const fc = porPersonalizado.get(c.operacao);
+    return fc ? { ...c, personalizado: fc } : c;
+  };
+
   const fila = [
-    ...vencidos.map(c => ({ operacao: c.operacao, fator1: c.fator1, fator2: c.fator2 })),
-    ...erroRecente.map(c => ({ operacao: c.operacao, fator1: c.fator1, fator2: c.fator2 })),
-    ...nivelBaixo.map(c => ({ operacao: c.operacao, fator1: c.fator1, fator2: c.fator2 })),
-    ...naoEstudados,
-    ...manutencao.map(c => ({ operacao: c.operacao, fator1: c.fator1, fator2: c.fator2 })),
+    ...vencidos.map(c => comPersonalizado({ operacao: c.operacao, fator1: c.fator1, fator2: c.fator2 })),
+    ...erroRecente.map(c => comPersonalizado({ operacao: c.operacao, fator1: c.fator1, fator2: c.fator2 })),
+    ...nivelBaixo.map(c => comPersonalizado({ operacao: c.operacao, fator1: c.fator1, fator2: c.fator2 })),
+    ...naoEstudados.map(comPersonalizado),
+    ...manutencao.map(c => comPersonalizado({ operacao: c.operacao, fator1: c.fator1, fator2: c.fator2 })),
   ];
 
   return fila.slice(0, Math.max(1, tamanhoSessao));
@@ -189,16 +214,24 @@ export function selecionarCardsDaSessao(
 // Fórmula do professor: soma de (nível - 1) ÷ (total de cards × 4) × 100.
 // Cards nunca estudados contam como nível 1 (contribuem 0), então:
 // todos no nível 1 → 0%; todos no nível 5 → 100%.
-export function calcularEvolucaoLeitnerPct(cards: TabuadaCardEstado[]): number {
+export function calcularEvolucaoLeitnerPct(
+  cards: TabuadaCardEstado[],
+  cardsPersonalizados: FlashcardPersonalizado[] = []
+): number {
   let soma = 0;
   const porOperacao = new Map<string, TabuadaCardEstado>();
   cards.forEach(c => porOperacao.set(c.operacao, c));
-  for (const op of todasAsOperacoes()) {
-    const card = porOperacao.get(op.operacao);
+  const universoCompleto = [
+    ...todasAsOperacoes().map(op => op.operacao),
+    ...cardsPersonalizados.map(fc => `custom:${fc.id}`),
+  ];
+  for (const operacao of universoCompleto) {
+    const card = porOperacao.get(operacao);
     const nivel = card && card.vezesVista > 0 ? clampNivel(card.nivel) : NIVEL_MIN;
     soma += nivel - 1;
   }
-  return (soma / (TOTAL_CARDS * 4)) * 100;
+  const totalCards = universoCompleto.length;
+  return totalCards > 0 ? (soma / (totalCards * 4)) * 100 : 0;
 }
 
 // ----- Contagem de dominados -----

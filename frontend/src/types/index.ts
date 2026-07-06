@@ -133,8 +133,10 @@ export interface TabuadaEvolucao {
   totalSessoes: number;
   acertosPorSessao: PontoSerie[];
   tempoPorSessao: PontoSerie[];
-  evolucaoPorDia: PontoSerie[];
-  dominadosPorDia: PontoSerie[];
+  evolucaoPorSessao: PontoSerie[];
+  dominadosPorSessao: PontoSerie[];
+  totalDicasUsadas: number;
+  totalOpcoesUsadas: number;
   operacoesDificeis: { operacao: string; erros: number; total: number }[];
   tabuadasDificeis: { tabuada: number; erros: number; total: number; taxaErro: number }[];
   ultimosErros: string[];

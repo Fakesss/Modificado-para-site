@@ -175,6 +175,11 @@ export const getTabuadaEvolucao = async () => { try { return (await api.get('/ta
 export const getTabuadaRelatorio = async (turmaId?: string) => { try { return (await api.get('/tabuada/relatorio', { params: turmaId ? { turma_id: turmaId } : {} })).data; } catch { return []; } };
 export const getTabuadaRelatorioAluno = async (alunoId: string) => { try { return (await api.get(`/tabuada/relatorio/aluno/${alunoId}`)).data; } catch { return null; } };
 
+// ======== FLASH CARDS PERSONALIZADOS (criados pelo próprio aluno) ========
+export const getTabuadaFlashcards = async () => { try { return (await api.get('/tabuada/flashcards')).data; } catch { return []; } };
+export const criarTabuadaFlashcard = async (dados: { tipo: 'CONTA' | 'TEXTO'; enunciado: string; respostaCorreta: number; dica?: string | null; opcoes?: number[] | null }) => (await api.post('/tabuada/flashcards', dados)).data;
+export const deletarTabuadaFlashcard = async (id: string) => (await api.delete(`/tabuada/flashcards/${id}`)).data;
+
 // ======== HANGAR DA NAVE (progressão permanente do Math Blaster) ========
 export const getHangarPerfil = async () => { try { return (await api.get('/hangar/perfil')).data; } catch { return null; } };
 export const hangarUpgrade = async (atributo: 'cdr' | 'velocidade' | 'dano') => { try { return (await api.post('/hangar/upgrade', { atributo })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao evoluir'); } };

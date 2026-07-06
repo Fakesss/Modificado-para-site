@@ -72,6 +72,9 @@ export default function AdminTabuadaRelatorio() {
               <Text style={styles.fichaLinha}>Evolução Leitner: <Text style={styles.fichaValor}>{alunoDetalhe.evolucaoPct.toFixed(1)}%</Text></Text>
               <Text style={styles.fichaLinha}>Tempo médio (acertos): <Text style={styles.fichaValor}>{alunoDetalhe.tempoMedio.toFixed(1)}s</Text></Text>
               <Text style={styles.fichaLinha}>Treinos feitos: <Text style={styles.fichaValor}>{alunoDetalhe.totalSessoes}</Text> ({alunoDetalhe.totalRespostas} respostas)</Text>
+              {(alunoDetalhe.totalDicasUsadas > 0 || alunoDetalhe.totalOpcoesUsadas > 0) && (
+                <Text style={styles.fichaLinha}>Ajuda usada: <Text style={styles.fichaValor}>{alunoDetalhe.totalDicasUsadas} dica{alunoDetalhe.totalDicasUsadas !== 1 ? 's' : ''} · {alunoDetalhe.totalOpcoesUsadas} opç{alunoDetalhe.totalOpcoesUsadas !== 1 ? 'ões' : 'ão'}</Text></Text>
+              )}
               {alunoDetalhe.tabuadasDificeis.length > 0 && (
                 <Text style={styles.fichaLinha}>Maior dificuldade: <Text style={[styles.fichaValor, { color: '#FF7055' }]}>tabuada {alunoDetalhe.tabuadasDificeis.map(t => `do ${t.tabuada}`).join(' e ')}</Text></Text>
               )}
@@ -84,10 +87,10 @@ export default function AdminTabuadaRelatorio() {
               </View>
             </View>
 
-            <GraficoLinha titulo="Evolução Leitner (%)" pontos={alunoDetalhe.evolucaoPorDia} cor="#FFB300" unidade="%" maxYFixo={100} />
+            <GraficoLinha titulo="Evolução Leitner (%)" pontos={alunoDetalhe.evolucaoPorSessao} cor="#FFB300" unidade="%" maxYFixo={100} />
             <GraficoLinha titulo="Acertos por treino (%)" pontos={alunoDetalhe.acertosPorSessao} cor="#32CD32" unidade="%" maxYFixo={100} />
             <GraficoLinha titulo="Tempo médio por treino (s)" pontos={alunoDetalhe.tempoPorSessao} cor="#7FD4FF" unidade="s" />
-            <GraficoLinha titulo="Cards dominados por dia" pontos={alunoDetalhe.dominadosPorDia} cor="#BB99FF" maxYFixo={100} />
+            <GraficoLinha titulo="Cards dominados por treino" pontos={alunoDetalhe.dominadosPorSessao} cor="#BB99FF" maxYFixo={100} />
 
             {alunoDetalhe.operacoesDificeis.length > 0 && (
               <View style={styles.cardInfo}>

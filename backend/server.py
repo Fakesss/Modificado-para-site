@@ -191,9 +191,9 @@ class ConfiguracaoJogo(BaseModel):
     spawnChancePorInimigo: Dict[str, int] = {}
 
 class TabuadaRespostaItem(BaseModel):
-    operacao: str            # "7x8"
-    fator1: int
-    fator2: int
+    operacao: str            # "7x8" ou "custom:<id>" (flash card criado pelo aluno)
+    fator1: Optional[int] = None
+    fator2: Optional[int] = None
     respostaCorreta: int
     respostaDada: int
     acertou: bool
@@ -203,10 +203,19 @@ class TabuadaRespostaItem(BaseModel):
     proximaRevisao: str      # ISO, calculada pelo módulo Leitner do app
     classificacao: str = "NORMAL"  # ERRO | LENTA | NORMAL | RAPIDA
     respondidoEm: str        # ISO, momento em que o aluno respondeu
+    usouDica: bool = False
+    usouOpcoes: bool = False
 
 class TabuadaSessaoRequest(BaseModel):
     modulo: str = "tabuada"
     respostas: List[TabuadaRespostaItem]
+
+class TabuadaFlashcardCreate(BaseModel):
+    tipo: str                       # "CONTA" | "TEXTO"
+    enunciado: str
+    respostaCorreta: int
+    dica: Optional[str] = None
+    opcoes: Optional[List[int]] = None
 
 # =========================================================================
 # CONFIGURAÇÃO DE PONTOS POR JOGO (painel de ajuste manual)
@@ -1540,11 +1549,51 @@ async def registrar_tabuada_sessao(dados: TabuadaSessaoRequest, current_user: di
 
     return {"message": "ok", "sessaoId": sessao_id, "respostasRegistradas": len(dados.respostas)}
 
-def _tabuada_evolucao_pct(niveis_por_card: Dict[str, int]) -> float:
+# --- Flash cards personalizados (criados pelo próprio aluno) ---
+# Entram no universo do jogo com operacao = "custom:<id>" e usam a MESMA máquina
+# de estado do Leitner (db.tabuada_cards) que os 100 cards fixos — o total de
+# cards de cada aluno passa a ser 100 + a quantidade que ele mesmo criou.
+@api_router.get("/tabuada/flashcards")
+async def get_tabuada_flashcards(current_user: dict = Depends(get_current_user)):
+    cards = await db.tabuada_flashcards_personalizados.find({"usuarioId": current_user["id"]}).to_list(500)
+    return [{k: v for k, v in c.items() if k != '_id'} for c in cards]
+
+@api_router.post("/tabuada/flashcards")
+async def criar_tabuada_flashcard(dados: TabuadaFlashcardCreate, current_user: dict = Depends(get_current_user)):
+    if dados.tipo not in ("CONTA", "TEXTO"):
+        raise HTTPException(status_code=400, detail="Tipo inválido")
+    if not dados.enunciado.strip():
+        raise HTTPException(status_code=400, detail="Enunciado obrigatório")
+    novo = {
+        "id": str(uuid.uuid4()),
+        "usuarioId": current_user["id"],
+        "tipo": dados.tipo,
+        "enunciado": dados.enunciado.strip(),
+        "respostaCorreta": dados.respostaCorreta,
+        "dica": dados.dica,
+        "opcoes": dados.opcoes,
+        "criadoEm": get_now_brt().isoformat(),
+    }
+    await db.tabuada_flashcards_personalizados.insert_one(novo)
+    return {k: v for k, v in novo.items() if k != '_id'}
+
+@api_router.delete("/tabuada/flashcards/{flashcard_id}")
+async def deletar_tabuada_flashcard(flashcard_id: str, current_user: dict = Depends(get_current_user)):
+    card = await db.tabuada_flashcards_personalizados.find_one({"id": flashcard_id, "usuarioId": current_user["id"]})
+    if not card:
+        raise HTTPException(status_code=404, detail="Flash card não encontrado")
+    await db.tabuada_flashcards_personalizados.delete_one({"id": flashcard_id})
+    await db.tabuada_cards.delete_one({"usuarioId": current_user["id"], "operacao": f"custom:{flashcard_id}"})
+    return {"message": "ok"}
+
+def _tabuada_evolucao_pct(niveis_por_card: Dict[str, int], total_cards: int = TABUADA_TOTAL_CARDS) -> float:
     """Evolução Leitner (%) = soma de (nível-1) ÷ (total de cards × 4) × 100.
-    Cards nunca estudados contam como nível 1 (contribuem 0)."""
+    Cards nunca estudados contam como nível 1 (contribuem 0). total_cards inclui
+    os flash cards personalizados que o aluno já criou (100 + quantos criou)."""
+    if total_cards <= 0:
+        return 0.0
     soma = sum(_tabuada_clamp_nivel(n) - 1 for n in niveis_por_card.values())
-    return round(soma / (TABUADA_TOTAL_CARDS * 4) * 100, 1)
+    return round(soma / (total_cards * 4) * 100, 1)
 
 async def calcular_evolucao_tabuada(usuario_id: str) -> Dict[str, Any]:
     """Monta todos os dados de evolução de um aluno a partir do histórico REAL
@@ -1552,51 +1601,67 @@ async def calcular_evolucao_tabuada(usuario_id: str) -> Dict[str, Any]:
     relatório individual do professor."""
     respostas = await db.tabuada_respostas.find({"usuarioId": usuario_id}).sort("registradoEm", 1).to_list(50000)
     cards = await db.tabuada_cards.find({"usuarioId": usuario_id}).to_list(300)
+    qtd_flashcards = await db.tabuada_flashcards_personalizados.count_documents({"usuarioId": usuario_id})
+    total_cards = TABUADA_TOTAL_CARDS + qtd_flashcards
 
     # --- Estado atual ---
     niveis_atuais = {c["operacao"]: c.get("nivel", 1) for c in cards if c.get("vezesVista", 0) > 0}
     dominados = sum(1 for n in niveis_atuais.values() if _tabuada_clamp_nivel(n) == 5)
-    evolucao_atual = _tabuada_evolucao_pct(niveis_atuais)
+    evolucao_atual = _tabuada_evolucao_pct(niveis_atuais, total_cards)
 
     tempos_acertos = [r["tempoResposta"] for r in respostas if r.get("acertou")]
     tempo_medio = round(sum(tempos_acertos) / len(tempos_acertos), 1) if tempos_acertos else 0.0
 
-    # --- Séries por sessão (ordem cronológica) ---
+    # --- Séries por sessão (ordem cronológica, uma sessão = um treino completo) ---
+    # Uma única passada pelo histórico monta TODAS as séries por treino: acertos,
+    # tempo médio, evolução Leitner e dominados (estado acumulado até ali), e uso
+    # de dica/opções. Isso substitui o agrupamento antigo por DIA (que sumia da
+    # tela quando o aluno fazia mais de um treino no mesmo dia) — agora cada
+    # TREINO vira um ponto do gráfico, mostrando a evolução por tentativa.
     sessoes_ordem: List[str] = []
     por_sessao: Dict[str, Dict[str, Any]] = {}
+    niveis_replay: Dict[str, int] = {}
+    numero_sessao = 0
+    sessao_atual: Optional[str] = None
     for r in respostas:
         sid = r.get("sessaoId", "?")
-        if sid not in por_sessao:
+        if sid != sessao_atual:
+            numero_sessao += 1
             sessoes_ordem.append(sid)
-            por_sessao[sid] = {"acertos": 0, "total": 0, "temposAcertos": [], "data": r.get("registradoEm", "")[:10]}
+            por_sessao[sid] = {
+                "numero": numero_sessao, "acertos": 0, "total": 0, "temposAcertos": [],
+                "dicas": 0, "opcoes": 0,
+            }
+            sessao_atual = sid
         s = por_sessao[sid]
         s["total"] += 1
         if r.get("acertou"):
             s["acertos"] += 1
             s["temposAcertos"].append(r["tempoResposta"])
+        if r.get("usouDica"):
+            s["dicas"] += 1
+        if r.get("usouOpcoes"):
+            s["opcoes"] += 1
+        niveis_replay[r["operacao"]] = r.get("nivelDepois", 1)
+        s["evolucaoApos"] = _tabuada_evolucao_pct(niveis_replay, total_cards)
+        s["dominadosApos"] = sum(1 for n in niveis_replay.values() if _tabuada_clamp_nivel(n) == 5)
+
     acertos_por_sessao = []
     tempo_por_sessao = []
+    evolucao_por_sessao = []
+    dominados_por_sessao = []
+    total_dicas_usadas = 0
+    total_opcoes_usadas = 0
     for sid in sessoes_ordem:
         s = por_sessao[sid]
-        acertos_por_sessao.append({"data": s["data"], "valor": round(s["acertos"] / s["total"] * 100, 1) if s["total"] else 0})
+        rotulo = f"Treino {s['numero']}"
+        acertos_por_sessao.append({"data": rotulo, "valor": round(s["acertos"] / s["total"] * 100, 1) if s["total"] else 0})
         media = round(sum(s["temposAcertos"]) / len(s["temposAcertos"]), 1) if s["temposAcertos"] else 0
-        tempo_por_sessao.append({"data": s["data"], "valor": media})
-
-    # --- Série da Evolução Leitner por dia (replay do histórico real) ---
-    evolucao_por_dia = []
-    dominados_por_dia = []
-    niveis_replay: Dict[str, int] = {}
-    dia_atual: Optional[str] = None
-    for r in respostas:
-        dia = r.get("registradoEm", "")[:10]
-        if dia_atual is not None and dia != dia_atual:
-            evolucao_por_dia.append({"data": dia_atual, "valor": _tabuada_evolucao_pct(niveis_replay)})
-            dominados_por_dia.append({"data": dia_atual, "valor": sum(1 for n in niveis_replay.values() if _tabuada_clamp_nivel(n) == 5)})
-        dia_atual = dia
-        niveis_replay[r["operacao"]] = r.get("nivelDepois", 1)
-    if dia_atual is not None:
-        evolucao_por_dia.append({"data": dia_atual, "valor": _tabuada_evolucao_pct(niveis_replay)})
-        dominados_por_dia.append({"data": dia_atual, "valor": sum(1 for n in niveis_replay.values() if _tabuada_clamp_nivel(n) == 5)})
+        tempo_por_sessao.append({"data": rotulo, "valor": media})
+        evolucao_por_sessao.append({"data": rotulo, "valor": s["evolucaoApos"]})
+        dominados_por_sessao.append({"data": rotulo, "valor": s["dominadosApos"]})
+        total_dicas_usadas += s["dicas"]
+        total_opcoes_usadas += s["opcoes"]
 
     # --- Dificuldades: operações e tabuadas (fator) com mais erros ---
     stats_op: Dict[str, Dict[str, int]] = {}
@@ -1633,7 +1698,7 @@ async def calcular_evolucao_tabuada(usuario_id: str) -> Dict[str, Any]:
     if tabuadas_dificeis:
         nomes = " e ".join(f"do {t['tabuada']}" for t in tabuadas_dificeis[:2])
         recomendacao = f"Revisar tabuadas {nomes}"
-    elif dominados >= TABUADA_TOTAL_CARDS:
+    elif dominados >= total_cards:
         recomendacao = "Parabéns! Todas as operações dominadas — continue treinando para manter."
     elif not respostas:
         recomendacao = "Comece seu primeiro treino!"
@@ -1648,15 +1713,17 @@ async def calcular_evolucao_tabuada(usuario_id: str) -> Dict[str, Any]:
 
     return {
         "dominados": dominados,
-        "totalCards": TABUADA_TOTAL_CARDS,
+        "totalCards": total_cards,
         "evolucaoPct": evolucao_atual,
         "tempoMedio": tempo_medio,
         "totalRespostas": len(respostas),
         "totalSessoes": len(sessoes_ordem),
         "acertosPorSessao": acertos_por_sessao,
         "tempoPorSessao": tempo_por_sessao,
-        "evolucaoPorDia": evolucao_por_dia,
-        "dominadosPorDia": dominados_por_dia,
+        "evolucaoPorSessao": evolucao_por_sessao,
+        "dominadosPorSessao": dominados_por_sessao,
+        "totalDicasUsadas": total_dicas_usadas,
+        "totalOpcoesUsadas": total_opcoes_usadas,
         "operacoesDificeis": operacoes_dificeis,
         "tabuadasDificeis": tabuadas_dificeis,
         "ultimosErros": ultimos_erros,
@@ -1684,12 +1751,18 @@ async def get_tabuada_relatorio(turma_id: Optional[str] = None, current_user: di
     for c in todos_cards:
         cards_por_aluno.setdefault(c["usuarioId"], []).append(c)
 
+    todos_flashcards = await db.tabuada_flashcards_personalizados.find({"usuarioId": {"$in": ids}}).to_list(50000)
+    flashcards_por_aluno: Dict[str, int] = {}
+    for fc in todos_flashcards:
+        flashcards_por_aluno[fc["usuarioId"]] = flashcards_por_aluno.get(fc["usuarioId"], 0) + 1
+
     # Estatística de erros por tabuada, calculada dos cards (leve o suficiente pra lista)
     linhas = []
     for u in usuarios:
         cards = cards_por_aluno.get(u["id"], [])
         vistos = [c for c in cards if c.get("vezesVista", 0) > 0]
         niveis = {c["operacao"]: c.get("nivel", 1) for c in vistos}
+        total_cards = TABUADA_TOTAL_CARDS + flashcards_por_aluno.get(u["id"], 0)
         dominados = sum(1 for n in niveis.values() if _tabuada_clamp_nivel(n) == 5)
         erros_fator: Dict[int, int] = {}
         for c in vistos:
@@ -1704,8 +1777,8 @@ async def get_tabuada_relatorio(turma_id: Optional[str] = None, current_user: di
             "nome": u.get("nome", "?"),
             "turma": turma.get("nome", "") if turma else "",
             "dominados": dominados,
-            "totalCards": TABUADA_TOTAL_CARDS,
-            "evolucaoPct": _tabuada_evolucao_pct(niveis),
+            "totalCards": total_cards,
+            "evolucaoPct": _tabuada_evolucao_pct(niveis, total_cards),
             "cardsEstudados": len(vistos),
             "pioresTabuadas": piores,
         })

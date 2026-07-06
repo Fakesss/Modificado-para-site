@@ -108,14 +108,23 @@ export default function MinhaEvolucaoTabuada() {
               <View style={styles.barraFundo}>
                 <View style={[styles.barraCheia, { width: `${pctDominados}%` }]} />
               </View>
-              <Text style={styles.barraLegenda}>Rumo aos 100 cards dominados!</Text>
+              <Text style={styles.barraLegenda}>Rumo aos {dados.totalCards} cards dominados!</Text>
             </View>
 
-            {/* Gráficos — sempre com dados reais */}
-            <GraficoLinha titulo="Evolução Leitner (%)" pontos={dados.evolucaoPorDia} cor="#FFB300" unidade="%" maxYFixo={100} />
+            {(dados.totalDicasUsadas > 0 || dados.totalOpcoesUsadas > 0) && (
+              <View style={styles.cardInfo}>
+                <Text style={styles.cardInfoTitulo}>Ajuda usada nos seus treinos</Text>
+                <Text style={styles.cardInfoTexto}>
+                  {dados.totalDicasUsadas} dica{dados.totalDicasUsadas !== 1 ? 's' : ''} · {dados.totalOpcoesUsadas} opç{dados.totalOpcoesUsadas !== 1 ? 'ões' : 'ão'}
+                </Text>
+              </View>
+            )}
+
+            {/* Gráficos — sempre com dados reais, um ponto por treino feito */}
+            <GraficoLinha titulo="Evolução Leitner (%)" pontos={dados.evolucaoPorSessao} cor="#FFB300" unidade="%" maxYFixo={100} />
             <GraficoLinha titulo="Acertos por treino (%)" pontos={dados.acertosPorSessao} cor="#32CD32" unidade="%" maxYFixo={100} />
             <GraficoLinha titulo="Tempo médio por treino (s)" pontos={dados.tempoPorSessao} cor="#7FD4FF" unidade="s" />
-            <GraficoLinha titulo="Cards dominados por dia" pontos={dados.dominadosPorDia} cor="#BB99FF" maxYFixo={100} />
+            <GraficoLinha titulo="Cards dominados por treino" pontos={dados.dominadosPorSessao} cor="#BB99FF" maxYFixo={100} />
 
             {/* Dificuldades principais */}
             {dados.operacoesDificeis.length > 0 && (

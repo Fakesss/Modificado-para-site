@@ -71,8 +71,8 @@ export default function HubJogos() {
         </TouchableOpacity>
 
         {/* BOTÃO DO CABO DE GUERRA OFFLINE */}
-        <TouchableOpacity 
-          style={styles.gameCard} 
+        <TouchableOpacity
+          style={styles.gameCard}
           onPress={() => router.push('/cabo_de_guerra_offline')}
           activeOpacity={0.8}
         >
@@ -84,6 +84,40 @@ export default function HubJogos() {
               Cabo de Guerra (Treino)
             </Text>
             <Text style={styles.gameDesc}>Jogue offline contra um Robô Inteligente que se adapta à sua velocidade!</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* BOTÃO DA TRILHA DA TABUADA */}
+        <TouchableOpacity
+          style={styles.gameCard}
+          onPress={() => router.push('/tabuada' as any)}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: '#FFB30020' }]}>
+            <Ionicons name="trail-sign" size={40} color="#FFB300" />
+          </View>
+          <View style={styles.gameInfo}>
+            <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
+              Trilha da Tabuada
+            </Text>
+            <Text style={styles.gameDesc}>Flash cards com repetição espaçada: treine a tabuada e acompanhe sua evolução real.</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* BOTÃO DO SUDOKU */}
+        <TouchableOpacity
+          style={styles.gameCard}
+          onPress={() => router.push('/sudoku' as any)}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.iconContainer, { backgroundColor: '#BB99FF20' }]}>
+            <Ionicons name="grid-outline" size={40} color="#BB99FF" />
+          </View>
+          <View style={styles.gameInfo}>
+            <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
+              Sudoku
+            </Text>
+            <Text style={styles.gameDesc}>Clássico jogo de lógica com números, em 5 níveis de dificuldade.</Text>
           </View>
         </TouchableOpacity>
 
