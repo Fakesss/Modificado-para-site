@@ -82,7 +82,7 @@ export default function AdminConfigJogo() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFD700" />
         </TouchableOpacity>
-        <Text style={styles.title}>Painel de Partida (Math Blaster)</Text>
+        <Text style={styles.title}>Painel de Partida (Equações Espaciais)</Text>
         <View style={{ width: 40 }} />
       </View>
 

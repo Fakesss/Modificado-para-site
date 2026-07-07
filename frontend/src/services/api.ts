@@ -125,7 +125,7 @@ export const pontuarJogo = async (jogo: string, pontos: number): Promise<{ ponto
 export const getRankingArcade = async () => { try { return (await api.get('/ranking/arcade')).data; } catch { return []; } };
 export const submitArcadeScore = async (pontos: number) => (await api.post('/arcade/score', { pontos })).data;
 
-// ======== ROTAS DO MATH BLASTER ========
+// ======== ROTAS DO EQUAÇÕES ESPACIAIS (id interno "math_blaster", inalterado) ========
 export const getRankingMathBlaster = async () => { try { return (await api.get('/ranking/math_blaster')).data; } catch { return []; } };
 export const submitMathBlasterScore = async (pontos: number) => (await api.post('/math_blaster/score', { pontos })).data;
 export const submitMathBlasterRareKill = async () => (await api.post('/math_blaster/rare_kill')).data;
@@ -168,7 +168,20 @@ export const adminDesbloquearConversa = async (user1: string, user2: string) => 
 export const concluirSudoku = async (dados: { difficulty: string; elapsedSeconds: number; hintsUsed: number }) => { try { await api.post('/sudoku/concluir', dados); } catch {} };
 export const getSudokuRanking = async (difficulty: string) => { try { return (await api.get(`/sudoku/ranking/${difficulty}`)).data; } catch { return []; } };
 
-// ======== HANGAR DA NAVE (progressão permanente do Math Blaster) ========
+// ======== TRILHA DA TABUADA (método Leitner) ========
+export const getTabuadaCards = async () => { try { return (await api.get('/tabuada/cards')).data; } catch { return null; } };
+export const enviarTabuadaSessao = async (dados: { modulo: string; respostas: any[] }) => (await api.post('/tabuada/sessao', dados)).data;
+export const getTabuadaEvolucao = async () => { try { return (await api.get('/tabuada/evolucao')).data; } catch { return null; } };
+export const getTabuadaRelatorio = async (turmaId?: string) => { try { return (await api.get('/tabuada/relatorio', { params: turmaId ? { turma_id: turmaId } : {} })).data; } catch { return []; } };
+export const getTabuadaRelatorioAluno = async (alunoId: string) => { try { return (await api.get(`/tabuada/relatorio/aluno/${alunoId}`)).data; } catch { return null; } };
+
+// ======== FLASH CARDS PERSONALIZADOS (criados pelo próprio aluno) ========
+export const getTabuadaFlashcards = async () => { try { return (await api.get('/tabuada/flashcards')).data; } catch { return []; } };
+export const criarTabuadaFlashcard = async (dados: { tipo: 'CONTA' | 'TEXTO'; enunciado: string; respostaCorreta: number; dica?: string | null; opcoes?: number[] | null }) => (await api.post('/tabuada/flashcards', dados)).data;
+export const atualizarTabuadaFlashcard = async (id: string, dados: { tipo: 'CONTA' | 'TEXTO'; enunciado: string; respostaCorreta: number; dica?: string | null; opcoes?: number[] | null }) => (await api.put(`/tabuada/flashcards/${id}`, dados)).data;
+export const deletarTabuadaFlashcard = async (id: string) => (await api.delete(`/tabuada/flashcards/${id}`)).data;
+
+// ======== HANGAR DA NAVE (progressão permanente do Equações Espaciais) ========
 export const getHangarPerfil = async () => { try { return (await api.get('/hangar/perfil')).data; } catch { return null; } };
 export const hangarUpgrade = async (atributo: 'cdr' | 'velocidade' | 'dano') => { try { return (await api.post('/hangar/upgrade', { atributo })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao evoluir'); } };
 export const hangarEquiparArma = async (arma: string) => { try { return (await api.post('/hangar/equipar_arma', { arma })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao equipar arma'); } };

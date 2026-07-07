@@ -6,7 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/context/AuthContext';
 
-export default function MathBlasterMultiNative() {
+export default function SkyEquationsMultiNative() {
   const router = useRouter();
   const { user } = useAuth();
   const params = useLocalSearchParams();
@@ -16,7 +16,7 @@ export default function MathBlasterMultiNative() {
   useEffect(() => {
     const prepareUrl = async () => {
       const token = await AsyncStorage.getItem('token');
-      const baseUrl = 'https://modificado-para-site.vercel.app/math_blaster_multi';
+      const baseUrl = 'https://modificado-para-site.vercel.app/sky_equations_multi';
       
       // Resgata os parâmetros que a tela de "Jogadores" enviou ao aceitar o desafio
       const roomId = params.roomId || '';

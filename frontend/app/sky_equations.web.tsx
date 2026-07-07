@@ -44,7 +44,7 @@ const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed
   );
 };
 
-export default function MathBlaster() {
+export default function SkyEquations() {
   const router = useRouter();
   const { user } = useAuth();
   
@@ -104,7 +104,8 @@ export default function MathBlaster() {
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0, movementTouchId: null as string | null, lastTouchX: 0, lastTouchY: 0,
     waveFlavor: 'CLASSICA' as string,
-    timeAlive: 0, flawlessBossesCount: 0, tookDamageThisBoss: false, timeFreezeTimer: 0, forceShieldHits: 0, xRayTimer: 0,
+    timeAlive: 0, flawlessBossesCount: 0, tookDamageThisBoss: false, tookDamageThisWave: false, timeFreezeTimer: 0, forceShieldHits: 0, xRayTimer: 0,
+    comboAtual: 0, melhorCombo: 0, // Combo: sobe a cada acerto seguido, zera em qualquer erro (ver lidarComTeclado)
     overdriveTimer: 0, overdriveStoredDamage: 0, overdriveStoredFireRate: 0, // Habilidade secreta do Hangar (ver hangarCodigoSecreto)
     drones: {
       normal: { active: false, level: 1, lastFire: 0, baseCooldown: 1500 },
@@ -497,13 +498,27 @@ export default function MathBlaster() {
         }
       }
 
-      if (!acertou && respostaRef.current !== '') { 
-        if (gs.forceShieldHits > 0) {
-          gs.forceShieldHits -= 1;
-          criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 5);
+      // COMBO: sobe a cada acerto seguido (conta, powerup ou escudo do chefe), zera em qualquer
+      // erro. A cada 5 de combo dá um bônus modesto de pontos (capado em 25), só pra recompensar
+      // sequências boas sem inflar demais a pontuação que já converte em ponto de equipe.
+      if (respostaRef.current !== '') {
+        if (acertou) {
+          gs.comboAtual += 1;
+          if (gs.comboAtual > gs.melhorCombo) gs.melhorCombo = gs.comboAtual;
+          if (gs.comboAtual > 0 && gs.comboAtual % 5 === 0) {
+            const bonusCombo = Math.min(25, gs.comboAtual);
+            gs.score += bonusCombo;
+            gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 30, text: `COMBO x${gs.comboAtual}! +${bonusCombo}`, color: '#FFD700', life: 90 });
+          }
         } else {
-          gs.player.hp = Math.max(0, gs.player.hp - (3 + (gs.fase * 2))); 
-          criarParticulas(gs.player.x, gs.player.y, '#FF0000', 5); 
+          gs.comboAtual = 0;
+          if (gs.forceShieldHits > 0) {
+            gs.forceShieldHits -= 1;
+            criarParticulas(gs.player.x, gs.player.y, '#00FA9A', 5);
+          } else {
+            gs.player.hp = Math.max(0, gs.player.hp - (3 + (gs.fase * 2)));
+            criarParticulas(gs.player.x, gs.player.y, '#FF0000', 5);
+          }
         }
       }
       setResposta('');
@@ -784,7 +799,8 @@ export default function MathBlaster() {
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
     gs.waveFlavor = 'CLASSICA';
     
-    gs.timeAlive = 0; gs.flawlessBossesCount = 0; gs.tookDamageThisBoss = false; gs.timeFreezeTimer = 0; gs.forceShieldHits = 0; gs.xRayTimer = 0;
+    gs.timeAlive = 0; gs.flawlessBossesCount = 0; gs.tookDamageThisBoss = false; gs.tookDamageThisWave = false; gs.timeFreezeTimer = 0; gs.forceShieldHits = 0; gs.xRayTimer = 0;
+    gs.comboAtual = 0; gs.melhorCombo = 0;
     gs.overdriveTimer = 0; gs.overdriveStoredDamage = 0; gs.overdriveStoredFireRate = 0;
     gs.drones = {
       normal: { active: false, level: 1, lastFire: 0, baseCooldown: 1500 },
@@ -868,6 +884,7 @@ export default function MathBlaster() {
       } else {
         gs.player.hp = Math.max(0, gs.player.hp - dano);
         if (gs.gameState === 'BOSS') gs.tookDamageThisBoss = true;
+        gs.tookDamageThisWave = true;
         criarParticulas(gs.player.x, gs.player.y, '#FF0000', 5);
       }
     };
@@ -1170,12 +1187,17 @@ export default function MathBlaster() {
         gs.enemies.push({ id: Math.random().toString(), type: 'SQUAD', x: cx + 40, y: -60, targetY: 70, isLeader: false, hp: baseHp, vx: 0, vy: 2, fireTimer: 0, angle: Math.PI, shield: gs.fase > 3 ? 1 : 0 });
       }
 
-      if (gs.stateTimer > 1500) { 
-        gs.gameState = 'BOSS_WARNING'; 
-        gs.stateTimer = 0; 
-        gs.tookDamageThisBoss = false; 
+      if (gs.stateTimer > 1500) {
+        // ONDA PERFEITA: bônus se o jogador atravessou a onda toda (até aqui) sem tomar dano.
+        if (!gs.tookDamageThisWave) {
+          gs.score += 30;
+          gs.floatingTexts.push({ id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 40, text: 'ONDA PERFEITA! +30', color: '#7FFF00', life: 120 });
+        }
+        gs.gameState = 'BOSS_WARNING';
+        gs.stateTimer = 0;
+        gs.tookDamageThisBoss = false;
       }
-    } 
+    }
     else if (gs.gameState === 'BOSS_WARNING') {
       if (gs.stateTimer > 90) { 
         gs.gameState = 'BOSS'; 
@@ -1234,6 +1256,7 @@ export default function MathBlaster() {
         gs.player.hp = Math.min(gs.player.maxHp, gs.player.hp + 50);
         gs.gameState = 'WAVES';
         gs.stateTimer = 0;
+        gs.tookDamageThisWave = false;
       }
     }
 
@@ -1568,14 +1591,14 @@ export default function MathBlaster() {
             <Ionicons name="arrow-back" size={30} color="#00FFFF"/>
           </TouchableOpacity>
           <Ionicons name="rocket" size={80} color="#00FFFF" style={{ marginBottom: 20, marginTop: 20 }}/>
-          <Text style={styles.tituloMenu}>SKY</Text>
-          <Text style={styles.subTituloMenu}>EQUATIONS</Text>
+          <Text style={styles.tituloMenu}>EQUAÇÕES</Text>
+          <Text style={styles.subTituloMenu}>ESPACIAIS</Text>
           <Text style={styles.instrucoes}>Use (W,A,S,D) ou Setas do teclado para voar. Digite a resposta e aperte (ENTER) para atirar!</Text>
 
           <View style={styles.rankingContainer}>
             <View style={styles.rankingHeaderRow}>
               <Ionicons name="trophy" size={24} color="#FFD700" />
-              <Text style={styles.rankingTitle}>HALL DA FAMA - BLASTER</Text>
+              <Text style={styles.rankingTitle}>HALL DA FAMA</Text>
             </View>
             <View style={styles.rankingScrollWrapper}>
               <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={true}>
@@ -1665,7 +1688,8 @@ export default function MathBlaster() {
           )}
           
           <Text style={styles.textoFase}>Chegou na Fase {gs.fase}</Text>
-          
+          {gs.melhorCombo >= 3 && <Text style={[styles.textoFase, { color: '#FFD700', marginTop: 2 }]}>🔥 Melhor combo: x{gs.melhorCombo}</Text>}
+
           <TouchableOpacity style={[styles.btnIniciar, { marginTop: 40 }]} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>TENTAR NOVAMENTE</Text>
           </TouchableOpacity>
@@ -1683,7 +1707,12 @@ export default function MathBlaster() {
         
         <View style={styles.hud}>
           <View style={{ flex: 1, paddingRight: 10 }}>
-            <Text style={styles.hudScore}>SCORE: {gs.score}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={styles.hudScore}>SCORE: {gs.score}</Text>
+              {gs.comboAtual >= 3 && (
+                <Text style={styles.hudCombo}>🔥 x{gs.comboAtual}</Text>
+              )}
+            </View>
             <View style={styles.hpBarContainer}>
               <View style={[styles.hpBarFill, { width: `${porcentagemHP}%`, backgroundColor: corHP }]}/>
             </View>
@@ -1718,6 +1747,16 @@ export default function MathBlaster() {
               borderWidth: 6,
               borderColor: `rgba(255, 221, 0, ${(0.3 + 0.55 * Math.abs(Math.sin(Date.now() / 260))).toFixed(2)})`,
               shadowColor: '#FFDD00', shadowRadius: 20, shadowOpacity: 0.5 + 0.4 * Math.abs(Math.sin(Date.now() / 260)),
+            }}/>
+          )}
+
+          {/* AVISO DE CASCO CRÍTICO: vinheta pulsante vermelha, sempre ativa (não depende do
+              cheat de visuais dinâmicos) — some assim que o HP sobe de novo acima de 25%. */}
+          {porcentagemHP > 0 && porcentagemHP <= 25 && (
+            <View pointerEvents="none" style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 61,
+              borderWidth: 10,
+              borderColor: `rgba(255, 30, 30, ${(0.25 + 0.4 * Math.abs(Math.sin(Date.now() / 200))).toFixed(2)})`,
             }}/>
           )}
 
@@ -2020,6 +2059,7 @@ const styles = StyleSheet.create({
 
   hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#0A0025', borderBottomWidth: 2, borderBottomColor: '#00FFFF', zIndex: 10, width: '100%', shadowColor: '#00FFFF', shadowRadius: 10, shadowOpacity: 0.5 },
   hudScore: { color: '#FFF', fontSize: 16, fontWeight: '900', letterSpacing: 1, marginBottom: 5, textShadowColor: '#00FFFF', textShadowRadius: 4, textShadowOffset: { width: 0, height: 0 } },
+  hudCombo: { color: '#FFD700', fontSize: 13, fontWeight: '900', marginBottom: 5, textShadowColor: '#FFD700', textShadowRadius: 4, textShadowOffset: { width: 0, height: 0 } },
   hpBarContainer: { width: '100%', height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, overflow: 'hidden' },
   hpBarFill: { height: '100%', borderRadius: 4 },
   hudFase: { color: '#FF00FF', fontSize: 20, fontWeight: '900', fontStyle: 'italic', textShadowColor: '#FF00FF', textShadowRadius: 6, textShadowOffset: { width: 0, height: 0 } },

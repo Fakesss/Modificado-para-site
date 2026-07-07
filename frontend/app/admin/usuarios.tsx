@@ -207,7 +207,7 @@ export default function AdminUsuarios() {
                   <View style={styles.statItem}><Ionicons name="star" size={14} color="#FFD700" /><Text style={styles.statText}>{user.pontosTotais} pts</Text></View>
                   <View style={styles.statItem}><Ionicons name="flame" size={14} color="#FF6B35" /><Text style={styles.statText}>{user.streakDias} dias</Text></View>
                   <View style={styles.statItem}><Ionicons name="game-controller" size={14} color="#9b59b6" /><Text style={styles.statText}>{user.recordeJogoSingle || 0} arcade</Text></View>
-                  <View style={styles.statItem}><Ionicons name="rocket" size={14} color="#00FFFF" /><Text style={styles.statText}>{user.recordeMathBlaster || 0} blaster</Text></View>
+                  <View style={styles.statItem}><Ionicons name="rocket" size={14} color="#00FFFF" /><Text style={styles.statText}>{user.recordeMathBlaster || 0} espacial</Text></View>
                 </View>
               </View>
               <View style={styles.userActions}>
@@ -232,8 +232,8 @@ export default function AdminUsuarios() {
               <Text style={[styles.inputLabel, { color: '#9b59b6', marginTop: 16 }]}>🕹️ Recorde Arcade (Hall da Fama)</Text>
               <TextInput style={[styles.textInput, { borderColor: '#9b59b6' }]} value={editRecordeArcade} onChangeText={setEditRecordeArcade} keyboardType="numeric" placeholder="Definir recorde do Arcade..." placeholderTextColor="#666" />
 
-              <Text style={[styles.inputLabel, { color: '#00FFFF', marginTop: 16 }]}>🚀 Recorde Math Blaster (Hall da Fama)</Text>
-              <TextInput style={[styles.textInput, { borderColor: '#00FFFF' }]} value={editRecordeMathBlaster} onChangeText={setEditRecordeMathBlaster} keyboardType="numeric" placeholder="Definir recorde do Math Blaster..." placeholderTextColor="#666" />
+              <Text style={[styles.inputLabel, { color: '#00FFFF', marginTop: 16 }]}>🚀 Recorde Equações Espaciais (Hall da Fama)</Text>
+              <TextInput style={[styles.textInput, { borderColor: '#00FFFF' }]} value={editRecordeMathBlaster} onChangeText={setEditRecordeMathBlaster} keyboardType="numeric" placeholder="Definir recorde do Equações Espaciais..." placeholderTextColor="#666" />
 
               <Text style={styles.inputLabel}>Nome de Exibição</Text>
               <TextInput style={styles.textInput} value={editNome} onChangeText={setEditNome} placeholder="Ex: João da Silva" placeholderTextColor="#666" />

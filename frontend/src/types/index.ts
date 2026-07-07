@@ -118,6 +118,45 @@ export interface ConfiguracaoJogo {
   spawnChancePorInimigo: Record<string, number>;
 }
 
+// ======== TRILHA DA TABUADA (método Leitner) ========
+export interface PontoSerie {
+  data: string;   // "2026-07-04"
+  valor: number;
+}
+
+export interface TabuadaEvolucao {
+  dominados: number;
+  totalCards: number;
+  evolucaoPct: number;
+  tempoMedio: number;
+  totalRespostas: number;
+  totalSessoes: number;
+  acertosPorSessao: PontoSerie[];
+  tempoPorSessao: PontoSerie[];
+  evolucaoPorSessao: PontoSerie[];
+  dominadosPorSessao: PontoSerie[];
+  totalDicasUsadas: number;
+  totalOpcoesUsadas: number;
+  operacoesDificeis: { operacao: string; erros: number; total: number }[];
+  tabuadasDificeis: { tabuada: number; erros: number; total: number; taxaErro: number }[];
+  ultimosErros: string[];
+  cardsVencidos: string[];
+  recomendacao: string;
+  aluno?: { id: string; nome: string; turma: string };
+}
+
+export interface TabuadaRelatorioLinha {
+  id: string;
+  nome: string;
+  turma: string;
+  dominados: number;
+  totalCards: number;
+  evolucaoPct: number;
+  cardsEstudados: number;
+  pioresTabuadas: number[];
+  posicao: number;
+}
+
 export interface Conteudo {
   id: string;
   tipo: 'VIDEO' | 'LINK' | 'MATERIAL';

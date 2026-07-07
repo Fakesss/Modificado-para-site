@@ -36,7 +36,7 @@ const BotaoRetro = ({ valor, isPressed, onPressWeb }: { valor: string, isPressed
   );
 };
 
-export default function MathBlasterMulti() {
+export default function SkyEquationsMulti() {
   const router = useRouter();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -1351,14 +1351,14 @@ export default function MathBlasterMulti() {
             <Ionicons name="arrow-back" size={30} color="#00FFFF"/>
           </TouchableOpacity>
           <Ionicons name="rocket" size={80} color="#00FFFF" style={{ marginBottom: 20, marginTop: 20 }}/>
-          <Text style={styles.tituloMenu}>SKY</Text>
-          <Text style={styles.subTituloMenu}>EQUATIONS</Text>
+          <Text style={styles.tituloMenu}>EQUAÇÕES</Text>
+          <Text style={styles.subTituloMenu}>ESPACIAIS</Text>
           <Text style={styles.instrucoes}>Use (W,A,S,D) ou Setas do teclado para voar. Digite a resposta e aperte (ENTER) para atirar!</Text>
 
           <View style={styles.rankingContainer}>
             <View style={styles.rankingHeaderRow}>
               <Ionicons name="trophy" size={24} color="#FFD700" />
-              <Text style={styles.rankingTitle}>HALL DA FAMA - BLASTER</Text>
+              <Text style={styles.rankingTitle}>HALL DA FAMA</Text>
             </View>
             <View style={styles.rankingScrollWrapper}>
               <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={true}>

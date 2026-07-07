@@ -68,7 +68,7 @@ export default function AdminHome() {
         const topAtual = modoPremiacao === 'ARCADE' ? topArcade : topBlaster;
         Alert.alert(
             'Sucesso!', 
-            `Os pontos foram distribuídos para o pódio do ${modoPremiacao === 'ARCADE' ? 'Arcade' : 'Math Blaster'}!\n\n🥇 ${topAtual[0]?.nome || '-'}: +${pts1} pts\n🥈 ${topAtual[1]?.nome || '-'}: +${pts2} pts\n🥉 ${topAtual[2]?.nome || '-'}: +${pts3} pts`
+            `Os pontos foram distribuídos para o pódio do ${modoPremiacao === 'ARCADE' ? 'Arcade' : 'Equações Espaciais'}!\n\n🥇 ${topAtual[0]?.nome || '-'}: +${pts1} pts\n🥈 ${topAtual[1]?.nome || '-'}: +${pts2} pts\n🥉 ${topAtual[2]?.nome || '-'}: +${pts3} pts`
         );
         setModalPremiacaoVisible(false);
     } catch (err) {
@@ -84,7 +84,7 @@ export default function AdminHome() {
   const handleZerarRanking = () => {
     Alert.alert(
       "Aviso de Segurança!",
-      "Você tem CERTEZA que deseja apagar os recordes de TODOS os jogadores do modo Arcade e Math Blaster? Essa ação não poderá ser desfeita.",
+      "Você tem CERTEZA que deseja apagar os recordes de TODOS os jogadores do modo Arcade e Equações Espaciais? Essa ação não poderá ser desfeita.",
       [
         { text: "Cancelar", style: "cancel" },
         { text: "Sim, Zerar Tudo", style: "destructive", onPress: async () => {
@@ -204,7 +204,19 @@ export default function AdminHome() {
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/config_jogo')}>
           <View style={[styles.menuIcon, { backgroundColor: '#FFD70030' }]}><Ionicons name="options" size={24} color="#FFD700" /></View>
-          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Painel de Partida (beta)</Text><Text style={styles.menuDescription}>Ajustar powerups e inimigos do Math Blaster ao vivo</Text></View>
+          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Painel de Partida (beta)</Text><Text style={styles.menuDescription}>Ajustar powerups e inimigos do Equações Espaciais ao vivo</Text></View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/tabuada')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#FFB30030' }]}><Ionicons name="trail-sign" size={24} color="#FFB300" /></View>
+          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Trilha da Tabuada (beta)</Text><Text style={styles.menuDescription}>Testar o treino de tabuada com repetição espaçada</Text></View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/tabuada_relatorio')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#7FD4FF30' }]}><Ionicons name="analytics" size={24} color="#7FD4FF" /></View>
+          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Relatório da Tabuada</Text><Text style={styles.menuDescription}>Progresso dos alunos no método Leitner, por turma</Text></View>
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
@@ -245,7 +257,7 @@ export default function AdminHome() {
                    <Text style={[styles.txtIntervalo, modoPremiacao === 'ARCADE' && styles.txtIntervaloAtivo]}>🎮 ARCADE</Text>
                  </TouchableOpacity>
                  <TouchableOpacity style={[styles.btnIntervalo, modoPremiacao === 'MATH_BLASTER' && styles.btnIntervaloAtivo]} onPress={() => setModoPremiacao('MATH_BLASTER')}>
-                   <Text style={[styles.txtIntervalo, modoPremiacao === 'MATH_BLASTER' && styles.txtIntervaloAtivo]}>🚀 MATH BLASTER</Text>
+                   <Text style={[styles.txtIntervalo, modoPremiacao === 'MATH_BLASTER' && styles.txtIntervaloAtivo]}>🚀 EQUAÇÕES ESPACIAIS</Text>
                  </TouchableOpacity>
               </View>
 
