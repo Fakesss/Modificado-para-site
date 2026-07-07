@@ -103,9 +103,10 @@ export default function TabsLayout() {
       } 
       else if (data.game_type === 'math_blaster') {
           // CORREÇÃO DA CONDIÇÃO DE LÍDER (isHost vs is_host do backend Python)
+          // (game_type continua 'math_blaster' — é o identificador interno do convite/protocolo, não o nome exibido)
           const isHostVal = data.is_host === true || data.isHost === true;
           const encodedColor = encodeURIComponent(data.opponent_color || '#FF00FF');
-          router.push(`/math_blaster_multi?roomId=${data.room_id}&isHost=${isHostVal}&opponentName=${data.opponent_name}&opponentColor=${encodedColor}`);
+          router.push(`/sky_equations_multi?roomId=${data.room_id}&isHost=${isHostVal}&opponentName=${data.opponent_name}&opponentColor=${encodedColor}`);
       }
       else if (data.game_type === 'tugofwar') {
           router.push('/cabo_de_guerra');
@@ -160,7 +161,7 @@ export default function TabsLayout() {
             </View>
             <Text style={styles.modalTitle}>DESAFIO RECEBIDO!</Text>
             <Text style={styles.modalText}>
-              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : convite?.game_type === 'arcade' ? 'Matemática Turbo' : convite?.game_type === 'math_blaster' ? 'Math Blaster Co-op' : 'Cabo de Guerra'}!
+              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : convite?.game_type === 'arcade' ? 'Matemática Turbo' : convite?.game_type === 'math_blaster' ? 'Equações Espaciais Co-op' : 'Cabo de Guerra'}!
             </Text>
             <View style={{ width: '100%', gap: 10, marginTop: 20 }}>
               <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#32CD32' }]} onPress={aceitarConvite}>

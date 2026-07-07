@@ -100,7 +100,7 @@ export default function JogadoresOnline() {
     if (gameType === 'arcade') {
       router.push(`/arcade_multi?spectate=${roomId}`);
     } else if (gameType === 'math_blaster') {
-      router.push(`/math_blaster_multi?spectate=${roomId}`);
+      router.push(`/sky_equations_multi?spectate=${roomId}`);
     } else if (gameType === 'tugofwar') {
       router.push(`/cabo_de_guerra?spectate=${roomId}`);
     } else {
@@ -178,7 +178,7 @@ export default function JogadoresOnline() {
           <View key={match.room_id} style={styles.card}>
             <View style={styles.info}>
               <Text style={{color: '#FFD700', fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>
-                {match.game_type === 'arcade' ? 'MATEMÁTICA TURBO' : match.game_type === 'math_blaster' ? 'MATH BLASTER CO-OP' : match.game_type === 'tugofwar' ? 'CABO DE GUERRA' : 'JOGO DA VELHA'}
+                {match.game_type === 'arcade' ? 'MATEMÁTICA TURBO' : match.game_type === 'math_blaster' ? 'EQUAÇÕES ESPACIAIS CO-OP' : match.game_type === 'tugofwar' ? 'CABO DE GUERRA' : 'JOGO DA VELHA'}
               </Text>
               <Text style={styles.name}>{match.player1} <Text style={{color: '#FF4444'}}>vs</Text> {match.player2}</Text>
               <Text style={styles.statusText}>👁 {match.spectators_count} assistindo</Text>
@@ -221,11 +221,11 @@ export default function JogadoresOnline() {
                     <Ionicons name="chevron-forward" size={20} color="#888" />
                 </TouchableOpacity>
 
-                {/* MODIFICAÇÃO: Ação direta ao clicar em Math Blaster Co-op */}
+                {/* Ação direta ao clicar em Equações Espaciais Co-op */}
                 <TouchableOpacity style={styles.gameOptionBtn} onPress={() => enviarConviteFinal('math_blaster', 'misto')}>
                     <View style={[styles.iconContainer, {backgroundColor: '#FFD70020'}]}><Ionicons name="planet" size={28} color="#FFD700" /></View>
                     <View style={{flex: 1}}>
-                       <Text style={styles.gameOptionText}>Math Blaster Co-op</Text>
+                       <Text style={styles.gameOptionText}>Equações Espaciais Co-op</Text>
                        <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Ação Direta!</Text>
                     </View>
                     <Ionicons name="rocket" size={20} color="#FFD700" />

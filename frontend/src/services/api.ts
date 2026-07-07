@@ -125,7 +125,7 @@ export const pontuarJogo = async (jogo: string, pontos: number): Promise<{ ponto
 export const getRankingArcade = async () => { try { return (await api.get('/ranking/arcade')).data; } catch { return []; } };
 export const submitArcadeScore = async (pontos: number) => (await api.post('/arcade/score', { pontos })).data;
 
-// ======== ROTAS DO MATH BLASTER ========
+// ======== ROTAS DO EQUAÇÕES ESPACIAIS (id interno "math_blaster", inalterado) ========
 export const getRankingMathBlaster = async () => { try { return (await api.get('/ranking/math_blaster')).data; } catch { return []; } };
 export const submitMathBlasterScore = async (pontos: number) => (await api.post('/math_blaster/score', { pontos })).data;
 export const submitMathBlasterRareKill = async () => (await api.post('/math_blaster/rare_kill')).data;
@@ -181,7 +181,7 @@ export const criarTabuadaFlashcard = async (dados: { tipo: 'CONTA' | 'TEXTO'; en
 export const atualizarTabuadaFlashcard = async (id: string, dados: { tipo: 'CONTA' | 'TEXTO'; enunciado: string; respostaCorreta: number; dica?: string | null; opcoes?: number[] | null }) => (await api.put(`/tabuada/flashcards/${id}`, dados)).data;
 export const deletarTabuadaFlashcard = async (id: string) => (await api.delete(`/tabuada/flashcards/${id}`)).data;
 
-// ======== HANGAR DA NAVE (progressão permanente do Math Blaster) ========
+// ======== HANGAR DA NAVE (progressão permanente do Equações Espaciais) ========
 export const getHangarPerfil = async () => { try { return (await api.get('/hangar/perfil')).data; } catch { return null; } };
 export const hangarUpgrade = async (atributo: 'cdr' | 'velocidade' | 'dano') => { try { return (await api.post('/hangar/upgrade', { atributo })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao evoluir'); } };
 export const hangarEquiparArma = async (arma: string) => { try { return (await api.post('/hangar/equipar_arma', { arma })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao equipar arma'); } };

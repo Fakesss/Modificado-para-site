@@ -261,11 +261,11 @@ def calcular_slots_disponiveis(construcoes: List[dict]) -> int:
     return 8 + (nivel_castelo - 1) * 4
 
 # =========================================================================
-# HANGAR DA NAVE (progressão permanente do jogador no Math Blaster)
+# HANGAR DA NAVE (progressão permanente do jogador no Equações Espaciais)
 # -------------------------------------------------------------------------
 # Curva de progressão amortecida (soft-cap): cada nível custa mais que o
 # anterior (custoBase * fatorCrescimento^nivelAtual) e o EFEITO de cada
-# atributo também é limitado (ver aplicação em math_blaster.web.tsx), pra
+# atributo também é limitado (ver aplicação em sky_equations.web.tsx), pra
 # não deixar a nave overpower rapidamente mesmo com muitas moedas.
 # =========================================================================
 HANGAR_CUSTO_BASE: Dict[str, int] = {"cdr": 40, "velocidade": 35, "dano": 45}
@@ -1902,7 +1902,7 @@ async def hangar_admin_injetar_moedas(dados: HangarInjetarMoedasRequest, current
 
 @api_router.post("/hangar/ganhar_moedas")
 async def hangar_ganhar_moedas(dados: HangarGanharMoedasRequest, current_user: dict = Depends(get_current_user)):
-    """Chamado no fim de uma partida do Math Blaster: converte parte do score em
+    """Chamado no fim de uma partida do Equações Espaciais: converte parte do score em
     moedas do hangar (progressão permanente do jogador, separada da pontuação de equipe)."""
     if dados.pontos <= 0:
         return {"moedasGanhas": 0}

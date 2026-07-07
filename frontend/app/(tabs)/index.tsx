@@ -22,7 +22,7 @@ import { RankingItem, Equipe, Turma } from '../../src/types';
 
 // --- CONFIGURAÇÃO DO BOTÃO ROTATIVO ---
 const JOGOS_ROTATIVOS = [
-  { rota: '/math_blaster', icone: 'rocket', titulo: 'Math Blaster', cor: '#00FFFF' },
+  { rota: '/sky_equations', icone: 'rocket', titulo: 'Equações Espaciais', cor: '#00FFFF' },
   { rota: '/tictactoe', icone: 'grid', titulo: 'Jogo da Velha', cor: '#32CD32' },
   { rota: '/cabo_de_guerra_offline', icone: 'people', titulo: 'Cabo de Guerra', cor: '#FF4500' }
 ];

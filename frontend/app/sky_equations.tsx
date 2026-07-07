@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/context/AuthContext';
 
-export default function MathBlasterNative() {
+export default function SkyEquationsNative() {
   const router = useRouter();
   const { user } = useAuth();
   const [url, setUrl] = useState<string | null>(null);
@@ -15,7 +15,7 @@ export default function MathBlasterNative() {
     const prepareUrl = async () => {
       const token = await AsyncStorage.getItem('token');
       // Passa o token e o ID do usuário via URL para a WebView poder autenticar as requisições
-      const vercelBase = 'https://modificado-para-site.vercel.app/math_blaster';
+      const vercelBase = 'https://modificado-para-site.vercel.app/sky_equations';
       setUrl(`${vercelBase}?token=${token || ''}&userId=${user?.id || ''}`);
     };
     prepareUrl();

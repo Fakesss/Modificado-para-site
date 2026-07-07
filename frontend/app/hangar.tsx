@@ -13,15 +13,20 @@ const ARMAS: { id: ArmaHangar; nome: string; desc: string; custo: number; icone:
   { id: 'LEQUE', nome: 'Tiro em Leque', desc: 'Três projéteis em leque, sempre ativo.', custo: 150, icone: 'apps-outline' },
 ];
 
-const ATRIBUTOS: { id: 'cdr' | 'velocidade' | 'dano'; nome: string; desc: string; campoNivel: 'nivelCDR' | 'nivelVelocidade' | 'nivelDano'; custoBase: number; icone: any }[] = [
-  { id: 'cdr', nome: 'Redução de Recarga', desc: 'Diminui o cooldown de todas as armas especiais.', campoNivel: 'nivelCDR', custoBase: 40, icone: 'timer-outline' },
-  { id: 'velocidade', nome: 'Velocidade', desc: 'Aumenta a velocidade de movimento da nave.', campoNivel: 'nivelVelocidade', custoBase: 35, icone: 'speedometer-outline' },
-  { id: 'dano', nome: 'Dano Base', desc: 'Aumenta o dano inicial da nave.', campoNivel: 'nivelDano', custoBase: 45, icone: 'flash' },
+// per/cap espelham exatamente as fórmulas aplicadas na partida real (ver iniciarJogo,
+// em sky_equations.web.tsx): CDR = min(0.5, nivel×0.05), Velocidade = min(0.6, nivel×0.06),
+// Dano = min(0.8, nivel×0.08). Mostrar esse número real (não só "Nível X/8") deixa claro
+// o que cada evolução realmente compra.
+const ATRIBUTOS: { id: 'cdr' | 'velocidade' | 'dano'; nome: string; desc: string; campoNivel: 'nivelCDR' | 'nivelVelocidade' | 'nivelDano'; custoBase: number; icone: any; efeitoPorNivel: number; efeitoCap: number; efeitoPrefixo: string; efeitoSufixo: string }[] = [
+  { id: 'cdr', nome: 'Redução de Recarga', desc: 'Diminui o cooldown de todas as armas especiais.', campoNivel: 'nivelCDR', custoBase: 40, icone: 'timer-outline', efeitoPorNivel: 0.05, efeitoCap: 0.5, efeitoPrefixo: '-', efeitoSufixo: ' cooldown' },
+  { id: 'velocidade', nome: 'Velocidade', desc: 'Aumenta a velocidade de movimento da nave.', campoNivel: 'nivelVelocidade', custoBase: 35, icone: 'speedometer-outline', efeitoPorNivel: 0.06, efeitoCap: 0.6, efeitoPrefixo: '+', efeitoSufixo: ' velocidade' },
+  { id: 'dano', nome: 'Dano Base', desc: 'Aumenta o dano inicial da nave.', campoNivel: 'nivelDano', custoBase: 45, icone: 'flash', efeitoPorNivel: 0.08, efeitoCap: 0.8, efeitoPrefixo: '+', efeitoSufixo: ' dano' },
 ];
 
 const FATOR_CRESCIMENTO = 1.4;
 const NIVEL_MAX = 8;
 const custoProximoNivel = (custoBase: number, nivelAtual: number) => Math.floor(custoBase * Math.pow(FATOR_CRESCIMENTO, nivelAtual));
+const efeitoPctNoNivel = (attr: { efeitoPorNivel: number; efeitoCap: number }, nivel: number) => Math.round(Math.min(attr.efeitoCap, nivel * attr.efeitoPorNivel) * 100);
 
 const CORES = ['#00FFFF', '#FF00FF', '#7FFF00', '#FFD700', '#FF4444', '#BB77FF', '#FF7055', '#FFFFFF'];
 
@@ -282,6 +287,21 @@ export default function Hangar() {
           <View style={styles.erroBox}><Text style={styles.erroText}>{erro}</Text></View>
         ) : null}
 
+        <View style={styles.statusNave}>
+          <View style={styles.statusNaveArma}>
+            <Ionicons name={ARMAS.find(a => a.id === perfil.armaInicial)?.icone || 'radio-button-on-outline'} size={18} color="#00FFFF" />
+            <Text style={styles.statusNaveArmaTexto}>{ARMAS.find(a => a.id === perfil.armaInicial)?.nome || 'Padrão'}</Text>
+          </View>
+          <View style={styles.statusNaveStatsRow}>
+            {ATRIBUTOS.map(attr => (
+              <View key={attr.id} style={styles.statusNaveChip}>
+                <Ionicons name={attr.icone} size={13} color="#00FFFF" />
+                <Text style={styles.statusNaveChipTexto}>{attr.efeitoPrefixo}{efeitoPctNoNivel(attr, perfil[attr.campoNivel])}%</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
         <Text style={styles.secaoTitulo}>ARMA INICIAL</Text>
         <Text style={styles.secaoDesc}>Toque numa arma para ver como fica no Live Preview acima. Toque em "APLICAR" pra confirmar.</Text>
         <View style={styles.gridArmas}>
@@ -333,6 +353,15 @@ export default function Hangar() {
                   <View key={i} style={[styles.pipNivel, i < nivelAtual && styles.pipNivelCheio]} />
                 ))}
               </View>
+              <Text style={styles.linhaAtributoEfeito}>
+                Efeito atual: <Text style={styles.linhaAtributoEfeitoValor}>{attr.efeitoPrefixo}{efeitoPctNoNivel(attr, nivelAtual)}%{attr.efeitoSufixo}</Text>
+                {!noMax && (
+                  <>
+                    {'  →  próximo nível: '}
+                    <Text style={styles.linhaAtributoEfeitoValor}>{attr.efeitoPrefixo}{efeitoPctNoNivel(attr, nivelAtual + 1)}%{attr.efeitoSufixo}</Text>
+                  </>
+                )}
+              </Text>
               <TouchableOpacity
                 style={[styles.btnEvoluir, noMax && styles.btnEvoluirDesativado]}
                 disabled={noMax}
@@ -440,6 +469,12 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 16, paddingBottom: 60 },
   erroBox: { backgroundColor: '#FF444430', borderWidth: 1, borderColor: '#FF4444', borderRadius: 8, padding: 10, marginBottom: 16 },
   erroText: { color: '#FF9999', fontSize: 13, textAlign: 'center' },
+  statusNave: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0e0e28', borderRadius: 12, borderWidth: 1, borderColor: '#252550', padding: 12, flexWrap: 'wrap', gap: 8 },
+  statusNaveArma: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusNaveArmaTexto: { color: '#EEE', fontWeight: '900', fontSize: 13 },
+  statusNaveStatsRow: { flexDirection: 'row', gap: 8 },
+  statusNaveChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#050015', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  statusNaveChipTexto: { color: '#00FFFF', fontWeight: 'bold', fontSize: 11 },
   secaoTitulo: { color: '#00FFFF', fontSize: 15, fontWeight: '900', letterSpacing: 1, marginTop: 28, marginBottom: 4 },
   secaoDesc: { color: '#777', fontSize: 12, marginBottom: 12 },
   gridArmas: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -458,6 +493,8 @@ const styles = StyleSheet.create({
   barraNivel: { flexDirection: 'row', gap: 4, marginBottom: 10 },
   pipNivel: { flex: 1, height: 6, borderRadius: 3, backgroundColor: '#252550' },
   pipNivelCheio: { backgroundColor: '#00FFFF' },
+  linhaAtributoEfeito: { color: '#888', fontSize: 11, marginBottom: 10 },
+  linhaAtributoEfeitoValor: { color: '#00FFFF', fontWeight: 'bold' },
   btnEvoluir: { backgroundColor: '#00FFFF', borderRadius: 8, paddingVertical: 9, alignItems: 'center' },
   btnEvoluirDesativado: { backgroundColor: '#333' },
   btnEvoluirText: { color: '#001018', fontWeight: '900', fontSize: 12 },

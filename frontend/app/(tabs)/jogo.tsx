@@ -19,10 +19,10 @@ export default function HubJogos() {
           <Text style={styles.subtitle}>Escolha seu modo de treinamento</Text>
         </View>
 
-        {/* NOVO: BOTÃO DO MATH BLASTER */}
-        <TouchableOpacity 
-          style={styles.gameCard} 
-          onPress={() => router.push('/math_blaster')}
+        {/* BOTÃO DO EQUAÇÕES ESPACIAIS */}
+        <TouchableOpacity
+          style={styles.gameCard}
+          onPress={() => router.push('/sky_equations')}
           activeOpacity={0.8}
         >
           <View style={[styles.iconContainer, { backgroundColor: '#00FFFF20' }]}>
@@ -30,7 +30,7 @@ export default function HubJogos() {
           </View>
           <View style={styles.gameInfo}>
             <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
-              Math Blaster
+              Equações Espaciais
             </Text>
             <Text style={styles.gameDesc}>Pilote sua nave e resolva equações para destruir os inimigos e as naves-mãe. Sobreviva!</Text>
           </View>
