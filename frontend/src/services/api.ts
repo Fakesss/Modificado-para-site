@@ -181,6 +181,11 @@ export const criarTabuadaFlashcard = async (dados: { tipo: 'CONTA' | 'TEXTO'; en
 export const atualizarTabuadaFlashcard = async (id: string, dados: { tipo: 'CONTA' | 'TEXTO'; enunciado: string; respostaCorreta: number; dica?: string | null; opcoes?: number[] | null }) => (await api.put(`/tabuada/flashcards/${id}`, dados)).data;
 export const deletarTabuadaFlashcard = async (id: string) => (await api.delete(`/tabuada/flashcards/${id}`)).data;
 
+// ======== DESAFIO FLASH CARDS (modo com ranking, à parte da Trilha da Tabuada) ========
+// A pontuação é sempre calculada e devolvida pelo servidor (nunca confiar num cálculo local).
+export const enviarTabuadaDesafioResultado = async (dados: { tabuadas: number[]; quantidadeQuestoes: number; acertos: number; tempoTotalSegundos: number }) => (await api.post('/tabuada/desafio/resultado', dados)).data;
+export const getTabuadaDesafioRanking = async (quantidade: number) => { try { return (await api.get(`/tabuada/desafio/ranking/${quantidade}`)).data; } catch { return []; } };
+
 // ======== HANGAR DA NAVE (progressão permanente do Equações Espaciais) ========
 export const getHangarPerfil = async () => { try { return (await api.get('/hangar/perfil')).data; } catch { return null; } };
 export const hangarUpgrade = async (atributo: 'cdr' | 'velocidade' | 'dano') => { try { return (await api.post('/hangar/upgrade', { atributo })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao evoluir'); } };

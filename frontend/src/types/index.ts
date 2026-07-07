@@ -145,6 +145,21 @@ export interface TabuadaEvolucao {
   aluno?: { id: string; nome: string; turma: string };
 }
 
+export interface TabuadaDesafioResultado {
+  id?: string;
+  nome: string;
+  turma?: string;
+  tabuadas: number[];
+  quantidadeQuestoes: number;
+  acertos: number;
+  tempoTotalSegundos: number;
+  pesoMedio: number;
+  pontuacaoBase: number;
+  bonusTempo: number;
+  pontuacaoFinal: number;
+  registradoEm?: string;
+}
+
 export interface TabuadaRelatorioLinha {
   id: string;
   nome: string;

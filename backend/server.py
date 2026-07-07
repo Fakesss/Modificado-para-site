@@ -217,6 +217,12 @@ class TabuadaFlashcardCreate(BaseModel):
     dica: Optional[str] = None
     opcoes: Optional[List[int]] = None
 
+class TabuadaDesafioSubmissao(BaseModel):
+    tabuadas: List[int]        # quais tabuadas (1..10) o aluno escolheu praticar
+    quantidadeQuestoes: int    # 15 | 20 | 30
+    acertos: int
+    tempoTotalSegundos: float
+
 # =========================================================================
 # CONFIGURAÇÃO DE PONTOS POR JOGO (painel de ajuste manual)
 # -------------------------------------------------------------------------
@@ -1817,6 +1823,77 @@ async def get_tabuada_relatorio_aluno(aluno_id: str, current_user: dict = Depend
     evolucao = await calcular_evolucao_tabuada(aluno_id)
     evolucao["aluno"] = {"id": aluno["id"], "nome": aluno.get("nome", "?"), "turma": turma.get("nome", "") if turma else ""}
     return evolucao
+
+# =========================================================================
+# DESAFIO FLASH CARDS (modo à parte da Trilha da Tabuada, com ranking)
+# -------------------------------------------------------------------------
+# O aluno escolhe QUAIS tabuadas (1..10) quer enfrentar e a quantidade de
+# questões (15/20/30) antes de começar. Isso NÃO mexe no estado do Leitner
+# (db.tabuada_cards) — é um modo separado, só pra ranking competitivo.
+#
+# Pontuação calculada aqui no servidor (nunca confiando no valor que o app
+# manda), pra o ranking ser justo de verdade:
+#   pontuacaoBase = acertos × pesoMédio(tabuadas escolhidas) × 10
+#   bonusTempo    = até 30 pontos, maior quanto menor o tempo médio por
+#                   questão (satura em 0 a partir de 12s por questão)
+#   pontuacaoFinal = pontuacaoBase + bonusTempo
+# A dificuldade pesa muito mais que a velocidade: só escolher tabuadas
+# fáceis (peso baixo) limita o teto de pontuação, mesmo respondendo rápido.
+# =========================================================================
+TABUADA_DESAFIO_PESOS: Dict[int, float] = {1: 1, 2: 1, 3: 2, 4: 2, 5: 2, 6: 3, 7: 3, 8: 3, 9: 3, 10: 1}
+TABUADA_DESAFIO_BONUS_TEMPO_MAX = 30
+TABUADA_DESAFIO_BONUS_TEMPO_REFERENCIA_SEG = 12  # tempo médio/questão a partir do qual o bônus é 0
+TABUADA_DESAFIO_QUANTIDADES_VALIDAS = (15, 20, 30)
+
+def _calcular_pontuacao_desafio(tabuadas: List[int], quantidade_questoes: int, acertos: int, tempo_total_segundos: float) -> Dict[str, float]:
+    tabuadas_validas = sorted(set(t for t in tabuadas if 1 <= t <= 10)) or [1]
+    peso_medio = sum(TABUADA_DESAFIO_PESOS.get(t, 1) for t in tabuadas_validas) / len(tabuadas_validas)
+    pontuacao_base = round(acertos * peso_medio * 10, 1)
+    tempo_medio_por_questao = (tempo_total_segundos / quantidade_questoes) if quantidade_questoes > 0 else 0
+    fracao_bonus = max(0.0, 1 - min(1.0, tempo_medio_por_questao / TABUADA_DESAFIO_BONUS_TEMPO_REFERENCIA_SEG))
+    bonus_tempo = round(TABUADA_DESAFIO_BONUS_TEMPO_MAX * fracao_bonus, 1)
+    return {
+        "tabuadas": tabuadas_validas,
+        "pesoMedio": round(peso_medio, 2),
+        "pontuacaoBase": pontuacao_base,
+        "bonusTempo": bonus_tempo,
+        "pontuacaoFinal": round(pontuacao_base + bonus_tempo, 1),
+    }
+
+@api_router.post("/tabuada/desafio/resultado")
+async def registrar_tabuada_desafio(dados: TabuadaDesafioSubmissao, current_user: dict = Depends(get_current_user)):
+    if dados.quantidadeQuestoes not in TABUADA_DESAFIO_QUANTIDADES_VALIDAS:
+        raise HTTPException(status_code=400, detail="Quantidade de questões inválida (use 15, 20 ou 30)")
+    if not dados.tabuadas or not any(1 <= t <= 10 for t in dados.tabuadas):
+        raise HTTPException(status_code=400, detail="Selecione ao menos uma tabuada de 1 a 10")
+
+    acertos = max(0, min(dados.quantidadeQuestoes, dados.acertos))
+    tempo_total = max(0.0, dados.tempoTotalSegundos)
+    calculo = _calcular_pontuacao_desafio(dados.tabuadas, dados.quantidadeQuestoes, acertos, tempo_total)
+
+    turma = await db.turmas.find_one({"id": current_user.get("turmaId", "")}) if current_user.get("turmaId") else None
+    doc = {
+        "id": str(uuid.uuid4()),
+        "usuarioId": current_user["id"],
+        "nome": current_user.get("nome", "?"),
+        "turma": turma.get("nome", "") if turma else "",
+        "quantidadeQuestoes": dados.quantidadeQuestoes,
+        "acertos": acertos,
+        "tempoTotalSegundos": round(tempo_total, 1),
+        **calculo,
+        "registradoEm": get_now_brt().isoformat(),
+    }
+    await db.tabuada_desafio_resultados.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != '_id'}
+
+@api_router.get("/tabuada/desafio/ranking/{quantidade}")
+async def get_tabuada_desafio_ranking(quantidade: int, current_user: dict = Depends(get_current_user)):
+    if quantidade not in TABUADA_DESAFIO_QUANTIDADES_VALIDAS:
+        raise HTTPException(status_code=400, detail="Quantidade de questões inválida (use 15, 20 ou 30)")
+    resultados = await db.tabuada_desafio_resultados.find(
+        {"quantidadeQuestoes": quantidade}
+    ).sort("pontuacaoFinal", -1).to_list(50)
+    return [{k: v for k, v in r.items() if k != '_id'} for r in resultados]
 
 @api_router.get("/hangar/perfil")
 async def get_hangar_perfil(current_user: dict = Depends(get_current_user)):

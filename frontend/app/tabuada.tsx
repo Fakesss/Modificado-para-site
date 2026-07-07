@@ -388,6 +388,11 @@ export default function TrilhaDaTabuada() {
             <Ionicons name="create-outline" size={18} color="#7FD4FF" />
             <Text style={styles.btnFlashcardsTexto}>MEUS FLASH CARDS{cardsPersonalizados.length > 0 ? ` (${cardsPersonalizados.length})` : ''}</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity style={styles.btnDesafio} onPress={() => router.push('/tabuada_desafio' as any)}>
+            <Ionicons name="trophy" size={18} color="#1a1200" />
+            <Text style={styles.btnDesafioTexto}>DESAFIO FLASH CARDS</Text>
+          </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
     );
@@ -635,6 +640,8 @@ const styles = StyleSheet.create({
   btnVoltarTexto: { color: '#776', fontWeight: '700', fontSize: 12 },
   btnFlashcards: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 2, borderColor: '#7FD4FF', borderRadius: 14, paddingVertical: 13, width: '100%', maxWidth: 360, marginTop: 12 },
   btnFlashcardsTexto: { color: '#7FD4FF', fontWeight: '900', fontSize: 13, letterSpacing: 1 },
+  btnDesafio: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFD700', borderRadius: 14, paddingVertical: 13, width: '100%', maxWidth: 360, marginTop: 12 },
+  btnDesafioTexto: { color: '#1a1200', fontWeight: '900', fontSize: 13, letterSpacing: 1 },
 
   jogoTopo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingTop: 10 },
   progresso: { color: '#CCB', fontSize: 15, fontWeight: '800' },
