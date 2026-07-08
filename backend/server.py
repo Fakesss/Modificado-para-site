@@ -216,6 +216,11 @@ class TabuadaFlashcardCreate(BaseModel):
     respostaCorreta: int
     dica: Optional[str] = None
     opcoes: Optional[List[int]] = None
+    jogoId: Optional[str] = None    # se preenchido, o card pertence a um jogo personalizado
+                                     # isolado (não entra na fila principal da Trilha da Tabuada)
+
+class JogoPersonalizadoCreate(BaseModel):
+    nome: str
 
 class TabuadaDesafioSubmissao(BaseModel):
     tabuadas: List[int]        # quais tabuadas (1..10) o aluno escolheu praticar
@@ -1555,13 +1560,49 @@ async def registrar_tabuada_sessao(dados: TabuadaSessaoRequest, current_user: di
 
     return {"message": "ok", "sessaoId": sessao_id, "respostasRegistradas": len(dados.respostas)}
 
+# --- Jogos personalizados (agrupam flash cards por tema: "MMC", "Frações"...) ---
+# Cada jogo é isolado dos demais e da Trilha da Tabuada principal: cards com
+# jogoId preenchido só aparecem no treino daquele jogo específico.
+@api_router.get("/tabuada/jogos")
+async def get_tabuada_jogos(current_user: dict = Depends(get_current_user)):
+    jogos = await db.tabuada_jogos_personalizados.find({"usuarioId": current_user["id"]}).sort("criadoEm", -1).to_list(200)
+    resultado = []
+    for j in jogos:
+        qtd = await db.tabuada_flashcards_personalizados.count_documents({"jogoId": j["id"]})
+        resultado.append({**{k: v for k, v in j.items() if k != '_id'}, "quantidadeCards": qtd})
+    return resultado
+
+@api_router.post("/tabuada/jogos")
+async def criar_tabuada_jogo(dados: JogoPersonalizadoCreate, current_user: dict = Depends(get_current_user)):
+    if not dados.nome.strip():
+        raise HTTPException(status_code=400, detail="Dê um nome para o jogo")
+    novo = {
+        "id": str(uuid.uuid4()),
+        "usuarioId": current_user["id"],
+        "nome": dados.nome.strip(),
+        "criadoEm": get_now_brt().isoformat(),
+    }
+    await db.tabuada_jogos_personalizados.insert_one(novo)
+    return {**{k: v for k, v in novo.items() if k != '_id'}, "quantidadeCards": 0}
+
+@api_router.delete("/tabuada/jogos/{jogo_id}")
+async def deletar_tabuada_jogo(jogo_id: str, current_user: dict = Depends(get_current_user)):
+    jogo = await db.tabuada_jogos_personalizados.find_one({"id": jogo_id, "usuarioId": current_user["id"]})
+    if not jogo:
+        raise HTTPException(status_code=404, detail="Jogo não encontrado")
+    await db.tabuada_jogos_personalizados.delete_one({"id": jogo_id})
+    await db.tabuada_flashcards_personalizados.delete_many({"jogoId": jogo_id, "usuarioId": current_user["id"]})
+    return {"message": "ok"}
+
 # --- Flash cards personalizados (criados pelo próprio aluno) ---
-# Entram no universo do jogo com operacao = "custom:<id>" e usam a MESMA máquina
-# de estado do Leitner (db.tabuada_cards) que os 100 cards fixos — o total de
-# cards de cada aluno passa a ser 100 + a quantidade que ele mesmo criou.
+# Cards SOLTOS (jogoId=None) entram no universo da Trilha da Tabuada principal com
+# operacao = "custom:<id>" e usam a MESMA máquina de estado do Leitner (db.tabuada_cards)
+# que os 100 cards fixos. Cards de um JOGO PERSONALIZADO (jogoId preenchido) ficam de
+# fora dessa fila — treinam separados, só dentro do próprio jogo.
 @api_router.get("/tabuada/flashcards")
-async def get_tabuada_flashcards(current_user: dict = Depends(get_current_user)):
-    cards = await db.tabuada_flashcards_personalizados.find({"usuarioId": current_user["id"]}).to_list(500)
+async def get_tabuada_flashcards(jogoId: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    filtro: Dict[str, Any] = {"usuarioId": current_user["id"], "jogoId": jogoId}
+    cards = await db.tabuada_flashcards_personalizados.find(filtro).to_list(500)
     return [{k: v for k, v in c.items() if k != '_id'} for c in cards]
 
 @api_router.post("/tabuada/flashcards")
@@ -1570,9 +1611,14 @@ async def criar_tabuada_flashcard(dados: TabuadaFlashcardCreate, current_user: d
         raise HTTPException(status_code=400, detail="Tipo inválido")
     if not dados.enunciado.strip():
         raise HTTPException(status_code=400, detail="Enunciado obrigatório")
+    if dados.jogoId:
+        jogo = await db.tabuada_jogos_personalizados.find_one({"id": dados.jogoId, "usuarioId": current_user["id"]})
+        if not jogo:
+            raise HTTPException(status_code=404, detail="Jogo não encontrado")
     novo = {
         "id": str(uuid.uuid4()),
         "usuarioId": current_user["id"],
+        "jogoId": dados.jogoId,
         "tipo": dados.tipo,
         "enunciado": dados.enunciado.strip(),
         "respostaCorreta": dados.respostaCorreta,
@@ -1858,6 +1904,7 @@ def _calcular_pontuacao_desafio(tabuadas: List[int], quantidade_questoes: int, a
         "pontuacaoBase": pontuacao_base,
         "bonusTempo": bonus_tempo,
         "pontuacaoFinal": round(pontuacao_base + bonus_tempo, 1),
+        "tempoMedioPorQuestao": round(tempo_medio_por_questao, 3),  # "velocidade média" exibida no ranking
     }
 
 @api_router.post("/tabuada/desafio/resultado")
