@@ -57,3 +57,54 @@ export function gerarQuestoesDesafio(tabuadasSelecionadas: number[], quantidade:
   }
   return baralho.slice(0, Math.max(1, quantidade));
 }
+
+// =============================================================================
+// ESTIMATIVA DE PONTUAÇÃO AO VIVO
+// -----------------------------------------------------------------------------
+// Espelha EXATAMENTE a fórmula do backend (_calcular_pontuacao_desafio, em
+// backend/server.py) pra mostrar uma prévia consistente da pontuação enquanto o
+// aluno joga. A pontuação REAL e persistida sempre vem do servidor no fim da
+// partida (enviarTabuadaDesafioResultado) — isto aqui nunca é a fonte da verdade,
+// só feedback visual. Chamando com questoesRespondidas = todas as questões da
+// partida, o resultado é idêntico ao que o servidor vai calcular.
+// =============================================================================
+export interface EstimativaPontuacao {
+  pesoMedio: number;
+  pontuacaoBase: number;
+  bonusTempo: number;
+  pontuacaoFinal: number;
+}
+
+const BONUS_TEMPO_MAX = 30;
+const BONUS_TEMPO_REFERENCIA_SEG = 12;
+
+export function estimarPontuacaoDesafio(
+  tabuadasSelecionadas: number[],
+  questoesRespondidas: number,
+  acertos: number,
+  tempoAcumuladoSegundos: number
+): EstimativaPontuacao {
+  const validas = Array.from(new Set(tabuadasSelecionadas.filter(t => t >= 1 && t <= 10)));
+  const tabuadas = validas.length > 0 ? validas : [1];
+  const pesoMedio = tabuadas.reduce((soma, t) => soma + (PESO_TABUADA[t] ?? 1), 0) / tabuadas.length;
+  const pontuacaoBase = Math.round(acertos * pesoMedio * 10 * 10) / 10;
+  const tempoMedioPorQuestao = questoesRespondidas > 0 ? tempoAcumuladoSegundos / questoesRespondidas : 0;
+  const fracaoBonus = Math.max(0, 1 - Math.min(1, tempoMedioPorQuestao / BONUS_TEMPO_REFERENCIA_SEG));
+  const bonusTempo = Math.round(BONUS_TEMPO_MAX * fracaoBonus * 10) / 10;
+  return {
+    pesoMedio: Math.round(pesoMedio * 100) / 100,
+    pontuacaoBase,
+    bonusTempo,
+    pontuacaoFinal: Math.round((pontuacaoBase + bonusTempo) * 10) / 10,
+  };
+}
+
+// Pontos-base ganhos por UMA resposta certa (constante durante toda a partida,
+// já que a fórmula usa o peso médio das tabuadas escolhidas, não o peso da
+// questão individual) — usado no efeito "+N pts" a cada resposta.
+export function pontosPorAcerto(tabuadasSelecionadas: number[]): number {
+  const validas = Array.from(new Set(tabuadasSelecionadas.filter(t => t >= 1 && t <= 10)));
+  const tabuadas = validas.length > 0 ? validas : [1];
+  const pesoMedio = tabuadas.reduce((soma, t) => soma + (PESO_TABUADA[t] ?? 1), 0) / tabuadas.length;
+  return Math.round(pesoMedio * 10);
+}

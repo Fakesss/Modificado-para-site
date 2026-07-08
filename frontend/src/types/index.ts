@@ -157,6 +157,7 @@ export interface TabuadaDesafioResultado {
   pontuacaoBase: number;
   bonusTempo: number;
   pontuacaoFinal: number;
+  tempoMedioPorQuestao: number;
   registradoEm?: string;
 }
 

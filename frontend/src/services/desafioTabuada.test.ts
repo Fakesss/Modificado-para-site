@@ -8,7 +8,7 @@
 //   node /tmp/desafio-test/desafioTabuada.test.js
 // =============================================================================
 
-import { gerarQuestoesDesafio, rotuloDificuldade, corDificuldade, PESO_TABUADA } from './desafioTabuada';
+import { gerarQuestoesDesafio, rotuloDificuldade, corDificuldade, estimarPontuacaoDesafio, pontosPorAcerto, PESO_TABUADA } from './desafioTabuada';
 
 let passaram = 0;
 let falharam = 0;
@@ -68,6 +68,35 @@ console.log('\n[6] Rótulos e cores de dificuldade batem com os pesos usados no 
   verificar('tabuada 9 é Difícil (peso 3)', rotuloDificuldade(9) === 'Difícil' && PESO_TABUADA[9] === 3);
   verificar('cor da tabuada 6 é vermelha (difícil)', corDificuldade(6) === '#FF7055');
   verificar('cor da tabuada 1 é verde (fácil)', corDificuldade(1) === '#32CD32');
+}
+
+console.log('\n[7] estimarPontuacaoDesafio (placar ao vivo): dificuldade pesa mais que velocidade');
+{
+  // Mesmo cenário validado no backend (_calcular_pontuacao_desafio): tabuada
+  // difícil respondida devagar (bônus de tempo zerado) ainda vence tabuada
+  // fácil respondida no limite da velocidade (bônus de tempo máximo).
+  const dificilLento = estimarPontuacaoDesafio([6, 7, 8, 9], 20, 20, 20 * 12);
+  const facilRapido = estimarPontuacaoDesafio([1, 2, 10], 20, 20, 20 * 0.1);
+  verificar(
+    'tabuada difícil (lenta) supera tabuada fácil (rapidíssima)',
+    dificilLento.pontuacaoFinal > facilRapido.pontuacaoFinal,
+    `difícil=${dificilLento.pontuacaoFinal} vs fácil=${facilRapido.pontuacaoFinal}`
+  );
+}
+
+console.log('\n[8] estimarPontuacaoDesafio: fórmula bate com o esperado (peso médio × acertos × 10 + bônus)');
+{
+  const est = estimarPontuacaoDesafio([1], 10, 10, 0); // tabuada 1 (peso 1), 10/10 acertos, tempo 0 (bônus máximo)
+  verificar('pontuação base = 10 acertos × peso 1 × 10 = 100', est.pontuacaoBase === 100, `base=${est.pontuacaoBase}`);
+  verificar('bônus de tempo máximo (30) quando tempo médio por questão é 0', est.bonusTempo === 30, `bonus=${est.bonusTempo}`);
+  verificar('pontuação final = base + bônus = 130', est.pontuacaoFinal === 130, `final=${est.pontuacaoFinal}`);
+}
+
+console.log('\n[9] pontosPorAcerto = peso médio das tabuadas escolhidas × 10');
+{
+  verificar('tabuada 1 (peso 1) dá 10 pontos por acerto', pontosPorAcerto([1]) === 10);
+  verificar('tabuada 6 (peso 3) dá 30 pontos por acerto', pontosPorAcerto([6]) === 30);
+  verificar('tabuadas 1 e 6 (peso médio 2) dão 20 pontos por acerto', pontosPorAcerto([1, 6]) === 20);
 }
 
 console.log(`\n========================================`);

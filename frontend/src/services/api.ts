@@ -176,10 +176,17 @@ export const getTabuadaRelatorio = async (turmaId?: string) => { try { return (a
 export const getTabuadaRelatorioAluno = async (alunoId: string) => { try { return (await api.get(`/tabuada/relatorio/aluno/${alunoId}`)).data; } catch { return null; } };
 
 // ======== FLASH CARDS PERSONALIZADOS (criados pelo próprio aluno) ========
-export const getTabuadaFlashcards = async () => { try { return (await api.get('/tabuada/flashcards')).data; } catch { return []; } };
-export const criarTabuadaFlashcard = async (dados: { tipo: 'CONTA' | 'TEXTO'; enunciado: string; respostaCorreta: number; dica?: string | null; opcoes?: number[] | null }) => (await api.post('/tabuada/flashcards', dados)).data;
+// Sem jogoId: só cards "soltos" (comportamento antigo, entram na Trilha da Tabuada
+// principal). Com jogoId: cards de um Jogo Personalizado isolado (ver tabuada_flashcards.tsx).
+export const getTabuadaFlashcards = async (jogoId?: string) => { try { return (await api.get('/tabuada/flashcards', { params: jogoId ? { jogoId } : {} })).data; } catch { return []; } };
+export const criarTabuadaFlashcard = async (dados: { tipo: 'CONTA' | 'TEXTO'; enunciado: string; respostaCorreta: number; dica?: string | null; opcoes?: number[] | null; jogoId?: string | null }) => (await api.post('/tabuada/flashcards', dados)).data;
 export const atualizarTabuadaFlashcard = async (id: string, dados: { tipo: 'CONTA' | 'TEXTO'; enunciado: string; respostaCorreta: number; dica?: string | null; opcoes?: number[] | null }) => (await api.put(`/tabuada/flashcards/${id}`, dados)).data;
 export const deletarTabuadaFlashcard = async (id: string) => (await api.delete(`/tabuada/flashcards/${id}`)).data;
+
+// ======== JOGOS PERSONALIZADOS (agrupam flash cards por tema, ex: "MMC") ========
+export const getTabuadaJogos = async () => { try { return (await api.get('/tabuada/jogos')).data; } catch { return []; } };
+export const criarTabuadaJogo = async (nome: string) => (await api.post('/tabuada/jogos', { nome })).data;
+export const deletarTabuadaJogo = async (id: string) => (await api.delete(`/tabuada/jogos/${id}`)).data;
 
 // ======== DESAFIO FLASH CARDS (modo com ranking, à parte da Trilha da Tabuada) ========
 // A pontuação é sempre calculada e devolvida pelo servidor (nunca confiar num cálculo local).

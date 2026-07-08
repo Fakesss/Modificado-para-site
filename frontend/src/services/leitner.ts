@@ -53,6 +53,9 @@ export interface TabuadaCardEstado {
 // Entra no jogo com operacao = "custom:<id>" e usa a MESMA máquina de estado
 // Leitner dos cards fixos (nível, revisão, vezesVista/Errada) — só a seleção de
 // sessão e o total de cards (denominador da evolução) precisam saber dele.
+// Cards com jogoId preenchido pertencem a um Jogo Personalizado isolado (ver
+// tabuada_flashcards.tsx) e NÃO entram nessa fila principal — só cards soltos
+// (jogoId ausente/null) entram, preservando o comportamento de sempre.
 export interface FlashcardPersonalizado {
   id: string;
   tipo: 'CONTA' | 'TEXTO';
@@ -60,6 +63,25 @@ export interface FlashcardPersonalizado {
   respostaCorreta: number;
   dica?: string | null;
   opcoes?: number[] | null;  // 3-4 alternativas (não precisa incluir a correta)
+  jogoId?: string | null;
+}
+
+// ----- Jogo Personalizado: agrupa flash cards por tema (ex: "MMC", "Frações") -----
+export interface JogoPersonalizado {
+  id: string;
+  nome: string;
+  criadoEm: string;
+  quantidadeCards: number;
+}
+
+// ----- Formata um tempo em segundos mostrando segundos e milissegundos -----
+// Usado em qualquer "tempo gasto" registrado (Trilha da Tabuada, Desafio Flash
+// Cards) pra deixar o registro mais preciso do que só segundos inteiros.
+export function formatarTempoPreciso(segundosTotais: number): string {
+  const totalMs = Math.max(0, Math.round(segundosTotais * 1000));
+  const s = Math.floor(totalMs / 1000);
+  const ms = totalMs % 1000;
+  return `${s}s ${ms.toString().padStart(3, '0')}ms`;
 }
 
 // ----- Universo de cards: tabuada do 1 ao 10, 7x8 e 8x7 são cards distintos -----

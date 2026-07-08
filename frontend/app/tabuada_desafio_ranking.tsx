@@ -84,6 +84,7 @@ export default function DesafioFlashCardsRanking() {
                 <View style={styles.statsRow}>
                   <Text style={styles.stat}>{linha.acertos}/{linha.quantidadeQuestoes} acertos</Text>
                   <Text style={styles.stat}>⏱ {formatarTempo(linha.tempoTotalSegundos)}</Text>
+                  <Text style={styles.stat}>⚡ {linha.tempoMedioPorQuestao.toFixed(1)}s/questão</Text>
                 </View>
               </View>
               <Text style={styles.pontuacao}>{linha.pontuacaoFinal.toFixed(0)}</Text>

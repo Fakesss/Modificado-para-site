@@ -1,11 +1,14 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as api from '../src/services/api';
-import { gerarQuestoesDesafio, rotuloDificuldade, corDificuldade, QuantidadeDesafio, QUANTIDADES_DESAFIO, QuestaoDesafio } from '../src/services/desafioTabuada';
+import {
+  gerarQuestoesDesafio, rotuloDificuldade, corDificuldade, estimarPontuacaoDesafio, pontosPorAcerto,
+  QuantidadeDesafio, QUANTIDADES_DESAFIO, QuestaoDesafio,
+} from '../src/services/desafioTabuada';
 import { TabuadaDesafioResultado } from '../src/types';
 
 // =============================================================================
@@ -23,6 +26,7 @@ interface RespostaDesafio { operacao: string; acertou: boolean; }
 
 const CHAVE_PENDENTES = 'tabuada_desafio_pendentes';
 const TECLAS: string[][] = [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['apagar', '0', 'ok']];
+const TEMPO_LIMITE_SEGUNDOS = 20; // tempo pra responder cada questão antes da barra zerar
 
 function formatarTempo(segundosTotais: number): string {
   const s = Math.max(0, Math.round(segundosTotais));
@@ -43,6 +47,8 @@ export default function DesafioFlashCards() {
   const [resposta, setResposta] = useState('');
   const [feedback, setFeedback] = useState<{ acertou: boolean; respostaCorreta: number } | null>(null);
   const [segundosDecorridos, setSegundosDecorridos] = useState(0);
+  const [pontuacaoAoVivo, setPontuacaoAoVivo] = useState(0);
+  const [popupTexto, setPopupTexto] = useState('');
 
   const [enviando, setEnviando] = useState(false);
   const [erroEnvio, setErroEnvio] = useState(false);
@@ -54,6 +60,9 @@ export default function DesafioFlashCards() {
   const inicioPartidaEm = useRef(0);
   const cronometroRef = useRef<any>(null);
   const respondendoRef = useRef(false);
+  const tempoBarraAnim = useRef(new Animated.Value(1)).current;
+  const popupAnim = useRef(new Animated.Value(0)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
   const stateRef = useRef({ fase, feedback, resposta, indice });
   stateRef.current = { fase, feedback, resposta, indice };
@@ -91,6 +100,47 @@ export default function DesafioFlashCards() {
     setTabuadasSelecionadas(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t].sort((a, b) => a - b));
   };
 
+  // ----- Barra de tempo: countdown visual (mesmo padrão do tabuada.tsx) -----
+  // Ao chegar em zero naturalmente, a resposta conta como errada (registrarResposta
+  // com string vazia); ao parar por causa de uma resposta manual, o callback ainda
+  // dispara mas com finished=false, então não faz nada.
+  const pararBarraTempo = () => { tempoBarraAnim.stopAnimation(); };
+
+  const iniciarBarraTempo = () => {
+    tempoBarraAnim.stopAnimation();
+    tempoBarraAnim.setValue(1);
+    Animated.timing(tempoBarraAnim, {
+      toValue: 0,
+      duration: TEMPO_LIMITE_SEGUNDOS * 1000,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished) registrarResposta('', TEMPO_LIMITE_SEGUNDOS);
+    });
+  };
+
+  // ----- Efeito rápido de pontos a cada resposta: "+N" flutuando (acerto) ou um
+  // pequeno tremor no placar (erro) — só feedback visual, não muda a pontuação. -----
+  const dispararEfeitoAcerto = (ganhou: number) => {
+    setPopupTexto(`+${ganhou}`);
+    popupAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(popupAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
+      Animated.delay(350),
+      Animated.timing(popupAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const dispararEfeitoErro = () => {
+    shakeAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 1, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -1, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0.6, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 55, useNativeDriver: true }),
+    ]).start();
+  };
+
   const iniciarDesafio = () => {
     if (tabuadasSelecionadas.length === 0) return;
     const selecao = gerarQuestoesDesafio(tabuadasSelecionadas, quantidade);
@@ -103,10 +153,12 @@ export default function DesafioFlashCards() {
     setFeedback(null);
     setResultado(null);
     setErroEnvio(false);
+    setPontuacaoAoVivo(0);
     inicioPartidaEm.current = Date.now();
     perguntaIniciadaEm.current = Date.now();
     setSegundosDecorridos(0);
     setFase('jogando');
+    iniciarBarraTempo();
   };
 
   const finalizarDesafio = async () => {
@@ -135,20 +187,29 @@ export default function DesafioFlashCards() {
     setEnviando(false);
   };
 
-  // ----- Resposta enviada (por digitação) -----
-  const registrarResposta = (respostaStr: string) => {
+  // ----- Resposta enviada (por digitação ou por tempo esgotado) -----
+  const registrarResposta = (respostaStr: string, tempoForcado?: number) => {
     if (respondendoRef.current || stateRef.current.fase !== 'jogando') return;
     const item = filaRef.current[stateRef.current.indice];
     if (!item) return;
     respondendoRef.current = true;
+    pararBarraTempo();
 
-    const tempo = (Date.now() - perguntaIniciadaEm.current) / 1000;
+    const tempo = tempoForcado ?? (Date.now() - perguntaIniciadaEm.current) / 1000;
     tempoAcumuladoRef.current += tempo;
 
     const correta = item.fator1 * item.fator2;
     const dada = parseInt(respostaStr, 10);
     const acertou = dada === correta;
     respostasRef.current.push({ operacao: item.operacao, acertou });
+
+    // Placar ao vivo: mesma fórmula do servidor, usando o que já foi respondido até
+    // agora — no fim da partida esse valor bate exatamente com o que o servidor calcula.
+    const acertosAteAgora = respostasRef.current.filter(r => r.acertou).length;
+    const estimativa = estimarPontuacaoDesafio(tabuadasSelecionadas, respostasRef.current.length, acertosAteAgora, tempoAcumuladoRef.current);
+    setPontuacaoAoVivo(estimativa.pontuacaoFinal);
+    if (acertou) dispararEfeitoAcerto(pontosPorAcerto(tabuadasSelecionadas));
+    else dispararEfeitoErro();
 
     setFeedback({ acertou, respostaCorreta: correta });
 
@@ -162,6 +223,7 @@ export default function DesafioFlashCards() {
       } else {
         setIndice(proximo);
         perguntaIniciadaEm.current = Date.now();
+        iniciarBarraTempo();
       }
     }, acertou ? 450 : 700);
   };
@@ -335,6 +397,35 @@ export default function DesafioFlashCards() {
         </View>
       </View>
 
+      <View style={styles.barraTempoFundo}>
+        <Animated.View
+          style={[
+            styles.barraTempoPreenchimento,
+            {
+              width: tempoBarraAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+              backgroundColor: tempoBarraAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['#FF7055', '#FFD700', '#32CD32'] }),
+            },
+          ]}
+        />
+      </View>
+
+      <Animated.View style={[styles.placarAoVivoRow, { transform: [{ translateX: shakeAnim.interpolate({ inputRange: [-1, 1], outputRange: [-6, 6] }) }] }]}>
+        <Ionicons name="trophy" size={13} color="#FFD700" />
+        <Text style={styles.placarAoVivoTexto}>{pontuacaoAoVivo.toFixed(0)} pts</Text>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.popupPontos,
+            {
+              opacity: popupAnim,
+              transform: [{ translateY: popupAnim.interpolate({ inputRange: [0, 1], outputRange: [4, -16] }) }],
+            },
+          ]}
+        >
+          <Text style={styles.popupPontosTexto}>{popupTexto}</Text>
+        </Animated.View>
+      </Animated.View>
+
       <View style={styles.areaConta}>
         <Text style={styles.conta}>{item.fator1} × {item.fator2}</Text>
         <View style={[styles.caixaResposta, feedback && (feedback.acertou ? styles.caixaAcerto : styles.caixaErro)]}>
@@ -404,6 +495,12 @@ const styles = StyleSheet.create({
   progresso: { color: '#CCB', fontSize: 15, fontWeight: '800' },
   cronometro: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   cronometroTexto: { color: '#7FD4FF', fontSize: 14, fontWeight: '800' },
+  barraTempoFundo: { height: 8, backgroundColor: '#1a1608', borderRadius: 4, marginHorizontal: 18, marginTop: 10, overflow: 'hidden' },
+  barraTempoPreenchimento: { height: '100%', borderRadius: 4 },
+  placarAoVivoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12 },
+  placarAoVivoTexto: { color: '#FFD700', fontSize: 15, fontWeight: '900' },
+  popupPontos: { position: 'absolute', right: -6, top: -4 },
+  popupPontosTexto: { color: '#32CD32', fontSize: 14, fontWeight: '900' },
   areaConta: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   conta: { color: '#FFF', fontSize: 56, fontWeight: '900', letterSpacing: 2 },
   caixaResposta: { marginTop: 22, minWidth: 140, borderBottomWidth: 3, borderBottomColor: '#FFB300', paddingHorizontal: 18, paddingVertical: 6, alignItems: 'center' },

@@ -12,6 +12,7 @@ import {
   calcularProximaRevisao,
   calcularEvolucaoLeitnerPct,
   selecionarCardsDaSessao,
+  formatarTempoPreciso,
   NOMES_NIVEIS,
   NIVEL_MAX,
 } from '../src/services/leitner';
@@ -122,12 +123,12 @@ export default function TrilhaDaTabuada() {
     api.getTabuadaFlashcards().then(fc => setCardsPersonalizados(Array.isArray(fc) ? fc : []));
   }, []));
 
-  // ----- Cronômetro visível da pergunta atual -----
+  // ----- Cronômetro visível da pergunta atual (segundos e milésimos) -----
   useEffect(() => {
     if (fase === 'jogando' && !feedback) {
       cronometroRef.current = setInterval(() => {
-        setSegundos(Math.floor((Date.now() - perguntaIniciadaEm.current) / 1000));
-      }, 500);
+        setSegundos((Date.now() - perguntaIniciadaEm.current) / 1000);
+      }, 47);
       return () => clearInterval(cronometroRef.current);
     }
   }, [fase, feedback, indice]);
@@ -229,7 +230,7 @@ export default function TrilhaDaTabuada() {
       fator1: item.personalizado ? undefined : item.fator1,
       fator2: item.personalizado ? undefined : item.fator2,
       respostaCorreta: correta, respostaDada: isNaN(dada) ? -1 : dada, acertou,
-      tempoResposta: Math.round(tempo * 10) / 10,
+      tempoResposta: Math.round(tempo * 1000) / 1000,
       nivelAntes, nivelDepois, proximaRevisao, classificacao, respondidoEm: agoraISO,
       usouDica: stateRef.current.dicaRevelada, usouOpcoes: stateRef.current.opcoesReveladas,
     };
@@ -432,7 +433,7 @@ export default function TrilhaDaTabuada() {
           <View style={styles.resumoGrid}>
             <View style={styles.resumoBox}><Text style={[styles.resumoValor, { color: '#32CD32' }]}>{acertos}</Text><Text style={styles.resumoLabel}>Acertos</Text></View>
             <View style={styles.resumoBox}><Text style={[styles.resumoValor, { color: '#FF7055' }]}>{erros}</Text><Text style={styles.resumoLabel}>Erros</Text></View>
-            <View style={styles.resumoBox}><Text style={styles.resumoValor}>{tempoMedio.toFixed(1)}s</Text><Text style={styles.resumoLabel}>Tempo médio</Text></View>
+            <View style={styles.resumoBox}><Text style={styles.resumoValorTempo}>{formatarTempoPreciso(tempoMedio)}</Text><Text style={styles.resumoLabel}>Tempo médio</Text></View>
             <View style={styles.resumoBox}><Text style={[styles.resumoValor, { color: '#FFD700' }]}>{rapidas}⚡</Text><Text style={styles.resumoLabel}>Rápidas</Text></View>
           </View>
 
@@ -503,7 +504,7 @@ export default function TrilhaDaTabuada() {
         <Text style={styles.progresso}>{Math.min(indice + 1, fila.length)} / {fila.length}</Text>
         <View style={styles.cronometro}>
           <Ionicons name="time-outline" size={14} color={segundos > 10 ? '#FF7055' : segundos > 5 ? '#FFD700' : '#32CD32'} />
-          <Text style={[styles.cronometroTexto, { color: segundos > 10 ? '#FF7055' : segundos > 5 ? '#FFD700' : '#32CD32' }]}>{segundos}s</Text>
+          <Text style={[styles.cronometroTexto, { color: segundos > 10 ? '#FF7055' : segundos > 5 ? '#FFD700' : '#32CD32' }]}>{formatarTempoPreciso(segundos)}</Text>
         </View>
       </View>
 
@@ -645,8 +646,8 @@ const styles = StyleSheet.create({
 
   jogoTopo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingTop: 10 },
   progresso: { color: '#CCB', fontSize: 15, fontWeight: '800' },
-  cronometro: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 52, justifyContent: 'flex-end' },
-  cronometroTexto: { fontSize: 14, fontWeight: '800' },
+  cronometro: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 92, justifyContent: 'flex-end' },
+  cronometroTexto: { fontSize: 12, fontWeight: '800' },
   barraTempoFundo: { height: 8, backgroundColor: '#1a1608', borderRadius: 4, marginHorizontal: 18, marginTop: 10, overflow: 'hidden' },
   barraTempoPreenchimento: { height: '100%', borderRadius: 4 },
   nivelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, marginTop: 14 },
@@ -684,6 +685,7 @@ const styles = StyleSheet.create({
   resumoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 20, justifyContent: 'center' },
   resumoBox: { backgroundColor: '#1a1608', borderRadius: 12, borderWidth: 1, borderColor: '#332a10', paddingVertical: 12, alignItems: 'center', width: '46%', maxWidth: 170 },
   resumoValor: { color: '#FFF', fontSize: 22, fontWeight: '900' },
+  resumoValorTempo: { color: '#FFF', fontSize: 15, fontWeight: '900' },
   resumoLabel: { color: '#887', fontSize: 11, marginTop: 2 },
   resumoCard: { backgroundColor: '#1a1608', borderRadius: 12, borderWidth: 1, borderColor: '#332a10', padding: 14, marginTop: 12, width: '100%', maxWidth: 360 },
   resumoCardTitulo: { color: '#FFB300', fontSize: 12, fontWeight: '800', marginBottom: 4 },
