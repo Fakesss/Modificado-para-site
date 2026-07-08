@@ -155,6 +155,8 @@ class SudokuConclusao(BaseModel):
     hintsUsed: int
 
 class HangarPerfil(BaseModel):
+    # Nome exibido no app: "Garagem". O prefixo interno "hangar" (rotas, coleção
+    # db.hangar_perfis) é mantido de propósito pra não quebrar apps já instalados.
     usuarioId: str
     moedas: int = 0
     armaInicial: str = "PADRAO"  # PADRAO | ELETRICA | PLASMA | LEQUE
@@ -162,6 +164,9 @@ class HangarPerfil(BaseModel):
     nivelCDR: int = 0
     nivelVelocidade: int = 0
     nivelDano: int = 0
+    nivelCasco: int = 0          # +12 de vida máxima por nível
+    nivelEscudo: int = 0         # cargas de escudo no início da partida (1 a cada 2 níveis, máx 4)
+    nivelDanoEspecial: int = 0   # +6% de dano das armas especiais por nível (cap +48%)
     corNave: str = "#00FFFF"
     habilidadeSecretaDesbloqueada: bool = False
 
@@ -183,6 +188,9 @@ class HangarInjetarMoedasRequest(BaseModel):
 
 class HangarGanharMoedasRequest(BaseModel):
     pontos: int
+
+class HangarResetItemRequest(BaseModel):
+    item: str  # arma ("ELETRICA"/"PLASMA"/"LEQUE") ou atributo ("cdr"/"velocidade"/"dano"/"casco"/"escudo"/"danoespecial")
 
 class ConfiguracaoJogo(BaseModel):
     jogoId: str = "math_blaster"
@@ -279,13 +287,32 @@ def calcular_slots_disponiveis(construcoes: List[dict]) -> int:
 # atributo também é limitado (ver aplicação em sky_equations.web.tsx), pra
 # não deixar a nave overpower rapidamente mesmo com muitas moedas.
 # =========================================================================
-HANGAR_CUSTO_BASE: Dict[str, int] = {"cdr": 40, "velocidade": 35, "dano": 45}
+HANGAR_CUSTO_BASE: Dict[str, int] = {"cdr": 40, "velocidade": 35, "dano": 45, "casco": 50, "escudo": 55, "danoespecial": 60}
+HANGAR_CAMPOS_NIVEL: Dict[str, str] = {
+    "cdr": "nivelCDR", "velocidade": "nivelVelocidade", "dano": "nivelDano",
+    "casco": "nivelCasco", "escudo": "nivelEscudo", "danoespecial": "nivelDanoEspecial",
+}
 HANGAR_FATOR_CRESCIMENTO = 1.4
 HANGAR_NIVEL_MAX = 8
+HANGAR_FRACAO_REEMBOLSO = 0.25  # redefinir devolve só 25% do que foi gasto (decisão do professor)
 
 def custo_upgrade_hangar(atributo: str, nivel_atual: int) -> int:
     base = HANGAR_CUSTO_BASE.get(atributo, 40)
     return int(base * (HANGAR_FATOR_CRESCIMENTO ** nivel_atual))
+
+def calcular_gastos_hangar(perfil: dict) -> Dict[str, Any]:
+    """Quanto o jogador já gastou em cada item comprável da Garagem (armas e níveis
+    de atributo). Fonte única usada tanto pra MOSTRAR os valores antes de confirmar
+    uma redefinição quanto pra CALCULAR o reembolso de 25% — nunca podem divergir."""
+    itens: Dict[str, int] = {}
+    for arma, info in HANGAR_ARMAS_CATALOGO.items():
+        if arma != "PADRAO" and arma in perfil.get("armasDesbloqueadas", []) and info["custo"] > 0:
+            itens[arma] = info["custo"]
+    for atributo, campo in HANGAR_CAMPOS_NIVEL.items():
+        nivel = perfil.get(campo, 0) or 0
+        if nivel > 0:
+            itens[atributo] = sum(custo_upgrade_hangar(atributo, n) for n in range(nivel))
+    return {"itens": itens, "total": sum(itens.values())}
 
 HANGAR_ARMAS_CATALOGO: Dict[str, Dict[str, Any]] = {
     "PADRAO":   {"nome": "Padrão",        "descricao": "Tiro simples e equilibrado.",              "custo": 0},
@@ -296,7 +323,7 @@ HANGAR_ARMAS_CATALOGO: Dict[str, Dict[str, Any]] = {
 
 HANGAR_CORES_DISPONIVEIS = ["#00FFFF", "#FF00FF", "#7FFF00", "#FFD700", "#FF4444", "#BB77FF", "#FF7055", "#FFFFFF"]
 
-HANGAR_CODIGO_SECRETO = "OVERDRIVE"        # desbloqueia o slot de habilidade secreta (digitado na tela do Hangar)
+HANGAR_CODIGO_SECRETO = "OVERDRIVE"        # desbloqueia o slot de habilidade secreta (digitado na tela da Garagem)
 ADMIN_SANDBOX_MASTER_CODE = "SANDBOX9000"  # backdoor do admin pra injetar moedas de teste
 
 async def get_or_create_hangar_perfil(usuario_id: str) -> dict:
@@ -305,7 +332,11 @@ async def get_or_create_hangar_perfil(usuario_id: str) -> dict:
         novo = HangarPerfil(usuarioId=usuario_id)
         await db.hangar_perfis.insert_one(novo.dict())
         perfil = novo.dict()
-    return perfil
+    # Perfis antigos no banco não têm os campos criados depois (ex: nivelCasco) —
+    # mescla com os defaults do modelo pra toda rota/tela sempre ver o shape completo.
+    completo = HangarPerfil(usuarioId=usuario_id).dict()
+    completo.update(perfil)
+    return completo
 
 # =========================================================================
 # CONFIGURAÇÃO GLOBAL DE PARTIDA (painel "live tweaking" do admin)
@@ -1949,7 +1980,7 @@ async def get_hangar_perfil(current_user: dict = Depends(get_current_user)):
 
 @api_router.post("/hangar/upgrade")
 async def hangar_upgrade(dados: HangarUpgradeRequest, current_user: dict = Depends(get_current_user)):
-    campo_nivel = {"cdr": "nivelCDR", "velocidade": "nivelVelocidade", "dano": "nivelDano"}.get(dados.atributo)
+    campo_nivel = HANGAR_CAMPOS_NIVEL.get(dados.atributo)
     if not campo_nivel:
         raise HTTPException(status_code=400, detail="Atributo inválido")
 
@@ -2034,6 +2065,58 @@ async def hangar_ganhar_moedas(dados: HangarGanharMoedasRequest, current_user: d
     await get_or_create_hangar_perfil(current_user["id"])
     await db.hangar_perfis.update_one({"usuarioId": current_user["id"]}, {"$inc": {"moedas": moedas_ganhas}})
     return {"moedasGanhas": moedas_ganhas}
+
+# ===== REDEFINIÇÃO DE COMPRAS DA GARAGEM (devolve 25% do valor gasto) =====
+@api_router.get("/hangar/gastos")
+async def hangar_gastos(current_user: dict = Depends(get_current_user)):
+    """Quanto foi gasto em cada item e no total — usado pela tela da Garagem pra
+    mostrar os valores REAIS antes do jogador confirmar uma redefinição."""
+    perfil = await get_or_create_hangar_perfil(current_user["id"])
+    gastos = calcular_gastos_hangar(perfil)
+    return {**gastos, "fracaoReembolso": HANGAR_FRACAO_REEMBOLSO}
+
+@api_router.post("/hangar/reset")
+async def hangar_reset_total(current_user: dict = Depends(get_current_user)):
+    """Redefine a nave inteira: remove TODAS as compras (armas e níveis) e devolve
+    25% do total gasto. Cor da nave e habilidade secreta não são compras — ficam."""
+    perfil = await get_or_create_hangar_perfil(current_user["id"])
+    gastos = calcular_gastos_hangar(perfil)
+    if gastos["total"] <= 0:
+        raise HTTPException(status_code=400, detail="Você ainda não comprou nada para redefinir")
+    reembolso = int(gastos["total"] * HANGAR_FRACAO_REEMBOLSO)
+    await db.hangar_perfis.update_one(
+        {"usuarioId": current_user["id"]},
+        {"$set": {
+            "armaInicial": "PADRAO", "armasDesbloqueadas": ["PADRAO"],
+            **{campo: 0 for campo in HANGAR_CAMPOS_NIVEL.values()},
+            "moedas": perfil.get("moedas", 0) + reembolso,
+        }},
+    )
+    perfil_atualizado = await get_or_create_hangar_perfil(current_user["id"])
+    return {"perfil": {k: v for k, v in perfil_atualizado.items() if k != '_id'}, "gastoTotal": gastos["total"], "reembolso": reembolso}
+
+@api_router.post("/hangar/reset_item")
+async def hangar_reset_item(dados: HangarResetItemRequest, current_user: dict = Depends(get_current_user)):
+    """Redefine UM item comprado (uma arma ou um atributo evoluído) e devolve 25%
+    do que foi gasto naquele item específico."""
+    perfil = await get_or_create_hangar_perfil(current_user["id"])
+    gastos = calcular_gastos_hangar(perfil)
+    gasto_item = gastos["itens"].get(dados.item, 0)
+    if gasto_item <= 0:
+        raise HTTPException(status_code=400, detail="Esse item não foi comprado (nada para redefinir)")
+
+    reembolso = int(gasto_item * HANGAR_FRACAO_REEMBOLSO)
+    mudancas: Dict[str, Any] = {"moedas": perfil.get("moedas", 0) + reembolso}
+    if dados.item in HANGAR_ARMAS_CATALOGO:
+        mudancas["armasDesbloqueadas"] = [a for a in perfil.get("armasDesbloqueadas", ["PADRAO"]) if a != dados.item]
+        if perfil.get("armaInicial") == dados.item:
+            mudancas["armaInicial"] = "PADRAO"
+    else:
+        mudancas[HANGAR_CAMPOS_NIVEL[dados.item]] = 0
+
+    await db.hangar_perfis.update_one({"usuarioId": current_user["id"]}, {"$set": mudancas})
+    perfil_atualizado = await get_or_create_hangar_perfil(current_user["id"])
+    return {"perfil": {k: v for k, v in perfil_atualizado.items() if k != '_id'}, "gastoItem": gasto_item, "reembolso": reembolso}
 
 # ===== CONFIGURAÇÃO GLOBAL DE PARTIDA (dashboard "live tweaking" do admin) =====
 @api_router.get("/configuracoes")

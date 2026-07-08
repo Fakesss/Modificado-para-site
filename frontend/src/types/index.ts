@@ -99,6 +99,7 @@ export interface SudokuSessaoAPI {
 
 export type ArmaHangar = 'PADRAO' | 'ELETRICA' | 'PLASMA' | 'LEQUE';
 
+// Nome exibido no app: "Garagem" (o prefixo interno "hangar" é mantido de propósito)
 export interface HangarPerfil {
   usuarioId: string;
   moedas: number;
@@ -107,6 +108,9 @@ export interface HangarPerfil {
   nivelCDR: number;
   nivelVelocidade: number;
   nivelDano: number;
+  nivelCasco: number;
+  nivelEscudo: number;
+  nivelDanoEspecial: number;
   corNave: string;
   habilidadeSecretaDesbloqueada: boolean;
 }

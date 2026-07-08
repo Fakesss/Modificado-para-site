@@ -61,7 +61,7 @@ export default function SkyEquations() {
   // Limite Diário de Spawn do Inimigo Raro
   const dailySpawnsRef = useRef(0);
 
-  // Loadout do Hangar (arma inicial, upgrades, cor) e configuração global do admin (drop rate,
+  // Loadout da Garagem (arma inicial, upgrades, cor) e configuração global do admin (drop rate,
   // powerups habilitados, chance de spawn por inimigo) — carregados uma vez e aplicados em iniciarJogo
   const hangarPerfilRef = useRef<HangarPerfil | null>(null);
   const configJogoRef = useRef<ConfiguracaoJogo | null>(null);
@@ -86,7 +86,7 @@ export default function SkyEquations() {
     player: {
       x: initialWidth / 2, y: initialHeight - 60, hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false,
       fireMode: 'PROJETIL' as 'PROJETIL' | 'CONTINUO', beamIntensity: 0,
-      // Loadout carregado do Hangar (ver hangarPerfilRef, aplicado em iniciarJogo)
+      // Loadout carregado da Garagem (ver hangarPerfilRef, aplicado em iniciarJogo)
       armaInicial: 'PADRAO' as 'PADRAO' | 'ELETRICA' | 'PLASMA' | 'LEQUE',
       cdr: 0, speedBonus: 0, corNave: '#00FFFF', secretSkillUnlocked: false, secretSkillUsedThisGame: false,
       weapons: {
@@ -95,7 +95,8 @@ export default function SkyEquations() {
         pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 70, damageMult: 6 },
         chain: { active: false, level: 1, baseCooldown: 9000, lastFire: 0, damageMult: 2, bounces: 3, range: 140 },
         mine: { active: false, level: 1, baseCooldown: 11000, lastFire: 0, damageMult: 4, fuse: 1500, blastRadius: 70, count: 1 },
-        electric: { active: false, level: 1, baseCooldown: 4000, lastFire: 0, damageMult: 0.6, bounces: 3, range: 150 }
+        electric: { active: false, level: 1, baseCooldown: 4000, lastFire: 0, damageMult: 0.9, bounces: 3, range: 150 },
+        fire: { active: false, level: 1, baseCooldown: 4200, lastFire: 0, damageMult: 1.2, burnDps: 0.8, burnDuration: 3000 }
       }
     },
     lasers: [] as any[], specialLasers: [] as any[], mathShots: [] as any[], pulses: [] as any[], floatingTexts: [] as any[],
@@ -103,10 +104,11 @@ export default function SkyEquations() {
     enemies: [] as any[], enemyLasers: [] as any[], powerups: [] as any[], particles: [] as any[],
     boss: { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 },
     score: 0, fase: 1, gameState: 'WAVES', stateTimer: 0, lastPowerupSpawn: 0, movementTouchId: null as string | null, lastTouchX: 0, lastTouchY: 0,
+    lastBossContactAt: 0, // janela do dano de contato físico da nave mãe
     waveFlavor: 'CLASSICA' as string,
     timeAlive: 0, flawlessBossesCount: 0, tookDamageThisBoss: false, tookDamageThisWave: false, timeFreezeTimer: 0, forceShieldHits: 0, xRayTimer: 0,
     comboAtual: 0, melhorCombo: 0, // Combo: sobe a cada acerto seguido, zera em qualquer erro (ver lidarComTeclado)
-    overdriveTimer: 0, overdriveStoredDamage: 0, overdriveStoredFireRate: 0, // Habilidade secreta do Hangar (ver hangarCodigoSecreto)
+    overdriveTimer: 0, overdriveStoredDamage: 0, overdriveStoredFireRate: 0, // Habilidade secreta da Garagem (ver hangarCodigoSecreto)
     drones: {
       normal: { active: false, level: 1, lastFire: 0, baseCooldown: 1500 },
       advanced: { active: false, level: 1, lastFire: 0, baseCooldown: 2000 }
@@ -201,6 +203,20 @@ export default function SkyEquations() {
     return closest;
   };
 
+  // Igual à busca acima, mas também considera a NAVE MÃE (boss) como alvo válido quando
+  // está em campo e sem escudo matemático. Usada pelas armas elétricas/cadeia — antes elas
+  // só procuravam em gs.enemies, então NUNCA acertavam o chefe (a luta ficava sem dano).
+  const acharAlvoOfensivo = (x: number, y: number, raio: number, excluir: Set<string>): { x: number; y: number; id: string; isBoss: boolean } | null => {
+    const inimigo = acharInimigoMaisProximoDentroDoRaio(x, y, raio, excluir);
+    let alvo = inimigo ? { x: inimigo.x, y: inimigo.y, id: inimigo.id, isBoss: false } : null;
+    if (gs.boss.active && !gs.boss.shield && gs.boss.y > 0) {
+      const dBoss = Math.pow(gs.boss.x - x, 2) + Math.pow(gs.boss.y - y, 2);
+      const dInimigo = inimigo ? Math.pow(inimigo.x - x, 2) + Math.pow(inimigo.y - y, 2) : Infinity;
+      if (dBoss < raio * raio && dBoss < dInimigo) alvo = { x: gs.boss.x, y: gs.boss.y, id: '__boss__', isBoss: true };
+    }
+    return alvo;
+  };
+
   // Powerups adaptativos: cadência e tiro triplo só valem pra arma primária por projétil (PROJETIL).
   // Preparado para uma futura arma primária de tiro contínuo (ex.: feixe laser) via player.fireMode.
   const POWERUPS_EXCLUSIVOS_PROJETIL = new Set(['FIRE_RATE', 'TRIPLE_SHOT']);
@@ -225,6 +241,9 @@ export default function SkyEquations() {
   const familiaDoPowerup = (tipo: string): string => {
     const semSufixo = ['DAMAGE', 'FIRE_RATE', 'TRIPLE_SHOT', 'HULL_UPGRADE', 'FORCE_SHIELD', 'TIME_FREEZE', 'X_RAY'];
     if (semSufixo.includes(tipo)) return tipo;
+    // O power-up de FOGO só existe como substituto do ELÉTRICO (quando a arma elétrica já vem
+    // equipada da Garagem) — compartilha o mesmo interruptor do Painel de Partida do admin.
+    if (tipo.startsWith('FIRE_') || tipo === 'FIRE') return 'ELECTRIC';
     for (const familia of ['MISSILE', 'LASER', 'PULSAR', 'CHAIN', 'ELECTRIC', 'MINE', 'DRONE']) {
       if (tipo.startsWith(familia)) return familia;
     }
@@ -383,7 +402,7 @@ export default function SkyEquations() {
         setResposta(''); return;
       }
 
-      // ATIVAÇÃO DA HABILIDADE SECRETA (OVERDRIVE): só funciona se desbloqueada no Hangar
+      // ATIVAÇÃO DA HABILIDADE SECRETA (OVERDRIVE): só funciona se desbloqueada na Garagem
       // (código digitado lá, ver hangarCodigoSecreto) e só uma vez por partida.
       if (respostaRef.current === '77778888') {
         if (gs.player.secretSkillUnlocked && !gs.player.secretSkillUsedThisGame && gs.overdriveTimer <= 0) {
@@ -478,6 +497,9 @@ export default function SkyEquations() {
               else if (type === 'ELECTRIC_UNLOCK') gs.player.weapons.electric.active = true;
               else if (type === 'ELECTRIC_COOLDOWN') { gs.player.weapons.electric.baseCooldown = Math.max(1500, gs.player.weapons.electric.baseCooldown - 500); gs.player.weapons.electric.level += 1; }
               else if (type === 'ELECTRIC_BOUNCE') { gs.player.weapons.electric.bounces += 1; gs.player.weapons.electric.level += 1; }
+              else if (type === 'FIRE_UNLOCK') gs.player.weapons.fire.active = true;
+              else if (type === 'FIRE_COOLDOWN') { gs.player.weapons.fire.baseCooldown = Math.max(2200, gs.player.weapons.fire.baseCooldown - 500); gs.player.weapons.fire.level += 1; }
+              else if (type === 'FIRE_BURN') { gs.player.weapons.fire.burnDps += 0.4; gs.player.weapons.fire.burnDuration = Math.min(5000, gs.player.weapons.fire.burnDuration + 400); gs.player.weapons.fire.level += 1; }
               else if (type === 'MINE_UNLOCK') gs.player.weapons.mine.active = true;
               else if (type === 'MINE_COOLDOWN') { gs.player.weapons.mine.baseCooldown = Math.max(5000, gs.player.weapons.mine.baseCooldown - 1500); gs.player.weapons.mine.level += 1; }
               else if (type === 'MINE_BLAST') { gs.player.weapons.mine.blastRadius += 15; gs.player.weapons.mine.level += 1; }
@@ -764,7 +786,7 @@ export default function SkyEquations() {
       x: initialGw / 2, y: initialGh - 100,
       hp: 100, maxHp: 100, damage: 1, shotSize: 6, fireRate: 300, lastFire: 0, tripleShot: false,
       fireMode: 'PROJETIL' as 'PROJETIL' | 'CONTINUO', beamIntensity: 0,
-      // Loadout carregado do Hangar (ver hangarPerfilRef, aplicado em iniciarJogo)
+      // Loadout carregado da Garagem (ver hangarPerfilRef, aplicado em iniciarJogo)
       armaInicial: 'PADRAO' as 'PADRAO' | 'ELETRICA' | 'PLASMA' | 'LEQUE',
       cdr: 0, speedBonus: 0, corNave: '#00FFFF', secretSkillUnlocked: false, secretSkillUsedThisGame: false,
       weapons: {
@@ -773,12 +795,14 @@ export default function SkyEquations() {
         pulsar: { active: false, level: 1, baseCooldown: 12000, lastFire: 0, radius: 70, damageMult: 6 },
         chain: { active: false, level: 1, baseCooldown: 9000, lastFire: 0, damageMult: 2, bounces: 3, range: 140 },
         mine: { active: false, level: 1, baseCooldown: 11000, lastFire: 0, damageMult: 4, fuse: 1500, blastRadius: 70, count: 1 },
-        electric: { active: false, level: 1, baseCooldown: 4000, lastFire: 0, damageMult: 0.6, bounces: 3, range: 150 }
+        electric: { active: false, level: 1, baseCooldown: 4000, lastFire: 0, damageMult: 0.9, bounces: 3, range: 150 },
+        fire: { active: false, level: 1, baseCooldown: 4200, lastFire: 0, damageMult: 1.2, burnDps: 0.8, burnDuration: 3000 }
       }
     };
 
-    // Aplica o loadout do Hangar (se já carregado). Efeitos com soft-cap pra não deixar a nave
-    // overpower rapidamente, mesmo com muitas moedas: CDR até 40%, velocidade até +48%, dano até +64%.
+    // Aplica o loadout da Garagem (se já carregado). Efeitos com soft-cap pra não deixar a nave
+    // overpower rapidamente, mesmo com muitas moedas: CDR até 50%, velocidade até +60%, dano até
+    // +80%, dano especial até +48%. As fórmulas são espelhadas na tela da Garagem (garagem.tsx).
     const hp = hangarPerfilRef.current;
     if (hp) {
       gs.player.armaInicial = hp.armaInicial || 'PADRAO';
@@ -788,6 +812,12 @@ export default function SkyEquations() {
       gs.player.corNave = hp.corNave || '#00FFFF';
       gs.player.secretSkillUnlocked = !!hp.habilidadeSecretaDesbloqueada;
       if (gs.player.armaInicial === 'LEQUE') gs.player.tripleShot = true;
+      // Casco Reforçado: +12 de vida máxima por nível, já valendo desde o primeiro segundo
+      gs.player.maxHp = 100 + Math.min(8, hp.nivelCasco || 0) * 12;
+      gs.player.hp = gs.player.maxHp;
+      // Dano Especial: multiplica o dano de TODAS as armas especiais (míssil, laser, pulsar...)
+      const bonusEspecial = Math.min(0.48, (hp.nivelDanoEspecial || 0) * 0.06);
+      if (bonusEspecial > 0) Object.values(gs.player.weapons).forEach((w: any) => { w.damageMult = w.damageMult * (1 + bonusEspecial); });
     }
     gs.player.secretSkillUsedThisGame = false;
 
@@ -797,9 +827,12 @@ export default function SkyEquations() {
     gs.enemies = []; gs.enemyLasers = []; gs.powerups = []; gs.particles = [];
     gs.boss = { active: false, type: 0, x: 0, y: -100, hp: 0, maxHp: 0, vx: 4, shield: false, txt: '', res: 0, timer: 0, nextShieldAt: 100 };
     gs.score = 0; gs.fase = 1; gs.gameState = 'WAVES'; gs.stateTimer = 0; gs.movementTouchId = null;
+    gs.lastBossContactAt = 0;
     gs.waveFlavor = 'CLASSICA';
     
-    gs.timeAlive = 0; gs.flawlessBossesCount = 0; gs.tookDamageThisBoss = false; gs.tookDamageThisWave = false; gs.timeFreezeTimer = 0; gs.forceShieldHits = 0; gs.xRayTimer = 0;
+    gs.timeAlive = 0; gs.flawlessBossesCount = 0; gs.tookDamageThisBoss = false; gs.tookDamageThisWave = false; gs.timeFreezeTimer = 0; gs.xRayTimer = 0;
+    // Escudo Inicial da Garagem: 1 carga a cada 2 níveis (máx 4) já ativa no começo da partida
+    gs.forceShieldHits = hangarPerfilRef.current ? Math.min(4, Math.ceil((hangarPerfilRef.current.nivelEscudo || 0) / 2)) : 0;
     gs.comboAtual = 0; gs.melhorCombo = 0;
     gs.overdriveTimer = 0; gs.overdriveStoredDamage = 0; gs.overdriveStoredFireRate = 0;
     gs.drones = {
@@ -834,7 +867,7 @@ export default function SkyEquations() {
       if (typeof (api as any).pontuarJogo === 'function') {
         (api as any).pontuarJogo('math_blaster', gs.score).then((r: any) => { if (r) setPontosEquipeGanhos(r); }).catch(() => {});
       }
-      // Moedas do Hangar: progressão permanente do jogador, separada da pontuação de equipe
+      // Moedas da Garagem: progressão permanente do jogador, separada da pontuação de equipe
       api.hangarGanharMoedas(gs.score).then((r: any) => {
         if (r && hangarPerfilRef.current) hangarPerfilRef.current.moedas += (r.moedasGanhas || 0);
       });
@@ -870,7 +903,7 @@ export default function SkyEquations() {
       }
     }
 
-    // APLICAR MOVIMENTO DO TECLADO FÍSICO (bônus de velocidade do Hangar aplicado aqui)
+    // APLICAR MOVIMENTO DO TECLADO FÍSICO (bônus de velocidade da Garagem aplicado aqui)
     const movSpeed = (6 / gs.currentZoom) * VELOCIDADE_BASE_MULT * (1 + gs.player.speedBonus);
     if (gs.keys.up) gs.player.y -= movSpeed;
     if (gs.keys.down) gs.player.y += movSpeed;
@@ -894,18 +927,21 @@ export default function SkyEquations() {
     if (gs.player.y < 20) gs.player.y = 20; 
     if (gs.player.y > gh - 20) gs.player.y = gh - 20;
 
-    // Arquétipo de arma inicial (escolhido no Hangar): muda o comportamento do tiro primário.
+    // Arquétipo de arma inicial (escolhido na Garagem): muda o comportamento do tiro primário.
     // PADRAO/LEQUE usam o tiro normal (LEQUE só força tripleShot=true desde o início, em iniciarJogo).
     // PLASMA atira mais devagar (cadência x2.5) e mais forte (dano x3). ELETRICA salta pra inimigos
     // próximos a cada disparo, com dano reduzido e atordoamento — reaproveita o sistema de chainBolts.
     const fireRateEfetivo = gs.player.fireRate * (gs.player.armaInicial === 'PLASMA' ? 2.5 : 1);
     if (now - gs.player.lastFire > fireRateEfetivo) {
       if (gs.player.armaInicial === 'ELETRICA') {
-        const primeiroAlvo = acharInimigoMaisProximoDentroDoRaio(gs.player.x, gs.player.y, 260, new Set());
+        // Laser elétrico da Garagem: mira em inimigos comuns, blindados E na nave mãe
+        // (acharAlvoOfensivo), e o raio persegue o alvo em movimento (targetId/targetBoss).
+        const primeiroAlvo = acharAlvoOfensivo(gs.player.x, gs.player.y, 260, new Set());
         gs.chainBolts.push({
           id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, prevX: gs.player.x, prevY: gs.player.y - 20,
           hitIds: new Set(), bouncesLeft: 1, damage: gs.player.damage * 0.5, range: 130,
           targetX: primeiroAlvo ? primeiroAlvo.x : gs.player.x, targetY: primeiroAlvo ? primeiroAlvo.y : gs.player.y - 260,
+          targetId: primeiroAlvo && !primeiroAlvo.isBoss ? primeiroAlvo.id : null, targetBoss: !!primeiroAlvo?.isBoss,
           resolved: !primeiroAlvo, life: 25, color: '#FFFF00', stun: true
         });
       } else if (gs.player.armaInicial === 'PLASMA') {
@@ -920,7 +956,7 @@ export default function SkyEquations() {
       gs.player.lastFire = now;
     }
 
-    // CDR (Redução de Recarga do Hangar) reduz o cooldown de todas as armas especiais abaixo
+    // CDR (Redução de Recarga da Garagem) reduz o cooldown de todas as armas especiais abaixo
     const cdrMult = 1 - gs.player.cdr;
 
     if (gs.player.weapons.missile.active && now - gs.player.weapons.missile.lastFire > gs.player.weapons.missile.baseCooldown * cdrMult) {
@@ -935,28 +971,56 @@ export default function SkyEquations() {
 
     if (gs.player.weapons.chain.active && now - gs.player.weapons.chain.lastFire > gs.player.weapons.chain.baseCooldown * cdrMult) {
       const cw = gs.player.weapons.chain;
-      const primeiroAlvo = acharInimigoMaisProximoDentroDoRaio(gs.player.x, gs.player.y, cw.range * 2, new Set());
+      const primeiroAlvo = acharAlvoOfensivo(gs.player.x, gs.player.y, cw.range * 2, new Set());
       gs.chainBolts.push({
         id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, prevX: gs.player.x, prevY: gs.player.y - 20,
         hitIds: new Set(), bouncesLeft: cw.bounces, damage: gs.player.damage * cw.damageMult, range: cw.range,
         targetX: primeiroAlvo ? primeiroAlvo.x : gs.player.x, targetY: primeiroAlvo ? primeiroAlvo.y : gs.player.y - 260,
+        targetId: primeiroAlvo && !primeiroAlvo.isBoss ? primeiroAlvo.id : null, targetBoss: !!primeiroAlvo?.isBoss,
         resolved: !primeiroAlvo, life: 25, color: '#9D00FF', stun: false
       });
       cw.lastFire = now;
     }
 
-    // BALAS ELÉTRICAS: dano base menor que os tiros convencionais, salta entre inimigos próximos
-    // e atordoa (impede de atirar) no exato instante em que a eletricidade encosta neles.
+    // BALAS ELÉTRICAS (power-up da partida): ESFERAS elétricas — projétil redondo que voa até
+    // o alvo mais próximo (inclusive a nave mãe), atordoa quem atinge e solta uma faísca em
+    // cadeia pros inimigos vizinhos. O visual de "laser elétrico" contínuo ficou exclusivo da
+    // arma ELETRICA comprada na Garagem — sem conflito entre os dois sistemas.
     if (gs.player.weapons.electric.active && now - gs.player.weapons.electric.lastFire > gs.player.weapons.electric.baseCooldown * cdrMult) {
       const ew = gs.player.weapons.electric;
-      const primeiroAlvo = acharInimigoMaisProximoDentroDoRaio(gs.player.x, gs.player.y, ew.range * 2, new Set());
-      gs.chainBolts.push({
-        id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, prevX: gs.player.x, prevY: gs.player.y - 20,
-        hitIds: new Set(), bouncesLeft: ew.bounces, damage: gs.player.damage * ew.damageMult, range: ew.range,
-        targetX: primeiroAlvo ? primeiroAlvo.x : gs.player.x, targetY: primeiroAlvo ? primeiroAlvo.y : gs.player.y - 260,
-        resolved: !primeiroAlvo, life: 25, color: '#FFFF00', stun: true
+      const alvo = acharAlvoOfensivo(gs.player.x, gs.player.y, ew.range * 2.2, new Set());
+      let vx = 0, vy = -8;
+      if (alvo) {
+        const dx = alvo.x - gs.player.x, dy = alvo.y - (gs.player.y - 20);
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        vx = (dx / d) * 8; vy = (dy / d) * 8;
+      }
+      gs.lasers.push({
+        id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx, vy,
+        damage: gs.player.damage * ew.damageMult, size: gs.player.shotSize * 1.6,
+        type: 'ELECTRIC_ORB', zaps: ew.bounces,
       });
       ew.lastFire = now;
+    }
+
+    // BALAS DE FOGO (substituto do power-up elétrico quando a arma ELETRICA já vem equipada
+    // da Garagem): projétil incendiário — dano na hora + deixa o alvo QUEIMANDO por alguns
+    // segundos (dano ao longo do tempo). Funciona em inimigos comuns, blindados e na nave mãe.
+    if (gs.player.weapons.fire.active && now - gs.player.weapons.fire.lastFire > gs.player.weapons.fire.baseCooldown * cdrMult) {
+      const fw = gs.player.weapons.fire;
+      const alvo = acharAlvoOfensivo(gs.player.x, gs.player.y, 900, new Set());
+      let vx = 0, vy = -9;
+      if (alvo) {
+        const dx = alvo.x - gs.player.x, dy = alvo.y - (gs.player.y - 20);
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        vx = (dx / d) * 9; vy = (dy / d) * 9;
+      }
+      gs.lasers.push({
+        id: Math.random().toString(), x: gs.player.x, y: gs.player.y - 20, vx, vy,
+        damage: gs.player.damage * fw.damageMult, size: gs.player.shotSize * 1.8,
+        type: 'FIRE', burnDps: gs.player.damage * fw.burnDps, burnDuration: fw.burnDuration,
+      });
+      fw.lastFire = now;
     }
 
     if (gs.player.weapons.mine.active && now - gs.player.weapons.mine.lastFire > gs.player.weapons.mine.baseCooldown * cdrMult && gs.mines.filter((m: any) => !m.exploded).length < gs.player.weapons.mine.count) {
@@ -1063,7 +1127,8 @@ export default function SkyEquations() {
       l.y += l.vy;
     });
     
-    gs.lasers = gs.lasers.filter(l => l.type === 'MISSILE_HOMING' ? l.life > 0 : (l.y > -50 && l.x > -20 && l.x < gw + 20));
+    // (limite inferior incluso: esferas elétricas/balas de fogo miram o alvo e podem descer)
+    gs.lasers = gs.lasers.filter(l => l.type === 'MISSILE_HOMING' ? l.life > 0 : (l.y > -50 && l.y < gh + 60 && l.x > -20 && l.x < gw + 20));
     
     gs.mathShots.forEach(ms => {
       ms.x += (ms.tx - ms.x) * 0.25; 
@@ -1326,6 +1391,15 @@ export default function SkyEquations() {
       }
     });
 
+    // DANO DE CONTATO FÍSICO DA NAVE MÃE: encostar no corpo do chefe machuca de verdade
+    // (antes não existia essa checagem — só os inimigos comuns davam dano de contato, e por
+    // isso o toque no chefe "às vezes" parecia não fazer nada). A janela de 700ms evita que
+    // o contato contínuo desconte vida a cada tick e destrua o jogador instantaneamente.
+    if (gs.boss.active && gs.boss.y > 0 && Math.abs(gs.player.x - gs.boss.x) < 55 && Math.abs(gs.player.y - gs.boss.y) < 45 && now - gs.lastBossContactAt > 700) {
+      gs.lastBossContactAt = now;
+      aplicarDano(8 + gs.fase * 4);
+    }
+
     gs.lasers.forEach(l => {
       gs.enemyLasers.forEach(el => {
         if (el.homing && el.hp > 0 && Math.abs(l.x - el.x) < 20 && Math.abs(l.y - el.y) < 20) { 
@@ -1346,6 +1420,26 @@ export default function SkyEquations() {
 
           e.hp -= (e.type === 'SHIELD_TANK' && l.type !== 'MISSILE' && l.type !== 'MISSILE_HOMING') ? l.damage * (1 - e.armorReduction) : l.damage;
           if (l.type !== 'NORMAL') e.lastPowerupHitAt = now; // barra de vida flutuante temporária
+          if (l.type === 'ELECTRIC_ORB') {
+            e.fireTimer = 0; // atordoamento: interrompe o ciclo de tiro de quem foi atingido
+            // Faísca em cadeia: do inimigo atingido, a eletricidade salta pro vizinho mais próximo
+            if (l.zaps > 0) {
+              const proximo = acharInimigoMaisProximoDentroDoRaio(e.x, e.y, 150, new Set([e.id]));
+              if (proximo) {
+                gs.chainBolts.push({
+                  id: Math.random().toString(), x: e.x, y: e.y, prevX: e.x, prevY: e.y,
+                  hitIds: new Set([e.id]), bouncesLeft: l.zaps - 1, damage: l.damage * 0.7, range: 150,
+                  targetX: proximo.x, targetY: proximo.y, targetId: proximo.id, targetBoss: false,
+                  resolved: false, life: 25, color: '#FFFF00', stun: true,
+                });
+              }
+            }
+          }
+          if (l.type === 'FIRE') {
+            // Marca o alvo pra queimar (dano ao longo do tempo) — não acumula, só renova/melhora
+            e.burnUntil = now + l.burnDuration;
+            e.burnDps = Math.max(e.burnDps || 0, l.burnDps);
+          }
           if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') {
             criarParticulas(e.x, e.y, '#FF4444', 10);
             gs.enemies.forEach(e2 => { if (!e2.mathRequired && Math.abs(e.x - e2.x) < l.aoeRange && Math.abs(e.y - e2.y) < l.aoeRange) { e2.hp -= l.damage; e2.lastPowerupHitAt = now; } });
@@ -1362,14 +1456,19 @@ export default function SkyEquations() {
       if (gs.boss.active && Math.abs(l.x - gs.boss.x) < 45 && Math.abs(l.y - gs.boss.y) < 35) {
         if (l.type !== 'LASER') { if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; }
         
-        if (gs.boss.shield) { 
-          criarParticulas(l.x, gs.boss.y + 35, '#00FFFF', 2); 
-        } else { 
-          gs.boss.hp -= l.damage; 
-          criarParticulas(l.x, l.y, '#FFD700', 4); 
-          if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') { 
-            criarParticulas(l.x, l.y, '#FF4444', 10); 
-            if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100; 
+        if (gs.boss.shield) {
+          criarParticulas(l.x, gs.boss.y + 35, '#00FFFF', 2);
+        } else {
+          gs.boss.hp -= l.damage;
+          criarParticulas(l.x, l.y, '#FFD700', 4);
+          if (l.type === 'FIRE') {
+            // Queimadura na nave mãe: efeito reduzido à metade (equilíbrio pra não derreter chefes)
+            (gs.boss as any).burnUntil = now + l.burnDuration;
+            (gs.boss as any).burnDps = Math.max((gs.boss as any).burnDps || 0, l.burnDps * 0.5);
+          }
+          if (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING') {
+            criarParticulas(l.x, l.y, '#FF4444', 10);
+            if (l.type === 'MISSILE_HOMING') l.life = 0; else l.y = -100;
           }
         }
       }
@@ -1377,6 +1476,14 @@ export default function SkyEquations() {
 
     gs.chainBolts.forEach((b: any) => {
       if (b.resolved) { b.life -= 2; return; }
+      // Persegue o alvo em movimento: sem isso, o raio ia até a posição ONDE o alvo ESTAVA
+      // no disparo e errava inimigos rápidos e a nave mãe (que patrulha o topo o tempo todo).
+      if (b.targetBoss) {
+        if (gs.boss.active) { b.targetX = gs.boss.x; b.targetY = gs.boss.y; }
+      } else if (b.targetId) {
+        const alvoVivo = gs.enemies.find((e: any) => e.id === b.targetId && e.hp > 0);
+        if (alvoVivo) { b.targetX = alvoVivo.x; b.targetY = alvoVivo.y; }
+      }
       b.x += (b.targetX - b.x) * 0.4;
       b.y += (b.targetY - b.y) * 0.4;
       b.life -= 1;
@@ -1402,6 +1509,7 @@ export default function SkyEquations() {
           if (proximo) {
             b.prevX = b.targetX; b.prevY = b.targetY;
             b.targetX = proximo.x; b.targetY = proximo.y;
+            b.targetId = proximo.id; b.targetBoss = false;
             b.bouncesLeft -= 1;
             b.damage *= 0.7;
             b.life = 25;
@@ -1414,6 +1522,23 @@ export default function SkyEquations() {
       }
     });
     gs.chainBolts = gs.chainBolts.filter((b: any) => b.life > 0);
+
+    // QUEIMADURA (power-up de fogo): dano ao longo do tempo em quem foi marcado pelas balas
+    // de fogo. Blindados (SHIELD_TANK) continuam reduzindo o dano da queimadura pela armadura,
+    // e a nave mãe recebe o efeito já reduzido pela metade na hora da aplicação — equilíbrio
+    // pra queimadura ajudar sem derreter chefes.
+    gs.enemies.forEach((e: any) => {
+      if (e.burnUntil && e.burnUntil > now && e.hp > 0 && !e.mathRequired) {
+        const danoTick = (e.burnDps || 0) * 0.03 * (e.type === 'SHIELD_TANK' ? (1 - e.armorReduction) : 1);
+        e.hp -= danoTick;
+        e.lastPowerupHitAt = now; // mantém a barrinha de vida visível enquanto queima
+        if (Math.random() < 0.22) criarParticulas(e.x + (Math.random() - 0.5) * 14, e.y + (Math.random() - 0.5) * 14, '#FF6600', 1);
+      }
+    });
+    if (gs.boss.active && (gs.boss as any).burnUntil && (gs.boss as any).burnUntil > now && !gs.boss.shield) {
+      gs.boss.hp -= ((gs.boss as any).burnDps || 0) * 0.03;
+      if (Math.random() < 0.22) criarParticulas(gs.boss.x + (Math.random() - 0.5) * 44, gs.boss.y + (Math.random() - 0.5) * 22, '#FF6600', 1);
+    }
 
     const intervaloPowerupEfetivo = 15000 / (configJogoRef.current?.dropRateMultiplier || 1);
     if (now - gs.lastPowerupSpawn > intervaloPowerupEfetivo && gs.powerups.length < 1 && gs.gameState === 'WAVES') {
@@ -1455,8 +1580,17 @@ export default function SkyEquations() {
         tipos.push({ type: 'CHAIN_BOUNCE', color: '#9D00FF', nome: 'CADEIA: SALTOS' });
       }
 
-      if (!gs.player.weapons.electric.active) tipos.push({ type: 'ELECTRIC_UNLOCK', color: '#FFFF00', nome: 'BALAS ELÉTRICAS' });
-      else {
+      if (gs.player.armaInicial === 'ELETRICA') {
+        // Já começou a partida com a arma elétrica equipada da Garagem: o power-up elétrico
+        // NÃO aparece nesta partida — entra no lugar dele o power-up de BALAS DE FOGO.
+        if (!gs.player.weapons.fire.active) tipos.push({ type: 'FIRE_UNLOCK', color: '#FF6600', nome: 'BALAS DE FOGO' });
+        else {
+          tipos.push({ type: 'FIRE_COOLDOWN', color: '#FF6600', nome: 'FOGO: RECARGA' });
+          tipos.push({ type: 'FIRE_BURN', color: '#FF6600', nome: 'FOGO: QUEIMADURA' });
+        }
+      } else if (!gs.player.weapons.electric.active) {
+        tipos.push({ type: 'ELECTRIC_UNLOCK', color: '#FFFF00', nome: 'BALAS ELÉTRICAS' });
+      } else {
         tipos.push({ type: 'ELECTRIC_COOLDOWN', color: '#FFFF00', nome: 'ELÉTRICA: RECARGA' });
         tipos.push({ type: 'ELECTRIC_BOUNCE', color: '#FFFF00', nome: 'ELÉTRICA: SALTOS' });
       }
@@ -1561,7 +1695,7 @@ export default function SkyEquations() {
     </View>
   );
 
-  const renderCooldownBox = (weaponKey: 'missile' | 'laser' | 'pulsar' | 'chain' | 'mine' | 'electric', color: string, icon: string) => {
+  const renderCooldownBox = (weaponKey: 'missile' | 'laser' | 'pulsar' | 'chain' | 'mine' | 'electric' | 'fire', color: string, icon: string) => {
     const w = gs.player.weapons[weaponKey];
     if (!w.active) return null;
     const pct = Math.max(0, Math.min(100, ((Date.now() - w.lastFire) / w.baseCooldown) * 100));
@@ -1658,9 +1792,9 @@ export default function SkyEquations() {
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarJogo}>
             <Text style={styles.btnIniciarTxt}>INICIAR MISSÃO</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#00FFFF', marginTop: 12, flexDirection: 'row', justifyContent: 'center', gap: 8 }]} onPress={() => router.push('/hangar' as any)}>
+          <TouchableOpacity style={[styles.btnIniciar, { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#00FFFF', marginTop: 12, flexDirection: 'row', justifyContent: 'center', gap: 8 }]} onPress={() => router.push('/garagem' as any)}>
             <Ionicons name="construct-outline" size={18} color="#00FFFF" />
-            <Text style={[styles.btnIniciarTxt, { color: '#00FFFF' }]}>HANGAR</Text>
+            <Text style={[styles.btnIniciarTxt, { color: '#00FFFF' }]}>GARAGEM</Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
@@ -1725,7 +1859,8 @@ export default function SkyEquations() {
             {renderCooldownBox('pulsar', '#00BFFF', 'shield')}
             {renderCooldownBox('chain', '#9D00FF', 'link')}
             {renderCooldownBox('mine', '#FFA500', 'disc')}
-            {renderCooldownBox('electric', '#FFFF00', 'flash-outline')} 
+            {renderCooldownBox('electric', '#FFFF00', 'flash-outline')}
+            {renderCooldownBox('fire', '#FF6600', 'flame')}
           </View>
         </View>
 
@@ -1847,7 +1982,6 @@ export default function SkyEquations() {
               const corNave = e.isLeader ? '#FF00FF' : '#FF0055';
               return (
                 <View key={e.id} style={[styles.squadronShip, { left: e.x - 12, top: e.y - 12, borderTopColor: corNave, filter: `drop-shadow(0 0 6px ${corNave})` as any, transform: [{ rotate: rot }] }]}>
-                  <View style={[styles.squadShadow, { left: -4, top: 4 }]}/>
                   {e.shield > 0 && <View style={styles.miniShield}/>}
                 </View>
               );
@@ -1901,16 +2035,17 @@ export default function SkyEquations() {
             ))}
 
             {gs.lasers.map(l => {
-              const corTiro = l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : l.type === 'PLASMA' ? '#FF6600' : '#00FFFF';
+              const corTiro = l.type === 'LASER' ? '#32CD32' : l.type === 'MISSILE' ? '#FF4444' : l.type === 'MISSILE_HOMING' ? '#FFD700' : l.type === 'PLASMA' ? '#FF6600' : l.type === 'ELECTRIC_ORB' ? '#FFFF00' : l.type === 'FIRE' ? '#FF5500' : '#00FFFF';
+              const esfera = l.type === 'ELECTRIC_ORB' || l.type === 'FIRE'; // esferas elétricas e balas de fogo são redondas
               return (
                 <View key={l.id} style={[styles.laserNormal, {
                   left: l.x - (l.size/2),
                   top: l.y,
                   width: l.size,
-                  height: l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.type === 'PLASMA' ? l.size * 1.6 : l.size * 3)),
+                  height: esfera ? l.size : (l.type === 'MISSILE' ? l.size : (l.type === 'MISSILE_HOMING' ? l.size : (l.type === 'LASER' ? l.size * 8 : l.type === 'PLASMA' ? l.size * 1.6 : l.size * 3))),
                   backgroundColor: corTiro,
-                  shadowColor: corTiro, shadowRadius: l.type === 'PLASMA' ? 12 : 6, shadowOpacity: 0.9,
-                  borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING' || l.type === 'PLASMA') ? l.size / 2 : 5
+                  shadowColor: corTiro, shadowRadius: (l.type === 'PLASMA' || esfera) ? 12 : 6, shadowOpacity: 0.9,
+                  borderRadius: (l.type === 'MISSILE' || l.type === 'MISSILE_HOMING' || l.type === 'PLASMA' || esfera) ? l.size / 2 : 5
                 }]}/>
               );
             })}
@@ -2101,8 +2236,9 @@ const styles = StyleSheet.create({
   droneAdvanced: { position: 'absolute', width: 12, height: 12, backgroundColor: '#FFD700', borderRadius: 3, borderWidth: 1, borderColor: '#FF4444', zIndex: 5, shadowColor: '#FFD700', shadowRadius: 5, shadowOpacity: 0.9 },
   
   meteorShape: { position: 'absolute', width: 24, height: 24, backgroundColor: '#555', borderRadius: 4, borderWidth: 2, borderColor: '#777', shadowColor: '#FF6600', shadowRadius: 5, shadowOpacity: 0.5 },
+  // (squadShadow removido: a "sombra" translúcida atrás de cada nave inimiga parecia um
+  // inimigo fantasma duplicado na tela — reportado pelo professor com print)
   squadronShip: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent' },
-  squadShadow: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 12, borderRightWidth: 12, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: 'rgba(255,0,85,0.35)' },
   flankerShape: { position: 'absolute', width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 24, borderStyle: 'solid', backgroundColor: 'transparent', borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#FFA500', filter: 'drop-shadow(0 0 6px #FFA500)' as any },
   miniShield: { position: 'absolute', top: -8, left: -16, width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#00FFFF', backgroundColor: 'rgba(0,255,255,0.1)', shadowColor: '#00FFFF', shadowRadius: 6, shadowOpacity: 0.7 },
   spawnerNode: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: '#00FFFF', shadowColor: '#00FFFF', shadowRadius: 4, shadowOpacity: 1 },
