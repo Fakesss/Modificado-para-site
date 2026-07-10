@@ -13,20 +13,29 @@ const ARMAS: { id: ArmaHangar; nome: string; desc: string; custo: number; icone:
   { id: 'LEQUE', nome: 'Tiro em Leque', desc: 'Três projéteis em leque, sempre ativo.', custo: 150, icone: 'apps-outline' },
 ];
 
-// per/cap espelham exatamente as fórmulas aplicadas na partida real (ver iniciarJogo,
+// efeito() espelha exatamente as fórmulas aplicadas na partida real (ver iniciarJogo,
 // em sky_equations.web.tsx): CDR = min(0.5, nivel×0.05), Velocidade = min(0.6, nivel×0.06),
-// Dano = min(0.8, nivel×0.08). Mostrar esse número real (não só "Nível X/8") deixa claro
-// o que cada evolução realmente compra.
-const ATRIBUTOS: { id: 'cdr' | 'velocidade' | 'dano'; nome: string; desc: string; campoNivel: 'nivelCDR' | 'nivelVelocidade' | 'nivelDano'; custoBase: number; icone: any; efeitoPorNivel: number; efeitoCap: number; efeitoPrefixo: string; efeitoSufixo: string }[] = [
-  { id: 'cdr', nome: 'Redução de Recarga', desc: 'Diminui o cooldown de todas as armas especiais.', campoNivel: 'nivelCDR', custoBase: 40, icone: 'timer-outline', efeitoPorNivel: 0.05, efeitoCap: 0.5, efeitoPrefixo: '-', efeitoSufixo: ' cooldown' },
-  { id: 'velocidade', nome: 'Velocidade', desc: 'Aumenta a velocidade de movimento da nave.', campoNivel: 'nivelVelocidade', custoBase: 35, icone: 'speedometer-outline', efeitoPorNivel: 0.06, efeitoCap: 0.6, efeitoPrefixo: '+', efeitoSufixo: ' velocidade' },
-  { id: 'dano', nome: 'Dano Base', desc: 'Aumenta o dano inicial da nave.', campoNivel: 'nivelDano', custoBase: 45, icone: 'flash', efeitoPorNivel: 0.08, efeitoCap: 0.8, efeitoPrefixo: '+', efeitoSufixo: ' dano' },
+// Dano = min(0.8, nivel×0.08), Casco = +12 HP/nível, Escudo = 1 carga a cada 2 níveis
+// (máx 4), Dano Especial = min(0.48, nivel×0.06). Mostrar o número real (não só
+// "Nível X/8") deixa claro o que cada evolução realmente compra.
+type AtributoId = 'cdr' | 'velocidade' | 'dano' | 'casco' | 'escudo' | 'danoespecial';
+type CampoNivel = 'nivelCDR' | 'nivelVelocidade' | 'nivelDano' | 'nivelCasco' | 'nivelEscudo' | 'nivelDanoEspecial';
+
+const cargasEscudo = (nivel: number) => Math.min(4, Math.ceil(nivel / 2));
+
+const ATRIBUTOS: { id: AtributoId; nome: string; desc: string; campoNivel: CampoNivel; custoBase: number; icone: any; efeito: (nivel: number) => string }[] = [
+  { id: 'cdr', nome: 'Redução de Recarga', desc: 'Diminui o cooldown de todas as armas especiais.', campoNivel: 'nivelCDR', custoBase: 40, icone: 'timer-outline', efeito: n => `-${Math.round(Math.min(0.5, n * 0.05) * 100)}% cooldown` },
+  { id: 'velocidade', nome: 'Velocidade', desc: 'Aumenta a velocidade de movimento da nave.', campoNivel: 'nivelVelocidade', custoBase: 35, icone: 'speedometer-outline', efeito: n => `+${Math.round(Math.min(0.6, n * 0.06) * 100)}% velocidade` },
+  { id: 'dano', nome: 'Dano Base', desc: 'Aumenta o dano inicial da nave.', campoNivel: 'nivelDano', custoBase: 45, icone: 'flash', efeito: n => `+${Math.round(Math.min(0.8, n * 0.08) * 100)}% dano` },
+  { id: 'casco', nome: 'Casco Reforçado', desc: 'Aumenta a vida máxima da nave desde o início da partida.', campoNivel: 'nivelCasco', custoBase: 50, icone: 'fitness-outline', efeito: n => `+${n * 12} de vida` },
+  { id: 'escudo', nome: 'Escudo Inicial', desc: 'Começa cada partida com cargas de escudo que absorvem dano.', campoNivel: 'nivelEscudo', custoBase: 55, icone: 'shield-checkmark-outline', efeito: n => cargasEscudo(n) === 0 ? 'nenhuma carga' : `${cargasEscudo(n)} carga${cargasEscudo(n) > 1 ? 's' : ''} de escudo` },
+  { id: 'danoespecial', nome: 'Dano Especial', desc: 'Aumenta o dano de todas as armas especiais (míssil, laser, pulsar, cadeia, mina...).', campoNivel: 'nivelDanoEspecial', custoBase: 60, icone: 'nuclear-outline', efeito: n => `+${Math.round(Math.min(0.48, n * 0.06) * 100)}% dano especial` },
 ];
 
 const FATOR_CRESCIMENTO = 1.4;
 const NIVEL_MAX = 8;
+const FRACAO_REEMBOLSO = 0.25; // espelha HANGAR_FRACAO_REEMBOLSO do backend — só pra exibição; o valor real vem do servidor
 const custoProximoNivel = (custoBase: number, nivelAtual: number) => Math.floor(custoBase * Math.pow(FATOR_CRESCIMENTO, nivelAtual));
-const efeitoPctNoNivel = (attr: { efeitoPorNivel: number; efeitoCap: number }, nivel: number) => Math.round(Math.min(attr.efeitoCap, nivel * attr.efeitoPorNivel) * 100);
 
 const CORES = ['#00FFFF', '#FF00FF', '#7FFF00', '#FFD700', '#FF4444', '#BB77FF', '#FF7055', '#FFFFFF'];
 
@@ -138,7 +147,11 @@ function LivePreviewCanvas({ armaInicial, corNave }: PreviewVisual) {
   );
 }
 
-export default function Hangar() {
+// Gastos por item (vem do servidor): base da seção "Gerenciar compras"
+interface GastosGaragem { itens: Record<string, number>; total: number; fracaoReembolso: number; }
+type PedidoReset = { tipo: 'total' } | { tipo: 'item'; item: string; nome: string };
+
+export default function Garagem() {
   const router = useRouter();
   const [perfil, setPerfil] = useState<HangarPerfil | null>(null);
   const [loading, setLoading] = useState(true);
@@ -147,13 +160,19 @@ export default function Hangar() {
   const [codigoPromo, setCodigoPromo] = useState('');
   const [mostrarInjetor, setMostrarInjetor] = useState(false);
   const [quantidadeInjetar, setQuantidadeInjetar] = useState('');
+  const [gastos, setGastos] = useState<GastosGaragem | null>(null);
+  const [pedidoReset, setPedidoReset] = useState<PedidoReset | null>(null);
+  const [redefinindo, setRedefinindo] = useState(false);
   const erroTimer = useRef<any>(null);
 
   // previewState: o que está sendo visualizado no Live Preview Canvas no momento (null = mostra o equipado)
   const [preview, setPreview] = useState<PreviewVisual | null>(null);
 
+  const carregarGastos = () => { api.hangarGastos().then((g) => { if (g) setGastos(g); }); };
+
   useEffect(() => {
     api.getHangarPerfil().then((p) => { setPerfil(p); setLoading(false); });
+    carregarGastos();
   }, []);
 
   const mostrarErro = (msg: string) => {
@@ -162,21 +181,45 @@ export default function Hangar() {
     erroTimer.current = setTimeout(() => setErro(''), 3000);
   };
 
-  const recarregarPerfil = async () => setPerfil(await api.getHangarPerfil());
+  const recarregarPerfil = async () => { setPerfil(await api.getHangarPerfil()); carregarGastos(); };
 
   const handleEquiparArma = async (arma: ArmaHangar): Promise<boolean> => {
     try {
       const atualizado = await api.hangarEquiparArma(arma);
       setPerfil(atualizado);
+      carregarGastos();
       return true;
     } catch (e: any) { mostrarErro(e.message); return false; }
   };
 
-  const handleUpgrade = async (atributo: 'cdr' | 'velocidade' | 'dano') => {
+  const handleUpgrade = async (atributo: AtributoId) => {
     try {
       const atualizado = await api.hangarUpgrade(atributo);
       setPerfil(atualizado);
+      carregarGastos();
     } catch (e: any) { mostrarErro(e.message); }
+  };
+
+  // ----- Redefinição (nave inteira ou um item): sempre passa pela confirmação -----
+  const nomeDoItem = (item: string) =>
+    ARMAS.find(a => a.id === item)?.nome ?? ATRIBUTOS.find(a => a.id === item)?.nome ?? item;
+
+  const gastoDoPedido = (pedido: PedidoReset) =>
+    pedido.tipo === 'total' ? (gastos?.total ?? 0) : (gastos?.itens?.[pedido.item] ?? 0);
+
+  const confirmarReset = async () => {
+    if (!pedidoReset || redefinindo) return;
+    setRedefinindo(true);
+    try {
+      const resultado = pedidoReset.tipo === 'total'
+        ? await api.hangarResetTotal()
+        : await api.hangarResetItem(pedidoReset.item);
+      if (resultado?.perfil) setPerfil(resultado.perfil);
+      carregarGastos();
+      setPedidoReset(null);
+      setPreview(null);
+    } catch (e: any) { mostrarErro(e.message); }
+    setRedefinindo(false);
   };
 
   const handleCor = async (cor: string): Promise<boolean> => {
@@ -256,7 +299,7 @@ export default function Hangar() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#00FFFF" />
         </TouchableOpacity>
-        <Text style={styles.title}>HANGAR</Text>
+        <Text style={styles.title}>GARAGEM</Text>
         <View style={styles.moedasBox}>
           <Ionicons name="logo-bitcoin" size={16} color="#FFD700" />
           <Text style={styles.moedasText}>{perfil.moedas}</Text>
@@ -293,10 +336,10 @@ export default function Hangar() {
             <Text style={styles.statusNaveArmaTexto}>{ARMAS.find(a => a.id === perfil.armaInicial)?.nome || 'Padrão'}</Text>
           </View>
           <View style={styles.statusNaveStatsRow}>
-            {ATRIBUTOS.map(attr => (
+            {ATRIBUTOS.filter(attr => (perfil[attr.campoNivel] ?? 0) > 0).map(attr => (
               <View key={attr.id} style={styles.statusNaveChip}>
                 <Ionicons name={attr.icone} size={13} color="#00FFFF" />
-                <Text style={styles.statusNaveChipTexto}>{attr.efeitoPrefixo}{efeitoPctNoNivel(attr, perfil[attr.campoNivel])}%</Text>
+                <Text style={styles.statusNaveChipTexto}>{attr.efeito(perfil[attr.campoNivel] ?? 0)}</Text>
               </View>
             ))}
           </View>
@@ -337,7 +380,7 @@ export default function Hangar() {
         <Text style={styles.secaoTitulo}>EVOLUÇÃO DA NAVE</Text>
         <Text style={styles.secaoDesc}>Cada nível custa mais que o anterior — evolua com calma.</Text>
         {ATRIBUTOS.map((attr) => {
-          const nivelAtual = perfil[attr.campoNivel];
+          const nivelAtual = perfil[attr.campoNivel] ?? 0;
           const noMax = nivelAtual >= NIVEL_MAX;
           const custo = custoProximoNivel(attr.custoBase, nivelAtual);
           return (
@@ -354,11 +397,11 @@ export default function Hangar() {
                 ))}
               </View>
               <Text style={styles.linhaAtributoEfeito}>
-                Efeito atual: <Text style={styles.linhaAtributoEfeitoValor}>{attr.efeitoPrefixo}{efeitoPctNoNivel(attr, nivelAtual)}%{attr.efeitoSufixo}</Text>
+                Efeito atual: <Text style={styles.linhaAtributoEfeitoValor}>{attr.efeito(nivelAtual)}</Text>
                 {!noMax && (
                   <>
                     {'  →  próximo nível: '}
-                    <Text style={styles.linhaAtributoEfeitoValor}>{attr.efeitoPrefixo}{efeitoPctNoNivel(attr, nivelAtual + 1)}%{attr.efeitoSufixo}</Text>
+                    <Text style={styles.linhaAtributoEfeitoValor}>{attr.efeito(nivelAtual + 1)}</Text>
                   </>
                 )}
               </Text>
@@ -417,6 +460,32 @@ export default function Hangar() {
           </View>
         )}
 
+        <Text style={styles.secaoTitulo}>GERENCIAR COMPRAS</Text>
+        <Text style={styles.secaoDesc}>
+          Redefinir devolve 25% do valor gasto. Antes de confirmar, você vê exatamente quanto gastou e quanto vai receber de volta.
+        </Text>
+        {gastos && Object.keys(gastos.itens).length > 0 ? (
+          <>
+            {Object.entries(gastos.itens).map(([item, gasto]) => (
+              <View key={item} style={styles.linhaGasto}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.linhaGastoNome}>{nomeDoItem(item)}</Text>
+                  <Text style={styles.linhaGastoValor}>Gasto: {gasto} moedas · devolve {Math.floor(gasto * (gastos.fracaoReembolso ?? FRACAO_REEMBOLSO))}</Text>
+                </View>
+                <TouchableOpacity style={styles.btnRedefinirItem} onPress={() => setPedidoReset({ tipo: 'item', item, nome: nomeDoItem(item) })}>
+                  <Text style={styles.btnRedefinirItemText}>REDEFINIR</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity style={styles.btnResetTotal} onPress={() => setPedidoReset({ tipo: 'total' })}>
+              <Ionicons name="refresh-circle-outline" size={18} color="#FF7055" />
+              <Text style={styles.btnResetTotalText}>REDEFINIR NAVE INTEIRA</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <Text style={styles.gastoVazio}>Você ainda não comprou nada — não há o que redefinir.</Text>
+        )}
+
         <View style={{ marginTop: 40 }}>
           <TextInput
             style={styles.inputPromo}
@@ -444,6 +513,42 @@ export default function Hangar() {
           )}
         </View>
       </ScrollView>
+
+      {/* Confirmação de redefinição: mostra gasto e reembolso ANTES de concluir,
+          pra ninguém redefinir sem querer (funciona igual no web e no celular). */}
+      {pedidoReset && (
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Ionicons name="alert-circle-outline" size={30} color="#FFD700" />
+            <Text style={styles.confirmTitulo}>
+              {pedidoReset.tipo === 'total' ? 'Redefinir a nave inteira?' : `Redefinir "${pedidoReset.nome}"?`}
+            </Text>
+            <Text style={styles.confirmTexto}>
+              {pedidoReset.tipo === 'total'
+                ? 'Todas as armas compradas e todos os níveis evoluídos serão removidos.'
+                : 'Essa melhoria será removida da sua nave.'}
+            </Text>
+            <View style={styles.confirmValores}>
+              <Text style={styles.confirmValorLinha}>
+                Valor gasto: <Text style={{ color: '#FFF', fontWeight: '900' }}>{gastoDoPedido(pedidoReset)} moedas</Text>
+              </Text>
+              <Text style={styles.confirmValorLinha}>
+                Você recebe de volta (25%): <Text style={{ color: '#FFD700', fontWeight: '900' }}>{Math.floor(gastoDoPedido(pedidoReset) * (gastos?.fracaoReembolso ?? FRACAO_REEMBOLSO))} moedas</Text>
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+              <TouchableOpacity style={styles.btnCancelarPreview} onPress={() => setPedidoReset(null)} disabled={redefinindo}>
+                <Text style={styles.btnCancelarPreviewText}>CANCELAR</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnConfirmarReset} onPress={confirmarReset} disabled={redefinindo}>
+                {redefinindo
+                  ? <ActivityIndicator size="small" color="#1a0505" />
+                  : <Text style={styles.btnConfirmarResetText}>CONFIRMAR</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -472,7 +577,7 @@ const styles = StyleSheet.create({
   statusNave: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0e0e28', borderRadius: 12, borderWidth: 1, borderColor: '#252550', padding: 12, flexWrap: 'wrap', gap: 8 },
   statusNaveArma: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusNaveArmaTexto: { color: '#EEE', fontWeight: '900', fontSize: 13 },
-  statusNaveStatsRow: { flexDirection: 'row', gap: 8 },
+  statusNaveStatsRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   statusNaveChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#050015', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   statusNaveChipTexto: { color: '#00FFFF', fontWeight: 'bold', fontSize: 11 },
   secaoTitulo: { color: '#00FFFF', fontSize: 15, fontWeight: '900', letterSpacing: 1, marginTop: 28, marginBottom: 4 },
@@ -512,4 +617,22 @@ const styles = StyleSheet.create({
   btnPequenoText: { color: '#00FFFF', fontWeight: 'bold', fontSize: 11 },
   inputPromo: { color: '#222', fontSize: 10, textAlign: 'center', padding: 4 },
   injetorBox: { alignItems: 'center', gap: 8, marginTop: 10 },
+
+  linhaGasto: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#0e0e28', borderRadius: 10, borderWidth: 1, borderColor: '#252550', padding: 12, marginBottom: 8 },
+  linhaGastoNome: { color: '#EEE', fontWeight: 'bold', fontSize: 13 },
+  linhaGastoValor: { color: '#888', fontSize: 11, marginTop: 2 },
+  btnRedefinirItem: { borderWidth: 1, borderColor: '#FF7055', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12 },
+  btnRedefinirItemText: { color: '#FF7055', fontWeight: '900', fontSize: 10 },
+  btnResetTotal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 2, borderColor: '#FF7055', borderRadius: 10, paddingVertical: 12, marginTop: 6 },
+  btnResetTotalText: { color: '#FF7055', fontWeight: '900', fontSize: 12, letterSpacing: 1 },
+  gastoVazio: { color: '#666', fontSize: 12, fontStyle: 'italic' },
+
+  confirmOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,5,0.82)', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24 },
+  confirmCard: { width: '100%', maxWidth: 360, backgroundColor: '#0e0e28', borderRadius: 14, borderWidth: 1, borderColor: '#FFD700', padding: 20, alignItems: 'center', gap: 8 },
+  confirmTitulo: { color: '#FFF', fontSize: 16, fontWeight: '900', textAlign: 'center' },
+  confirmTexto: { color: '#AAB', fontSize: 12, textAlign: 'center', lineHeight: 18 },
+  confirmValores: { backgroundColor: '#050015', borderRadius: 10, padding: 12, width: '100%', gap: 6, marginTop: 6 },
+  confirmValorLinha: { color: '#AAB', fontSize: 13 },
+  btnConfirmarReset: { backgroundColor: '#FF7055', borderRadius: 8, paddingVertical: 9, paddingHorizontal: 18, minWidth: 120, alignItems: 'center' },
+  btnConfirmarResetText: { color: '#1a0505', fontWeight: '900', fontSize: 12 },
 });

@@ -193,13 +193,19 @@ export const deletarTabuadaJogo = async (id: string) => (await api.delete(`/tabu
 export const enviarTabuadaDesafioResultado = async (dados: { tabuadas: number[]; quantidadeQuestoes: number; acertos: number; tempoTotalSegundos: number }) => (await api.post('/tabuada/desafio/resultado', dados)).data;
 export const getTabuadaDesafioRanking = async (quantidade: number) => { try { return (await api.get(`/tabuada/desafio/ranking/${quantidade}`)).data; } catch { return []; } };
 
-// ======== HANGAR DA NAVE (progressão permanente do Equações Espaciais) ========
+// ======== GARAGEM DA NAVE (progressão permanente do Equações Espaciais) ========
+// Nome exibido no app: "Garagem". O prefixo interno "hangar" (funções e rotas) é
+// mantido de propósito pra não quebrar o backend/apps já publicados.
 export const getHangarPerfil = async () => { try { return (await api.get('/hangar/perfil')).data; } catch { return null; } };
-export const hangarUpgrade = async (atributo: 'cdr' | 'velocidade' | 'dano') => { try { return (await api.post('/hangar/upgrade', { atributo })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao evoluir'); } };
+export const hangarUpgrade = async (atributo: 'cdr' | 'velocidade' | 'dano' | 'casco' | 'escudo' | 'danoespecial') => { try { return (await api.post('/hangar/upgrade', { atributo })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao evoluir'); } };
 export const hangarEquiparArma = async (arma: string) => { try { return (await api.post('/hangar/equipar_arma', { arma })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao equipar arma'); } };
 export const hangarCor = async (cor: string) => { try { return (await api.post('/hangar/cor', { cor })).data; } catch { return null; } };
 export const hangarCodigoSecreto = async (codigo: string) => { try { return (await api.post('/hangar/codigo_secreto', { codigo })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Código inválido'); } };
 export const hangarAdminInjetarMoedas = async (codigoMaster: string, quantidade: number) => { try { return (await api.post('/hangar/admin_injetar_moedas', { codigoMaster, quantidade })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao injetar moedas'); } };
 export const hangarGanharMoedas = async (pontos: number) => { try { return (await api.post('/hangar/ganhar_moedas', { pontos })).data; } catch { return null; } };
+// Redefinição de compras: devolve 25% do gasto (total ou de um item específico)
+export const hangarGastos = async () => { try { return (await api.get('/hangar/gastos')).data; } catch { return null; } };
+export const hangarResetTotal = async () => { try { return (await api.post('/hangar/reset')).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao redefinir a nave'); } };
+export const hangarResetItem = async (item: string) => { try { return (await api.post('/hangar/reset_item', { item })).data; } catch (e: any) { throw new Error(e?.response?.data?.detail || 'Erro ao redefinir o item'); } };
 
 export default api;
