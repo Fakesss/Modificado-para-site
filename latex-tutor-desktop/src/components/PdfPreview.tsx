@@ -12,6 +12,7 @@ interface PdfPreviewProps {
 
 export function PdfPreview({ pdfData, emptyMessage }: PdfPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1.1);
   const [numPages, setNumPages] = useState(0);
 
@@ -21,6 +22,10 @@ export function PdfPreview({ pdfData, emptyMessage }: PdfPreviewProps) {
 
     async function render() {
       if (!containerRef.current) return;
+      const wrapper = wrapperRef.current;
+      const prevScrollTop = wrapper?.scrollTop ?? 0;
+      const prevScrollLeft = wrapper?.scrollLeft ?? 0;
+
       containerRef.current.innerHTML = "";
       if (!pdfData) {
         setNumPages(0);
@@ -47,6 +52,14 @@ export function PdfPreview({ pdfData, emptyMessage }: PdfPreviewProps) {
         renderTasks.push(task);
         await task.promise;
       }
+
+      // Recompiling replaces every canvas, which would otherwise reset the
+      // reader back to the top of page 1 on every keystroke — restore
+      // wherever they were scrolled to instead.
+      if (wrapper) {
+        wrapper.scrollTop = prevScrollTop;
+        wrapper.scrollLeft = prevScrollLeft;
+      }
     }
 
     render();
@@ -67,7 +80,7 @@ export function PdfPreview({ pdfData, emptyMessage }: PdfPreviewProps) {
           <button onClick={() => setZoom((z) => Math.min(3, z + 0.1))}>+</button>
         </div>
       </div>
-      <div className="pdf-preview-pages-wrapper">
+      <div className="pdf-preview-pages-wrapper" ref={wrapperRef}>
         {/* This container is only ever touched imperatively (pdf.js appends canvases
             directly), so it must never also hold React-rendered children — mixing the
             two causes React and our manual DOM writes to fight over the same nodes. */}

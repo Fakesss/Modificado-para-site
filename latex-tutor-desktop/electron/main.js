@@ -3,7 +3,8 @@ const path = require("path");
 const { pathToFileURL } = require("url");
 const { detectEngine, isInstalled } = require("./texEngine");
 const { compileLatex } = require("./compiler");
-const { listPackages, installPackage } = require("./packages");
+const { listPackages, installPackage, uninstallPackage } = require("./packages");
+const { savePdf, openPath, showInFolder } = require("./pdfExport");
 const store = require("./store");
 
 const isDev = process.env.NODE_ENV === "development";
@@ -90,6 +91,25 @@ ipcMain.handle("packages:install", async (evt, name) => {
   return installPackage(name, (chunk) => {
     evt.sender.send("packages:install-progress", { name, chunk });
   });
+});
+
+ipcMain.handle("packages:uninstall", async (evt, name) => {
+  return uninstallPackage(name, (chunk) => {
+    evt.sender.send("packages:install-progress", { name, chunk });
+  });
+});
+
+// --- IPC: PDF export ---
+
+ipcMain.handle("pdf:save", async (evt, { pdf, suggestedName }) => {
+  const win = BrowserWindow.fromWebContents(evt.sender);
+  return savePdf(win, Buffer.from(pdf), suggestedName || "documento");
+});
+
+ipcMain.handle("pdf:open", (_evt, filePath) => openPath(filePath));
+ipcMain.handle("pdf:reveal", (_evt, filePath) => {
+  showInFolder(filePath);
+  return true;
 });
 
 // --- IPC: persisted state ---

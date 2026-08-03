@@ -1,4 +1,4 @@
-export type Tab = "lessons" | "freemode" | "packages" | "setup";
+export type Tab = "lessons" | "freemode" | "drawings" | "packages" | "setup";
 
 interface TopNavProps {
   active: Tab;
@@ -9,6 +9,7 @@ interface TopNavProps {
 const TABS: { id: Tab; label: string }[] = [
   { id: "lessons", label: "Aprender" },
   { id: "freemode", label: "Modo Livre" },
+  { id: "drawings", label: "Desenhos" },
   { id: "packages", label: "Pacotes" },
   { id: "setup", label: "Configuração" }
 ];
