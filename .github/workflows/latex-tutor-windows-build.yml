@@ -1,0 +1,37 @@
+name: LaTeX Tutor - Build Windows Installer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "latex-tutor-desktop/**"
+      - ".github/workflows/latex-tutor-windows-build.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: latex-tutor-desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build Windows installer
+        run: npm run dist:win
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: latex-tutor-windows-installer
+          path: latex-tutor-desktop/release/*.exe
