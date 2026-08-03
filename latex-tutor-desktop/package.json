@@ -23,6 +23,7 @@
     "@codemirror/commands": "^6.6.2",
     "@codemirror/language": "^6.10.3",
     "@codemirror/legacy-modes": "^6.4.1",
+    "@codemirror/lint": "^6.9.7",
     "@codemirror/state": "^6.4.1",
     "@codemirror/view": "^6.34.1",
     "@types/react": "^18.3.11",
@@ -62,7 +63,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -73,7 +76,9 @@
       "createStartMenuShortcut": true
     },
     "linux": {
-      "target": ["AppImage"]
+      "target": [
+        "AppImage"
+      ]
     }
   }
 }

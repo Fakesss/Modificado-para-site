@@ -710,3 +710,461 @@ body {
   text-align: center;
   color: #888;
 }
+
+/* --- Workspace toolbar extras: status, autocompile, download --- */
+
+.workspace-autocompile-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #ccc;
+  cursor: pointer;
+}
+
+.workspace-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #2c2d33;
+  color: #ccc;
+}
+
+.workspace-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #888;
+}
+
+.workspace-status-editing .workspace-status-dot {
+  background: #7bb0ff;
+}
+
+.workspace-status-compiling .workspace-status-dot {
+  background: #ffd166;
+  animation: pulse-dot 1s infinite ease-in-out;
+}
+
+.workspace-status-updated .workspace-status-dot {
+  background: #6fd48f;
+}
+
+.workspace-status-error .workspace-status-dot {
+  background: #ff6b6b;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.workspace-download {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.workspace-download-feedback {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.workspace-download-feedback.success {
+  color: #6fd48f;
+}
+
+.workspace-download-feedback.error {
+  color: #ff8080;
+  max-width: 260px;
+}
+
+.workspace-download-feedback button {
+  background: #2c2d33;
+  color: #ddd;
+  border: 1px solid #3a3c46;
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* --- Error/diagnostics panel below the editor --- */
+
+.workspace-error-panel {
+  flex-shrink: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  background: #201a1a;
+  border-top: 1px solid #3a2424;
+}
+
+.workspace-error-panel-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #ff9d9d;
+  padding: 6px 12px 2px;
+}
+
+.workspace-error-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 6px;
+}
+
+.workspace-error-item button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: #ffb0b0;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.workspace-error-item.severity-warning button {
+  color: #ffd9a0;
+}
+
+.workspace-error-item button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.workspace-error-item button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* --- Lessons: modules, actions, example/challenge panels --- */
+
+.lessons-module-group {
+  margin-bottom: 6px;
+}
+
+.lessons-module-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: #ddd;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 4px;
+  cursor: pointer;
+}
+
+.lessons-module-progress {
+  font-size: 11px;
+  color: #888;
+  font-weight: 400;
+}
+
+.lessons-breadcrumb {
+  font-size: 12px;
+  color: #7bb0ff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.lessons-actions-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.lessons-actions-row button {
+  background: #2c2d33;
+  color: #ddd;
+  border: 1px solid #3a3c46;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.lessons-example {
+  background: #16171b;
+  border: 1px solid #2c2d33;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.lessons-example pre {
+  white-space: pre-wrap;
+  font-size: 12px;
+  background: #101114;
+  padding: 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 6px 0;
+}
+
+.lessons-example button {
+  background: #3a6ea5;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.lessons-guided-instructions {
+  font-size: 13px;
+  color: #ccc;
+  margin: 4px 0 0;
+}
+
+.lessons-challenge-panel {
+  flex-shrink: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 14px 20px;
+  border-top: 1px solid #2c2d33;
+  background: #191a1f;
+}
+
+.lessons-challenge-panel h2 {
+  font-size: 14px;
+  margin: 0 0 6px;
+  color: #ffd9a0;
+}
+
+.lessons-hints {
+  font-size: 13px;
+  color: #ccc;
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.lessons-commands-learned {
+  font-size: 12px;
+  color: #999;
+  margin-top: 10px;
+}
+
+.lessons-command-tag {
+  display: inline-block;
+  background: #24252b;
+  border: 1px solid #3a3c46;
+  color: #7bb0ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin: 2px 4px 2px 0;
+  font-size: 11px;
+}
+
+.lessons-main .lessons-header,
+.lessons-main .lessons-challenge-panel {
+  flex-shrink: 0;
+}
+
+.lessons-main .split-layout {
+  flex: 1;
+  min-height: 0;
+}
+
+/* --- Drawings gallery --- */
+
+.drawings-view {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.drawings-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: #16171b;
+  border-right: 1px solid #2c2d33;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.drawings-sidebar h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  color: #888;
+  margin-top: 0;
+}
+
+.drawings-category {
+  margin-bottom: 14px;
+}
+
+.drawings-category-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #7bb0ff;
+  margin-bottom: 4px;
+}
+
+.drawings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.drawings-list-item {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: #ccc;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.drawings-list-item:hover {
+  background: #202127;
+}
+
+.drawings-list-item.active {
+  background: #2c3a52;
+  color: white;
+}
+
+.drawings-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.drawings-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid #2c2d33;
+}
+
+.drawings-header h1 {
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+
+.drawings-save-message {
+  font-size: 12px;
+  color: #6fd48f;
+}
+
+.drawings-main .split-layout {
+  flex: 1;
+  min-height: 0;
+}
+
+/* --- Packages: expandable details, xelatex badge, manual install --- */
+
+.packages-manual-install {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.packages-manual-install input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #3a3c46;
+  background: #24252b;
+  color: white;
+  font-size: 13px;
+}
+
+.packages-manual-install button {
+  background: #3a6ea5;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.packages-manual-install button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.packages-list-item-wrapper {
+  background: #24252b;
+  border: 1px solid #2c2d33;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.packages-list-item-wrapper .packages-list-item {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.packages-item-main {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.packages-badge-xelatex {
+  font-size: 11px;
+  background: #3d2a3d;
+  color: #e8b6f0;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.packages-uninstall-btn {
+  background: #6e2f2f !important;
+}
+
+.packages-details {
+  padding: 0 16px 14px;
+  border-top: 1px solid #2c2d33;
+}
+
+.packages-example-title {
+  font-size: 12px;
+  color: #999;
+  margin-top: 10px;
+}
+
+.packages-details pre {
+  white-space: pre-wrap;
+  font-size: 12px;
+  background: #16171b;
+  padding: 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 6px 0;
+}
+
+.packages-add-feedback {
+  font-size: 12px;
+  color: #6fd48f;
+  margin-top: 4px;
+}

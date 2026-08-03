@@ -60,10 +60,21 @@ let cached = null;
 
 function detectEngine(force = false) {
   if (cached && !force) return cached;
+  const tlmgr = findBinary("tlmgr");
+  // MiKTeX ships two possible package-manager CLIs depending on version: the
+  // modern unified "miktex" launcher (miktex packages ...) and the older but
+  // still-shipped "mpm" (mpm --install=...). We detect both and try them in
+  // that order when actually running a package command (see packages.js).
+  const miktex = findBinary("miktex");
+  const mpm = findBinary("mpm");
   cached = {
     pdflatex: findBinary("pdflatex"),
     xelatex: findBinary("xelatex"),
-    tlmgr: findBinary("tlmgr")
+    tlmgr,
+    miktex,
+    mpm,
+    // Which package-manager backend to use, if any.
+    packageManager: tlmgr ? "tlmgr" : miktex || mpm ? "miktex" : null
   };
   return cached;
 }

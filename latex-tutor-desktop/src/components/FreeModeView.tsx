@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Workspace } from "./Workspace";
 
 interface FreeModeViewProps {
+  isActive?: boolean;
   onGoToPackage: (packageName: string) => void;
 }
 
-export function FreeModeView({ onGoToPackage }: FreeModeViewProps) {
+export function FreeModeView({ isActive, onGoToPackage }: FreeModeViewProps) {
   const [files, setFiles] = useState<Record<string, string>>({});
   const [activeFile, setActiveFile] = useState<string>("main.tex");
   const [loaded, setLoaded] = useState(false);
@@ -88,9 +89,12 @@ export function FreeModeView({ onGoToPackage }: FreeModeViewProps) {
       <div className="freemode-main">
         <Workspace
           storageKey="freemode-workspace"
+          jobKey="freemode"
+          isActive={isActive}
           code={files[activeFile] ?? ""}
           onChange={updateCode}
           mainFileName={activeFile}
+          suggestedPdfName={activeFile.replace(/\.tex$/, "")}
           onGoToPackage={onGoToPackage}
         />
       </div>
