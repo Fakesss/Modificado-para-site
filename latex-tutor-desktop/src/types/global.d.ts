@@ -25,6 +25,7 @@ export interface CompileResult {
   diagnostics: CompileDiagnostic[];
   missingEngine?: boolean;
   missingPackage?: string | null;
+  incompatiblePackage?: string | null;
   cancelled?: boolean;
 }
 

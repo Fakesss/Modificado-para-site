@@ -26,6 +26,8 @@ body {
 .top-nav {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 4px;
   gap: 24px;
   padding: 10px 20px;
   background: #16171b;
@@ -41,6 +43,7 @@ body {
 
 .top-nav-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -130,17 +133,21 @@ body {
 }
 
 .split-collapse-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background: #2c2d33;
-  color: #e6e6e6;
-  border: 1px solid #3a3c46;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 12px;
+  flex-shrink: 0;
+  width: 18px;
+  align-self: stretch;
+  background: #202127;
+  color: #999;
+  border: none;
+  border-left: 1px solid #2c2d33;
+  padding: 0;
+  font-size: 11px;
   cursor: pointer;
-  z-index: 5;
+}
+
+.split-collapse-btn:hover {
+  background: #2c2d33;
+  color: #ddd;
 }
 
 /* --- Editor --- */
@@ -155,6 +162,8 @@ body {
 .workspace-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 6px;
   gap: 10px;
   padding: 8px 10px;
   background: #202127;
@@ -199,13 +208,19 @@ body {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  /* When the preview toolbar(s) + every banner (missing package, errors,
+     coordinate tool) together need more room than is available, scroll this
+     column instead of letting flex silently overflow and overlap — that
+     silent overflow was the actual cause of controls visually stacking on
+     top of each other in cramped windows. */
+  overflow-y: auto;
 }
 
 .pdf-preview {
-  flex: 1;
+  flex: 1 0 260px;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: 260px;
   background: #2a2b31;
 }
 
@@ -213,6 +228,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 4px;
   padding: 6px 10px;
   font-size: 12px;
   color: #aaa;
@@ -222,7 +239,8 @@ body {
 .pdf-zoom-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .pdf-zoom-controls button {
@@ -230,28 +248,117 @@ body {
   color: #fff;
   border: none;
   border-radius: 4px;
-  width: 22px;
+  min-width: 22px;
   height: 22px;
+  padding: 0 6px;
   cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.pdf-zoom-controls button.active {
+  background: #3a6ea5;
+}
+
+/* Body wraps the scroll area plus the (optional) ruler strips, so the rulers
+   sit in their own grid cells and can never overlap the toolbar or the page
+   content itself. */
+.pdf-preview-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  grid-template-rows: 20px 1fr;
+}
+
+.pdf-ruler-corner {
+  grid-column: 1;
+  grid-row: 1;
+  background: #202127;
+  border-right: 1px solid #2c2d33;
+  border-bottom: 1px solid #2c2d33;
+}
+
+.pdf-ruler-h {
+  grid-column: 2;
+  grid-row: 1;
+  position: relative;
+  overflow: hidden;
+  background: #202127;
+  border-bottom: 1px solid #2c2d33;
+}
+
+.pdf-ruler-v {
+  grid-column: 1;
+  grid-row: 2;
+  position: relative;
+  overflow: hidden;
+  background: #202127;
+  border-right: 1px solid #2c2d33;
+}
+
+.pdf-ruler-tick {
+  position: absolute;
+  background: #555;
+}
+
+.pdf-ruler-h .pdf-ruler-tick {
+  top: 12px;
+  bottom: 0;
+  width: 1px;
+}
+
+.pdf-ruler-h .pdf-ruler-tick.major {
+  top: 4px;
+  background: #999;
+}
+
+.pdf-ruler-v .pdf-ruler-tick {
+  left: 12px;
+  right: 0;
+  height: 1px;
+}
+
+.pdf-ruler-v .pdf-ruler-tick.major {
+  left: 4px;
+  background: #999;
 }
 
 .pdf-preview-pages-wrapper {
-  flex: 1;
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
   overflow: auto;
   padding: 16px;
+  cursor: grab;
+}
+
+.pdf-preview-pages-wrapper:active {
+  cursor: grabbing;
+}
+
+.pdf-preview-pages-wrapper.coord-mode {
+  cursor: crosshair;
+}
+
+.pdf-preview-pages-zoom {
+  position: relative;
+  width: fit-content;
+  margin: 0 auto;
+  transform-origin: top left;
+}
+
+.pdf-preview-pages {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
 }
 
-.pdf-preview-pages {
-  display: contents;
-}
-
 .pdf-page {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
   background: white;
+  display: block;
 }
 
 .pdf-preview-empty {
@@ -259,6 +366,99 @@ body {
   margin-top: 40px;
   text-align: center;
   padding: 0 20px;
+}
+
+/* --- Coordinate tool --- */
+
+.coord-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #ccc;
+  background: #202127;
+  border-bottom: 1px solid #2c2d33;
+}
+
+.coord-toolbar select,
+.coord-toolbar input[type="number"] {
+  background: #24252b;
+  color: white;
+  border: 1px solid #3a3c46;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.coord-toolbar button {
+  background: #2c2d33;
+  color: #ddd;
+  border: 1px solid #3a3c46;
+  border-radius: 5px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.coord-toolbar button.active {
+  background: #3a6ea5;
+  border-color: #3a6ea5;
+}
+
+.coord-toolbar-hint {
+  color: #777;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.coord-grid-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(to right, rgba(255, 60, 60, 0.35) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 60, 60, 0.35) 1px, transparent 1px);
+  background-position: bottom left;
+}
+
+.coord-readout {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #ddd;
+  background: #16171b;
+  border-top: 1px solid #2c2d33;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.coord-readout-result {
+  margin-top: 6px;
+}
+
+.coord-code-block {
+  margin-top: 8px;
+}
+
+.coord-code-label {
+  color: #999;
+  font-size: 11px;
+}
+
+.coord-code-block pre {
+  background: #101114;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  margin: 4px 0;
+}
+
+.coord-copy-feedback {
+  color: #6fd48f;
+  font-size: 12px;
+  margin-top: 4px;
 }
 
 .banner {
@@ -552,6 +752,8 @@ body {
 .packages-list-item {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
   gap: 16px;
   background: #24252b;
   border: 1px solid #2c2d33;
@@ -641,11 +843,13 @@ body {
 
 .setup-cards {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   margin: 20px 0;
 }
 
 .setup-card {
+  min-width: 240px;
   flex: 1;
   background: #24252b;
   border: 1px solid #2c2d33;
@@ -765,8 +969,11 @@ body {
 .workspace-download {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 4px;
   gap: 8px;
   margin-left: auto;
+  max-width: 100%;
 }
 
 .workspace-download-feedback {
@@ -799,10 +1006,20 @@ body {
 
 .workspace-error-panel {
   flex-shrink: 0;
-  max-height: 160px;
-  overflow-y: auto;
+  max-height: 200px;
+  display: flex;
+  flex-direction: column;
   background: #201a1a;
   border-top: 1px solid #3a2424;
+}
+
+.workspace-error-panel-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 8px 6px 12px;
+  flex-shrink: 0;
 }
 
 .workspace-error-panel-title {
@@ -810,13 +1027,76 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #ff9d9d;
-  padding: 6px 12px 2px;
+}
+
+.workspace-error-panel-autoopen {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #bb8a8a;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.workspace-error-panel-controls {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.workspace-error-panel-controls button {
+  background: #2c2020;
+  color: #ddd;
+  border: 1px solid #3a2424;
+  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.workspace-error-panel-controls button:hover {
+  background: #3a2424;
 }
 
 .workspace-error-panel ul {
   list-style: none;
   margin: 0;
   padding: 0 6px 6px;
+  overflow-y: auto;
+}
+
+.workspace-error-indicator {
+  flex-shrink: 0;
+  width: 100%;
+  text-align: left;
+  background: #201a1a;
+  border: none;
+  border-top: 1px solid #3a2424;
+  color: #ffb0b0;
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.workspace-error-indicator:hover {
+  background: #2a2020;
+}
+
+.workspace-inline-install-progress {
+  font-size: 12px;
+  color: #ffd9a0;
+  margin: 4px 0;
+}
+
+.workspace-inline-install-progress.success {
+  color: #6fd48f;
+}
+
+.workspace-inline-install-progress.error {
+  color: #ff8080;
 }
 
 .workspace-error-item button {

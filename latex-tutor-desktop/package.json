@@ -1,7 +1,7 @@
 {
-  "name": "latex-tutor-desktop",
-  "version": "0.1.0",
-  "description": "Aplicativo desktop offline para Windows que ensina LaTeX por níveis e permite programar livremente com pré-visualização ao vivo.",
+  "name": "kubitex-desktop",
+  "version": "0.2.0",
+  "description": "KubiTeX: aplicativo desktop offline para Windows que ensina LaTeX por níveis e permite programar livremente com pré-visualização ao vivo.",
   "author": "Daniel",
   "private": true,
   "main": "electron/main.js",
@@ -42,8 +42,8 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "com.professordaniel.latextutor",
-    "productName": "LaTeX Tutor",
+    "appId": "com.professordaniel.kubitex",
+    "productName": "KubiTeX",
     "directories": {
       "output": "release",
       "buildResources": "build-resources"

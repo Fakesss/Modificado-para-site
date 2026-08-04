@@ -65,12 +65,15 @@ export function SplitLayout({ left, right, storageKey }: SplitLayoutProps) {
       >
         {!collapsed && right}
       </div>
+      {/* A real flex column, not an absolutely-positioned overlay — this is the
+          only way to guarantee it never overlaps toolbar content inside either
+          pane, at any window size or zoom level. */}
       <button
         className="split-collapse-btn"
         onClick={() => setCollapsed((c) => !c)}
         title={collapsed ? "Mostrar pré-visualização" : "Ocultar pré-visualização"}
       >
-        {collapsed ? "◀ Visualização" : "▶"}
+        {collapsed ? "◀" : "▶"}
       </button>
     </div>
   );

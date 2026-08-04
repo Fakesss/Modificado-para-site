@@ -7,6 +7,8 @@ import { registerActiveEditor } from "../lib/activeEditor";
 import type { CompileDiagnostic } from "../types/global";
 
 type Status = "editing" | "compiling" | "updated" | "error";
+type ErrorPanelMode = "expanded" | "minimized" | "hidden";
+type InlineInstallState = "idle" | "installing" | "success" | "error";
 
 interface WorkspaceProps {
   storageKey: string;
@@ -23,6 +25,13 @@ interface WorkspaceProps {
 function readBoolPref(key: string, fallback: boolean) {
   const saved = localStorage.getItem(key);
   return saved === null ? fallback : saved === "1";
+}
+
+function findUsepackageLine(code: string, pkgName: string): number | null {
+  const lines = code.split("\n");
+  const re = new RegExp(`\\\\usepackage(?:\\[[^\\]]*\\])?\\{\\s*${pkgName}\\s*\\}`);
+  const idx = lines.findIndex((line) => re.test(line));
+  return idx === -1 ? null : idx + 1;
 }
 
 export function Workspace({
@@ -42,10 +51,19 @@ export function Workspace({
   const [compileDiagnostics, setCompileDiagnostics] = useState<CompileDiagnostic[]>([]);
   const [missingEngine, setMissingEngine] = useState(false);
   const [missingPackage, setMissingPackage] = useState<string | null>(null);
+  const [incompatiblePackage, setIncompatiblePackage] = useState<string | null>(null);
   const [autoCompile, setAutoCompile] = useState(() => readBoolPref(`${storageKey}:autoCompile`, true));
   const [pdfSaveState, setPdfSaveState] = useState<"idle" | "working" | "success" | "error">("idle");
   const [pdfSaveMessage, setPdfSaveMessage] = useState<string | null>(null);
   const [savedPdfPath, setSavedPdfPath] = useState<string | null>(null);
+
+  const [errorPanelMode, setErrorPanelMode] = useState<ErrorPanelMode>(
+    () => (localStorage.getItem(`${storageKey}:errorPanelMode`) as ErrorPanelMode) || "expanded"
+  );
+  const [autoOpenErrors, setAutoOpenErrors] = useState(() => readBoolPref(`${storageKey}:autoOpenErrors`, true));
+  const hadDiagnosticsRef = useRef(false);
+
+  const [inlineInstall, setInlineInstall] = useState<{ name: string; state: InlineInstallState; log: string } | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codeRef = useRef(code);
@@ -75,14 +93,35 @@ export function Workspace({
         setPdfData(new Uint8Array(result.pdf));
         setMissingEngine(false);
         setMissingPackage(null);
+        setIncompatiblePackage(null);
         setErrors([]);
         setCompileDiagnostics(result.diagnostics ?? []);
         setStatus("updated");
       } else {
         setErrors(result.errors ?? []);
         setMissingEngine(Boolean(result.missingEngine));
-        setMissingPackage(result.missingPackage ?? null);
-        setCompileDiagnostics(result.diagnostics ?? []);
+        const missing = result.missingPackage ?? null;
+        setMissingPackage(missing);
+        setIncompatiblePackage(missing ? null : result.incompatiblePackage ?? null);
+
+        // Surface the offending \usepackage{} line itself as a diagnostic, so
+        // the editor highlights exactly what's wrong instead of only a banner.
+        const extraDiagnostics: CompileDiagnostic[] = [...(result.diagnostics ?? [])];
+        const badPkg = missing ?? result.incompatiblePackage ?? null;
+        if (badPkg) {
+          const line = findUsepackageLine(codeRef.current, badPkg);
+          if (line != null) {
+            extraDiagnostics.push({
+              line,
+              severity: "error",
+              message: missing
+                ? `Pacote "${badPkg}" não está instalado.`
+                : `Pacote "${badPkg}" está instalado, mas não é compatível com o motor de compilação atual (${engine}).`,
+              rawMessage: ""
+            });
+          }
+        }
+        setCompileDiagnostics(extraDiagnostics);
         setStatus("error");
       }
     } catch {
@@ -109,6 +148,24 @@ export function Workspace({
   useEffect(() => {
     localStorage.setItem(`${storageKey}:autoCompile`, autoCompile ? "1" : "0");
   }, [autoCompile, storageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}:errorPanelMode`, errorPanelMode);
+  }, [errorPanelMode, storageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}:autoOpenErrors`, autoOpenErrors ? "1" : "0");
+  }, [autoOpenErrors, storageKey]);
+
+  // Only pop the panel open automatically the instant it goes from "no
+  // problems" to "some problems" — never fight the user's own minimize/close.
+  useEffect(() => {
+    const hasNow = mergedDiagnostics.length > 0;
+    if (hasNow && !hadDiagnosticsRef.current && autoOpenErrors) {
+      setErrorPanelMode("expanded");
+    }
+    hadDiagnosticsRef.current = hasNow;
+  }, [mergedDiagnostics.length, autoOpenErrors]);
 
   // Register as "the current document" for the Pacotes tab's \usepackage{}
   // insert action, but only while this Workspace is the one the user is
@@ -139,6 +196,24 @@ export function Workspace({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, engine]);
+
+  useEffect(() => {
+    const off = window.api.packages.onInstallProgress(({ name, chunk }) => {
+      setInlineInstall((prev) => (prev && prev.name === name ? { ...prev, log: prev.log + chunk } : prev));
+    });
+    return off;
+  }, []);
+
+  async function installMissingPackageInline(name: string) {
+    setInlineInstall({ name, state: "installing", log: "" });
+    const result = await window.api.packages.install(name);
+    if (result.success) {
+      setInlineInstall({ name, state: "success", log: result.message });
+      compile(); // recompile automatically now that the package should be available
+    } else {
+      setInlineInstall({ name, state: "error", log: result.message });
+    }
+  }
 
   async function handleDownloadPdf() {
     setPdfSaveState("working");
@@ -181,6 +256,10 @@ export function Workspace({
     error: "Erro"
   };
 
+  const errorCount = mergedDiagnostics.filter((d) => d.severity === "error").length;
+  const warningCount = mergedDiagnostics.filter((d) => d.severity === "warning").length;
+  const diagnosticsSummary = `${errorCount} erro(s), ${warningCount} aviso(s)`;
+
   return (
     <SplitLayout
       storageKey={storageKey}
@@ -213,24 +292,47 @@ export function Workspace({
             </div>
           </div>
           <LatexEditor ref={editorRef} value={code} onChange={onChange} diagnostics={mergedDiagnostics} />
-          {mergedDiagnostics.length > 0 && (
+
+          {mergedDiagnostics.length > 0 && errorPanelMode === "hidden" && (
+            <button className="workspace-error-indicator" onClick={() => setErrorPanelMode("expanded")}>
+              ⚠ {diagnosticsSummary} — clique para ver detalhes
+            </button>
+          )}
+
+          {mergedDiagnostics.length > 0 && errorPanelMode !== "hidden" && (
             <div className="workspace-error-panel">
-              <div className="workspace-error-panel-title">
-                {mergedDiagnostics.filter((d) => d.severity === "error").length} erro(s),{" "}
-                {mergedDiagnostics.filter((d) => d.severity === "warning").length} aviso(s)
+              <div className="workspace-error-panel-header">
+                <span className="workspace-error-panel-title">{diagnosticsSummary}</span>
+                <label className="workspace-error-panel-autoopen">
+                  <input type="checkbox" checked={autoOpenErrors} onChange={(e) => setAutoOpenErrors(e.target.checked)} />
+                  Abrir automaticamente
+                </label>
+                <div className="workspace-error-panel-controls">
+                  <button
+                    onClick={() => setErrorPanelMode(errorPanelMode === "minimized" ? "expanded" : "minimized")}
+                    title={errorPanelMode === "minimized" ? "Expandir" : "Minimizar"}
+                  >
+                    {errorPanelMode === "minimized" ? "▾" : "▁"}
+                  </button>
+                  <button onClick={() => setErrorPanelMode("hidden")} title="Fechar">
+                    ✕
+                  </button>
+                </div>
               </div>
-              <ul>
-                {mergedDiagnostics.map((d, i) => (
-                  <li key={i} className={`workspace-error-item severity-${d.severity}`}>
-                    <button
-                      onClick={() => d.line != null && editorRef.current?.scrollToLine(d.line)}
-                      disabled={d.line == null}
-                    >
-                      {d.line != null ? `Linha ${d.line}` : "—"}: {d.message}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              {errorPanelMode === "expanded" && (
+                <ul>
+                  {mergedDiagnostics.map((d, i) => (
+                    <li key={i} className={`workspace-error-item severity-${d.severity}`}>
+                      <button
+                        onClick={() => d.line != null && editorRef.current?.scrollToLine(d.line)}
+                        disabled={d.line == null}
+                      >
+                        {d.line != null ? `Linha ${d.line}` : "—"}: {d.message}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </div>
@@ -248,8 +350,30 @@ export function Workspace({
           )}
           {missingPackage && (
             <div className="banner banner-warning">
-              Pacote <code>{missingPackage}</code> não está instalado.{" "}
-              <button onClick={() => onGoToPackage?.(missingPackage)}>Instalar pacote</button>
+              <div>
+                Pacote <code>{missingPackage}</code> não está instalado — por isso a compilação falhou.
+              </div>
+              {inlineInstall?.name === missingPackage && inlineInstall.state === "installing" && (
+                <div className="workspace-inline-install-progress">Instalando {missingPackage}…</div>
+              )}
+              {inlineInstall?.name === missingPackage && inlineInstall.state === "success" && (
+                <div className="workspace-inline-install-progress success">✔ Instalado! Recompilando…</div>
+              )}
+              {inlineInstall?.name === missingPackage && inlineInstall.state === "error" && (
+                <div className="workspace-inline-install-progress error">✕ Falhou: {inlineInstall.log}</div>
+              )}
+              {(!inlineInstall || inlineInstall.name !== missingPackage || inlineInstall.state === "error") && (
+                <div className="lessons-actions-row">
+                  <button onClick={() => installMissingPackageInline(missingPackage)}>Instalar agora</button>
+                  <button onClick={() => onGoToPackage?.(missingPackage)}>Ver na aba Pacotes</button>
+                </div>
+              )}
+            </div>
+          )}
+          {incompatiblePackage && (
+            <div className="banner banner-warning">
+              Pacote <code>{incompatiblePackage}</code> está instalado, mas não é compatível com o motor de compilação
+              atual (<code>{engine}</code>). Ele precisa de XeLaTeX ou LuaLaTeX — instalar de novo não vai resolver.
             </div>
           )}
           {errors.length > 0 && (
