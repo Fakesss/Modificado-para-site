@@ -1,4 +1,4 @@
-name: LaTeX Tutor - Build Windows Installer
+name: KubiTeX - Build Windows Installer
 
 on:
   push:
@@ -33,5 +33,5 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: latex-tutor-windows-installer
+          name: kubitex-windows-installer
           path: latex-tutor-desktop/release/*.exe

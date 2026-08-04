@@ -49,6 +49,7 @@
     { "name": "pdfpages", "sizeKB": 300, "shortdesc": "Inclusão de páginas inteiras de outros PDFs", "bundledDefault": false, "example": "\\includepdf[pages=-]{documento.pdf}" },
     { "name": "xy", "sizeKB": 2000, "shortdesc": "Diagramas comutativos e setas (XY-pic)", "bundledDefault": false, "example": "\\xymatrix{A \\ar[r] & B}" },
     { "name": "forest", "sizeKB": 800, "shortdesc": "Desenho de árvores e estruturas hierárquicas", "bundledDefault": false, "example": "\\begin{forest}\n[A [B] [C]]\n\\end{forest}" },
-    { "name": "moderncv", "sizeKB": 500, "shortdesc": "Modelo de currículo moderno", "bundledDefault": false, "example": "\\moderncvstyle{classic}" }
+    { "name": "moderncv", "sizeKB": 500, "shortdesc": "Modelo de currículo moderno", "bundledDefault": false, "example": "\\moderncvstyle{classic}" },
+    { "name": "eso-pic", "sizeKB": 90, "shortdesc": "Adiciona comandos para desenhar em posições absolutas da página (fundo, marca d'água)", "bundledDefault": false, "example": "\\AddToShipoutPictureBG{\\put(0,0){\\includegraphics{fundo.png}}}" }
   ]
 }

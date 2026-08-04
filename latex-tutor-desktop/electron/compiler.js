@@ -46,6 +46,27 @@ function extractMissingPackage(log) {
   return match ? match[1] : null;
 }
 
+// A handful of common packages that only work under XeTeX/LuaTeX. Used as a
+// fallback when the package itself doesn't self-report the incompatibility
+// (see extractIncompatiblePackage below for the more reliable, general check).
+const KNOWN_XETEX_ONLY_PACKAGES = ["fontspec", "polyglossia", "unicode-math", "luatextra", "luacode"];
+
+// Distinguishes "package installed but wrong engine" from "package missing":
+// many XeTeX/LuaTeX-only packages (fontspec included) proactively check the
+// engine and throw a clear self-report ("... requires either XeTeX or
+// LuaTeX"); when that's not present we fall back to checking whether the
+// source uses a package we know is XeTeX/LuaTeX-only.
+function extractIncompatiblePackage(log, engine, sourceCode) {
+  if (engine !== "pdflatex") return null; // xelatex/lualatex can run almost everything
+  const selfCheck = log.match(/Package (\w[\w-]*) Error:[^\n]*requires (?:either )?(?:XeTeX|LuaTeX)/i);
+  if (selfCheck) return selfCheck[1];
+
+  const usedPackages = Array.from(sourceCode.matchAll(/\\usepackage(?:\[[^\]]*\])?\{([^}]+)\}/g))
+    .flatMap((m) => m[1].split(","))
+    .map((s) => s.trim());
+  return usedPackages.find((p) => KNOWN_XETEX_ONLY_PACKAGES.includes(p)) ?? null;
+}
+
 const FRIENDLY_RULES = [
   [/Undefined control sequence/, () => "Este comando pode estar escrito incorretamente ou não existe."],
   [/Missing \$ inserted/, () => "Parece que falta um cifrão `$` para abrir ou fechar o modo matemático."],
@@ -182,8 +203,18 @@ function compileLatex({ jobKey, files, mainFileName, engine = "pdflatex" }) {
       } else {
         const errors = extractErrors(log);
         const missingPackage = extractMissingPackage(log);
+        const incompatiblePackage = missingPackage
+          ? null
+          : extractIncompatiblePackage(log, engine, files[mainFileName] ?? "");
         fs.rmSync(tmpDir, { recursive: true, force: true });
-        resolve({ success: false, log, errors, missingPackage, diagnostics: extractDiagnostics(log) });
+        resolve({
+          success: false,
+          log,
+          errors,
+          missingPackage,
+          incompatiblePackage,
+          diagnostics: extractDiagnostics(log)
+        });
       }
     });
 

@@ -17,7 +17,7 @@ const TABS: { id: Tab; label: string }[] = [
 export function TopNav({ active, onChange, engineWarning }: TopNavProps) {
   return (
     <nav className="top-nav">
-      <div className="top-nav-brand">LaTeX Tutor</div>
+      <div className="top-nav-brand" title="KubiTeX (pronuncia-se Kú-bi-tés)">KubiTeX</div>
       <div className="top-nav-tabs">
         {TABS.map((tab) => (
           <button

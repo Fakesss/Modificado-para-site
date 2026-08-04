@@ -28,7 +28,7 @@ function createWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: "LaTeX Tutor",
+    title: "KubiTeX",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

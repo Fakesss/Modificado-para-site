@@ -1,4 +1,6 @@
-# LaTeX Tutor (desktop, offline)
+# KubiTeX (desktop, offline)
+
+_Pronuncia-se "Kú-bi-tés"._
 
 Aplicativo desktop para Windows que ensina LaTeX por uma trilha progressiva de
 módulos e também oferece um modo livre para programar qualquer documento, com
@@ -7,9 +9,10 @@ recolhível).
 
 ## O que já está pronto
 
-- **Aprender**: 7 módulos (Primeiros passos, Formatação de texto, Matemática,
-  Tabelas, Imagens, TikZ, Documentos completos) somando mais de 50 aulas. Cada
-  aula tem explicação, exemplo pronto (com botão para inserir no editor),
+- **Aprender**: 9 módulos (Primeiros passos, Formatação de texto, Matemática,
+  Tabelas, Imagens, TikZ, Documentos completos, Malhas e planos para
+  professores, Posicionamento e coordenadas no TikZ) somando quase 70 aulas.
+  Cada aula tem explicação, exemplo pronto (com botão para inserir no editor),
   exercício guiado, desafio com dicas e solução comentada, lista dos comandos
   aprendidos, e progresso salvo automaticamente.
 - **Modo Livre**: workspace com múltiplos arquivos `.tex`, salvos automaticamente.
@@ -18,9 +21,17 @@ recolhível).
   prova...) para visualizar, copiar o código ou usar direto no Modo Livre.
 - **Editor + Preview**: CodeMirror com destaque de sintaxe LaTeX, erros
   destacados diretamente na linha problemática (sublinhado + marcador na régua,
-  nunca o texto todo), e um painel com a lista de erros/avisos clicável (clicar
-  leva direto à linha). PDF renderizado via pdf.js, com posição de rolagem e
-  zoom preservados entre compilações.
+  nunca o texto todo), e um painel de erros/avisos que pode ser minimizado,
+  fechado (deixando só um indicador pequeno e clicável) ou configurado para não
+  abrir sozinho. PDF renderizado via pdf.js, com zoom dinâmico (roda do mouse +
+  Ctrl, gesto de pinça no touchpad, sempre centralizado no cursor), arrastar
+  para navegar pela página ampliada, e botões de ajustar à largura/à página.
+- **Ferramenta de coordenadas**: modo especial na pré-visualização com régua,
+  malha configurável (espaçamento, cor da grade), leitura da posição do cursor
+  em centímetros, medição de distância/ponto médio entre dois cliques, e
+  geração automática do código `\draw` (nas duas variantes — coordenadas locais
+  e posição absoluta via `current page`) pronto para copiar ou inserir direto
+  no editor.
 - **Compilação automática e rápida**: atualiza ~450ms depois que você para de
   digitar, cancela a compilação anterior ao editar de novo, mostra um indicador
   de status (Editando/Compilando/Atualizado/Erro), mantém a última versão válida
@@ -31,11 +42,13 @@ recolhível).
   mostrá-lo na pasta depois de salvar.
 - **Pacotes**: busca por nome, descrição, tamanho e exemplo de uso; instalar,
   remover e adicionar automaticamente o `\usepackage{}` correspondente ao
-  documento que você estiver editando. Usa o catálogo completo do `tlmgr`
-  (TeX Live/TinyTeX) ou do MiKTeX quando disponível; cai para um catálogo
-  offline curado (tamanhos aproximados) caso contrário, sempre deixando claro
-  qual fonte está sendo usada — e ainda permite instalar qualquer pacote pelo
-  nome exato mesmo que ele não apareça na lista.
+  documento que você estiver editando. Quando falta um pacote, o próprio editor
+  destaca a linha do `\usepackage`, explica se ele está faltando ou apenas
+  incompatível com o motor atual (pdflatex vs. XeLaTeX), e oferece um botão
+  para instalar ali mesmo — com barra de progresso e recompilação automática ao
+  terminar. Usa o catálogo completo do `tlmgr` (TeX Live/TinyTeX) ou do MiKTeX
+  quando disponível; cai para um catálogo offline curado caso contrário, sempre
+  deixando claro qual fonte está sendo usada.
 - **Configuração**: detecta se existe um motor LaTeX (`pdflatex`/`xelatex`) e um
   gerenciador de pacotes (`tlmgr` ou MiKTeX) no computador e, se não houver,
   orienta a instalação do MiKTeX ou do TinyTeX.
@@ -105,7 +118,7 @@ latex-tutor-desktop/
   src/
     components/       # Workspace, editor, preview, abas (Aprender/Modo Livre/
                       # Desenhos/Pacotes/Configuração)
-    lessons/           # currículo: types.ts + modules/module1..7.ts
+    lessons/           # currículo: types.ts + modules/module1..9.ts
     drawings/          # catálogo da biblioteca de desenhos TikZ
     lib/               # registro do "editor ativo" e checagem local de erros LaTeX
   resources/          # catálogo offline de pacotes (fallback, com exemplos de uso)
