@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { detectEngine } = require("./texEngine");
+const { copyImagesInto } = require("./imageBank");
 
 // One in-flight compile per "job" (one per visible Workspace: lessons/freemode/
 // drawings). Starting a new compile for the same jobKey kills whatever was
@@ -158,6 +159,7 @@ function compileLatex({ jobKey, files, mainFileName, engine = "pdflatex" }) {
         fs.mkdirSync(path.dirname(fullPath), { recursive: true });
         fs.writeFileSync(fullPath, content, "utf8");
       }
+      copyImagesInto(tmpDir);
     } catch (err) {
       resolve({ success: false, log: String(err), errors: [String(err)], diagnostics: [] });
       return;

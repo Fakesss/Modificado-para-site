@@ -15,7 +15,19 @@ recolhível).
   Cada aula tem explicação, exemplo pronto (com botão para inserir no editor),
   exercício guiado, desafio com dicas e solução comentada, lista dos comandos
   aprendidos, e progresso salvo automaticamente.
-- **Modo Livre**: workspace com múltiplos arquivos `.tex`, salvos automaticamente.
+- **Modo Livre**: workspace com múltiplos arquivos `.tex`, organizados em abas
+  (como um navegador — clicar num arquivo na barra lateral abre/foca sua aba,
+  fechar uma aba não apaga o arquivo). Tudo é salvo automaticamente enquanto
+  você digita e, se a janela for fechada logo depois de uma alteração, o app
+  espera a gravação terminar antes de fechar de verdade — nada se perde.
+- **Banco de imagens**: painel no Modo Livre para enviar figuras/fotos (PNG,
+  JPG, PDF, EPS); o editor reconhece os nomes enviados e sugere autocompletar
+  dentro de `\includegraphics{}`, e a compilação já inclui as imagens
+  automaticamente.
+- **Pré-visualização destacável**: botão "Destacar" abre o PDF numa janela
+  separada, redimensionável e que pode ser movida para qualquer lugar da tela
+  (inclusive um segundo monitor); "Reencaixar" (ou simplesmente fechar a
+  janela) traz a pré-visualização de volta para o lugar de sempre.
 - **Desenhos**: biblioteca de mais de 15 modelos prontos em TikZ (triângulos,
   ângulos, plano cartesiano, gráficos, fluxogramas, árvores, cabeçalho de
   prova...) para visualizar, copiar o código ou usar direto no Modo Livre.
@@ -26,6 +38,16 @@ recolhível).
   abrir sozinho. PDF renderizado via pdf.js, com zoom dinâmico (roda do mouse +
   Ctrl, gesto de pinça no touchpad, sempre centralizado no cursor), arrastar
   para navegar pela página ampliada, e botões de ajustar à largura/à página.
+  Botões de desfazer/refazer sempre visíveis na barra de ferramentas, mais um
+  histórico de versões recentes (com horário e prévia da alteração) para
+  voltar a qualquer estado anterior do documento com um clique.
+- **Autocompletar inteligente**: a tecla Tab sugere primeiro o último comando
+  parecido que você usou (por prefixo), e cai para uma lista de comandos LaTeX
+  válidos do menor para o maior quando não há histórico. Fechamento automático
+  de chaves/colchetes/parênteses e o autocompletar por Tab podem ser
+  ativados/desativados na aba **Configuração**.
+- **Restaurar código original**: botão na aba Aprender que devolve o código de
+  uma aula ao ponto de partida, caso você altere ou apague algo por engano.
 - **Ferramenta de coordenadas**: modo especial na pré-visualização com régua,
   malha configurável (espaçamento, cor da grade), leitura da posição do cursor
   em centímetros, medição de distância/ponto médio entre dois cliques, e
@@ -114,13 +136,16 @@ gerar o `.exe` final aqui. Duas formas de obtê-lo:
 ```
 latex-tutor-desktop/
   electron/          # processo principal: compilação (cancelável), detecção do
-                      # motor/gerenciador de pacotes, exportação de PDF, estado salvo
+                      # motor/gerenciador de pacotes, exportação de PDF, estado
+                      # salvo, banco de imagens, janela destacável do PDF
   src/
     components/       # Workspace, editor, preview, abas (Aprender/Modo Livre/
-                      # Desenhos/Pacotes/Configuração)
+                      # Desenhos/Pacotes/Configuração), janela destacável do PDF
     lessons/           # currículo: types.ts + modules/module1..9.ts
     drawings/          # catálogo da biblioteca de desenhos TikZ
-    lib/               # registro do "editor ativo" e checagem local de erros LaTeX
+    lib/               # registro do "editor ativo", checagem local de erros
+                      # LaTeX, configurações do editor, comandos/autocompletar,
+                      # banco de imagens, janela destacável do PDF
   resources/          # catálogo offline de pacotes (fallback, com exemplos de uso)
 ```
 

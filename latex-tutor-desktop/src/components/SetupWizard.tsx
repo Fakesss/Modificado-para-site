@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import type { EngineStatus } from "../types/global";
+import { getEditorSettings, subscribeEditorSettings, updateEditorSettings } from "../lib/editorSettings";
 
 interface SetupWizardProps {
   status: EngineStatus | null;
@@ -7,10 +9,15 @@ interface SetupWizardProps {
 
 export function SetupWizard({ status, onRecheck }: SetupWizardProps) {
   const installed = status?.installed ?? false;
+  const [settings, setSettings] = useState(getEditorSettings());
+
+  useEffect(() => subscribeEditorSettings(setSettings), []);
 
   return (
     <div className="setup-wizard">
-      <h1>Configuração do motor LaTeX</h1>
+      <h1>Configuração</h1>
+
+      <h2 className="setup-section-title">Motor LaTeX</h2>
 
       {installed ? (
         <div className="banner banner-success">
@@ -58,6 +65,35 @@ export function SetupWizard({ status, onRecheck }: SetupWizardProps) {
           <pre>{JSON.stringify(status.engines, null, 2)}</pre>
         </details>
       )}
+
+      <h2 className="setup-section-title">Editor</h2>
+      <div className="setup-editor-options">
+        <label className="setup-editor-option">
+          <input
+            type="checkbox"
+            checked={settings.autoCloseBrackets}
+            onChange={(e) => updateEditorSettings({ autoCloseBrackets: e.target.checked })}
+          />
+          <div>
+            <strong>Fechar chaves, colchetes e parênteses automaticamente</strong>
+            <p>Ao digitar {"\\frac{"}, o app já adiciona o {"}"} de fechamento para você.</p>
+          </div>
+        </label>
+        <label className="setup-editor-option">
+          <input
+            type="checkbox"
+            checked={settings.tabAutocomplete}
+            onChange={(e) => updateEditorSettings({ tabAutocomplete: e.target.checked })}
+          />
+          <div>
+            <strong>Autocompletar comandos com a tecla Tab</strong>
+            <p>
+              Sugere primeiro o último comando parecido que você usou; se não houver, sugere comandos LaTeX válidos
+              do menor para o maior.
+            </p>
+          </div>
+        </label>
+      </div>
     </div>
   );
 }

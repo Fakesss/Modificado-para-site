@@ -4,6 +4,8 @@ import { LatexEditor, type LatexEditorHandle } from "./LatexEditor";
 import { PdfPreview } from "./PdfPreview";
 import { computeLocalDiagnostics, type DiagnosticItem } from "../lib/latexLint";
 import { registerActiveEditor } from "../lib/activeEditor";
+import { getImageNames } from "../lib/imageBank";
+import { isPdfWindowDetached, subscribePdfWindowState, sendPdfData, closePdfWindow } from "../lib/pdfWindow";
 import type { CompileDiagnostic } from "../types/global";
 
 type Status = "editing" | "compiling" | "updated" | "error";
@@ -34,6 +36,36 @@ function findUsepackageLine(code: string, pkgName: string): number | null {
   return idx === -1 ? null : idx + 1;
 }
 
+interface HistoryEntry {
+  id: number;
+  time: number;
+  code: string;
+  preview: string;
+}
+
+// Summarize a snapshot by showing the line where it first diverges from the
+// previous snapshot — cheap to compute and usually points at the actual edit,
+// without needing a real diff algorithm.
+function summarizeChange(previousCode: string, code: string): string {
+  let i = 0;
+  const len = Math.min(previousCode.length, code.length);
+  while (i < len && previousCode[i] === code[i]) i++;
+  const lineStart = code.lastIndexOf("\n", i) + 1;
+  let lineEnd = code.indexOf("\n", i);
+  if (lineEnd === -1) lineEnd = code.length;
+  const line = code.slice(lineStart, lineEnd).trim();
+  return line || "(linha em branco)";
+}
+
+function relativeTime(timestamp: number): string {
+  const diffSeconds = Math.round((Date.now() - timestamp) / 1000);
+  if (diffSeconds < 5) return "agora mesmo";
+  if (diffSeconds < 60) return `há ${diffSeconds} s`;
+  if (diffSeconds < 3600) return `há ${Math.round(diffSeconds / 60)} min`;
+  if (diffSeconds < 86400) return `há ${Math.round(diffSeconds / 3600)} h`;
+  return `há ${Math.round(diffSeconds / 86400)} d`;
+}
+
 export function Workspace({
   storageKey,
   jobKey,
@@ -46,6 +78,7 @@ export function Workspace({
   onGoToPackage
 }: WorkspaceProps) {
   const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
+  const [pdfDetached, setPdfDetached] = useState(isPdfWindowDetached());
   const [status, setStatus] = useState<Status>("editing");
   const [errors, setErrors] = useState<string[]>([]);
   const [compileDiagnostics, setCompileDiagnostics] = useState<CompileDiagnostic[]>([]);
@@ -64,6 +97,12 @@ export function Workspace({
   const hadDiagnosticsRef = useRef(false);
 
   const [inlineInstall, setInlineInstall] = useState<{ name: string; state: InlineInstallState; log: string } | null>(null);
+
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
+  const lastSnapshotRef = useRef(code);
+  const historyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const historyPanelRef = useRef<HTMLDivElement>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codeRef = useRef(code);
@@ -156,6 +195,56 @@ export function Workspace({
   useEffect(() => {
     localStorage.setItem(`${storageKey}:autoOpenErrors`, autoOpenErrors ? "1" : "0");
   }, [autoOpenErrors, storageKey]);
+
+  useEffect(() => subscribePdfWindowState(setPdfDetached), []);
+
+  // Only the tab the user is actually looking at should drive the detached
+  // popout window's contents — otherwise a background auto-compile in a
+  // hidden tab would silently replace what's showing in the floating window.
+  // Re-sends on `pdfDetached` too: a compile that finished before the popout
+  // even existed would otherwise never reach it, since sending only happens
+  // when `pdfData` itself changes.
+  useEffect(() => {
+    if (isActive) sendPdfData(pdfData);
+  }, [pdfData, isActive, pdfDetached]);
+
+  // Record a version-history checkpoint once the user pauses for a bit,
+  // rather than on every keystroke — gives a browsable trail of past states
+  // to fall back to, on top of CodeMirror's own linear undo/redo stack.
+  useEffect(() => {
+    if (historyDebounceRef.current) clearTimeout(historyDebounceRef.current);
+    historyDebounceRef.current = setTimeout(() => {
+      if (code !== lastSnapshotRef.current && code.trim().length > 0) {
+        const preview = summarizeChange(lastSnapshotRef.current, code);
+        lastSnapshotRef.current = code;
+        setHistoryEntries((prev) => [{ id: Date.now(), time: Date.now(), code, preview }, ...prev].slice(0, 15));
+      }
+    }, 2500);
+    return () => {
+      if (historyDebounceRef.current) clearTimeout(historyDebounceRef.current);
+    };
+  }, [code]);
+
+  useEffect(() => {
+    if (!historyOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (historyPanelRef.current && !historyPanelRef.current.contains(e.target as Node)) {
+        setHistoryOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [historyOpen]);
+
+  function restoreSnapshot(entry: HistoryEntry) {
+    if (code !== lastSnapshotRef.current) {
+      const preview = summarizeChange(lastSnapshotRef.current, code);
+      setHistoryEntries((prev) => [{ id: Date.now(), time: Date.now(), code, preview }, ...prev].slice(0, 15));
+    }
+    lastSnapshotRef.current = entry.code;
+    onChange(entry.code);
+    setHistoryOpen(false);
+  }
 
   // Only pop the panel open automatically the instant it goes from "no
   // problems" to "some problems" — never fight the user's own minimize/close.
@@ -266,6 +355,41 @@ export function Workspace({
       left={
         <div className="workspace-left">
           <div className="workspace-toolbar">
+            <div className="workspace-undo-redo">
+              <button title="Desfazer (Ctrl+Z)" onClick={() => editorRef.current?.undo()}>
+                ↶
+              </button>
+              <button title="Refazer (Ctrl+Y)" onClick={() => editorRef.current?.redo()}>
+                ↷
+              </button>
+            </div>
+            <div className="workspace-history" ref={historyPanelRef}>
+              <button
+                className="workspace-history-toggle"
+                title="Histórico de versões recentes"
+                onClick={() => setHistoryOpen((v) => !v)}
+              >
+                🕘 Histórico
+              </button>
+              {historyOpen && (
+                <div className="workspace-history-panel">
+                  {historyEntries.length === 0 ? (
+                    <div className="workspace-history-empty">Nenhuma alteração registrada ainda.</div>
+                  ) : (
+                    <ul>
+                      {historyEntries.map((entry) => (
+                        <li key={entry.id}>
+                          <button onClick={() => restoreSnapshot(entry)}>
+                            <span className="workspace-history-time">{relativeTime(entry.time)}</span>
+                            <span className="workspace-history-preview">{entry.preview}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
             <button onClick={compile} disabled={status === "compiling"}>
               ▶ Atualizar
             </button>
@@ -291,7 +415,7 @@ export function Workspace({
               {pdfSaveState === "error" && <span className="workspace-download-feedback error">{pdfSaveMessage}</span>}
             </div>
           </div>
-          <LatexEditor ref={editorRef} value={code} onChange={onChange} diagnostics={mergedDiagnostics} />
+          <LatexEditor ref={editorRef} value={code} onChange={onChange} diagnostics={mergedDiagnostics} getImageNames={getImageNames} />
 
           {mergedDiagnostics.length > 0 && errorPanelMode === "hidden" && (
             <button className="workspace-error-indicator" onClick={() => setErrorPanelMode("expanded")}>
@@ -339,7 +463,14 @@ export function Workspace({
       }
       right={
         <div className="workspace-right">
-          <PdfPreview pdfData={pdfData} />
+          {pdfDetached && isActive ? (
+            <div className="workspace-pdf-detached-placeholder">
+              <p>📤 A pré-visualização está aberta em outra janela.</p>
+              <button onClick={closePdfWindow}>🗗 Reencaixar aqui</button>
+            </div>
+          ) : (
+            <PdfPreview pdfData={pdfData} />
+          )}
           {status === "error" && pdfData && (
             <div className="banner banner-warning">Mostrando a última versão válida — o código atual tem erros.</div>
           )}
