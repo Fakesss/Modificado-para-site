@@ -260,6 +260,42 @@ body {
   background: #3a6ea5;
 }
 
+.workspace-pdf-detached-placeholder {
+  flex: 1 0 260px;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: #2a2b31;
+  color: #aaa;
+  font-size: 14px;
+  text-align: center;
+  padding: 24px;
+}
+
+.workspace-pdf-detached-placeholder button {
+  background: #3a6ea5;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.pdf-popout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+.pdf-popout .pdf-preview {
+  flex: 1;
+}
+
 /* Body wraps the scroll area plus the (optional) ruler strips, so the rulers
    sit in their own grid cells and can never overlap the toolbar or the page
    content itself. */
@@ -700,14 +736,169 @@ body {
   padding: 4px 6px;
 }
 
-.freemode-main {
+.imagebank-panel {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #2c2d33;
+}
+
+.imagebank-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.imagebank-header h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  color: #888;
+  margin: 0;
+}
+
+.imagebank-header button {
+  background: #2c2d33;
+  color: #ddd;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.imagebank-header button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.imagebank-empty {
+  font-size: 12px;
+  color: #777;
+  line-height: 1.5;
+}
+
+.imagebank-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.imagebank-list li {
+  display: flex;
+  align-items: center;
+}
+
+.imagebank-item {
   flex: 1;
   min-width: 0;
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: #ccc;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.imagebank-item:hover {
+  background: #24252b;
+}
+
+.imagebank-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imagebank-item-size {
+  flex-shrink: 0;
+  color: #777;
+  font-size: 11px;
+}
+
+.imagebank-item-delete {
+  background: transparent;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+.freemode-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .freemode-main .split-layout {
   flex: 1;
+  min-height: 0;
+}
+
+.freemode-tabstrip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  background: #16171b;
+  border-bottom: 1px solid #2c2d33;
+  padding: 6px 6px 0;
+}
+
+.freemode-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #202127;
+  border: 1px solid #2c2d33;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  padding: 0 4px 0 2px;
+}
+
+.freemode-tab.active {
+  background: #24252b;
+  border-color: #3a6ea5;
+}
+
+.freemode-tab-label {
+  background: transparent;
+  border: none;
+  color: #ccc;
+  padding: 7px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.freemode-tab.active .freemode-tab-label {
+  color: white;
+}
+
+.freemode-tab-close {
+  background: transparent;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 3px 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.freemode-tab-close:hover {
+  background: #3a3b42;
+  color: #eee;
 }
 
 /* --- Packages --- */
@@ -909,6 +1100,52 @@ body {
   overflow-x: auto;
 }
 
+.setup-section-title {
+  margin-top: 36px;
+  padding-top: 20px;
+  border-top: 1px solid #2c2d33;
+  font-size: 17px;
+}
+
+.setup-editor-options {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 16px 0;
+}
+
+.setup-editor-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #24252b;
+  border: 1px solid #2c2d33;
+  border-radius: 10px;
+  padding: 14px 18px;
+  cursor: pointer;
+}
+
+.setup-editor-option input[type="checkbox"] {
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.setup-editor-option strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.setup-editor-option p {
+  font-size: 13px;
+  color: #aaa;
+  line-height: 1.5;
+  margin: 0;
+}
+
 .loading {
   padding: 40px;
   text-align: center;
@@ -924,6 +1161,88 @@ body {
   font-size: 12px;
   color: #ccc;
   cursor: pointer;
+}
+
+.workspace-undo-redo {
+  display: flex;
+  gap: 4px;
+}
+
+.workspace-undo-redo button {
+  padding: 6px 10px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.workspace-history {
+  position: relative;
+}
+
+.workspace-history-toggle {
+  font-size: 13px;
+}
+
+.workspace-history-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #24252b;
+  border: 1px solid #2c2d33;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+  padding: 6px;
+}
+
+.workspace-history-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: #888;
+  text-align: center;
+}
+
+.workspace-history-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.workspace-history-panel li button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: transparent;
+  color: inherit;
+  padding: 8px 10px;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.workspace-history-panel li button:hover {
+  background: #2c2d33;
+}
+
+.workspace-history-time {
+  font-size: 11px;
+  color: #888;
+}
+
+.workspace-history-preview {
+  font-size: 12px;
+  color: #ddd;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .workspace-status {

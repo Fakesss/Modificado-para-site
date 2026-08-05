@@ -5,7 +5,10 @@ import { FreeModeView } from "./components/FreeModeView";
 import { DrawingsView } from "./components/DrawingsView";
 import { PackagesView } from "./components/PackagesView";
 import { SetupWizard } from "./components/SetupWizard";
+import { PdfPopoutWindow } from "./components/PdfPopoutWindow";
 import type { EngineStatus } from "./types/global";
+
+const isPdfPopout = window.location.hash === "#pdf-popout";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("lessons");
@@ -19,6 +22,7 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (isPdfPopout) return;
     recheckEngine().then((status) => {
       if (!status.installed) setTab("setup");
     });
@@ -27,6 +31,13 @@ export default function App() {
   function goToPackage(packageName: string) {
     setPackageQuery(packageName);
     setTab("packages");
+  }
+
+  // The detached PDF preview window loads this very same bundle (there's no
+  // separate entry point), just at a "#pdf-popout" URL — render only the
+  // minimal popout view for it instead of the full tabbed app.
+  if (isPdfPopout) {
+    return <PdfPopoutWindow />;
   }
 
   // Lessons/Modo Livre/Desenhos stay mounted (just hidden) instead of being

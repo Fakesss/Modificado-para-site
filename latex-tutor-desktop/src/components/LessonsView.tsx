@@ -85,6 +85,12 @@ export function LessonsView({ isActive, onGoToPackage }: LessonsViewProps) {
 
           <div className="lessons-actions-row">
             <button onClick={() => setShowExample((v) => !v)}>{showExample ? "Ocultar exemplo pronto" : "Ver exemplo pronto"}</button>
+            <button
+              title="Restaura o código inicial desta lição, desfazendo qualquer alteração ou exclusão acidental"
+              onClick={() => setCode(lesson.guidedStarter)}
+            >
+              ↺ Restaurar código original
+            </button>
             <button className="lessons-complete-btn" onClick={markComplete}>
               {completed.has(lesson.id) ? "✔ Concluído — avançar para o próximo" : "Marcar como concluído e avançar"}
             </button>

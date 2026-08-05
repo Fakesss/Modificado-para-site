@@ -29,6 +29,40 @@ contextBridge.exposeInMainWorld("api", {
   freeMode: {
     getFiles: () => ipcRenderer.invoke("freemode:get-files"),
     saveFile: (relPath, content) => ipcRenderer.invoke("freemode:save-file", relPath, content),
-    deleteFile: (relPath) => ipcRenderer.invoke("freemode:delete-file", relPath)
+    deleteFile: (relPath) => ipcRenderer.invoke("freemode:delete-file", relPath),
+    setOpenTabs: (openTabs, activeFile) => ipcRenderer.invoke("freemode:set-open-tabs", openTabs, activeFile)
+  },
+  settings: {
+    get: () => ipcRenderer.invoke("settings:get"),
+    set: (settings) => ipcRenderer.invoke("settings:set", settings)
+  },
+  app: {
+    onFlushBeforeClose: (cb) => {
+      const listener = () => cb();
+      ipcRenderer.on("app:flush-before-close", listener);
+      return () => ipcRenderer.removeListener("app:flush-before-close", listener);
+    },
+    confirmFlushComplete: () => ipcRenderer.send("app:flush-complete")
+  },
+  images: {
+    list: () => ipcRenderer.invoke("images:list"),
+    add: () => ipcRenderer.invoke("images:add"),
+    delete: (name) => ipcRenderer.invoke("images:delete", name),
+    read: (name) => ipcRenderer.invoke("images:read", name)
+  },
+  pdfWindow: {
+    open: () => ipcRenderer.invoke("pdf-window:open"),
+    close: () => ipcRenderer.invoke("pdf-window:close"),
+    updateData: (pdf) => ipcRenderer.send("pdf-window:update-data", pdf),
+    onData: (cb) => {
+      const listener = (_evt, data) => cb(data ? new Uint8Array(data) : null);
+      ipcRenderer.on("pdf-window:data", listener);
+      return () => ipcRenderer.removeListener("pdf-window:data", listener);
+    },
+    onStateChanged: (cb) => {
+      const listener = (_evt, isOpen) => cb(isOpen);
+      ipcRenderer.on("pdf-window:state-changed", listener);
+      return () => ipcRenderer.removeListener("pdf-window:state-changed", listener);
+    }
   }
 });

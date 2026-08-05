@@ -54,6 +54,7 @@ export interface ProgressState {
 export interface FreeModeFiles {
   files: Record<string, string>;
   lastActiveFile: string;
+  openTabs: string[];
 }
 
 export interface PdfSaveResult {
@@ -61,6 +62,16 @@ export interface PdfSaveResult {
   cancelled?: boolean;
   filePath?: string;
   message?: string;
+}
+
+export interface EditorSettings {
+  autoCloseBrackets: boolean;
+  tabAutocomplete: boolean;
+}
+
+export interface ImageInfo {
+  name: string;
+  sizeKB: number;
 }
 
 export interface WindowApi {
@@ -94,6 +105,28 @@ export interface WindowApi {
     getFiles: () => Promise<FreeModeFiles>;
     saveFile: (relPath: string, content: string) => Promise<void>;
     deleteFile: (relPath: string) => Promise<void>;
+    setOpenTabs: (openTabs: string[], activeFile?: string) => Promise<void>;
+  };
+  settings: {
+    get: () => Promise<EditorSettings>;
+    set: (settings: Partial<EditorSettings>) => Promise<EditorSettings>;
+  };
+  app: {
+    onFlushBeforeClose: (cb: () => void) => () => void;
+    confirmFlushComplete: () => void;
+  };
+  images: {
+    list: () => Promise<ImageInfo[]>;
+    add: () => Promise<{ added: number; images: ImageInfo[] }>;
+    delete: (name: string) => Promise<ImageInfo[]>;
+    read: (name: string) => Promise<string | null>;
+  };
+  pdfWindow: {
+    open: () => Promise<boolean>;
+    close: () => Promise<boolean>;
+    updateData: (pdf: Uint8Array | null) => void;
+    onData: (cb: (pdf: Uint8Array | null) => void) => () => void;
+    onStateChanged: (cb: (isOpen: boolean) => void) => () => void;
   };
 }
 

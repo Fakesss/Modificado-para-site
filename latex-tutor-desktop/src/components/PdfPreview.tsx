@@ -3,6 +3,7 @@ import * as pdfjsLib from "pdfjs-dist";
 // eslint-disable-next-line import/no-unresolved
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { getActiveEditor } from "../lib/activeEditor";
+import { openPdfWindow } from "../lib/pdfWindow";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -27,6 +28,11 @@ type Point = { xAbs: number; yAbs: number; xDisp: number; yDisp: number };
 interface PdfPreviewProps {
   pdfData: Uint8Array | null;
   emptyMessage?: string;
+  // True when this PdfPreview is the one running inside the detached popout
+  // window itself — hides controls that only make sense in the main window
+  // (detaching again, or the coordinate tool, which inserts into "the active
+  // editor", a registry that only exists in the main window's JS context).
+  isPopout?: boolean;
 }
 
 function formatCm(v: number) {
@@ -36,7 +42,7 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-export function PdfPreview({ pdfData, emptyMessage }: PdfPreviewProps) {
+export function PdfPreview({ pdfData, emptyMessage, isPopout }: PdfPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoomState] = useState(1);
@@ -318,17 +324,24 @@ export function PdfPreview({ pdfData, emptyMessage }: PdfPreviewProps) {
           <button onClick={fitPage} title="Ver página inteira">
             Página
           </button>
-          <button
-            className={coordMode ? "active" : ""}
-            onClick={() => setCoordMode((v) => !v)}
-            title="Ferramenta de coordenadas"
-          >
-            📐 Coordenadas
-          </button>
+          {!isPopout && (
+            <button
+              className={coordMode ? "active" : ""}
+              onClick={() => setCoordMode((v) => !v)}
+              title="Ferramenta de coordenadas"
+            >
+              📐 Coordenadas
+            </button>
+          )}
+          {!isPopout && (
+            <button onClick={openPdfWindow} title="Abrir a pré-visualização em outra janela, redimensionável e movível">
+              ⧉ Destacar
+            </button>
+          )}
         </div>
       </div>
 
-      {coordMode && (
+      {!isPopout && coordMode && (
         <div className="coord-toolbar">
           <label>
             Origem:{" "}

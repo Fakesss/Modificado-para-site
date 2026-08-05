@@ -6,9 +6,53 @@ const { compileLatex } = require("./compiler");
 const { listPackages, installPackage, uninstallPackage } = require("./packages");
 const { savePdf, openPath, showInFolder } = require("./pdfExport");
 const store = require("./store");
+const { listImages, addImages, deleteImage, readImageDataUrl } = require("./imageBank");
 
 const isDev = process.env.NODE_ENV === "development";
 const RENDERER_DIR = path.join(__dirname, "..", "dist", "renderer");
+
+// Single floating PDF preview window (there's only ever one, mirroring
+// whichever tab is currently active in the main window).
+let pdfWin = null;
+
+function notifyPdfWindowState(isOpen) {
+  BrowserWindow.getAllWindows().forEach((w) => {
+    if (w !== pdfWin) w.webContents.send("pdf-window:state-changed", isOpen);
+  });
+}
+
+function openPdfWindow() {
+  if (pdfWin && !pdfWin.isDestroyed()) {
+    pdfWin.focus();
+    return true;
+  }
+  pdfWin = new BrowserWindow({
+    width: 700,
+    height: 900,
+    title: "KubiTeX - Pré-visualização do PDF",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  if (isDev) {
+    pdfWin.loadURL("http://localhost:5173/#pdf-popout");
+  } else {
+    pdfWin.loadURL("app://bundle/index.html#pdf-popout");
+  }
+  pdfWin.on("closed", () => {
+    pdfWin = null;
+    notifyPdfWindowState(false);
+  });
+  // Wait for the popout page to finish loading (and register its own
+  // "pdf-window:data" listener) before telling the main window it's open —
+  // otherwise the resend of the current PDF that follows could arrive before
+  // anyone in that window is listening for it.
+  pdfWin.webContents.once("did-finish-load", () => notifyPdfWindowState(true));
+  return true;
+}
 
 function resourcesPath() {
   return app.isPackaged ? process.resourcesPath : path.join(__dirname, "..", "resources");
@@ -43,6 +87,32 @@ function createWindow() {
   } else {
     win.loadURL("app://bundle/index.html");
   }
+
+  // Free Mode debounces disk writes by ~500ms, so a close right after typing
+  // could otherwise drop the last keystrokes. Hold the window open just long
+  // enough for the renderer to flush pending saves, with a timeout in case it
+  // never responds (e.g. the page crashed).
+  let readyToDestroy = false;
+  let flushRequested = false;
+  win.on("close", (event) => {
+    if (readyToDestroy) return;
+    event.preventDefault();
+    // The floating PDF window has nothing to flush; just don't leave it
+    // orphaned (window-all-closed wouldn't fire while it's still open).
+    if (pdfWin && !pdfWin.isDestroyed()) pdfWin.close();
+    if (flushRequested) return;
+    flushRequested = true;
+    win.webContents.send("app:flush-before-close");
+    const forceTimer = setTimeout(() => {
+      readyToDestroy = true;
+      win.close();
+    }, 2000);
+    ipcMain.once("app:flush-complete", () => {
+      clearTimeout(forceTimer);
+      readyToDestroy = true;
+      win.close();
+    });
+  });
 }
 
 app.whenReady().then(() => {
@@ -121,3 +191,25 @@ ipcMain.handle("progress:dismiss-setup", (_evt, value) => store.setSetupDismisse
 ipcMain.handle("freemode:get-files", () => store.getFreeModeFiles());
 ipcMain.handle("freemode:save-file", (_evt, relPath, content) => store.saveFreeModeFile(relPath, content));
 ipcMain.handle("freemode:delete-file", (_evt, relPath) => store.deleteFreeModeFile(relPath));
+ipcMain.handle("freemode:set-open-tabs", (_evt, openTabs, activeFile) => store.setOpenTabs(openTabs, activeFile));
+
+ipcMain.handle("settings:get", () => store.getEditorSettings());
+ipcMain.handle("settings:set", (_evt, settings) => store.setEditorSettings(settings));
+
+// --- IPC: image bank ---
+
+ipcMain.handle("images:list", () => listImages());
+ipcMain.handle("images:add", (evt) => addImages(BrowserWindow.fromWebContents(evt.sender)));
+ipcMain.handle("images:delete", (_evt, name) => deleteImage(name));
+ipcMain.handle("images:read", (_evt, name) => readImageDataUrl(name));
+
+// --- IPC: detachable PDF preview window ---
+
+ipcMain.handle("pdf-window:open", () => openPdfWindow());
+ipcMain.handle("pdf-window:close", () => {
+  if (pdfWin && !pdfWin.isDestroyed()) pdfWin.close();
+  return true;
+});
+ipcMain.on("pdf-window:update-data", (_evt, pdf) => {
+  if (pdfWin && !pdfWin.isDestroyed()) pdfWin.webContents.send("pdf-window:data", pdf);
+});

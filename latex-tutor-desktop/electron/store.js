@@ -8,7 +8,12 @@ const store = new Store({
       "main.tex": "\\documentclass{article}\n\\begin{document}\n\nOlá, mundo!\n\n\\end{document}\n"
     },
     lastActiveFile: "main.tex",
-    setupDismissed: false
+    openTabs: ["main.tex"],
+    setupDismissed: false,
+    editorSettings: {
+      autoCloseBrackets: true,
+      tabAutocomplete: true
+    }
   }
 });
 
@@ -31,9 +36,12 @@ function setSetupDismissed(value) {
 }
 
 function getFreeModeFiles() {
+  const files = store.get("freeModeFiles");
+  const openTabs = (store.get("openTabs") || []).filter((f) => f in files);
   return {
-    files: store.get("freeModeFiles"),
-    lastActiveFile: store.get("lastActiveFile")
+    files,
+    lastActiveFile: store.get("lastActiveFile"),
+    openTabs: openTabs.length > 0 ? openTabs : Object.keys(files).slice(0, 1)
   };
 }
 
@@ -48,6 +56,22 @@ function deleteFreeModeFile(relPath) {
   const files = store.get("freeModeFiles");
   delete files[relPath];
   store.set("freeModeFiles", files);
+  const openTabs = (store.get("openTabs") || []).filter((f) => f !== relPath);
+  store.set("openTabs", openTabs);
+}
+
+function setOpenTabs(openTabs, activeFile) {
+  store.set("openTabs", openTabs);
+  if (activeFile) store.set("lastActiveFile", activeFile);
+}
+
+function getEditorSettings() {
+  return store.get("editorSettings");
+}
+
+function setEditorSettings(settings) {
+  store.set("editorSettings", { ...store.get("editorSettings"), ...settings });
+  return store.get("editorSettings");
 }
 
 module.exports = {
@@ -56,5 +80,8 @@ module.exports = {
   setSetupDismissed,
   getFreeModeFiles,
   saveFreeModeFile,
-  deleteFreeModeFile
+  deleteFreeModeFile,
+  setOpenTabs,
+  getEditorSettings,
+  setEditorSettings
 };
