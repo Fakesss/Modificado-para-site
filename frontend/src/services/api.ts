@@ -15,6 +15,13 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// O backend (Render) "dorme" depois de um tempo sem uso e pode levar dezenas de
+// segundos pra acordar na primeira requisição — sem isso, o app mostrava erro
+// ("fora do ar") pra quem abria o app/jogo justo nesse momento, mesmo o servidor
+// estando saudável (só lento pra acordar). Tenta de novo algumas vezes, esperando
+// mais a cada tentativa, antes de desistir de verdade.
+const ESPERAS_RETENTATIVA_MS = [3000, 6000, 10000]; // web: até ~19s de espera extra, além do tempo de cada tentativa
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -22,11 +29,13 @@ api.interceptors.response.use(
     if (!originalRequest) return Promise.reject(error);
 
     const isNetworkOrServerError = !error.response || error.response?.status >= 500;
+    const tentativa = originalRequest._retryCount || 0;
+    const maxTentativas = Platform.OS === 'web' ? ESPERAS_RETENTATIVA_MS.length : 1;
 
-    if (isNetworkOrServerError && !originalRequest._retry) {
-      originalRequest._retry = true; 
-      console.log('📡 Detectada queda. Aguardando estabilização...');
-      const tempoEspera = Platform.OS === 'web' ? 3000 : 100;
+    if (isNetworkOrServerError && tentativa < maxTentativas) {
+      originalRequest._retryCount = tentativa + 1;
+      const tempoEspera = Platform.OS === 'web' ? ESPERAS_RETENTATIVA_MS[tentativa] : 100;
+      console.log(`📡 Detectada queda (tentativa ${tentativa + 1}/${maxTentativas}). Aguardando ${tempoEspera}ms...`);
       await new Promise((resolve) => setTimeout(resolve, tempoEspera));
       return api(originalRequest);
     }

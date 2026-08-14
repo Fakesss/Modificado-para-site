@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 import os
 import logging
 import re
@@ -365,22 +366,36 @@ async def aplicar_pontos_diarios_jogo(usuario_id: str, equipe_id: Optional[str],
 
     data_hoje = get_now_brt().strftime("%Y-%m-%d")
     filtro = {"usuarioId": usuario_id, "jogo": jogo, "data": data_hoje}
-    registro = await db.pontos_diarios_jogos.find_one(filtro)
-    ja_ganho_hoje = registro.get("pontosHoje", 0) if registro else 0
 
-    espaco_restante = max(limite - ja_ganho_hoje, 0)
-    pontos_validos = max(min(pontos_calculados, espaco_restante), 0)
+    # Trava o limite diário de forma ATÔMICA (pipeline de update executada inteira pelo
+    # MongoDB, sem intervalo entre "ler quanto já ganhou hoje" e "gravar quanto ganha agora").
+    # A versão anterior lia o saldo, calculava e só depois gravava — se duas partidas
+    # terminassem quase juntas, as duas liam o MESMO saldo antes de qualquer uma gravar, e as
+    # duas concediam pontos até o limite, juntas ultrapassando-o (foi assim que um aluno
+    # conseguiu mais pontos de equipe num dia do que o limite configurado permitiria).
+    atualizado = await db.pontos_diarios_jogos.find_one_and_update(
+        filtro,
+        [
+            {"$set": {"_antes": {"$ifNull": ["$pontosHoje", 0]}}},
+            {"$set": {
+                "id": {"$ifNull": ["$id", str(uuid.uuid4())]},
+                "usuarioId": usuario_id, "jogo": jogo, "data": data_hoje,
+                "pontosHoje": {"$min": [limite, {"$add": ["$_antes", pontos_calculados]}]},
+                "concedidoAgora": {"$subtract": [{"$min": [limite, {"$add": ["$_antes", pontos_calculados]}]}, "$_antes"]},
+            }},
+            {"$unset": "_antes"},
+        ],
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+    pontos_validos = max(0, int(atualizado.get("concedidoAgora", 0)))
+    total_hoje = int(atualizado.get("pontosHoje", 0))
 
     if pontos_validos > 0:
-        await db.pontos_diarios_jogos.update_one(
-            filtro, {"$inc": {"pontosHoje": pontos_validos}, "$setOnInsert": {"id": str(uuid.uuid4())}},
-            upsert=True
-        )
         await db.usuarios.update_one({"id": usuario_id}, {"$inc": {"pontosTotais": pontos_validos}})
         if equipe_id:
             await db.equipes.update_one({"id": str(equipe_id).strip()}, {"$inc": {"pontosTotais": pontos_validos}})
 
-    total_hoje = ja_ganho_hoje + pontos_validos
     return {
         "pontosGanhos": pontos_validos,
         "pontosHojeNesseJogo": total_hoje,
