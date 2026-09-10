@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import * as api from '../../src/services/api';
 import { ConfiguracaoJogo } from '../../src/types';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 
 const FAMILIAS_POWERUP: { id: string; nome: string }[] = [
   { id: 'DAMAGE', nome: 'Dano da Nave' },
@@ -35,6 +36,8 @@ const TIPOS_INIMIGO: { id: string; nome: string }[] = [
 ];
 
 export default function AdminConfigJogo() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const [config, setConfig] = useState<ConfiguracaoJogo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,7 +74,7 @@ export default function AdminConfigJogo() {
   if (loading || !config) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#FFD700" style={{ marginTop: 80 }} />
+        <ActivityIndicator size="large" color={cores.dourado} style={{ marginTop: 80 }} />
       </SafeAreaView>
     );
   }
@@ -80,7 +83,7 @@ export default function AdminConfigJogo() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFD700" />
+          <Ionicons name="arrow-back" size={24} color={cores.dourado} />
         </TouchableOpacity>
         <Text style={styles.title}>Painel de Partida (Equações Espaciais)</Text>
         <View style={{ width: 40 }} />
@@ -90,7 +93,7 @@ export default function AdminConfigJogo() {
         <Text style={styles.secaoTitulo}>TAXA DE DROP DE POWERUPS</Text>
         <Text style={styles.secaoDesc}>Controla a frequência com que powerups aparecem na partida.</Text>
         <View style={styles.sliderRow}>
-          <Ionicons name="gift-outline" size={20} color="#FFD700" />
+          <Ionicons name="gift-outline" size={20} color={cores.dourado} />
           <Slider
             style={{ flex: 1, height: 40, marginHorizontal: 10 }}
             minimumValue={0.25}
@@ -98,9 +101,9 @@ export default function AdminConfigJogo() {
             step={0.05}
             value={config.dropRateMultiplier}
             onValueChange={(val) => setConfig({ ...config, dropRateMultiplier: val })}
-            minimumTrackTintColor="#FFD700"
-            maximumTrackTintColor="#333"
-            thumbTintColor="#FFD700"
+            minimumTrackTintColor={cores.dourado}
+            maximumTrackTintColor={cores.borda}
+            thumbTintColor={cores.dourado}
           />
           <Text style={styles.sliderValor}>x{config.dropRateMultiplier.toFixed(2)}</Text>
         </View>
@@ -112,8 +115,8 @@ export default function AdminConfigJogo() {
             const ativo = config.powerupsHabilitados.includes(fam.id);
             return (
               <TouchableOpacity key={fam.id} style={styles.linhaCheckbox} onPress={() => togglePowerup(fam.id)}>
-                <Ionicons name={ativo ? 'checkbox' : 'square-outline'} size={20} color={ativo ? '#FFD700' : '#666'} />
-                <Text style={[styles.checkboxLabel, !ativo && { color: '#666' }]}>{fam.nome}</Text>
+                <Ionicons name={ativo ? 'checkbox' : 'square-outline'} size={20} color={ativo ? cores.dourado : cores.textoFraco} />
+                <Text style={[styles.checkboxLabel, !ativo && { color: cores.textoFraco }]}>{fam.nome}</Text>
               </TouchableOpacity>
             );
           })}
@@ -137,7 +140,7 @@ export default function AdminConfigJogo() {
         ))}
 
         <TouchableOpacity style={styles.btnSalvar} onPress={salvar} disabled={salvando}>
-          {salvando ? <ActivityIndicator size="small" color="#000" /> : (
+          {salvando ? <ActivityIndicator size="small" color={cores.sobreAcento} /> : (
             <Text style={styles.btnSalvarText}>{salvo ? 'SALVO!' : 'SALVAR CONFIGURAÇÃO'}</Text>
           )}
         </TouchableOpacity>
@@ -146,24 +149,24 @@ export default function AdminConfigJogo() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#333' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: cores.borda },
   backButton: { padding: 8 },
-  title: { fontSize: 16, fontWeight: 'bold', color: '#fff', flex: 1, textAlign: 'center' },
+  title: { fontSize: 16, fontWeight: 'bold', color: cores.texto, flex: 1, textAlign: 'center' },
   scrollContent: { padding: 16, paddingBottom: 60 },
-  secaoTitulo: { color: '#FFD700', fontSize: 15, fontWeight: '900', letterSpacing: 1, marginTop: 24, marginBottom: 4 },
-  secaoDesc: { color: '#888', fontSize: 12, marginBottom: 12 },
-  sliderRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
-  sliderValor: { color: '#FFD700', fontWeight: 'bold', fontSize: 13, minWidth: 50, textAlign: 'right' },
-  gridCheckbox: { backgroundColor: '#1a1a2e', borderRadius: 10, padding: 6 },
+  secaoTitulo: { color: cores.dourado, fontSize: 15, fontWeight: '900', letterSpacing: 1, marginTop: 24, marginBottom: 4 },
+  secaoDesc: { color: cores.textoFraco, fontSize: 12, marginBottom: 12 },
+  sliderRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  sliderValor: { color: cores.dourado, fontWeight: 'bold', fontSize: 13, minWidth: 50, textAlign: 'right' },
+  gridCheckbox: { backgroundColor: cores.superficie, borderRadius: 10, padding: 6 },
   linhaCheckbox: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, paddingHorizontal: 10 },
-  checkboxLabel: { color: '#EEE', fontSize: 13 },
-  linhaSpawn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1a1a2e', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 8 },
-  linhaSpawnNome: { color: '#EEE', fontSize: 13, fontWeight: '600' },
+  checkboxLabel: { color: cores.texto, fontSize: 13 },
+  linhaSpawn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: cores.superficie, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 8 },
+  linhaSpawnNome: { color: cores.texto, fontSize: 13, fontWeight: '600' },
   spawnInputBox: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  spawnInput: { backgroundColor: '#0c0c0c', color: '#FFD700', borderWidth: 1, borderColor: '#444', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, width: 60, textAlign: 'center', fontWeight: 'bold' },
-  spawnInputPct: { color: '#888', fontSize: 12 },
-  btnSalvar: { backgroundColor: '#FFD700', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 30 },
-  btnSalvarText: { color: '#000', fontWeight: '900', fontSize: 14 },
+  spawnInput: { backgroundColor: cores.fundo, color: cores.dourado, borderWidth: 1, borderColor: cores.borda, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, width: 60, textAlign: 'center', fontWeight: 'bold' },
+  spawnInputPct: { color: cores.textoFraco, fontSize: 12 },
+  btnSalvar: { backgroundColor: cores.dourado, borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 30 },
+  btnSalvarText: { color: cores.sobreAcento, fontWeight: '900', fontSize: 14 },
 });

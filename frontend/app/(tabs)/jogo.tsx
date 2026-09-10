@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
 export default function HubJogos() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
 
   return (
@@ -14,7 +17,7 @@ export default function HubJogos() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         
         <View style={styles.header}>
-          <Ionicons name="game-controller" size={64} color="#FFD700" />
+          <Ionicons name="game-controller" size={64} color={cores.dourado} />
           <Text style={styles.title}>Sala de Jogos</Text>
           <Text style={styles.subtitle}>Escolha seu modo de treinamento</Text>
         </View>
@@ -25,8 +28,8 @@ export default function HubJogos() {
           onPress={() => router.push('/sky_equations')}
           activeOpacity={0.8}
         >
-          <View style={[styles.iconContainer, { backgroundColor: '#00FFFF20' }]}>
-            <Ionicons name="rocket" size={40} color="#00FFFF" />
+          <View style={[styles.iconContainer, { backgroundColor: cores.ciano + '20' }]}>
+            <Ionicons name="rocket" size={40} color={cores.ciano} />
           </View>
           <View style={styles.gameInfo}>
             <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
@@ -42,8 +45,8 @@ export default function HubJogos() {
           onPress={() => router.push('/tictactoe')}
           activeOpacity={0.8}
         >
-          <View style={[styles.iconContainer, { backgroundColor: '#32CD3220' }]}>
-            <Ionicons name="grid" size={40} color="#32CD32" />
+          <View style={[styles.iconContainer, { backgroundColor: cores.sucesso + '20' }]}>
+            <Ionicons name="grid" size={40} color={cores.sucesso} />
           </View>
           <View style={styles.gameInfo}>
             <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
@@ -59,8 +62,8 @@ export default function HubJogos() {
           onPress={() => router.push('/arcade')}
           activeOpacity={0.8}
         >
-          <View style={[styles.iconContainer, { backgroundColor: '#4169E120' }]}>
-            <Ionicons name="rocket" size={40} color="#4169E1" />
+          <View style={[styles.iconContainer, { backgroundColor: cores.azul + '20' }]}>
+            <Ionicons name="rocket" size={40} color={cores.azul} />
           </View>
           <View style={styles.gameInfo}>
             <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
@@ -76,8 +79,8 @@ export default function HubJogos() {
           onPress={() => router.push('/cabo_de_guerra_offline')}
           activeOpacity={0.8}
         >
-          <View style={[styles.iconContainer, { backgroundColor: '#FF450020' }]}>
-            <Ionicons name="people" size={40} color="#FF4500" />
+          <View style={[styles.iconContainer, { backgroundColor: cores.laranja + '20' }]}>
+            <Ionicons name="people" size={40} color={cores.laranja} />
           </View>
           <View style={styles.gameInfo}>
             <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
@@ -93,8 +96,8 @@ export default function HubJogos() {
           onPress={() => router.push('/tabuada' as any)}
           activeOpacity={0.8}
         >
-          <View style={[styles.iconContainer, { backgroundColor: '#FFB30020' }]}>
-            <Ionicons name="trail-sign" size={40} color="#FFB300" />
+          <View style={[styles.iconContainer, { backgroundColor: cores.ambar + '20' }]}>
+            <Ionicons name="trail-sign" size={40} color={cores.ambar} />
           </View>
           <View style={styles.gameInfo}>
             <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
@@ -110,8 +113,8 @@ export default function HubJogos() {
           onPress={() => router.push('/sudoku' as any)}
           activeOpacity={0.8}
         >
-          <View style={[styles.iconContainer, { backgroundColor: '#BB99FF20' }]}>
-            <Ionicons name="grid-outline" size={40} color="#BB99FF" />
+          <View style={[styles.iconContainer, { backgroundColor: cores.roxo + '20' }]}>
+            <Ionicons name="grid-outline" size={40} color={cores.roxo} />
           </View>
           <View style={styles.gameInfo}>
             <Text style={styles.gameTitle} numberOfLines={1} ellipsizeMode="tail">
@@ -126,23 +129,23 @@ export default function HubJogos() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   scrollContent: { padding: 20, alignItems: 'center' },
   header: { alignItems: 'center', marginBottom: 40, marginTop: 20 },
-  title: { fontSize: 32, fontWeight: '900', color: '#fff', marginTop: 12 },
-  subtitle: { fontSize: 16, color: '#888', marginTop: 4 },
+  title: { fontSize: 32, fontWeight: '900', color: cores.texto, marginTop: 12 },
+  subtitle: { fontSize: 16, color: cores.textoFraco, marginTop: 4 },
   
   gameCard: { 
     flexDirection: 'row', 
-    backgroundColor: '#1a1a2e', 
+    backgroundColor: cores.superficie, 
     borderRadius: 20, 
     padding: 20, 
     marginBottom: 20, 
     width: '100%', 
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#333'
+    borderColor: cores.borda
   },
   iconContainer: { 
     width: 80, 
@@ -153,6 +156,6 @@ const styles = StyleSheet.create({
     marginRight: 15 
   },
   gameInfo: { flex: 1 },
-  gameTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 6 },
-  gameDesc: { color: '#aaa', fontSize: 13, lineHeight: 18 }
+  gameTitle: { color: cores.texto, fontSize: 20, fontWeight: 'bold', marginBottom: 6 },
+  gameDesc: { color: cores.textoFraco, fontSize: 13, lineHeight: 18 }
 });

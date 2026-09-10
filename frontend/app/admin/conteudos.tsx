@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
   ActivityIndicator, Alert, Platform
@@ -8,8 +8,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
 import { Conteudo } from '../../src/types';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 
 export default function AdminGerenciarConteudos() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const [conteudos, setConteudos] = useState<Conteudo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +67,7 @@ export default function AdminGerenciarConteudos() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View>
+        <View style={styles.loadingContainer}><ActivityIndicator size="large" color={cores.dourado} /></View>
       </SafeAreaView>
     );
   }
@@ -72,14 +75,14 @@ export default function AdminGerenciarConteudos() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color="#fff" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={cores.texto} /></TouchableOpacity>
         <Text style={styles.headerTitle}>Gerenciar Conteúdos</Text>
         <TouchableOpacity onPress={() => router.push('/admin/criar-conteudo')}>
-          <Ionicons name="add-circle" size={28} color="#FFD700" />
+          <Ionicons name="add-circle" size={28} color={cores.dourado} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={cores.dourado} />}>
         
         {conteudos.map((conteudo) => (
           <View key={conteudo.id} style={styles.card}>
@@ -87,7 +90,7 @@ export default function AdminGerenciarConteudos() {
               <Ionicons 
                 name={conteudo.tipo === 'VIDEO' ? 'play' : conteudo.tipo === 'LINK' ? 'link' : 'document'} 
                 size={28} 
-                color={conteudo.tipo === 'VIDEO' ? '#4169E1' : conteudo.tipo === 'LINK' ? '#32CD32' : '#FFD700'} 
+                color={conteudo.tipo === 'VIDEO' ? cores.azul : conteudo.tipo === 'LINK' ? cores.sucesso : cores.dourado} 
               />
             </View>
             <View style={styles.cardInfo}>
@@ -98,10 +101,10 @@ export default function AdminGerenciarConteudos() {
             </View>
             <View style={styles.cardActions}>
               <TouchableOpacity style={styles.actionButton} onPress={() => router.push({ pathname: '/admin/criar-conteudo', params: { id: conteudo.id } })}>
-                <Ionicons name="pencil" size={20} color="#FFD700" />
+                <Ionicons name="pencil" size={20} color={cores.dourado} />
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton} onPress={() => handleDelete(conteudo.id)}>
-                <Ionicons name="trash" size={20} color="#E74C3C" />
+                <Ionicons name="trash" size={20} color={cores.erro} />
               </TouchableOpacity>
             </View>
           </View>
@@ -109,10 +112,10 @@ export default function AdminGerenciarConteudos() {
 
         {conteudos.length === 0 && (
           <View style={styles.emptyState}>
-            <Ionicons name="folder-open-outline" size={48} color="#666" />
+            <Ionicons name="folder-open-outline" size={48} color={cores.textoFraco} />
             <Text style={styles.emptyText}>Nenhum conteúdo cadastrado</Text>
             <TouchableOpacity style={styles.createButton} onPress={() => router.push('/admin/criar-conteudo')}>
-              <Ionicons name="add" size={20} color="#000" />
+              <Ionicons name="add" size={20} color={cores.sobreAcento} />
               <Text style={styles.createButtonText}>Criar Primeiro Conteúdo</Text>
             </TouchableOpacity>
           </View>
@@ -123,24 +126,24 @@ export default function AdminGerenciarConteudos() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  headerTitle: { color: cores.texto, fontSize: 18, fontWeight: 'bold' },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, marginBottom: 12 },
-  cardIcon: { width: 56, height: 56, backgroundColor: '#ffffff10', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 16, padding: 16, marginBottom: 12 },
+  cardIcon: { width: 56, height: 56, backgroundColor: cores.textoFraco + '18', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   cardInfo: { flex: 1, marginLeft: 12 },
-  cardTitle: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  cardTitle: { color: cores.texto, fontSize: 16, fontWeight: '600' },
   cardMeta: { flexDirection: 'row', marginTop: 8 },
-  badge: { backgroundColor: '#333', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  badgeText: { fontSize: 10, fontWeight: 'bold', color: '#fff' },
+  badge: { backgroundColor: cores.borda, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  badgeText: { fontSize: 10, fontWeight: 'bold', color: cores.texto },
   cardActions: { gap: 8 },
-  actionButton: { padding: 8, backgroundColor: '#252540', borderRadius: 8 },
+  actionButton: { padding: 8, backgroundColor: cores.superficieAlt, borderRadius: 8 },
   emptyState: { alignItems: 'center', padding: 40 },
-  emptyText: { color: '#666', fontSize: 16, marginTop: 16, marginBottom: 20 },
-  createButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD700', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, gap: 8 },
-  createButtonText: { color: '#000', fontWeight: 'bold' },
+  emptyText: { color: cores.textoFraco, fontSize: 16, marginTop: 16, marginBottom: 20 },
+  createButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.dourado, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, gap: 8 },
+  createButtonText: { color: cores.sobreAcento, fontWeight: 'bold' },
 });

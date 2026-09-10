@@ -1,12 +1,15 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Switch, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
 import { socket } from '../../src/services/socket';
 
 export default function JogadoresOnline() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const { user } = useAuth();
   const router = useRouter();
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
@@ -109,9 +112,9 @@ export default function JogadoresOnline() {
   };
 
   const getStatusColor = (status: string) => {
-    if (status === 'JOGANDO_ONLINE' || status === 'JOGANDO_OFFLINE') return '#FF4444'; 
-    if (status === 'EXERCICIO') return '#FFD700'; 
-    return '#32CD32'; 
+    if (status === 'JOGANDO_ONLINE' || status === 'JOGANDO_OFFLINE') return cores.erro; 
+    if (status === 'EXERCICIO') return cores.dourado; 
+    return cores.sucesso; 
   };
 
   const getStatusText = (status: string) => {
@@ -124,14 +127,14 @@ export default function JogadoresOnline() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="radio" size={28} color="#32CD32" />
+        <Ionicons name="radio" size={28} color={cores.sucesso} />
         <Text style={styles.title}>Lobby Global</Text>
       </View>
 
       <View style={styles.dndContainer}>
         <View>
           <Text style={{color: '#FFF', fontWeight: 'bold'}}>Receber Convites</Text>
-          <Text style={{color: '#888', fontSize: 12}}>Outros podem te desafiar</Text>
+          <Text style={{color: cores.textoFraco, fontSize: 12}}>Outros podem te desafiar</Text>
         </View>
         <Switch 
           value={aceitaConvites} 
@@ -150,7 +153,7 @@ export default function JogadoresOnline() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#32CD32" />}>
+      <ScrollView contentContainerStyle={styles.list} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={cores.sucesso} />}>
         {abaAtual === 'jogadores' && onlineUsers.map(jogador => (
           <View key={jogador.sid} style={styles.card}>
             <View style={styles.info}>
@@ -167,8 +170,8 @@ export default function JogadoresOnline() {
                 <Text style={styles.btnAcaoText}>Desafiar</Text>
               </TouchableOpacity>
             ) : (
-              <View style={[styles.btnAcao, { backgroundColor: '#333' }]}>
-                <Ionicons name="moon-outline" size={16} color="#888" />
+              <View style={[styles.btnAcao, { backgroundColor: cores.borda }]}>
+                <Ionicons name="moon-outline" size={16} color={cores.textoFraco} />
               </View>
             )}
           </View>
@@ -177,13 +180,13 @@ export default function JogadoresOnline() {
         {abaAtual === 'partidas' && activeMatches.map(match => (
           <View key={match.room_id} style={styles.card}>
             <View style={styles.info}>
-              <Text style={{color: '#FFD700', fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>
+              <Text style={{color: cores.dourado, fontSize: 12, fontWeight: 'bold', marginBottom: 4}}>
                 {match.game_type === 'arcade' ? 'MATEMÁTICA TURBO' : match.game_type === 'math_blaster' ? 'EQUAÇÕES ESPACIAIS CO-OP' : match.game_type === 'tugofwar' ? 'CABO DE GUERRA' : 'JOGO DA VELHA'}
               </Text>
-              <Text style={styles.name}>{match.player1} <Text style={{color: '#FF4444'}}>vs</Text> {match.player2}</Text>
+              <Text style={styles.name}>{match.player1} <Text style={{color: cores.erro}}>vs</Text> {match.player2}</Text>
               <Text style={styles.statusText}>👁 {match.spectators_count} assistindo</Text>
             </View>
-            <TouchableOpacity style={[styles.btnAcao, { backgroundColor: '#4169E1' }]} onPress={() => assistirPartida(match.room_id, match.game_type)}>
+            <TouchableOpacity style={[styles.btnAcao, { backgroundColor: cores.azul }]} onPress={() => assistirPartida(match.room_id, match.game_type)}>
               <Ionicons name="eye" size={20} color="#FFF" />
               <Text style={styles.btnAcaoText}>Assistir</Text>
             </TouchableOpacity>
@@ -192,7 +195,7 @@ export default function JogadoresOnline() {
 
         {((abaAtual === 'jogadores' && onlineUsers.length === 0) || (abaAtual === 'partidas' && activeMatches.length === 0)) && (
           <View style={styles.empty}>
-            <Ionicons name={abaAtual === 'jogadores' ? "people-outline" : "tv-outline"} size={48} color="#444" />
+            <Ionicons name={abaAtual === 'jogadores' ? "people-outline" : "tv-outline"} size={48} color={cores.borda} />
             <Text style={styles.emptyText}>{abaAtual === 'jogadores' ? 'Não há outros jogadores online.' : 'Nenhuma partida rolando no momento.'}</Text>
           </View>
         )}
@@ -207,37 +210,37 @@ export default function JogadoresOnline() {
                 <Text style={styles.modalText}>Qual jogo você quer jogar com {jogadorParaConvidar?.name}?</Text>
                 
                 <TouchableOpacity style={styles.gameOptionBtn} onPress={() => enviarConviteFinal('tictactoe')}>
-                    <View style={[styles.iconContainer, {backgroundColor: '#32CD3220'}]}><Ionicons name="grid" size={28} color="#32CD32" /></View>
+                    <View style={[styles.iconContainer, {backgroundColor: cores.sucesso + '20'}]}><Ionicons name="grid" size={28} color={cores.sucesso} /></View>
                     <Text style={styles.gameOptionText}>Jogo da Velha</Text>
-                    <Ionicons name="chevron-forward" size={20} color="#888" />
+                    <Ionicons name="chevron-forward" size={20} color={cores.textoFraco} />
                 </TouchableOpacity>
                 
                 <TouchableOpacity style={styles.gameOptionBtn} onPress={() => setJogoSelecionadoParaDesafio('arcade')}>
-                    <View style={[styles.iconContainer, {backgroundColor: '#4169E120'}]}><Ionicons name="rocket" size={28} color="#4169E1" /></View>
+                    <View style={[styles.iconContainer, {backgroundColor: cores.azul + '20'}]}><Ionicons name="rocket" size={28} color={cores.azul} /></View>
                     <View style={{flex: 1}}>
                        <Text style={styles.gameOptionText}>Matemática Turbo</Text>
-                       <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Escolher operação...</Text>
+                       <Text style={{color: cores.textoFraco, fontSize: 10, fontWeight: 'bold'}}>Escolher operação...</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={20} color="#888" />
+                    <Ionicons name="chevron-forward" size={20} color={cores.textoFraco} />
                 </TouchableOpacity>
 
                 {/* Ação direta ao clicar em Equações Espaciais Co-op */}
                 <TouchableOpacity style={styles.gameOptionBtn} onPress={() => enviarConviteFinal('math_blaster', 'misto')}>
-                    <View style={[styles.iconContainer, {backgroundColor: '#FFD70020'}]}><Ionicons name="planet" size={28} color="#FFD700" /></View>
+                    <View style={[styles.iconContainer, {backgroundColor: cores.dourado + '20'}]}><Ionicons name="planet" size={28} color={cores.dourado} /></View>
                     <View style={{flex: 1}}>
                        <Text style={styles.gameOptionText}>Equações Espaciais Co-op</Text>
-                       <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Ação Direta!</Text>
+                       <Text style={{color: cores.textoFraco, fontSize: 10, fontWeight: 'bold'}}>Ação Direta!</Text>
                     </View>
-                    <Ionicons name="rocket" size={20} color="#FFD700" />
+                    <Ionicons name="rocket" size={20} color={cores.dourado} />
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.gameOptionBtn} onPress={() => setJogoSelecionadoParaDesafio('tugofwar')}>
-                    <View style={[styles.iconContainer, {backgroundColor: '#FF149320'}]}><Ionicons name="people" size={28} color="#FF1493" /></View>
+                    <View style={[styles.iconContainer, {backgroundColor: cores.rosa + '20'}]}><Ionicons name="people" size={28} color={cores.rosa} /></View>
                     <View style={{flex: 1}}>
                        <Text style={styles.gameOptionText}>Cabo de Guerra</Text>
-                       <Text style={{color: '#888', fontSize: 10, fontWeight: 'bold'}}>Escolher operação...</Text>
+                       <Text style={{color: cores.textoFraco, fontSize: 10, fontWeight: 'bold'}}>Escolher operação...</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={20} color="#888" />
+                    <Ionicons name="chevron-forward" size={20} color={cores.textoFraco} />
                 </TouchableOpacity>
               </>
             ) : (
@@ -249,20 +252,20 @@ export default function JogadoresOnline() {
                 
                 <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center'}}>
                     {[
-                        {id: 'misto', nome: 'Misto', cor: '#FFD700'},
-                        {id: 'soma', nome: 'Soma', cor: '#32CD32'},
-                        {id: 'subtracao', nome: 'Subtração', cor: '#FF4444'},
-                        {id: 'multiplicacao', nome: 'Multiplicação', cor: '#4169E1'},
-                        {id: 'divisao', nome: 'Divisão', cor: '#9b59b6'},
-                        {id: 'potenciacao', nome: 'Potência/Raiz', cor: '#FF8C00'},
+                        {id: 'misto', nome: 'Misto', cor: cores.dourado},
+                        {id: 'soma', nome: 'Soma', cor: cores.sucesso},
+                        {id: 'subtracao', nome: 'Subtração', cor: cores.erro},
+                        {id: 'multiplicacao', nome: 'Multiplicação', cor: cores.azul},
+                        {id: 'divisao', nome: 'Divisão', cor: cores.roxo},
+                        {id: 'potenciacao', nome: 'Potência/Raiz', cor: cores.laranja},
                     ].map(m => (
-                        <TouchableOpacity key={m.id} style={{backgroundColor: '#0c0c0c', padding: 15, borderRadius: 10, width: '45%', borderLeftWidth: 4, borderLeftColor: m.cor}} onPress={() => enviarConviteFinal(jogoSelecionadoParaDesafio, m.id)}>
+                        <TouchableOpacity key={m.id} style={{backgroundColor: cores.fundo, padding: 15, borderRadius: 10, width: '45%', borderLeftWidth: 4, borderLeftColor: m.cor}} onPress={() => enviarConviteFinal(jogoSelecionadoParaDesafio, m.id)}>
                             <Text style={{color: '#FFF', fontWeight: 'bold', textAlign: 'center'}}>{m.nome}</Text>
                         </TouchableOpacity>
                     ))}
                 </View>
                 <TouchableOpacity style={{marginTop: 25, padding: 10}} onPress={() => setJogoSelecionadoParaDesafio(null)}>
-                    <Text style={{color: '#888', textAlign: 'center', fontWeight: 'bold'}}>Voltar</Text>
+                    <Text style={{color: cores.textoFraco, textAlign: 'center', fontWeight: 'bold'}}>Voltar</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -277,33 +280,33 @@ export default function JogadoresOnline() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   header: { flexDirection: 'row', alignItems: 'center', padding: 20, gap: 10, paddingBottom: 15 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
-  dndContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1a1a2e', marginHorizontal: 20, padding: 15, borderRadius: 12, marginBottom: 15 },
-  tabSelector: { flexDirection: 'row', marginHorizontal: 20, backgroundColor: '#1a1a2e', borderRadius: 12, padding: 4, marginBottom: 10 },
+  title: { fontSize: 24, fontWeight: 'bold', color: cores.texto },
+  dndContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: cores.superficie, marginHorizontal: 20, padding: 15, borderRadius: 12, marginBottom: 15 },
+  tabSelector: { flexDirection: 'row', marginHorizontal: 20, backgroundColor: cores.superficie, borderRadius: 12, padding: 4, marginBottom: 10 },
   tabBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 10 },
-  tabActive: { backgroundColor: '#333' },
-  tabText: { color: '#888', fontWeight: 'bold' },
-  tabTextActive: { color: '#FFF' },
+  tabActive: { backgroundColor: cores.borda },
+  tabText: { color: cores.textoFraco, fontWeight: 'bold' },
+  tabTextActive: { color: cores.texto },
   list: { padding: 16, gap: 12, paddingBottom: 40 },
-  card: { backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  card: { backgroundColor: cores.superficie, padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   info: { flex: 1 },
   onlineDot: { width: 10, height: 10, borderRadius: 5 },
-  name: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  statusText: { color: '#888', fontSize: 12, marginTop: 4 },
-  btnAcao: { backgroundColor: '#32CD32', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 5 },
-  btnAcaoText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
+  name: { color: cores.texto, fontSize: 16, fontWeight: 'bold' },
+  statusText: { color: cores.textoFraco, fontSize: 12, marginTop: 4 },
+  btnAcao: { backgroundColor: cores.sucesso, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 5 },
+  btnAcaoText: { color: cores.texto, fontWeight: 'bold', fontSize: 12 },
   empty: { alignItems: 'center', marginTop: 50 },
-  emptyText: { color: '#666', marginTop: 10 },
+  emptyText: { color: cores.textoFraco, marginTop: 10 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
-  modalGameContent: { backgroundColor: '#1a1a2e', padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
-  modalTitle: { color: '#FFF', fontSize: 20, fontWeight: '900', marginBottom: 5 },
-  modalText: { color: '#AAA', fontSize: 14, marginBottom: 20 },
-  gameOptionBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0c0c0c', padding: 15, borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: '#333' },
+  modalGameContent: { backgroundColor: cores.superficie, padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
+  modalTitle: { color: cores.texto, fontSize: 20, fontWeight: '900', marginBottom: 5 },
+  modalText: { color: cores.textoFraco, fontSize: 14, marginBottom: 20 },
+  gameOptionBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.fundo, padding: 15, borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: cores.borda },
   iconContainer: { width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  gameOptionText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', flex: 1 },
+  gameOptionText: { color: cores.texto, fontSize: 16, fontWeight: 'bold', flex: 1 },
   cancelBtn: { marginTop: 15, paddingVertical: 15, alignItems: 'center' },
-  cancelBtnText: { color: '#FF4444', fontWeight: 'bold', fontSize: 16 }
+  cancelBtnText: { color: cores.erro, fontWeight: 'bold', fontSize: 16 }
 });

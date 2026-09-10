@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,7 @@ import {
   NOMES_NIVEIS,
   NIVEL_MAX,
 } from '../src/services/leitner';
+import { useTema, CoresTema } from '../src/context/ThemeContext';
 
 // =============================================================================
 // TRILHA DA TABUADA — jogo de repetição espaçada (método Leitner)
@@ -60,6 +61,8 @@ function embaralhar<T>(lista: T[]): T[] {
 }
 
 export default function TrilhaDaTabuada() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const [fase, setFase] = useState<Fase>('carregando');
   const [cards, setCards] = useState<TabuadaCardEstado[]>([]);
@@ -327,7 +330,7 @@ export default function TrilhaDaTabuada() {
   if (fase === 'carregando') {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#FFB300" style={{ marginTop: 80 }} />
+        <ActivityIndicator size="large" color={cores.ambar} style={{ marginTop: 80 }} />
       </SafeAreaView>
     );
   }
@@ -340,10 +343,10 @@ export default function TrilhaDaTabuada() {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <ScrollView contentContainerStyle={styles.menuScroll}>
           <TouchableOpacity style={{ alignSelf: 'flex-start' }} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={28} color="#FFB300" />
+            <Ionicons name="arrow-back" size={28} color={cores.ambar} />
           </TouchableOpacity>
 
-          <Ionicons name="trail-sign" size={64} color="#FFB300" style={{ marginTop: 10 }} />
+          <Ionicons name="trail-sign" size={64} color={cores.ambar} style={{ marginTop: 10 }} />
           <Text style={styles.tituloMenu}>TRILHA DA</Text>
           <Text style={styles.subtituloMenu}>TABUADA</Text>
           <Text style={styles.explicacao}>
@@ -357,7 +360,7 @@ export default function TrilhaDaTabuada() {
               <Text style={styles.menuStatLabel}>Evolução</Text>
             </View>
             <View style={styles.menuStatBox}>
-              <Text style={[styles.menuStatValor, { color: vencidos > 0 ? '#FF7055' : '#32CD32' }]}>{vencidos}</Text>
+              <Text style={[styles.menuStatValor, { color: vencidos > 0 ? cores.laranja : cores.sucesso }]}>{vencidos}</Text>
               <Text style={styles.menuStatLabel}>Para revisar hoje</Text>
             </View>
           </View>
@@ -376,22 +379,22 @@ export default function TrilhaDaTabuada() {
           </View>
 
           <TouchableOpacity style={styles.btnIniciar} onPress={() => iniciarSessao()}>
-            <Ionicons name="play" size={20} color="#1a1200" />
+            <Ionicons name="play" size={20} color={cores.sobreAcento} />
             <Text style={styles.btnIniciarTexto}>COMEÇAR TREINO</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.btnEvolucao} onPress={() => router.push('/tabuada_evolucao' as any)}>
-            <Ionicons name="trending-up" size={18} color="#FFB300" />
+            <Ionicons name="trending-up" size={18} color={cores.ambar} />
             <Text style={styles.btnEvolucaoTexto}>MINHA EVOLUÇÃO</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.btnFlashcards} onPress={() => router.push('/tabuada_flashcards' as any)}>
-            <Ionicons name="create-outline" size={18} color="#7FD4FF" />
+            <Ionicons name="create-outline" size={18} color={cores.ciano} />
             <Text style={styles.btnFlashcardsTexto}>MEUS FLASH CARDS{cardsPersonalizados.length > 0 ? ` (${cardsPersonalizados.length})` : ''}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.btnDesafio} onPress={() => router.push('/tabuada_desafio' as any)}>
-            <Ionicons name="trophy" size={18} color="#1a1200" />
+            <Ionicons name="trophy" size={18} color={cores.sobreAcento} />
             <Text style={styles.btnDesafioTexto}>DESAFIO FLASH CARDS</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -422,26 +425,26 @@ export default function TrilhaDaTabuada() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <ScrollView contentContainerStyle={styles.menuScroll}>
-          <Ionicons name={acertos >= erros ? 'trophy' : 'fitness'} size={56} color="#FFB300" style={{ marginTop: 16 }} />
+          <Ionicons name={acertos >= erros ? 'trophy' : 'fitness'} size={56} color={cores.ambar} style={{ marginTop: 16 }} />
           <Text style={styles.resumoTitulo}>Treino concluído!</Text>
 
-          {enviando && <ActivityIndicator size="small" color="#FFB300" style={{ marginTop: 4 }} />}
+          {enviando && <ActivityIndicator size="small" color={cores.ambar} style={{ marginTop: 4 }} />}
           {falhaEnvio && (
             <Text style={styles.avisoOffline}>Sem conexão agora — seu treino ficou salvo no aparelho e será enviado automaticamente.</Text>
           )}
 
           <View style={styles.resumoGrid}>
-            <View style={styles.resumoBox}><Text style={[styles.resumoValor, { color: '#32CD32' }]}>{acertos}</Text><Text style={styles.resumoLabel}>Acertos</Text></View>
-            <View style={styles.resumoBox}><Text style={[styles.resumoValor, { color: '#FF7055' }]}>{erros}</Text><Text style={styles.resumoLabel}>Erros</Text></View>
+            <View style={styles.resumoBox}><Text style={[styles.resumoValor, { color: cores.sucesso }]}>{acertos}</Text><Text style={styles.resumoLabel}>Acertos</Text></View>
+            <View style={styles.resumoBox}><Text style={[styles.resumoValor, { color: cores.laranja }]}>{erros}</Text><Text style={styles.resumoLabel}>Erros</Text></View>
             <View style={styles.resumoBox}><Text style={styles.resumoValorTempo}>{formatarTempoPreciso(tempoMedio)}</Text><Text style={styles.resumoLabel}>Tempo médio</Text></View>
-            <View style={styles.resumoBox}><Text style={[styles.resumoValor, { color: '#FFD700' }]}>{rapidas}⚡</Text><Text style={styles.resumoLabel}>Rápidas</Text></View>
+            <View style={styles.resumoBox}><Text style={[styles.resumoValor, { color: cores.dourado }]}>{rapidas}⚡</Text><Text style={styles.resumoLabel}>Rápidas</Text></View>
           </View>
 
           <View style={styles.resumoCard}>
             <Text style={styles.resumoCardTitulo}>Sua evolução</Text>
             <Text style={styles.resumoEvolucao}>
               {evolucaoAntes.current.toFixed(1)}% → {evolucaoDepois.toFixed(1)}%
-              <Text style={{ color: delta >= 0 ? '#32CD32' : '#FF7055' }}>  ({delta >= 0 ? '+' : ''}{delta.toFixed(1)}%)</Text>
+              <Text style={{ color: delta >= 0 ? cores.sucesso : cores.laranja }}>  ({delta >= 0 ? '+' : ''}{delta.toFixed(1)}%)</Text>
             </Text>
           </View>
 
@@ -471,11 +474,11 @@ export default function TrilhaDaTabuada() {
           )}
 
           <TouchableOpacity style={styles.btnIniciar} onPress={() => iniciarSessao()}>
-            <Ionicons name="refresh" size={20} color="#1a1200" />
+            <Ionicons name="refresh" size={20} color={cores.sobreAcento} />
             <Text style={styles.btnIniciarTexto}>TREINAR DE NOVO</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.btnEvolucao} onPress={() => router.push('/tabuada_evolucao' as any)}>
-            <Ionicons name="trending-up" size={18} color="#FFB300" />
+            <Ionicons name="trending-up" size={18} color={cores.ambar} />
             <Text style={styles.btnEvolucaoTexto}>MINHA EVOLUÇÃO</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.btnVoltar} onPress={() => setFase('menu')}>
@@ -499,12 +502,12 @@ export default function TrilhaDaTabuada() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.jogoTopo}>
         <TouchableOpacity onPress={() => setFase('menu')}>
-          <Ionicons name="close" size={26} color="#888" />
+          <Ionicons name="close" size={26} color={cores.textoFraco} />
         </TouchableOpacity>
         <Text style={styles.progresso}>{Math.min(indice + 1, fila.length)} / {fila.length}</Text>
         <View style={styles.cronometro}>
-          <Ionicons name="time-outline" size={14} color={segundos > 10 ? '#FF7055' : segundos > 5 ? '#FFD700' : '#32CD32'} />
-          <Text style={[styles.cronometroTexto, { color: segundos > 10 ? '#FF7055' : segundos > 5 ? '#FFD700' : '#32CD32' }]}>{formatarTempoPreciso(segundos)}</Text>
+          <Ionicons name="time-outline" size={14} color={segundos > 10 ? cores.laranja : segundos > 5 ? cores.dourado : cores.sucesso} />
+          <Text style={[styles.cronometroTexto, { color: segundos > 10 ? cores.laranja : segundos > 5 ? cores.dourado : cores.sucesso }]}>{formatarTempoPreciso(segundos)}</Text>
         </View>
       </View>
 
@@ -514,7 +517,7 @@ export default function TrilhaDaTabuada() {
             styles.barraTempoPreenchimento,
             {
               width: tempoBarraAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-              backgroundColor: tempoBarraAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['#FF7055', '#FFD700', '#32CD32'] }),
+              backgroundColor: tempoBarraAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [cores.laranja, cores.dourado, cores.sucesso] }),
             },
           ]}
         />
@@ -522,7 +525,7 @@ export default function TrilhaDaTabuada() {
 
       <View style={styles.nivelRow}>
         {Array.from({ length: NIVEL_MAX }).map((_, i) => (
-          <Ionicons key={i} name={i < nivelExibido ? 'star' : 'star-outline'} size={16} color={i < nivelExibido ? '#FFB300' : '#444'} />
+          <Ionicons key={i} name={i < nivelExibido ? 'star' : 'star-outline'} size={16} color={i < nivelExibido ? cores.ambar : cores.borda} />
         ))}
         <Text style={styles.nivelNome}>{NOMES_NIVEIS[nivelExibido]}</Text>
       </View>
@@ -542,13 +545,13 @@ export default function TrilhaDaTabuada() {
           <View style={styles.ajudaRow}>
             {temDica && !dicaRevelada && (
               <TouchableOpacity style={styles.btnAjuda} onPress={() => setDicaRevelada(true)}>
-                <Ionicons name="bulb-outline" size={13} color="#FFD700" />
+                <Ionicons name="bulb-outline" size={13} color={cores.dourado} />
                 <Text style={styles.btnAjudaTexto}>Ver dica</Text>
               </TouchableOpacity>
             )}
             {temOpcoes && !opcoesReveladas && (
               <TouchableOpacity style={styles.btnAjuda} onPress={() => setOpcoesReveladas(true)}>
-                <Ionicons name="list-outline" size={13} color="#7FD4FF" />
+                <Ionicons name="list-outline" size={13} color={cores.ciano} />
                 <Text style={styles.btnAjudaTexto}>Ver opções</Text>
               </TouchableOpacity>
             )}
@@ -557,7 +560,7 @@ export default function TrilhaDaTabuada() {
 
         {!feedback && dicaRevelada && item.personalizado?.dica && (
           <View style={styles.dicaBox}>
-            <Ionicons name="bulb" size={13} color="#FFD700" />
+            <Ionicons name="bulb" size={13} color={cores.dourado} />
             <Text style={styles.dicaTexto}>{item.personalizado.dica}</Text>
           </View>
         )}
@@ -605,8 +608,8 @@ export default function TrilhaDaTabuada() {
                 onPress={() => apertarTecla(tecla)}
                 disabled={!!feedback}
               >
-                {tecla === 'apagar' ? <Ionicons name="backspace" size={22} color="#FFF" />
-                  : tecla === 'ok' ? <Ionicons name="checkmark" size={24} color="#1a1200" />
+                {tecla === 'apagar' ? <Ionicons name="backspace" size={22} color={cores.erro} />
+                  : tecla === 'ok' ? <Ionicons name="checkmark" size={24} color={cores.sobreAcento} />
                   : <Text style={styles.teclaTexto}>{tecla}</Text>}
               </TouchableOpacity>
             ))}
@@ -617,78 +620,78 @@ export default function TrilhaDaTabuada() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0d0b04' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   menuScroll: { padding: 20, alignItems: 'center', paddingBottom: 50 },
-  tituloMenu: { fontSize: 30, fontWeight: '900', color: '#FFF', letterSpacing: 3, marginTop: 8 },
-  subtituloMenu: { fontSize: 38, fontWeight: '900', color: '#FFB300', letterSpacing: 5, marginTop: -6 },
-  explicacao: { color: '#998', fontSize: 13, textAlign: 'center', marginTop: 12, lineHeight: 19, maxWidth: 340 },
+  tituloMenu: { fontSize: 30, fontWeight: '900', color: cores.texto, letterSpacing: 3, marginTop: 8 },
+  subtituloMenu: { fontSize: 38, fontWeight: '900', color: cores.ambar, letterSpacing: 5, marginTop: -6 },
+  explicacao: { color: cores.textoFraco, fontSize: 13, textAlign: 'center', marginTop: 12, lineHeight: 19, maxWidth: 340 },
   menuStatsRow: { flexDirection: 'row', gap: 14, marginTop: 24 },
-  menuStatBox: { backgroundColor: '#1a1608', borderRadius: 14, borderWidth: 1, borderColor: '#332a10', paddingVertical: 14, paddingHorizontal: 24, alignItems: 'center', minWidth: 130 },
-  menuStatValor: { color: '#FFB300', fontSize: 26, fontWeight: '900' },
-  menuStatLabel: { color: '#887', fontSize: 11, marginTop: 2 },
-  rotuloTamanho: { color: '#887', fontSize: 12, marginTop: 28, marginBottom: 8 },
+  menuStatBox: { backgroundColor: cores.superficie, borderRadius: 14, borderWidth: 1, borderColor: cores.borda, paddingVertical: 14, paddingHorizontal: 24, alignItems: 'center', minWidth: 130 },
+  menuStatValor: { color: cores.ambar, fontSize: 26, fontWeight: '900' },
+  menuStatLabel: { color: cores.textoFraco, fontSize: 11, marginTop: 2 },
+  rotuloTamanho: { color: cores.textoFraco, fontSize: 12, marginTop: 28, marginBottom: 8 },
   tamanhoRow: { flexDirection: 'row', gap: 10 },
-  tamanhoChip: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 20, backgroundColor: '#1a1608', borderWidth: 1, borderColor: '#332a10' },
-  tamanhoChipAtivo: { backgroundColor: '#FFB300', borderColor: '#FFB300' },
-  tamanhoChipTexto: { color: '#887', fontWeight: '700', fontSize: 12 },
-  tamanhoChipTextoAtivo: { color: '#1a1200' },
-  btnIniciar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFB300', borderRadius: 14, paddingVertical: 15, width: '100%', maxWidth: 360, marginTop: 28 },
-  btnIniciarTexto: { color: '#1a1200', fontWeight: '900', fontSize: 15, letterSpacing: 1 },
-  btnEvolucao: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 2, borderColor: '#FFB300', borderRadius: 14, paddingVertical: 13, width: '100%', maxWidth: 360, marginTop: 12 },
-  btnEvolucaoTexto: { color: '#FFB300', fontWeight: '900', fontSize: 13, letterSpacing: 1 },
+  tamanhoChip: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 20, backgroundColor: cores.superficie, borderWidth: 1, borderColor: cores.borda },
+  tamanhoChipAtivo: { backgroundColor: cores.ambar, borderColor: cores.ambar },
+  tamanhoChipTexto: { color: cores.textoFraco, fontWeight: '700', fontSize: 12 },
+  tamanhoChipTextoAtivo: { color: cores.sobreAcento },
+  btnIniciar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: cores.ambar, borderRadius: 14, paddingVertical: 15, width: '100%', maxWidth: 360, marginTop: 28 },
+  btnIniciarTexto: { color: cores.sobreAcento, fontWeight: '900', fontSize: 15, letterSpacing: 1 },
+  btnEvolucao: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 2, borderColor: cores.ambar, borderRadius: 14, paddingVertical: 13, width: '100%', maxWidth: 360, marginTop: 12 },
+  btnEvolucaoTexto: { color: cores.ambar, fontWeight: '900', fontSize: 13, letterSpacing: 1 },
   btnVoltar: { marginTop: 16, padding: 10 },
-  btnVoltarTexto: { color: '#776', fontWeight: '700', fontSize: 12 },
-  btnFlashcards: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 2, borderColor: '#7FD4FF', borderRadius: 14, paddingVertical: 13, width: '100%', maxWidth: 360, marginTop: 12 },
-  btnFlashcardsTexto: { color: '#7FD4FF', fontWeight: '900', fontSize: 13, letterSpacing: 1 },
-  btnDesafio: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFD700', borderRadius: 14, paddingVertical: 13, width: '100%', maxWidth: 360, marginTop: 12 },
-  btnDesafioTexto: { color: '#1a1200', fontWeight: '900', fontSize: 13, letterSpacing: 1 },
+  btnVoltarTexto: { color: cores.textoFraco, fontWeight: '700', fontSize: 12 },
+  btnFlashcards: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 2, borderColor: cores.ciano, borderRadius: 14, paddingVertical: 13, width: '100%', maxWidth: 360, marginTop: 12 },
+  btnFlashcardsTexto: { color: cores.ciano, fontWeight: '900', fontSize: 13, letterSpacing: 1 },
+  btnDesafio: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: cores.dourado, borderRadius: 14, paddingVertical: 13, width: '100%', maxWidth: 360, marginTop: 12 },
+  btnDesafioTexto: { color: cores.sobreAcento, fontWeight: '900', fontSize: 13, letterSpacing: 1 },
 
   jogoTopo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingTop: 10 },
-  progresso: { color: '#CCB', fontSize: 15, fontWeight: '800' },
+  progresso: { color: cores.texto, fontSize: 15, fontWeight: '800' },
   cronometro: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 92, justifyContent: 'flex-end' },
   cronometroTexto: { fontSize: 12, fontWeight: '800' },
-  barraTempoFundo: { height: 8, backgroundColor: '#1a1608', borderRadius: 4, marginHorizontal: 18, marginTop: 10, overflow: 'hidden' },
+  barraTempoFundo: { height: 8, backgroundColor: cores.superficie, borderRadius: 4, marginHorizontal: 18, marginTop: 10, overflow: 'hidden' },
   barraTempoPreenchimento: { height: '100%', borderRadius: 4 },
   nivelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, marginTop: 14 },
-  nivelNome: { color: '#887', fontSize: 12, marginLeft: 8 },
+  nivelNome: { color: cores.textoFraco, fontSize: 12, marginLeft: 8 },
   areaConta: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  conta: { color: '#FFF', fontSize: 56, fontWeight: '900', letterSpacing: 2, textAlign: 'center' },
-  contaTexto: { color: '#FFF', fontSize: 26, fontWeight: '800', textAlign: 'center', paddingHorizontal: 26, lineHeight: 34 },
-  caixaResposta: { marginTop: 22, minWidth: 140, borderBottomWidth: 3, borderBottomColor: '#FFB300', paddingHorizontal: 18, paddingVertical: 6, alignItems: 'center' },
-  caixaAcerto: { borderBottomColor: '#32CD32' },
-  caixaErro: { borderBottomColor: '#FF7055' },
-  respostaTexto: { color: '#FFB300', fontSize: 42, fontWeight: '900', minHeight: 52 },
+  conta: { color: cores.texto, fontSize: 56, fontWeight: '900', letterSpacing: 2, textAlign: 'center' },
+  contaTexto: { color: cores.texto, fontSize: 26, fontWeight: '800', textAlign: 'center', paddingHorizontal: 26, lineHeight: 34 },
+  caixaResposta: { marginTop: 22, minWidth: 140, borderBottomWidth: 3, borderBottomColor: cores.ambar, paddingHorizontal: 18, paddingVertical: 6, alignItems: 'center' },
+  caixaAcerto: { borderBottomColor: cores.sucesso },
+  caixaErro: { borderBottomColor: cores.laranja },
+  respostaTexto: { color: cores.ambar, fontSize: 42, fontWeight: '900', minHeight: 52 },
   feedbackBox: { marginTop: 18, alignItems: 'center', paddingHorizontal: 24 },
-  feedbackAcerto: { color: '#32CD32', fontSize: 20, fontWeight: '900' },
-  feedbackErro: { color: '#FF7055', fontSize: 22, fontWeight: '900' },
-  feedbackNivel: { color: '#AA9', fontSize: 13, marginTop: 6, textAlign: 'center' },
+  feedbackAcerto: { color: cores.sucesso, fontSize: 20, fontWeight: '900' },
+  feedbackErro: { color: cores.laranja, fontSize: 22, fontWeight: '900' },
+  feedbackNivel: { color: cores.textoFraco, fontSize: 13, marginTop: 6, textAlign: 'center' },
 
   ajudaRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  btnAjuda: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#1a1608', borderWidth: 1, borderColor: '#332a10' },
-  btnAjudaTexto: { color: '#AA9', fontSize: 11, fontWeight: '700' },
-  dicaBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 12, maxWidth: 300, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: '#1e1a08', borderWidth: 1, borderColor: '#443a10' },
-  dicaTexto: { color: '#FFD700', fontSize: 12, fontWeight: '600', flex: 1 },
+  btnAjuda: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: cores.superficie, borderWidth: 1, borderColor: cores.borda },
+  btnAjudaTexto: { color: cores.textoFraco, fontSize: 11, fontWeight: '700' },
+  dicaBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 12, maxWidth: 300, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: cores.superficie, borderWidth: 1, borderColor: cores.borda },
+  dicaTexto: { color: cores.dourado, fontSize: 12, fontWeight: '600', flex: 1 },
   opcoesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12, justifyContent: 'center', maxWidth: 320 },
-  opcaoBtn: { minWidth: 56, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#14142e', borderWidth: 1, borderColor: '#7FD4FF', alignItems: 'center' },
-  opcaoBtnTexto: { color: '#7FD4FF', fontSize: 16, fontWeight: '800' },
+  opcaoBtn: { minWidth: 56, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: cores.superficie, borderWidth: 1, borderColor: cores.ciano, alignItems: 'center' },
+  opcaoBtnTexto: { color: cores.ciano, fontSize: 16, fontWeight: '800' },
 
   teclado: { paddingHorizontal: 24, paddingBottom: 18, gap: 10, alignSelf: 'center', width: '100%', maxWidth: 380 },
   tecladoLinha: { flexDirection: 'row', gap: 10 },
-  tecla: { flex: 1, height: 58, borderRadius: 12, backgroundColor: '#1a1608', borderWidth: 1, borderColor: '#332a10', alignItems: 'center', justifyContent: 'center' },
-  teclaOk: { backgroundColor: '#FFB300', borderColor: '#FFB300' },
-  teclaApagar: { backgroundColor: '#2a1410', borderColor: '#442018' },
-  teclaTexto: { color: '#FFF', fontSize: 24, fontWeight: '800' },
+  tecla: { flex: 1, height: 58, borderRadius: 12, backgroundColor: cores.superficie, borderWidth: 1, borderColor: cores.borda, alignItems: 'center', justifyContent: 'center' },
+  teclaOk: { backgroundColor: cores.ambar, borderColor: cores.ambar },
+  teclaApagar: { backgroundColor: cores.erro + '22', borderColor: cores.erro + '66' },
+  teclaTexto: { color: cores.texto, fontSize: 24, fontWeight: '800' },
 
-  resumoTitulo: { color: '#FFF', fontSize: 24, fontWeight: '900', marginTop: 10 },
-  avisoOffline: { color: '#FFD700', fontSize: 11, textAlign: 'center', marginTop: 8, paddingHorizontal: 30 },
+  resumoTitulo: { color: cores.texto, fontSize: 24, fontWeight: '900', marginTop: 10 },
+  avisoOffline: { color: cores.dourado, fontSize: 11, textAlign: 'center', marginTop: 8, paddingHorizontal: 30 },
   resumoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 20, justifyContent: 'center' },
-  resumoBox: { backgroundColor: '#1a1608', borderRadius: 12, borderWidth: 1, borderColor: '#332a10', paddingVertical: 12, alignItems: 'center', width: '46%', maxWidth: 170 },
-  resumoValor: { color: '#FFF', fontSize: 22, fontWeight: '900' },
-  resumoValorTempo: { color: '#FFF', fontSize: 15, fontWeight: '900' },
-  resumoLabel: { color: '#887', fontSize: 11, marginTop: 2 },
-  resumoCard: { backgroundColor: '#1a1608', borderRadius: 12, borderWidth: 1, borderColor: '#332a10', padding: 14, marginTop: 12, width: '100%', maxWidth: 360 },
-  resumoCardTitulo: { color: '#FFB300', fontSize: 12, fontWeight: '800', marginBottom: 4 },
-  resumoCardTexto: { color: '#DDC', fontSize: 14, fontWeight: '600' },
-  resumoEvolucao: { color: '#FFF', fontSize: 18, fontWeight: '900' },
+  resumoBox: { backgroundColor: cores.superficie, borderRadius: 12, borderWidth: 1, borderColor: cores.borda, paddingVertical: 12, alignItems: 'center', width: '46%', maxWidth: 170 },
+  resumoValor: { color: cores.texto, fontSize: 22, fontWeight: '900' },
+  resumoValorTempo: { color: cores.texto, fontSize: 15, fontWeight: '900' },
+  resumoLabel: { color: cores.textoFraco, fontSize: 11, marginTop: 2 },
+  resumoCard: { backgroundColor: cores.superficie, borderRadius: 12, borderWidth: 1, borderColor: cores.borda, padding: 14, marginTop: 12, width: '100%', maxWidth: 360 },
+  resumoCardTitulo: { color: cores.ambar, fontSize: 12, fontWeight: '800', marginBottom: 4 },
+  resumoCardTexto: { color: cores.texto, fontSize: 14, fontWeight: '600' },
+  resumoEvolucao: { color: cores.texto, fontSize: 18, fontWeight: '900' },
 });

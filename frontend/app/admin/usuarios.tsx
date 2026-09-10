@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator, Alert, Modal, TextInput, Platform, AppState, Switch
 } from 'react-native';
@@ -8,8 +8,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
 import { buscarUsuariosOnline } from '../../src/services/multiplayerApi';
 import { Usuario, Turma, Equipe } from '../../src/types';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 
 export default function AdminUsuarios() {
+  const { cores, corEquipe } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
@@ -122,7 +125,7 @@ export default function AdminUsuarios() {
     try { await api.zerarTodosPontos(); Alert.alert('Sucesso', 'O ranking foi limpo!'); loadData(); } catch (error) {}
   };
 
-  const getPerfilColor = (perfil: string) => { if (perfil === 'ADMIN') return '#E74C3C'; if (perfil === 'ALUNO_LIDER') return '#FFD700'; return '#4169E1'; };
+  const getPerfilColor = (perfil: string) => { if (perfil === 'ADMIN') return cores.erro; if (perfil === 'ALUNO_LIDER') return cores.dourado; return cores.azul; };
   const getPerfilLabel = (perfil: string) => { if (perfil === 'ADMIN') return 'Admin'; if (perfil === 'ALUNO_LIDER') return 'Líder'; return 'Aluno'; };
 
   const formatarUltimoAcesso = (dataIso?: string) => {
@@ -136,7 +139,7 @@ export default function AdminUsuarios() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View>
+        <View style={styles.loadingContainer}><ActivityIndicator size="large" color={cores.dourado} /></View>
       </SafeAreaView>
     );
   }
@@ -153,13 +156,13 @@ export default function AdminUsuarios() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+          <Ionicons name="arrow-back" size={24} color={cores.texto} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Gerenciar Usuários</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={cores.dourado} />}>
         
         <TouchableOpacity style={styles.zerarAllButton} onPress={confirmarZerarTodos}>
           <Ionicons name="warning" size={20} color="#FFF" />
@@ -176,9 +179,9 @@ export default function AdminUsuarios() {
               <View style={styles.userInfo}>
                 <View style={styles.userHeader}>
                   <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
-                    <View style={[styles.onlineDot, { backgroundColor: isOnline ? '#32CD32' : '#555' }]} />
+                    <View style={[styles.onlineDot, { backgroundColor: isOnline ? cores.sucesso : cores.textoFraco }]} />
                     <Text style={styles.userName}>{user.nome}</Text>
-                    {user.ocultoChat && <Ionicons name="eye-off" size={14} color="#888" />}
+                    {user.ocultoChat && <Ionicons name="eye-off" size={14} color={cores.textoFraco} />}
                   </View>
                   <View style={[styles.perfilBadge, { backgroundColor: getPerfilColor(user.perfil) + '30' }]}>
                     <Text style={[styles.perfilText, { color: getPerfilColor(user.perfil) }]}>{getPerfilLabel(user.perfil)}</Text>
@@ -187,11 +190,11 @@ export default function AdminUsuarios() {
 
                 <View style={{ marginBottom: 8 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={{ color: isOnline ? '#32CD32' : '#555', fontSize: 12, fontWeight: 'bold' }}>{isOnline ? 'Online agora' : 'Offline'}</Text>
+                    <Text style={{ color: isOnline ? cores.sucesso : cores.textoFraco, fontSize: 12, fontWeight: 'bold' }}>{isOnline ? 'Online agora' : 'Offline'}</Text>
                     <Text style={styles.userEmail}> • {user.email}</Text>
                   </View>
                   {!isOnline && (
-                    <Text style={{ color: '#666', fontSize: 11, marginTop: 2, fontStyle: 'italic' }}>Último acesso: {formatarUltimoAcesso(user.ultimoAcesso)}</Text>
+                    <Text style={{ color: cores.textoFraco, fontSize: 11, marginTop: 2, fontStyle: 'italic' }}>Último acesso: {formatarUltimoAcesso(user.ultimoAcesso)}</Text>
                   )}
                 </View>
 
@@ -204,15 +207,15 @@ export default function AdminUsuarios() {
                   )}
                 </View>
                 <View style={styles.userStats}>
-                  <View style={styles.statItem}><Ionicons name="star" size={14} color="#FFD700" /><Text style={styles.statText}>{user.pontosTotais} pts</Text></View>
-                  <View style={styles.statItem}><Ionicons name="flame" size={14} color="#FF6B35" /><Text style={styles.statText}>{user.streakDias} dias</Text></View>
-                  <View style={styles.statItem}><Ionicons name="game-controller" size={14} color="#9b59b6" /><Text style={styles.statText}>{user.recordeJogoSingle || 0} arcade</Text></View>
-                  <View style={styles.statItem}><Ionicons name="rocket" size={14} color="#00FFFF" /><Text style={styles.statText}>{user.recordeMathBlaster || 0} espacial</Text></View>
+                  <View style={styles.statItem}><Ionicons name="star" size={14} color={cores.dourado} /><Text style={styles.statText}>{user.pontosTotais} pts</Text></View>
+                  <View style={styles.statItem}><Ionicons name="flame" size={14} color={cores.laranja} /><Text style={styles.statText}>{user.streakDias} dias</Text></View>
+                  <View style={styles.statItem}><Ionicons name="game-controller" size={14} color={cores.roxo} /><Text style={styles.statText}>{user.recordeJogoSingle || 0} arcade</Text></View>
+                  <View style={styles.statItem}><Ionicons name="rocket" size={14} color={cores.ciano} /><Text style={styles.statText}>{user.recordeMathBlaster || 0} espacial</Text></View>
                 </View>
               </View>
               <View style={styles.userActions}>
-                <TouchableOpacity style={styles.actionButton} onPress={() => openEditModal(user)}><Ionicons name="create" size={20} color="#4169E1" /></TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleDelete(user.id)}><Ionicons name="trash" size={20} color="#E74C3C" /></TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={() => openEditModal(user)}><Ionicons name="create" size={20} color={cores.azul} /></TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleDelete(user.id)}><Ionicons name="trash" size={20} color={cores.erro} /></TouchableOpacity>
               </View>
             </View>
           );
@@ -226,55 +229,55 @@ export default function AdminUsuarios() {
               <Text style={styles.modalTitle}>Painel do Usuário</Text>
               <Text style={styles.modalSubtitle}>{selectedUser?.email}</Text>
 
-              <Text style={[styles.inputLabel, { color: '#FFD700' }]}>🏆 Pontos Atuais</Text>
-              <TextInput style={[styles.textInput, { borderColor: '#FFD700' }]} value={editPontos} onChangeText={setEditPontos} keyboardType="numeric" placeholder="Zerar ou Diminuir pontos..." placeholderTextColor="#666" />
+              <Text style={[styles.inputLabel, { color: cores.dourado }]}>🏆 Pontos Atuais</Text>
+              <TextInput style={[styles.textInput, { borderColor: cores.dourado }]} value={editPontos} onChangeText={setEditPontos} keyboardType="numeric" placeholder="Zerar ou Diminuir pontos..." placeholderTextColor={cores.textoFraco} />
 
-              <Text style={[styles.inputLabel, { color: '#9b59b6', marginTop: 16 }]}>🕹️ Recorde Arcade (Hall da Fama)</Text>
-              <TextInput style={[styles.textInput, { borderColor: '#9b59b6' }]} value={editRecordeArcade} onChangeText={setEditRecordeArcade} keyboardType="numeric" placeholder="Definir recorde do Arcade..." placeholderTextColor="#666" />
+              <Text style={[styles.inputLabel, { color: cores.roxo, marginTop: 16 }]}>🕹️ Recorde Arcade (Hall da Fama)</Text>
+              <TextInput style={[styles.textInput, { borderColor: cores.roxo }]} value={editRecordeArcade} onChangeText={setEditRecordeArcade} keyboardType="numeric" placeholder="Definir recorde do Arcade..." placeholderTextColor={cores.textoFraco} />
 
-              <Text style={[styles.inputLabel, { color: '#00FFFF', marginTop: 16 }]}>🚀 Recorde Equações Espaciais (Hall da Fama)</Text>
-              <TextInput style={[styles.textInput, { borderColor: '#00FFFF' }]} value={editRecordeMathBlaster} onChangeText={setEditRecordeMathBlaster} keyboardType="numeric" placeholder="Definir recorde do Equações Espaciais..." placeholderTextColor="#666" />
+              <Text style={[styles.inputLabel, { color: cores.ciano, marginTop: 16 }]}>🚀 Recorde Equações Espaciais (Hall da Fama)</Text>
+              <TextInput style={[styles.textInput, { borderColor: cores.ciano }]} value={editRecordeMathBlaster} onChangeText={setEditRecordeMathBlaster} keyboardType="numeric" placeholder="Definir recorde do Equações Espaciais..." placeholderTextColor={cores.textoFraco} />
 
               <Text style={styles.inputLabel}>Nome de Exibição</Text>
-              <TextInput style={styles.textInput} value={editNome} onChangeText={setEditNome} placeholder="Ex: João da Silva" placeholderTextColor="#666" />
+              <TextInput style={styles.textInput} value={editNome} onChangeText={setEditNome} placeholder="Ex: João da Silva" placeholderTextColor={cores.textoFraco} />
 
               <Text style={styles.inputLabel}>Redefinir Senha</Text>
-              <TextInput style={styles.textInput} value={editSenha} onChangeText={setEditSenha} placeholder="Deixe em branco para manter a atual..." placeholderTextColor="#666" />
+              <TextInput style={styles.textInput} value={editSenha} onChangeText={setEditSenha} placeholder="Deixe em branco para manter a atual..." placeholderTextColor={cores.textoFraco} />
 
               {/* CONTROLE DE CONTA DE TESTE AQUI */}
               <View style={styles.switchRow}>
                 <View>
                   <Text style={styles.switchLabel}>Ocultar no Inbox (Conta de Teste)</Text>
-                  <Text style={{color:'#666', fontSize: 11}}>O usuário sumirá do chat dos alunos</Text>
+                  <Text style={{color:cores.textoFraco, fontSize: 11}}>O usuário sumirá do chat dos alunos</Text>
                 </View>
-                <Switch value={editOcultoChat} onValueChange={setEditOcultoChat} trackColor={{ false: '#333', true: '#FFD700' }} thumbColor={editOcultoChat ? '#fff' : '#888'} />
+                <Switch value={editOcultoChat} onValueChange={setEditOcultoChat} trackColor={{ false: cores.borda, true: cores.dourado }} thumbColor={editOcultoChat ? '#fff' : cores.textoFraco} />
               </View>
 
               <Text style={styles.inputLabel}>Nível de Permissão (Perfil)</Text>
               <View style={styles.selectContainer}>
                 {['ALUNO', 'ALUNO_LIDER', 'ADMIN'].map((perfil) => (
                   <TouchableOpacity key={perfil} style={[styles.selectOption, editPerfil === perfil && { backgroundColor: getPerfilColor(perfil) }]} onPress={() => setEditPerfil(perfil)}>
-                    <Text style={[styles.selectText, editPerfil === perfil && { color: '#000' }]}>{getPerfilLabel(perfil)}</Text>
+                    <Text style={[styles.selectText, editPerfil === perfil && { color: cores.sobreAcento }]}>{getPerfilLabel(perfil)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
               <Text style={styles.inputLabel}>Turma</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectScroll}>
-                <TouchableOpacity style={[styles.selectOption, !editTurma && styles.selectOptionActive]} onPress={() => setEditTurma('')}><Text style={[styles.selectText, !editTurma && { color: '#000' }]}>Nenhuma</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.selectOption, !editTurma && styles.selectOptionActive]} onPress={() => setEditTurma('')}><Text style={[styles.selectText, !editTurma && { color: cores.sobreAcento }]}>Nenhuma</Text></TouchableOpacity>
                 {turmas.map((turma) => (
                   <TouchableOpacity key={turma.id} style={[styles.selectOption, editTurma === turma.id && styles.selectOptionActive]} onPress={() => setEditTurma(turma.id)}>
-                    <Text style={[styles.selectText, editTurma === turma.id && { color: '#000' }]}>{turma.nome}</Text>
+                    <Text style={[styles.selectText, editTurma === turma.id && { color: cores.sobreAcento }]}>{turma.nome}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
 
               <Text style={styles.inputLabel}>Equipe do Aluno</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectScroll}>
-                <TouchableOpacity style={[styles.selectOption, !editEquipe && styles.selectOptionActive]} onPress={() => setEditEquipe('')}><Text style={[styles.selectText, !editEquipe && { color: '#000' }]}>Nenhuma</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.selectOption, !editEquipe && styles.selectOptionActive]} onPress={() => setEditEquipe('')}><Text style={[styles.selectText, !editEquipe && { color: cores.sobreAcento }]}>Nenhuma</Text></TouchableOpacity>
                 {equipes.map((equipe) => (
                   <TouchableOpacity key={equipe.id} style={[styles.selectOption, { borderColor: equipe.cor }, editEquipe === equipe.id && { backgroundColor: equipe.cor }]} onPress={() => setEditEquipe(equipe.id)}>
-                    <Text style={[styles.selectText, { color: editEquipe === equipe.id ? '#000' : equipe.cor }]}>{equipe.nome}</Text>
+                    <Text style={[styles.selectText, { color: editEquipe === equipe.id ? cores.sobreAcento : corEquipe(equipe.cor) }]}>{equipe.nome}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -291,52 +294,52 @@ export default function AdminUsuarios() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  headerTitle: { color: cores.texto, fontSize: 18, fontWeight: 'bold' },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
   
-  zerarAllButton: { backgroundColor: '#E74C3C', flexDirection: 'row', padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20 },
-  zerarAllText: { color: '#FFF', fontWeight: '900', fontSize: 16 },
+  zerarAllButton: { backgroundColor: cores.erro, flexDirection: 'row', padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20 },
+  zerarAllText: { color: cores.texto, fontWeight: '900', fontSize: 16 },
 
-  userCard: { flexDirection: 'row', backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, marginBottom: 12 },
+  userCard: { flexDirection: 'row', backgroundColor: cores.superficie, borderRadius: 16, padding: 16, marginBottom: 12 },
   userInfo: { flex: 1 },
   userHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   onlineDot: { width: 10, height: 10, borderRadius: 5 },
-  userName: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  userName: { color: cores.texto, fontSize: 16, fontWeight: '600' },
   perfilBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   perfilText: { fontSize: 10, fontWeight: 'bold' },
-  userEmail: { color: '#888', fontSize: 13 },
+  userEmail: { color: cores.textoFraco, fontSize: 13 },
   userMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  metaText: { color: '#666', fontSize: 12 },
+  metaText: { color: cores.textoFraco, fontSize: 12 },
   teamBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   teamText: { fontSize: 12, fontWeight: '600' },
   userStats: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }, // Adicionado flexWrap para evitar quebra visual em ecrãs pequenos
   statItem: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-  statText: { color: '#888', fontSize: 12 },
+  statText: { color: cores.textoFraco, fontSize: 12 },
   userActions: { justifyContent: 'center', gap: 8 },
   actionButton: { padding: 8 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, maxHeight: '90%' },
-  modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 4 },
-  modalSubtitle: { color: '#888', fontSize: 14, marginBottom: 10 },
-  inputLabel: { color: '#888', fontSize: 12, marginBottom: 8, marginTop: 16 },
-  textInput: { backgroundColor: '#0c0c0c', borderRadius: 12, padding: 14, color: '#fff', borderWidth: 1, borderColor: '#333' },
+  modalContent: { backgroundColor: cores.superficie, borderRadius: 16, padding: 20, maxHeight: '90%' },
+  modalTitle: { color: cores.texto, fontSize: 20, fontWeight: 'bold', marginBottom: 4 },
+  modalSubtitle: { color: cores.textoFraco, fontSize: 14, marginBottom: 10 },
+  inputLabel: { color: cores.textoFraco, fontSize: 12, marginBottom: 8, marginTop: 16 },
+  textInput: { backgroundColor: cores.fundo, borderRadius: 12, padding: 14, color: cores.texto, borderWidth: 1, borderColor: cores.borda },
   
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 10, padding: 15, backgroundColor: '#0c0c0c', borderRadius: 12, borderWidth: 1, borderColor: '#333' },
-  switchLabel: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 10, padding: 15, backgroundColor: cores.fundo, borderRadius: 12, borderWidth: 1, borderColor: cores.borda },
+  switchLabel: { color: cores.texto, fontSize: 14, fontWeight: 'bold' },
 
   selectContainer: { flexDirection: 'row', gap: 8 },
   selectScroll: { flexDirection: 'row' },
-  selectOption: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#333', marginRight: 8 },
-  selectOptionActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
-  selectText: { color: '#888', fontWeight: '600' },
+  selectOption: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: cores.borda, marginRight: 8 },
+  selectOptionActive: { backgroundColor: cores.dourado, borderColor: cores.dourado },
+  selectText: { color: cores.textoFraco, fontWeight: '600' },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 24, paddingBottom: 10 },
-  cancelButton: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#333', alignItems: 'center' },
-  cancelButtonText: { color: '#fff', fontWeight: '600' },
-  saveButton: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#FFD700', alignItems: 'center' },
-  saveButtonText: { color: '#000', fontWeight: '600' },
+  cancelButton: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: cores.borda, alignItems: 'center' },
+  cancelButtonText: { color: cores.texto, fontWeight: '600' },
+  saveButton: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: cores.dourado, alignItems: 'center' },
+  saveButtonText: { color: cores.sobreAcento, fontWeight: '600' },
 });

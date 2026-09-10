@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -6,14 +6,17 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as api from '../../src/services/api';
 import { Equipe } from '../../src/types';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 
 export default function CorAdmin() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const [equipes, setEquipes] = useState<Equipe[]>([]);
   
   // Separamos a cor que está salva da cor que você está digitando
-  const [savedColor, setSavedColor] = useState('#FFD700');
-  const [typedColor, setTypedColor] = useState('#FFD700');
+  const [savedColor, setSavedColor] = useState(cores.dourado);
+  const [typedColor, setTypedColor] = useState(cores.dourado);
   
   const [loading, setLoading] = useState(true);
 
@@ -57,7 +60,7 @@ export default function CorAdmin() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#FFD700" style={{ marginTop: 50 }} />
+        <ActivityIndicator size="large" color={cores.dourado} style={{ marginTop: 50 }} />
       </SafeAreaView>
     );
   }
@@ -66,7 +69,7 @@ export default function CorAdmin() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFD700" />
+          <Ionicons name="arrow-back" size={24} color={cores.dourado} />
         </TouchableOpacity>
         <Text style={styles.title}>Cor da Prévia (Admin)</Text>
         <View style={{ width: 40 }} />
@@ -113,7 +116,7 @@ export default function CorAdmin() {
               value={typedColor}
               onChangeText={setTypedColor}
               placeholder="#FFFFFF"
-              placeholderTextColor="#666"
+              placeholderTextColor={cores.textoFraco}
               autoCapitalize="characters"
               maxLength={7}
             />
@@ -124,7 +127,7 @@ export default function CorAdmin() {
             style={styles.saveCustomButtonFull}
             onPress={() => salvarCor(typedColor)}
           >
-            <Ionicons name="save-outline" size={20} color="#000" />
+            <Ionicons name="save-outline" size={20} color={cores.sobreAcento} />
             <Text style={styles.saveCustomButtonText}>Salvar Cor Exclusiva</Text>
           </TouchableOpacity>
         </View>
@@ -134,31 +137,31 @@ export default function CorAdmin() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#333' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: cores.borda },
   backButton: { padding: 8 },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+  title: { fontSize: 20, fontWeight: 'bold', color: cores.texto },
   content: { padding: 16 },
-  subtitle: { color: '#888', marginBottom: 20, fontSize: 14 },
+  subtitle: { color: cores.textoFraco, marginBottom: 20, fontSize: 14 },
   
-  card: { backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, marginBottom: 24, borderWidth: 1 },
-  label: { color: '#fff', fontSize: 14, marginBottom: 12, fontWeight: 'bold' },
+  card: { backgroundColor: cores.superficie, padding: 16, borderRadius: 12, marginBottom: 24, borderWidth: 1 },
+  label: { color: cores.texto, fontSize: 14, marginBottom: 12, fontWeight: 'bold' },
   currentView: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  colorPreviewLarge: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#fff' },
-  hexText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  colorPreviewLarge: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: cores.borda },
+  hexText: { color: cores.texto, fontSize: 18, fontWeight: 'bold' },
   
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#fff', marginBottom: 12 },
-  teamButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#333' },
-  colorPreview: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, borderColor: '#fff', marginRight: 12 },
-  teamButtonText: { color: '#fff', fontSize: 16 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: cores.texto, marginBottom: 12 },
+  teamButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: cores.borda },
+  colorPreview: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, borderColor: cores.borda, marginRight: 12 },
+  teamButtonText: { color: cores.texto, fontSize: 16 },
   
-  customColorCard: { backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#333' },
-  inputLabel: { color: '#888', fontSize: 14, marginBottom: 8 },
+  customColorCard: { backgroundColor: cores.superficie, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: cores.borda },
+  inputLabel: { color: cores.textoFraco, fontSize: 14, marginBottom: 8 },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
-  realTimePreview: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: '#fff' },
-  input: { flex: 1, backgroundColor: '#0c0c0c', color: '#fff', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#444', fontSize: 16 },
+  realTimePreview: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: cores.borda },
+  input: { flex: 1, backgroundColor: cores.fundo, color: cores.texto, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: cores.borda, fontSize: 16 },
   
-  saveCustomButtonFull: { backgroundColor: '#FFD700', flexDirection: 'row', paddingVertical: 14, justifyContent: 'center', alignItems: 'center', borderRadius: 12, gap: 8 },
-  saveCustomButtonText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
+  saveCustomButtonFull: { backgroundColor: cores.dourado, flexDirection: 'row', paddingVertical: 14, justifyContent: 'center', alignItems: 'center', borderRadius: 12, gap: 8 },
+  saveCustomButtonText: { color: cores.sobreAcento, fontWeight: 'bold', fontSize: 16 },
 });

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Polyline, Line, Circle, Text as SvgText } from 'react-native-svg';
+import { useTema, CoresTema, corParaTema } from '../context/ThemeContext';
 import { PontoSerie } from '../types';
 
 // Gráfico de linha simples e leve (react-native-svg, funciona em Expo Go e web).
@@ -19,7 +20,10 @@ const LARGURA = 320;
 const ALTURA = 150;
 const MARGEM = { esquerda: 34, direita: 10, topo: 12, baixo: 22 };
 
-export default function GraficoLinha({ titulo, pontos, cor, unidade = '', maxYFixo }: Props) {
+export default function GraficoLinha({ titulo, pontos, cor: corBruta, unidade = '', maxYFixo }: Props) {
+  const { cores, estaClaro } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
+  const cor = corParaTema(corBruta, estaClaro, 0.40);
   if (!pontos || pontos.length < 2) {
     return (
       <View style={styles.card}>
@@ -69,8 +73,8 @@ export default function GraficoLinha({ titulo, pontos, cor, unidade = '', maxYFi
           const valor = Math.round(minY + frac * (maxY - minY));
           return (
             <React.Fragment key={frac}>
-              <Line x1={MARGEM.esquerda} y1={y} x2={LARGURA - MARGEM.direita} y2={y} stroke="#26264a" strokeWidth={1} />
-              <SvgText x={MARGEM.esquerda - 6} y={y + 4} fill="#666" fontSize="9" textAnchor="end">
+              <Line x1={MARGEM.esquerda} y1={y} x2={LARGURA - MARGEM.direita} y2={y} stroke={cores.borda} strokeWidth={1} />
+              <SvgText x={MARGEM.esquerda - 6} y={y + 4} fill={cores.textoFraco} fontSize="9" textAnchor="end">
                 {valor}{unidade}
               </SvgText>
             </React.Fragment>
@@ -84,10 +88,10 @@ export default function GraficoLinha({ titulo, pontos, cor, unidade = '', maxYFi
         ))}
 
         {/* Rótulos de data: primeiro e último ponto */}
-        <SvgText x={coordX(0)} y={ALTURA - 6} fill="#888" fontSize="9" textAnchor="start">
+        <SvgText x={coordX(0)} y={ALTURA - 6} fill={cores.textoFraco} fontSize="9" textAnchor="start">
           {formatarData(pontos[0].data)}
         </SvgText>
-        <SvgText x={coordX(pontos.length - 1)} y={ALTURA - 6} fill="#888" fontSize="9" textAnchor="end">
+        <SvgText x={coordX(pontos.length - 1)} y={ALTURA - 6} fill={cores.textoFraco} fontSize="9" textAnchor="end">
           {formatarData(ultimo.data)}
         </SvgText>
       </Svg>
@@ -95,11 +99,11 @@ export default function GraficoLinha({ titulo, pontos, cor, unidade = '', maxYFi
   );
 }
 
-const styles = StyleSheet.create({
-  card: { backgroundColor: '#14142e', borderRadius: 14, borderWidth: 1, borderColor: '#26264a', padding: 14, marginBottom: 14 },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  card: { backgroundColor: cores.superficie, borderRadius: 14, borderWidth: 1, borderColor: cores.borda, padding: 14, marginBottom: 14 },
   tituloRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  titulo: { color: '#CCD', fontSize: 13, fontWeight: '700' },
+  titulo: { color: cores.texto, fontSize: 13, fontWeight: '700' },
   valorAtual: { fontSize: 16, fontWeight: '900' },
   vazioBox: { height: 90, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
-  vazioTexto: { color: '#667', fontSize: 12, textAlign: 'center' },
+  vazioTexto: { color: cores.textoFraco, fontSize: 12, textAlign: 'center' },
 });

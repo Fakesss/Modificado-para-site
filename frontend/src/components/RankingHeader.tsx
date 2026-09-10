@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTema, CoresTema, textoSobre } from '../context/ThemeContext';
 import { RankingItem } from '../types';
 
 interface Props {
@@ -8,9 +9,11 @@ interface Props {
   loading?: boolean;
 }
 
-const EMPTY_ITEM = { id: 'empty', nome: '-', cor: '#333', pontosTotais: 0, posicao: 0 };
+const EMPTY_ITEM = { id: 'empty', nome: '-', cor: '#8a8a99', pontosTotais: 0, posicao: 0 };
 
 export default function RankingHeader({ ranking, loading }: Props) {
+  const { cores, corEquipe } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const sortedByPoints = [...ranking].sort((a, b) => b.pontosTotais - a.pontosTotais);
 
   const first = sortedByPoints[0] ? { ...sortedByPoints[0], posicao: 1 } : { ...EMPTY_ITEM, posicao: 1 };
@@ -79,16 +82,16 @@ export default function RankingHeader({ ranking, loading }: Props) {
           return (
             <View key={`${item.id}-${index}`} style={[styles.podiumItem, isFirst && { zIndex: 2 }]}>
               
-              <View style={[styles.teamNamePill, { backgroundColor: isEmpty ? '#333' : item.cor }]}>
-                <Text style={styles.teamNamePillText} numberOfLines={2} adjustsFontSizeToFit>
+              <View style={[styles.teamNamePill, { backgroundColor: isEmpty ? cores.textoFraco : corEquipe(item.cor), borderColor: cores.superficie }]}>
+                <Text style={[styles.teamNamePillText, { color: isEmpty ? cores.superficie : textoSobre(corEquipe(item.cor)) }]} numberOfLines={2} adjustsFontSizeToFit>
                   {isEmpty ? '-' : nomeFormatado}
                 </Text>
               </View>
               
-              <View style={[styles.podiumBox, { height: podiumHeight, backgroundColor: isEmpty ? '#33333330' : item.cor + '25' }]}>
+              <View style={[styles.podiumBox, { height: podiumHeight, backgroundColor: isEmpty ? cores.superficieAlt : corEquipe(item.cor) + '25' }]}>
                 
-                <View style={[styles.insidePositionCircle, { backgroundColor: isEmpty ? '#333' : item.cor }]}>
-                  <Text style={[styles.insidePositionText, { color: isEmpty ? '#888' : '#000' }]}>
+                <View style={[styles.insidePositionCircle, { backgroundColor: isEmpty ? cores.textoFraco : corEquipe(item.cor), borderColor: cores.superficie }]}>
+                  <Text style={[styles.insidePositionText, { color: isEmpty ? cores.superficie : textoSobre(corEquipe(item.cor)) }]}>
                     {item.posicao}º
                   </Text>
                 </View>
@@ -96,10 +99,10 @@ export default function RankingHeader({ ranking, loading }: Props) {
                 <Ionicons 
                   name={isEmpty ? (isFirst ? 'trophy-outline' : 'medal-outline') : (isFirst ? 'trophy' : 'medal')} 
                   size={isFirst ? 32 : 28} 
-                  color={isEmpty ? '#555' : item.cor} 
+                  color={isEmpty ? cores.textoFraco : corEquipe(item.cor)} 
                 />
                 
-                <Text style={[styles.podiumPoints, { color: isEmpty ? '#555' : item.cor }]}>
+                <Text style={[styles.podiumPoints, { color: isEmpty ? cores.textoFraco : corEquipe(item.cor) }]}>
                   {isEmpty ? '- pts' : `${item.pontosTotais} pts`}
                 </Text>
 
@@ -112,13 +115,13 @@ export default function RankingHeader({ ranking, loading }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#333' },
-  title: { fontSize: 18, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 20 },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { backgroundColor: cores.superficie, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: cores.borda },
+  title: { fontSize: 18, fontWeight: 'bold', color: cores.texto, textAlign: 'center', marginBottom: 20 },
   podiumContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', paddingHorizontal: 4 },
   podiumItem: { flex: 1, alignItems: 'center', marginHorizontal: 4 },
-  teamNamePill: { width: '92%', alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 4, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 8, zIndex: 10, minHeight: 38, borderWidth: 1, borderColor: '#1a1a2e' },
-  teamNamePillText: { color: '#000', fontWeight: '900', fontSize: 13, textAlign: 'center', includeFontPadding: false, textAlignVertical: 'center' },
+  teamNamePill: { width: '92%', alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 4, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 8, zIndex: 10, minHeight: 38, borderWidth: 1 },
+  teamNamePillText: { color: '#fff', fontWeight: '900', fontSize: 13, textAlign: 'center', includeFontPadding: false, textAlignVertical: 'center' },
   podiumBox: { width: '100%', borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 6 },
   insidePositionCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   insidePositionText: { fontWeight: 'bold', fontSize: 14 },

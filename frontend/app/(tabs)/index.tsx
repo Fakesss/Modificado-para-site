@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../src/context/AuthContext';
+import { useTema, CoresTema, corParaTema } from '../../src/context/ThemeContext';
 import * as api from '../../src/services/api';
 import RankingHeader from '../../src/components/RankingHeader';
 import StreakBadge from '../../src/components/StreakBadge';
@@ -37,6 +38,11 @@ const obterJogoDoDia = () => {
 
 export default function Home() {
   const { user, logout, refreshUser } = useAuth();
+  const { cores, estaClaro, alternarTema, corEquipe } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
+  // No tema claro os cartões coloridos usam um véu bem mais leve — a mesma
+  // transparência do escuro deixaria tudo saturado em cima do branco.
+  const veu = estaClaro ? '20' : '50';
   const router = useRouter();
   const [ranking, setRanking] = useState<RankingItem[]>([]);
   const [equipe, setEquipe] = useState<Equipe | null>(null);
@@ -140,13 +146,14 @@ export default function Home() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
+          <ActivityIndicator size="large" color={cores.dourado} />
         </View>
       </SafeAreaView>
     );
   }
 
-  const finalTeamColor = equipe?.cor || '#333333';
+  const finalTeamColor = equipe?.cor ? corEquipe(equipe.cor) : cores.textoFraco;
+  const corJogo = corParaTema(jogoDestacado.cor, estaClaro, 0.40);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -154,26 +161,32 @@ export default function Home() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={cores.dourado} />
         }
       >
         {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Olá, {user?.nome?.split(' ')[0]}!</Text>
-            
+
             {turma && (
               <View style={styles.turmaBadge}>
-                <Ionicons name="school" size={14} color="#888" />
+                <Ionicons name="school" size={14} color={cores.textoFraco} />
                 <Text style={styles.turmaText}>{turma.nome}</Text>
               </View>
             )}
 
             <StreakBadge streakDias={user?.streakDias || 0} />
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={24} color="#888" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity style={styles.botaoTema} onPress={alternarTema} accessibilityLabel={estaClaro ? 'Mudar para o tema escuro' : 'Mudar para o tema claro'}>
+              <Ionicons name={estaClaro ? 'moon' : 'sunny'} size={18} color={cores.ambar} />
+              <Text style={styles.botaoTemaTexto}>{estaClaro ? 'Escuro' : 'Claro'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={24} color={cores.textoFraco} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Ranking Header (O Pódio) */}
@@ -184,7 +197,7 @@ export default function Home() {
           <Text style={styles.statsTitle}>Seus Pontos</Text>
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
-              <Ionicons name="star" size={28} color="#FFD700" />
+              <Ionicons name="star" size={28} color={cores.dourado} />
               <Text style={styles.statValue}>{user?.pontosTotais || 0}</Text>
               <Text style={styles.statLabel}>pontos totais</Text>
             </View>
@@ -205,27 +218,27 @@ export default function Home() {
           
           {/* Fila 1 */}
           <View style={styles.actionRow}>
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#4169E1' + '50' }]} onPress={() => router.push('/(tabs)/videos')}>
-              <Ionicons name="play" size={24} color="#4169E1" />
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: cores.azul + veu, borderColor: cores.azul + '55' }]} onPress={() => router.push('/(tabs)/videos')}>
+              <Ionicons name="play" size={24} color={cores.azul} />
               <Text style={styles.actionText}>Vídeo-aulas</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#32CD32' + '50' }]} onPress={() => router.push('/(tabs)/exercicios')}>
-              <Ionicons name="document-text" size={24} color="#32CD32" />
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: cores.sucesso + veu, borderColor: cores.sucesso + '55' }]} onPress={() => router.push('/(tabs)/exercicios')}>
+              <Ionicons name="document-text" size={24} color={cores.sucesso} />
               <Text style={styles.actionText}>Atividades</Text>
             </TouchableOpacity>
           </View>
 
           {/* Fila 2 (Ranking e Jogo Rotativo lado a lado) */}
           <View style={styles.actionRow}>
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FFD700' + '50' }]} onPress={() => router.push('/(tabs)/ranking')}>
-              <Ionicons name="trophy" size={28} color="#FFD700" />
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: cores.dourado + veu, borderColor: cores.dourado + '55' }]} onPress={() => router.push('/(tabs)/ranking')}>
+              <Ionicons name="trophy" size={28} color={cores.dourado} />
               <Text style={[styles.actionText, { fontSize: 13, marginTop: 10 }]}>Ranking Geral</Text>
             </TouchableOpacity>
 
             {/* BOTÃO ROTATIVO COM SELO "NOVO" */}
             <TouchableOpacity 
-                style={[styles.actionCard, { backgroundColor: jogoDestacado.cor + '40', borderColor: jogoDestacado.cor }]} 
+                style={[styles.actionCard, { backgroundColor: corJogo + veu, borderColor: corJogo }]} 
                 onPress={() => router.push(jogoDestacado.rota as any)}
             >
               {mostrarSeloNovo && (
@@ -233,21 +246,32 @@ export default function Home() {
                     <Text style={styles.novoBadgeText}>NOVO!</Text>
                 </View>
               )}
-              <Ionicons name={jogoDestacado.icone as any} size={28} color={jogoDestacado.cor} />
-              <Text style={[styles.actionText, { fontSize: 13, marginTop: 10, color: '#FFF' }]}>{jogoDestacado.titulo}</Text>
+              <Ionicons name={jogoDestacado.icone as any} size={28} color={corJogo} />
+              <Text style={[styles.actionText, { fontSize: 13, marginTop: 10 }]}>{jogoDestacado.titulo}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Fila 3 */}
           <View style={styles.actionRow}>
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FF8C00' + '50' }]} onPress={() => router.push('/(tabs)/conteudos')}>
-              <Ionicons name="book-outline" size={24} color="#FF8C00" />
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: cores.laranja + veu, borderColor: cores.laranja + '55' }]} onPress={() => router.push('/(tabs)/conteudos')}>
+              <Ionicons name="book-outline" size={24} color={cores.laranja} />
               <Text style={styles.actionText}>Conteúdos</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#E066FF' + '50' }]} onPress={() => router.push('/(tabs)/progresso')}>
-              <Ionicons name="stats-chart" size={24} color="#E066FF" />
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: cores.roxo + veu, borderColor: cores.roxo + '55' }]} onPress={() => router.push('/(tabs)/progresso')}>
+              <Ionicons name="stats-chart" size={24} color={cores.roxo} />
               <Text style={styles.actionText}>Progresso</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Fila 4: Cartela de Missões (cartão largo — é o quadro de estrelas do aluno) */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: cores.ambar + veu, borderColor: cores.ambar, flexDirection: 'row', gap: 10 }]}
+              onPress={() => router.push('/cartela_missoes' as any)}
+            >
+              <Ionicons name="star" size={26} color={cores.ambar} />
+              <Text style={[styles.actionText, { marginTop: 0, fontSize: 14 }]}>Cartela de Missões</Text>
             </TouchableOpacity>
           </View>
 
@@ -257,44 +281,46 @@ export default function Home() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  greeting: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 6 },
+  greeting: { fontSize: 24, fontWeight: 'bold', color: cores.texto, marginBottom: 6 },
   
-  turmaBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start', marginBottom: 10, borderWidth: 1, borderColor: '#333', gap: 6 },
-  turmaText: { color: '#888', fontSize: 13, fontWeight: '600' },
+  turmaBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start', marginBottom: 10, borderWidth: 1, borderColor: cores.borda, gap: 6 },
+  turmaText: { color: cores.textoFraco, fontSize: 13, fontWeight: '600' },
 
   logoutButton: { padding: 8 },
-  statsCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#333' },
-  statsTitle: { fontSize: 16, color: '#888', marginBottom: 16 },
+  botaoTema: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: cores.ambar, backgroundColor: cores.ambar + '18', marginRight: 4 },
+  botaoTemaTexto: { color: cores.ambar, fontSize: 12, fontWeight: '800' },
+  statsCard: { backgroundColor: cores.superficie, borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: cores.borda },
+  statsTitle: { fontSize: 16, color: cores.textoFraco, marginBottom: 16 },
   statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
   statItem: { alignItems: 'center' },
-  statValue: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginTop: 8 },
-  statLabel: { fontSize: 12, color: '#666', marginTop: 4 },
-  teamDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#333' },
+  statValue: { fontSize: 28, fontWeight: 'bold', color: cores.texto, marginTop: 8 },
+  statLabel: { fontSize: 12, color: cores.textoFraco, marginTop: 4 },
+  teamDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: cores.borda },
   
   actionGrid: { gap: 12, paddingBottom: 20 },
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  actionCard: { flex: 1, borderRadius: 16, padding: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1a1a2e', position: 'relative' },
-  actionText: { color: '#fff', fontSize: 12, fontWeight: '600', marginTop: 10, textAlign: 'center' },
+  actionCard: { flex: 1, borderRadius: 16, padding: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: cores.borda, position: 'relative' },
+  actionText: { color: cores.texto, fontSize: 12, fontWeight: '600', marginTop: 10, textAlign: 'center' },
 
   // Estilos do Selo "Novo"
   novoBadge: {
     position: 'absolute',
     top: -8,
     right: -8,
-    backgroundColor: '#FF0055',
+    backgroundColor: cores.rosa,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#FFF',
+    borderColor: cores.superficie,
     zIndex: 10,
-    shadowColor: '#FF0055',
+    shadowColor: cores.rosa,
     shadowRadius: 5,
     shadowOpacity: 0.8
   },

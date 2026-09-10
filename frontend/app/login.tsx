@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext';
+import { useTema, CoresTema } from '../src/context/ThemeContext';
 
 export default function Login() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -93,18 +96,18 @@ export default function Login() {
           </TouchableOpacity>
 
           <View style={styles.header}>
-            <Ionicons name="school" size={64} color="#FFD700" />
+            <Ionicons name="school" size={64} color={cores.dourado} />
             <Text style={styles.title}>Ranking Matemática</Text>
             <Text style={styles.subtitle}>Equipes</Text>
           </View>
 
           <View style={styles.form}>
             <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={24} color="#888" style={styles.inputIcon} />
+              <Ionicons name="mail-outline" size={24} color={cores.textoFraco} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Email"
-                placeholderTextColor="#666"
+                placeholderTextColor={cores.textoFraco}
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text);
@@ -117,11 +120,11 @@ export default function Login() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={24} color="#888" style={styles.inputIcon} />
+              <Ionicons name="lock-closed-outline" size={24} color={cores.textoFraco} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Senha"
-                placeholderTextColor="#666"
+                placeholderTextColor={cores.textoFraco}
                 value={senha}
                 onChangeText={(text) => {
                   setSenha(text);
@@ -134,7 +137,7 @@ export default function Login() {
                 <Ionicons
                   name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                   size={24}
-                  color="#888"
+                  color={cores.textoFraco}
                 />
               </TouchableOpacity>
             </View>
@@ -142,7 +145,7 @@ export default function Login() {
             {/* 🚨 CAIXA DE ERRO VISUAL APARECE AQUI SE TIVER ERRO */}
             {mensagemErro !== '' && (
               <View style={styles.caixaErro}>
-                <Ionicons name="alert-circle" size={20} color="#ff4444" />
+                <Ionicons name="alert-circle" size={20} color={cores.erro} />
                 <Text style={styles.textoErro}>{mensagemErro}</Text>
               </View>
             )}
@@ -153,7 +156,7 @@ export default function Login() {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#000" />
+                <ActivityIndicator color={cores.sobreAcento} />
               ) : (
                 <Text style={styles.buttonText}>Entrar</Text>
               )}
@@ -178,10 +181,10 @@ export default function Login() {
   );
 }
 
-const styles = StyleSheet.create({
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: cores.fundo,
   },
   keyboardView: {
     flex: 1,
@@ -202,7 +205,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: cores.fundo,
   },
   header: {
     alignItems: 'center',
@@ -212,12 +215,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
     marginTop: 16,
   },
   subtitle: {
     fontSize: 20,
-    color: '#FFD700',
+    color: cores.dourado,
     fontWeight: '600',
   },
   form: {
@@ -226,7 +229,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 4,
@@ -236,7 +239,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: '#fff',
+    color: cores.texto,
     fontSize: 16,
     paddingVertical: 14,
   },
@@ -245,21 +248,21 @@ const styles = StyleSheet.create({
   caixaErro: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ff444420', // Fundo vermelho transparente
+    backgroundColor: cores.erro + '20', // Fundo vermelho transparente
     padding: 12,
     borderRadius: 8,
     marginTop: -4,
     marginBottom: 4,
   },
   textoErro: {
-    color: '#ff4444', // Letra vermelha
+    color: cores.erro, // Letra vermelha
     marginLeft: 8,
     fontSize: 14,
     fontWeight: 'bold',
   },
 
   button: {
-    backgroundColor: '#FFD700',
+    backgroundColor: cores.dourado,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -269,7 +272,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: '#000',
+    color: cores.sobreAcento,
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -279,11 +282,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   registerText: {
-    color: '#888',
+    color: cores.textoFraco,
     fontSize: 16,
   },
   registerTextBold: {
-    color: '#FFD700',
+    color: cores.dourado,
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -293,7 +296,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    color: '#555',
+    color: cores.textoFraco,
     fontSize: 14,
   },
 });

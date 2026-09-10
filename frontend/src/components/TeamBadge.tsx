@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTema, textoSobre } from '../context/ThemeContext';
 
 interface Props {
   nome: string;
@@ -9,6 +10,9 @@ interface Props {
 }
 
 export default function TeamBadge({ nome, cor, pontos, size = 'medium' }: Props) {
+  const { corEquipe } = useTema();
+  const corFundo = corEquipe(cor);
+  const corTexto = textoSobre(corFundo);
   const getSizeStyles = () => {
     switch (size) {
       case 'small':
@@ -26,17 +30,17 @@ export default function TeamBadge({ nome, cor, pontos, size = 'medium' }: Props)
     <View style={[
       styles.container,
       {
-        backgroundColor: cor,
+        backgroundColor: corFundo,
         paddingHorizontal: sizeStyles.paddingH,
         paddingVertical: sizeStyles.paddingV,
         borderRadius: sizeStyles.borderRadius,
       }
     ]}>
-      <Text style={[styles.text, { fontSize: sizeStyles.fontSize }]}>
+      <Text style={[styles.text, { fontSize: sizeStyles.fontSize, color: corTexto }]}>
         Equipe {nome}
       </Text>
       {pontos !== undefined && (
-        <Text style={[styles.points, { fontSize: sizeStyles.fontSize - 2 }]}>
+        <Text style={[styles.points, { fontSize: sizeStyles.fontSize - 2, color: corTexto }]}>
           {pontos} pts
         </Text>
       )}

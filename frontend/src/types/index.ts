@@ -165,6 +165,13 @@ export interface TabuadaDesafioResultado {
   registradoEm?: string;
 }
 
+// ======== CARTELA DE MISSÕES (estrelas dadas manualmente pelo professor) ========
+export interface CartelaMissoes {
+  alunoId: string;
+  estrelas: number;
+  total: number; // sempre 30 por enquanto, mas vem do servidor pra nunca dessincronizar
+}
+
 export interface TabuadaRelatorioLinha {
   id: string;
   nome: string;

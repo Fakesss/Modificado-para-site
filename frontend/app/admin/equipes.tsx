@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
 import { Equipe } from '../../src/types';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 
 export default function AdminEquipes() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const [equipes, setEquipes] = useState<Equipe[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +67,7 @@ export default function AdminEquipes() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#FFD700" style={{ marginTop: 50 }} />
+        <ActivityIndicator size="large" color={cores.dourado} style={{ marginTop: 50 }} />
       </SafeAreaView>
     );
   }
@@ -73,7 +76,7 @@ export default function AdminEquipes() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFD700" />
+          <Ionicons name="arrow-back" size={24} color={cores.dourado} />
         </TouchableOpacity>
         <Text style={styles.title}>Gerenciar Equipes</Text>
         <View style={{ width: 40 }} />
@@ -98,7 +101,7 @@ export default function AdminEquipes() {
                 value={currentEdit.nome}
                 onChangeText={(text) => updateEdit(equipe.id, 'nome', text)}
                 placeholder="Ex: Equipe Alfa"
-                placeholderTextColor="#666"
+                placeholderTextColor={cores.textoFraco}
               />
 
               <Text style={styles.label}>Cor Padrão (HEX)</Text>
@@ -107,7 +110,7 @@ export default function AdminEquipes() {
                 value={currentEdit.cor}
                 onChangeText={(text) => updateEdit(equipe.id, 'cor', text)}
                 placeholder="Ex: #FF0000"
-                placeholderTextColor="#666"
+                placeholderTextColor={cores.textoFraco}
                 autoCapitalize="characters"
               />
 
@@ -117,10 +120,10 @@ export default function AdminEquipes() {
                 disabled={savingId === equipe.id}
               >
                 {savingId === equipe.id ? (
-                  <ActivityIndicator color="#000" />
+                  <ActivityIndicator color={cores.sobreAcento} />
                 ) : (
                   <>
-                    <Ionicons name="save-outline" size={20} color="#000" />
+                    <Ionicons name="save-outline" size={20} color={cores.sobreAcento} />
                     <Text style={styles.saveButtonText}>Salvar Alterações</Text>
                   </>
                 )}
@@ -133,19 +136,19 @@ export default function AdminEquipes() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#333' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: cores.borda },
   backButton: { padding: 8 },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+  title: { fontSize: 20, fontWeight: 'bold', color: cores.texto },
   content: { padding: 16 },
-  subtitle: { color: '#888', marginBottom: 24, fontSize: 14 },
-  card: { backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#333' },
+  subtitle: { color: cores.textoFraco, marginBottom: 24, fontSize: 14 },
+  card: { backgroundColor: cores.superficie, padding: 16, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: cores.borda },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
-  colorPreview: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: '#fff' },
-  teamId: { color: '#666', fontSize: 12 },
-  label: { color: '#fff', fontSize: 14, marginBottom: 8, fontWeight: '500' },
-  input: { backgroundColor: '#0c0c0c', color: '#fff', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#333', marginBottom: 16, fontSize: 16 },
-  saveButton: { backgroundColor: '#FFD700', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 8, gap: 8 },
-  saveButtonText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
+  colorPreview: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: cores.borda },
+  teamId: { color: cores.textoFraco, fontSize: 12 },
+  label: { color: cores.texto, fontSize: 14, marginBottom: 8, fontWeight: '500' },
+  input: { backgroundColor: cores.fundo, color: cores.texto, padding: 12, borderRadius: 8, borderWidth: 1, borderColor: cores.borda, marginBottom: 16, fontSize: 16 },
+  saveButton: { backgroundColor: cores.dourado, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 8, gap: 8 },
+  saveButtonText: { color: cores.sobreAcento, fontWeight: 'bold', fontSize: 16 },
 });

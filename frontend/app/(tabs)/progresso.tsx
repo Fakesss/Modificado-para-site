@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,29 +6,39 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
+import { useTema, CoresTema, textoSobre } from '../../src/context/ThemeContext';
 import * as api from '../../src/services/api';
 import StreakBadge from '../../src/components/StreakBadge';
-import { Equipe } from '../../src/types';
+import CartelaMissoesView from '../../src/components/CartelaMissoes';
+import { Equipe, CartelaMissoes } from '../../src/types';
 
 export default function Progresso() {
+  const router = useRouter();
   const { user, refreshUser } = useAuth();
+  const { cores, corEquipe } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const [progress, setProgress] = useState<any>(null);
   const [equipe, setEquipe] = useState<Equipe | null>(null);
+  const [cartela, setCartela] = useState<CartelaMissoes | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [progressData, equipesData] = await Promise.all([
+      const [progressData, equipesData, cartelaData] = await Promise.all([
         api.getMeuProgresso(),
         api.getEquipes(),
+        api.getMinhaCartelaMissoes(),
       ]);
       setProgress(progressData);
-      
+      setCartela(cartelaData);
+
       if (user?.equipeId) {
         const userEquipe = equipesData.find((e: Equipe) => e.id === user.equipeId);
         setEquipe(userEquipe || null);
@@ -54,7 +64,7 @@ export default function Progresso() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
+          <ActivityIndicator size="large" color={cores.dourado} />
         </View>
       </SafeAreaView>
     );
@@ -66,13 +76,13 @@ export default function Progresso() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={cores.dourado} />
         }
       >
         {/* Profile Header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
-            <Ionicons name="person" size={48} color="#FFD700" />
+            <Ionicons name="person" size={48} color={cores.dourado} />
           </View>
           <Text style={styles.profileName}>{user?.nome}</Text>
           <Text style={styles.profileEmail}>{user?.email}</Text>
@@ -81,13 +91,13 @@ export default function Progresso() {
 
         {/* Team Info */}
         {equipe && (
-          <View style={[styles.teamCard, { borderLeftColor: equipe.cor }]}>
-            <View style={[styles.teamBadge, { backgroundColor: equipe.cor }]}>
-              <Ionicons name="people" size={20} color="#000" />
+          <View style={[styles.teamCard, { borderLeftColor: corEquipe(equipe.cor) }]}>
+            <View style={[styles.teamBadge, { backgroundColor: corEquipe(equipe.cor) }]}>
+              <Ionicons name="people" size={20} color={textoSobre(corEquipe(equipe.cor))} />
             </View>
             <View style={styles.teamInfo}>
               <Text style={styles.teamLabel}>Sua Equipe</Text>
-              <Text style={[styles.teamName, { color: equipe.cor }]}>Equipe {equipe.nome}</Text>
+              <Text style={[styles.teamName, { color: corEquipe(equipe.cor) }]}>Equipe {equipe.nome}</Text>
             </View>
           </View>
         )}
@@ -95,36 +105,53 @@ export default function Progresso() {
         {/* Stats Cards */}
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
-            <Ionicons name="star" size={32} color="#FFD700" />
+            <Ionicons name="star" size={32} color={cores.dourado} />
             <Text style={styles.statValue}>{progress?.pontosTotais || 0}</Text>
             <Text style={styles.statLabel}>Pontos Totais</Text>
           </View>
           
           <View style={styles.statCard}>
-            <Ionicons name="flame" size={32} color="#FF6B35" />
+            <Ionicons name="flame" size={32} color={cores.laranja} />
             <Text style={styles.statValue}>{user?.streakDias || 0}</Text>
             <Text style={styles.statLabel}>Dias de Ofensiva</Text>
           </View>
           
           <View style={styles.statCard}>
-            <Ionicons name="play-circle" size={32} color="#4169E1" />
+            <Ionicons name="play-circle" size={32} color={cores.azul} />
             <Text style={styles.statValue}>{progress?.totalVideos || 0}</Text>
             <Text style={styles.statLabel}>Vídeos Concluídos</Text>
           </View>
           
           <View style={styles.statCard}>
-            <Ionicons name="document-text" size={32} color="#32CD32" />
+            <Ionicons name="document-text" size={32} color={cores.sucesso} />
             <Text style={styles.statValue}>{progress?.totalExercicios || 0}</Text>
             <Text style={styles.statLabel}>Exercícios Feitos</Text>
           </View>
         </View>
+
+        {/* Cartela de Missões — a cartela em si, direto no perfil */}
+        <Text style={styles.sectionTitle}>Cartela de Missões</Text>
+        {cartela ? (
+          <TouchableOpacity activeOpacity={0.9} onPress={() => router.push('/cartela_missoes' as any)} style={{ marginBottom: 24 }}>
+            <CartelaMissoesView estrelas={cartela.estrelas} total={cartela.total} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.cartelaAviso}>
+            <Ionicons name="cloud-offline-outline" size={28} color={cores.textoFraco} />
+            <Text style={styles.cartelaSubtitulo}>Não consegui carregar sua cartela agora.</Text>
+            <TouchableOpacity style={styles.cartelaBotao} onPress={loadData}>
+              <Ionicons name="refresh" size={16} color={cores.sobreAcento} />
+              <Text style={styles.cartelaBotaoTexto}>Tentar de novo</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Points Breakdown */}
         <Text style={styles.sectionTitle}>Origem dos Pontos</Text>
         <View style={styles.breakdownCard}>
           <View style={styles.breakdownRow}>
             <View style={styles.breakdownLeft}>
-              <Ionicons name="play-circle" size={24} color="#4169E1" />
+              <Ionicons name="play-circle" size={24} color={cores.azul} />
               <Text style={styles.breakdownLabel}>Vídeo-aulas</Text>
             </View>
             <Text style={styles.breakdownValue}>+{progress?.pontosVideos || 0} pts</Text>
@@ -132,7 +159,7 @@ export default function Progresso() {
           <View style={styles.breakdownDivider} />
           <View style={styles.breakdownRow}>
             <View style={styles.breakdownLeft}>
-              <Ionicons name="document-text" size={24} color="#32CD32" />
+              <Ionicons name="document-text" size={24} color={cores.sucesso} />
               <Text style={styles.breakdownLabel}>Exercícios</Text>
             </View>
             <Text style={styles.breakdownValue}>+{progress?.pontosExercicios || 0} pts</Text>
@@ -145,7 +172,7 @@ export default function Progresso() {
             <Text style={styles.sectionTitle}>Últimas Atividades</Text>
             {progress.submissoes.slice(0, 5).map((sub: any, index: number) => (
               <View key={sub.id || index} style={styles.activityItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#32CD32" />
+                <Ionicons name="checkmark-circle" size={20} color={cores.sucesso} />
                 <View style={styles.activityInfo}>
                   <Text style={styles.activityTitle}>Exercício concluído</Text>
                   <Text style={styles.activityMeta}>
@@ -161,10 +188,10 @@ export default function Progresso() {
   );
 }
 
-const styles = StyleSheet.create({
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: cores.fundo,
   },
   loadingContainer: {
     flex: 1,
@@ -185,7 +212,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#FFD700' + '30',
+    backgroundColor: cores.dourado + '30',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -193,18 +220,18 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
     marginBottom: 4,
   },
   profileEmail: {
     fontSize: 14,
-    color: '#888',
+    color: cores.textoFraco,
     marginBottom: 16,
   },
   teamCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
@@ -223,7 +250,7 @@ const styles = StyleSheet.create({
   },
   teamLabel: {
     fontSize: 12,
-    color: '#888',
+    color: cores.textoFraco,
   },
   teamName: {
     fontSize: 18,
@@ -237,7 +264,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     width: '47%',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
@@ -245,23 +272,53 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
     marginTop: 8,
   },
   statLabel: {
     fontSize: 12,
-    color: '#888',
+    color: cores.textoFraco,
     marginTop: 4,
     textAlign: 'center',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
     marginBottom: 16,
   },
+  cartelaAviso: {
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: cores.superficie,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: cores.borda,
+    padding: 20,
+    marginBottom: 24,
+  },
+  cartelaBotao: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: cores.ambar,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 4,
+  },
+  cartelaBotaoTexto: {
+    color: cores.sobreAcento,
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  cartelaSubtitulo: {
+    color: cores.textoFraco,
+    fontSize: 12,
+    marginTop: 2,
+  },
   breakdownCard: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 16,
     padding: 16,
     marginBottom: 24,
@@ -278,23 +335,23 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   breakdownLabel: {
-    color: '#fff',
+    color: cores.texto,
     fontSize: 16,
   },
   breakdownValue: {
-    color: '#FFD700',
+    color: cores.dourado,
     fontSize: 16,
     fontWeight: 'bold',
   },
   breakdownDivider: {
     height: 1,
-    backgroundColor: '#333',
+    backgroundColor: cores.borda,
     marginVertical: 8,
   },
   activityItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
@@ -304,12 +361,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   activityTitle: {
-    color: '#fff',
+    color: cores.texto,
     fontSize: 14,
     fontWeight: '600',
   },
   activityMeta: {
-    color: '#888',
+    color: cores.textoFraco,
     fontSize: 12,
     marginTop: 2,
   },
