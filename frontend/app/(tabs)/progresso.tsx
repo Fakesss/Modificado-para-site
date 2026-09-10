@@ -15,6 +15,7 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useTema, CoresTema, textoSobre } from '../../src/context/ThemeContext';
 import * as api from '../../src/services/api';
 import StreakBadge from '../../src/components/StreakBadge';
+import CartelaMissoesView from '../../src/components/CartelaMissoes';
 import { Equipe, CartelaMissoes } from '../../src/types';
 
 export default function Progresso() {
@@ -128,17 +129,22 @@ export default function Progresso() {
           </View>
         </View>
 
-        {/* Cartela de Missões */}
-        <TouchableOpacity style={styles.cartelaCard} onPress={() => router.push('/cartela_missoes' as any)} activeOpacity={0.85}>
-          <View style={styles.cartelaIcone}>
-            <Ionicons name="star" size={26} color={cores.ambar} />
+        {/* Cartela de Missões — a cartela em si, direto no perfil */}
+        <Text style={styles.sectionTitle}>Cartela de Missões</Text>
+        {cartela ? (
+          <TouchableOpacity activeOpacity={0.9} onPress={() => router.push('/cartela_missoes' as any)} style={{ marginBottom: 24 }}>
+            <CartelaMissoesView estrelas={cartela.estrelas} total={cartela.total} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.cartelaAviso}>
+            <Ionicons name="cloud-offline-outline" size={28} color={cores.textoFraco} />
+            <Text style={styles.cartelaSubtitulo}>Não consegui carregar sua cartela agora.</Text>
+            <TouchableOpacity style={styles.cartelaBotao} onPress={loadData}>
+              <Ionicons name="refresh" size={16} color={cores.sobreAcento} />
+              <Text style={styles.cartelaBotaoTexto}>Tentar de novo</Text>
+            </TouchableOpacity>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cartelaTitulo}>Cartela de Missões</Text>
-            <Text style={styles.cartelaSubtitulo}>{cartela ? `${cartela.estrelas} / ${cartela.total} estrelas` : 'Veja suas estrelas'}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={cores.textoFraco} />
-        </TouchableOpacity>
+        )}
 
         {/* Points Breakdown */}
         <Text style={styles.sectionTitle}>Origem dos Pontos</Text>
@@ -281,29 +287,30 @@ const criarEstilos = (cores: CoresTema) => StyleSheet.create({
     color: cores.texto,
     marginBottom: 16,
   },
-  cartelaCard: {
-    flexDirection: 'row',
+  cartelaAviso: {
     alignItems: 'center',
-    gap: 14,
+    gap: 8,
     backgroundColor: cores.superficie,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: cores.borda,
-    padding: 16,
-    marginBottom: 20,
+    padding: 20,
+    marginBottom: 24,
   },
-  cartelaIcone: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: cores.superficieAlt,
+  cartelaBotao: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: cores.ambar,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 4,
   },
-  cartelaTitulo: {
-    color: cores.texto,
-    fontWeight: 'bold',
-    fontSize: 15,
+  cartelaBotaoTexto: {
+    color: cores.sobreAcento,
+    fontWeight: '900',
+    fontSize: 13,
   },
   cartelaSubtitulo: {
     color: cores.textoFraco,

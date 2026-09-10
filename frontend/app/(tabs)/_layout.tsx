@@ -201,7 +201,7 @@ export default function TabsLayout() {
           },
           tabBarActiveTintColor: corAba,
           tabBarInactiveTintColor: cores.textoFraco,
-          tabBarLabelStyle: { fontSize: 12, fontWeight: '600', marginBottom: Platform.OS === 'android' ? 4 : 0 },
+          tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginBottom: Platform.OS === 'android' ? 4 : 0 },
         }}
       >
         <Tabs.Screen name="index" options={{ title: 'Início', tabBarIcon: ({ color, size }) => (<Ionicons name="home" size={size} color={color} />) }} />
@@ -212,12 +212,12 @@ export default function TabsLayout() {
 
         <Tabs.Screen name="jogo" options={{ title: 'Jogos', tabBarIcon: ({ color, size }) => (<Ionicons name="game-controller" size={size} color={color} />), tabBarBadge: '🧪', tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 } }} />
         <Tabs.Screen name="equipe" options={{ title: 'Equipe', href: isLeader ? undefined : null, tabBarIcon: ({ color, size }) => (<Ionicons name="people" size={size} color={color} />) }} />
+        <Tabs.Screen name="progresso" options={{ title: 'Perfil', tabBarIcon: ({ color, size }) => (<Ionicons name="person" size={size} color={color} />) }} />
         
         <Tabs.Screen name="ranking" options={{ href: null }} />
         <Tabs.Screen name="conteudos" options={{ href: null }} />
         <Tabs.Screen name="exercicios" options={{ href: null }} />
         <Tabs.Screen name="videos" options={{ href: null }} />
-        <Tabs.Screen name="progresso" options={{ href: null }} />
       </Tabs>
     </SafeAreaView>
   );

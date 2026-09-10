@@ -179,8 +179,9 @@ export default function Home() {
             <StreakBadge streakDias={user?.streakDias || 0} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <TouchableOpacity style={styles.logoutButton} onPress={alternarTema}>
-              <Ionicons name={estaClaro ? 'moon-outline' : 'sunny-outline'} size={24} color={cores.textoFraco} />
+            <TouchableOpacity style={styles.botaoTema} onPress={alternarTema} accessibilityLabel={estaClaro ? 'Mudar para o tema escuro' : 'Mudar para o tema claro'}>
+              <Ionicons name={estaClaro ? 'moon' : 'sunny'} size={18} color={cores.ambar} />
+              <Text style={styles.botaoTemaTexto}>{estaClaro ? 'Escuro' : 'Claro'}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
               <Ionicons name="log-out-outline" size={24} color={cores.textoFraco} />
@@ -292,6 +293,8 @@ const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   turmaText: { color: cores.textoFraco, fontSize: 13, fontWeight: '600' },
 
   logoutButton: { padding: 8 },
+  botaoTema: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: cores.ambar, backgroundColor: cores.ambar + '18', marginRight: 4 },
+  botaoTemaTexto: { color: cores.ambar, fontSize: 12, fontWeight: '800' },
   statsCard: { backgroundColor: cores.superficie, borderRadius: 16, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: cores.borda },
   statsTitle: { fontSize: 16, color: cores.textoFraco, marginBottom: 16 },
   statsRow: { flexDirection: 'row', justifyContent: 'space-around' },

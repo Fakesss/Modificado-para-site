@@ -8,7 +8,7 @@ import * as api from '../../src/services/api';
 import { useTema, CoresTema, corParaTema } from '../../src/context/ThemeContext';
 
 export default function AdminHome() {
-  const { cores, estaClaro } = useTema();
+  const { cores, estaClaro, alternarTema } = useTema();
   const styles = useMemo(() => criarEstilos(cores), [cores]);
   const { user, logout, isPreviewMode, exitPreviewMode } = useAuth();
   const router = useRouter();
@@ -120,7 +120,13 @@ export default function AdminHome() {
             <Text style={styles.greeting}>Painel Administrativo</Text>
             {isPreviewMode && (<View style={styles.previewBadge}><Ionicons name="eye" size={14} color={cores.dourado} /><Text style={styles.previewText}>Modo Visualização</Text></View>)}
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}><Ionicons name="log-out-outline" size={24} color={cores.textoFraco} /></TouchableOpacity>
+          <View style={styles.headerBotoes}>
+            <TouchableOpacity style={styles.botaoTema} onPress={alternarTema} accessibilityLabel={estaClaro ? 'Mudar para o tema escuro' : 'Mudar para o tema claro'}>
+              <Ionicons name={estaClaro ? 'moon' : 'sunny'} size={18} color={cores.ambar} />
+              <Text style={styles.botaoTemaTexto}>{estaClaro ? 'Escuro' : 'Claro'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}><Ionicons name="log-out-outline" size={24} color={cores.textoFraco} /></TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.statsGrid}>
@@ -380,6 +386,9 @@ const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   previewBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.dourado + '30', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 8, gap: 4 },
   previewText: { color: cores.dourado, fontSize: 12, fontWeight: '600' },
   logoutButton: { padding: 8 },
+  headerBotoes: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  botaoTema: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: cores.ambar, backgroundColor: cores.ambar + '18' },
+  botaoTemaTexto: { color: cores.ambar, fontSize: 12, fontWeight: '800' },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
   statCard: { width: '47%', backgroundColor: cores.superficie, borderRadius: 16, padding: 16, alignItems: 'center' },
   statValue: { fontSize: 28, fontWeight: 'bold', color: cores.texto, marginTop: 8 },
