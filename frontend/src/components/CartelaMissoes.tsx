@@ -44,6 +44,7 @@ export default function CartelaMissoes({ estrelas, total = 30, semRodape }: Prop
   const [largura, setLargura] = useState(0);
 
   const escala = largura / BASE_LARGURA;
+  const altura = largura * (BASE_ALTURA / BASE_LARGURA);
   const conquistadas = Math.max(0, Math.min(estrelas, total, CENTROS_X.length * CENTROS_Y.length));
   const completa = estrelas >= total;
 
@@ -88,8 +89,18 @@ export default function CartelaMissoes({ estrelas, total = 30, semRodape }: Prop
 
   return (
     <View>
-      <View style={styles.cartela} onLayout={aoMedir}>
-        <Image source={FUNDO} style={StyleSheet.absoluteFill} resizeMode="stretch" />
+      <View style={[styles.cartela, largura > 0 && { height: altura }]} onLayout={aoMedir}>
+        <Image
+          source={FUNDO}
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: largura > 0 ? largura : '100%',
+            height: largura > 0 ? altura : '100%',
+          }}
+          resizeMode="stretch"
+        />
         {selos}
       </View>
 
@@ -108,11 +119,16 @@ export default function CartelaMissoes({ estrelas, total = 30, semRodape }: Prop
 const styles = StyleSheet.create({
   cartela: {
     width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
     aspectRatio: BASE_LARGURA / BASE_ALTURA,
     borderRadius: 10,
     overflow: 'hidden',
   },
   rodape: {
+    width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
