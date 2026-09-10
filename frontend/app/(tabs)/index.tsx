@@ -251,6 +251,17 @@ export default function Home() {
             </TouchableOpacity>
           </View>
 
+          {/* Fila 4: Cartela de Missões (cartão largo — é o quadro de estrelas do aluno) */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: '#FFB300' + '40', borderColor: '#FFB300', flexDirection: 'row', gap: 10 }]}
+              onPress={() => router.push('/cartela_missoes' as any)}
+            >
+              <Ionicons name="star" size={26} color="#FFB300" />
+              <Text style={[styles.actionText, { marginTop: 0, fontSize: 14 }]}>Cartela de Missões</Text>
+            </TouchableOpacity>
+          </View>
+
         </View>
       </ScrollView>
     </SafeAreaView>
