@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,8 +17,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext';
 import * as api from '../src/services/api';
 import { Turma, Equipe } from '../src/types';
+import { useTema, CoresTema, textoSobre } from '../src/context/ThemeContext';
 
 export default function Register() {
+  const { cores, corEquipe } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
@@ -110,32 +113,32 @@ export default function Register() {
           keyboardShouldPersistTaps="handled"
         >
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
+            <Ionicons name="arrow-back" size={24} color={cores.texto} />
           </TouchableOpacity>
 
           <View style={styles.header}>
-            <Ionicons name="person-add" size={48} color="#FFD700" />
+            <Ionicons name="person-add" size={48} color={cores.dourado} />
             <Text style={styles.title}>Criar Conta</Text>
           </View>
 
           <View style={styles.form}>
             <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={24} color="#888" style={styles.inputIcon} />
+              <Ionicons name="person-outline" size={24} color={cores.textoFraco} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Nome completo *"
-                placeholderTextColor="#666"
+                placeholderTextColor={cores.textoFraco}
                 value={nome}
                 onChangeText={setNome}
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={24} color="#888" style={styles.inputIcon} />
+              <Ionicons name="mail-outline" size={24} color={cores.textoFraco} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="E-mail *"
-                placeholderTextColor="#666"
+                placeholderTextColor={cores.textoFraco}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -145,11 +148,11 @@ export default function Register() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={24} color="#888" style={styles.inputIcon} />
+              <Ionicons name="lock-closed-outline" size={24} color={cores.textoFraco} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Senha *"
-                placeholderTextColor="#666"
+                placeholderTextColor={cores.textoFraco}
                 value={senha}
                 onChangeText={setSenha}
                 secureTextEntry={!showPassword}
@@ -159,17 +162,17 @@ export default function Register() {
                 <Ionicons
                   name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                   size={24}
-                  color="#888"
+                  color={cores.textoFraco}
                 />
               </TouchableOpacity>
             </View>
 
             <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={24} color="#888" style={styles.inputIcon} />
+              <Ionicons name="lock-closed-outline" size={24} color={cores.textoFraco} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Confirmar senha *"
-                placeholderTextColor="#666"
+                placeholderTextColor={cores.textoFraco}
                 value={confirmarSenha}
                 onChangeText={setConfirmarSenha}
                 secureTextEntry={!showPassword}
@@ -212,7 +215,7 @@ export default function Register() {
                 >
                   <Text style={[
                     styles.selectText,
-                    { color: equipeId === equipe.id ? '#000' : equipe.cor },
+                    { color: equipeId === equipe.id ? textoSobre(corEquipe(equipe.cor)) : corEquipe(equipe.cor) },
                   ]}>{equipe.nome}</Text>
                 </TouchableOpacity>
               ))}
@@ -221,7 +224,7 @@ export default function Register() {
             {/* Aviso se não selecionou turma/equipe */}
             {(!turmaId || !equipeId) && (
               <View style={styles.warningContainer}>
-                <Ionicons name="warning" size={16} color="#FFD700" />
+                <Ionicons name="warning" size={16} color={cores.dourado} />
                 <Text style={styles.warningText}>
                   Turma e equipe são obrigatórios para cadastro
                 </Text>
@@ -234,7 +237,7 @@ export default function Register() {
               disabled={!canRegister || loading}
             >
               {loading ? (
-                <ActivityIndicator color="#000" />
+                <ActivityIndicator color={cores.sobreAcento} />
               ) : (
                 <Text style={styles.buttonText}>Cadastrar</Text>
               )}
@@ -254,10 +257,10 @@ export default function Register() {
   );
 }
 
-const styles = StyleSheet.create({
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: cores.fundo,
   },
   keyboardView: {
     flex: 1,
@@ -280,7 +283,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
     marginTop: 16,
   },
   form: {
@@ -289,7 +292,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 4,
@@ -299,12 +302,12 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: '#fff',
+    color: cores.texto,
     fontSize: 16,
     paddingVertical: 14,
   },
   sectionTitle: {
-    color: '#FFD700',
+    color: cores.dourado,
     fontSize: 14,
     fontWeight: '600',
     marginTop: 16,
@@ -320,25 +323,25 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#333',
+    borderColor: cores.borda,
     minWidth: 80,
     alignItems: 'center',
   },
   selectOptionActive: {
-    backgroundColor: '#FFD700',
-    borderColor: '#FFD700',
+    backgroundColor: cores.dourado,
+    borderColor: cores.dourado,
   },
   selectText: {
-    color: '#888',
+    color: cores.textoFraco,
     fontWeight: '600',
   },
   selectTextActive: {
-    color: '#000',
+    color: cores.sobreAcento,
   },
   warningContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFD70020',
+    backgroundColor: cores.dourado + '20',
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 10,
@@ -346,12 +349,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   warningText: {
-    color: '#FFD700',
+    color: cores.dourado,
     fontSize: 13,
     flex: 1,
   },
   button: {
-    backgroundColor: '#FFD700',
+    backgroundColor: cores.dourado,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -361,7 +364,7 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   buttonText: {
-    color: '#000',
+    color: cores.sobreAcento,
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -371,11 +374,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   loginText: {
-    color: '#888',
+    color: cores.textoFraco,
     fontSize: 16,
   },
   loginTextBold: {
-    color: '#FFD700',
+    color: cores.dourado,
     fontSize: 16,
     fontWeight: 'bold',
   },

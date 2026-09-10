@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Dimensions, Alert, Platform, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,13 +6,14 @@ import { useRouter } from 'expo-router';
 import { socket, activeMatchData, setActiveMatchData } from '../src/services/socket';
 import { useAuth } from '../src/context/AuthContext';
 import * as api from '../src/services/api';
+import { useTema, CoresTema } from '../src/context/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
 // =========================================================================
 // EFEITO NEON GIRATÓRIO DO ADMINISTRADOR
 // =========================================================================
-const AuraGiratoria = ({ cores }: { cores: string[] }) => {
+const AuraGiratoria = ({ paleta }: { paleta: string[] }) => {
   const spinValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -31,7 +32,7 @@ const AuraGiratoria = ({ cores }: { cores: string[] }) => {
     outputRange: ['0deg', '360deg']
   });
 
-  const coresSeguras = cores && cores.length > 0 ? cores : ['#00BFFF', '#FFD700', '#32CD32'];
+  const coresSeguras = paleta && paleta.length > 0 ? paleta : ['#00BFFF', '#FFD700', '#32CD32'];
 
   return (
     <Animated.View style={{
@@ -72,7 +73,7 @@ const AuraGiratoria = ({ cores }: { cores: string[] }) => {
 // =========================================================================
 // O TIME ANIMADO (3 Personagens)
 // =========================================================================
-const AnimatedTeam = ({ isLeft, config, teamState }: any) => {
+const AnimatedTeam = ({ isLeft, config, teamState, estilos }: any) => {
   const animVal = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -119,7 +120,7 @@ const AnimatedTeam = ({ isLeft, config, teamState }: any) => {
     : { textShadowColor: shadow, textShadowRadius: 15 };
 
   return (
-    <View style={[styles.teamContainer, { flexDirection: isLeft ? 'row' : 'row-reverse' }]}>
+    <View style={[estilos.teamContainer, { flexDirection: isLeft ? 'row' : 'row-reverse' }]}>
       {[0, 1, 2].map((i) => (
         <Animated.View key={i} style={{ 
           transform: [{ rotate: rotation }, { translateY }, { translateX }],
@@ -130,7 +131,7 @@ const AnimatedTeam = ({ isLeft, config, teamState }: any) => {
         }}>
           
           {/* SE FOR ADMIN: Renderiza a aura neon giratória atrás dele */}
-          {config.isRainbow && <AuraGiratoria cores={config.rainbowColors} />}
+          {config.isRainbow && <AuraGiratoria paleta={config.rainbowColors} />}
 
           {/* O CORPO DO JOGADOR */}
           <Ionicons 
@@ -148,12 +149,12 @@ const AnimatedTeam = ({ isLeft, config, teamState }: any) => {
 // =========================================================================
 // BOTÃO VISUAL DO TECLADO
 // =========================================================================
-const BotaoVisual = ({ valor, isPressed, onPressWeb }: any) => {
+const BotaoVisual = ({ valor, isPressed, onPressWeb, estilos }: any) => {
   return (
     <TouchableOpacity
       style={[
-        styles.tecla,
-        valor === 'apagar' ? styles.teclaApagar : valor === 'enviar' ? styles.teclaEnviar : null,
+        estilos.tecla,
+        valor === 'apagar' ? estilos.teclaApagar : valor === 'enviar' ? estilos.teclaEnviar : null,
         isPressed && { opacity: 0.5, transform: [{ scale: 0.92 }] }
       ]}
       onPress={Platform.OS === 'web' ? () => onPressWeb(valor) : undefined}
@@ -162,12 +163,14 @@ const BotaoVisual = ({ valor, isPressed, onPressWeb }: any) => {
     >
       {valor === 'apagar' ? <Ionicons name="close" size={24} color="#fff" /> :
        valor === 'enviar' ? <Ionicons name="checkmark" size={28} color="#fff" /> :
-       <Text style={styles.teclaText}>{valor}</Text>}
+       <Text style={estilos.teclaText}>{valor}</Text>}
     </TouchableOpacity>
   );
 };
 
 export default function CaboDeGuerraOnline() {
+  const { cores, corEquipe } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const { user } = useAuth();
   const router = useRouter();
 
@@ -206,17 +209,17 @@ export default function CaboDeGuerraOnline() {
   const getTeamConfig = (equipeId: string, perfil: string, email: string, isLocalPlayer: boolean, opponentEquipeId: string) => {
     // Se for administrador
     if (perfil === 'ADMIN' || perfil?.includes('admin') || email === 'danielprofessormatematica@gmail.com') {
-        const cores = equipesDb.length > 0 ? equipesDb.map(e => e.cor) : ['#00BFFF', '#FFD700', '#32CD32'];
-        return { isRainbow: true, core: '#FFFFFF', rainbowColors: cores, isGhost: false };
+        const arcoIris = equipesDb.length > 0 ? equipesDb.map(e => corEquipe(e.cor)) : [cores.ciano, cores.dourado, cores.sucesso];
+        return { isRainbow: true, core: cores.texto, rainbowColors: arcoIris, isGhost: false };
     }
   
     // Lê dinamicamente
     const equipeEncontrada = equipesDb.find(e => e.id === equipeId);
-    const teamColor = equipeEncontrada ? equipeEncontrada.cor : '#00BFFF';
+    const teamColor = equipeEncontrada ? equipeEncontrada.cor : cores.ciano;
   
     // Se jogar contra um oponente da MESMA equipe, o oponente fica branco com borda da cor
     if (!isLocalPlayer && equipeId && equipeId === opponentEquipeId) {
-        return { isRainbow: false, core: '#FFFFFF', glow: teamColor, isGhost: true };
+        return { isRainbow: false, core: cores.textoFraco, glow: teamColor, isGhost: true };
     }
   
     return { isRainbow: false, core: teamColor, glow: teamColor, isGhost: false };
@@ -454,7 +457,7 @@ export default function CaboDeGuerraOnline() {
   if (tela === 'resultado') {
     const venci = ganhador === socket.id;
     // Pega a primeira cor do arco-íris se for admin, ou a cor principal se for aluno (para o troféu final)
-    const finalColor = venci ? (rightConfig.isRainbow ? (rightConfig.rainbowColors && rightConfig.rainbowColors.length > 0 ? rightConfig.rainbowColors[0] : '#FFD700') : rightConfig.core) : '#888';
+    const finalColor = venci ? (rightConfig.isRainbow ? (rightConfig.rainbowColors && rightConfig.rainbowColors.length > 0 ? rightConfig.rainbowColors[0] : cores.dourado) : rightConfig.core) : cores.textoFraco;
     
     return (
       <SafeAreaView style={styles.container}>
@@ -462,16 +465,16 @@ export default function CaboDeGuerraOnline() {
           <Text style={styles.resultadoTitle}>{venci ? 'Sua Equipe Venceu!' : 'Vocês Foram Puxados!'}</Text>
           <Ionicons name={venci ? 'trophy' : 'sad'} size={90} color={finalColor} style={{ marginBottom: 20 }} />
           {venci && pontosEquipeGanhos && (
-            <View style={{ backgroundColor: pontosEquipeGanhos.pontosGanhos > 0 ? '#FFD70020' : '#88888820', borderRadius: 16, padding: 14, marginBottom: 16 }}>
-              <Text style={{ color: '#FFD700', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
+            <View style={{ backgroundColor: pontosEquipeGanhos.pontosGanhos > 0 ? cores.dourado + '20' : cores.textoFraco + '20', borderRadius: 16, padding: 14, marginBottom: 16 }}>
+              <Text style={{ color: cores.dourado, fontSize: 22, fontWeight: '900', textAlign: 'center' }}>
                 {pontosEquipeGanhos.pontosGanhos > 0 ? `+${pontosEquipeGanhos.pontosGanhos} pts pra equipe!` : 'Limite diário já atingido'}
               </Text>
-              {pontosEquipeGanhos.limiteAtingido && <Text style={{ color: '#AAA', fontSize: 13, marginTop: 4, textAlign: 'center' }}>Volte amanhã pra ganhar mais pontos neste jogo 😉</Text>}
+              {pontosEquipeGanhos.limiteAtingido && <Text style={{ color: cores.textoFraco, fontSize: 13, marginTop: 4, textAlign: 'center' }}>Volte amanhã pra ganhar mais pontos neste jogo 😉</Text>}
             </View>
           )}
-          <AnimatedTeam isLeft={!venci} config={venci ? rightConfig : leftConfig} teamState="win" />
-          <TouchableOpacity style={[styles.btnVoltar, { backgroundColor: finalColor === '#888' ? '#333' : finalColor }]} onPress={() => { performLeaveMatch(); router.replace('/salas'); }}>
-            <Text style={[styles.btnVoltarText, { color: venci ? '#000' : '#FFF' }]}>Voltar ao Menu</Text>
+          <AnimatedTeam estilos={styles} isLeft={!venci} config={venci ? rightConfig : leftConfig} teamState="win" />
+          <TouchableOpacity style={[styles.btnVoltar, { backgroundColor: finalColor === cores.textoFraco ? cores.borda : finalColor }]} onPress={() => { performLeaveMatch(); router.replace('/salas'); }}>
+            <Text style={[styles.btnVoltarText, { color: '#FFF' }]}>Voltar ao Menu</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -482,7 +485,7 @@ export default function CaboDeGuerraOnline() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={abandonarPartida} style={styles.btnSair}>
-          <Ionicons name="exit-outline" size={24} color="#FFF" />
+          <Ionicons name="exit-outline" size={24} color={cores.texto} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>CABO DE GUERRA</Text>
         <View style={{ width: 40 }} />
@@ -490,17 +493,17 @@ export default function CaboDeGuerraOnline() {
 
       <View style={styles.arena}>
         <View style={styles.namesRow}>
-           <Text style={[styles.playerName, { color: leftConfig.isRainbow ? '#FFFFFF' : leftConfig.core, textShadowColor: leftConfig.glow || '#FFFFFF', textShadowRadius: 10 }]}>{oponenteNome}</Text>
-           <Text style={[styles.playerName, { color: rightConfig.isGhost ? '#FFF' : rightConfig.core, textShadowColor: rightConfig.glow || '#FFFFFF', textShadowRadius: 10 }]}>Você</Text>
+           <Text style={[styles.playerName, { color: leftConfig.isRainbow ? cores.texto : leftConfig.core, textShadowColor: leftConfig.glow || cores.texto, textShadowRadius: 10 }]}>{oponenteNome}</Text>
+           <Text style={[styles.playerName, { color: rightConfig.isGhost ? cores.textoFraco : rightConfig.core, textShadowColor: rightConfig.glow || cores.texto, textShadowRadius: 10 }]}>Você</Text>
         </View>
 
         <View style={styles.field}>
             <View style={styles.teamLeftZone}>
-               <AnimatedTeam isLeft={true} config={leftConfig} teamState={leftState} />
+               <AnimatedTeam estilos={styles} isLeft={true} config={leftConfig} teamState={leftState} />
             </View>
 
             <View style={styles.teamRightZone}>
-               <AnimatedTeam isLeft={false} config={rightConfig} teamState={rightState} />
+               <AnimatedTeam estilos={styles} isLeft={false} config={rightConfig} teamState={rightState} />
             </View>
 
             <View style={styles.ropeLine} />
@@ -518,7 +521,7 @@ export default function CaboDeGuerraOnline() {
             <Text style={styles.operationText}>{operacao.texto}</Text>
           </View>
         ) : (
-          <View style={[styles.operationCard, { backgroundColor: '#333' }]}>
+          <View style={[styles.operationCard, { backgroundColor: cores.borda }]}>
              <Text style={styles.operationText}>---</Text>
           </View>
         )}
@@ -532,14 +535,14 @@ export default function CaboDeGuerraOnline() {
             {[['7','8','9'], ['4','5','6'], ['1','2','3']].map((row, i) => (
               <View key={i} style={styles.tecladoRow}>
                 {row.map(num => (
-                  <BotaoVisual key={num} valor={num} isPressed={teclasPressionadas.includes(num)} onPressWeb={executarAcaoTecla} />
+                  <BotaoVisual estilos={styles} key={num} valor={num} isPressed={teclasPressionadas.includes(num)} onPressWeb={executarAcaoTecla} />
                 ))}
               </View>
             ))}
             <View style={styles.tecladoRow}>
-              <BotaoVisual valor="apagar" isPressed={teclasPressionadas.includes('apagar')} onPressWeb={executarAcaoTecla} />
-              <BotaoVisual valor="0" isPressed={teclasPressionadas.includes('0')} onPressWeb={executarAcaoTecla} />
-              <BotaoVisual valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={executarAcaoTecla} />
+              <BotaoVisual estilos={styles} valor="apagar" isPressed={teclasPressionadas.includes('apagar')} onPressWeb={executarAcaoTecla} />
+              <BotaoVisual estilos={styles} valor="0" isPressed={teclasPressionadas.includes('0')} onPressWeb={executarAcaoTecla} />
+              <BotaoVisual estilos={styles} valor="enviar" isPressed={teclasPressionadas.includes('enviar')} onPressWeb={executarAcaoTecla} />
             </View>
           </View>
 
@@ -559,11 +562,11 @@ export default function CaboDeGuerraOnline() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingVertical: 15 },
   btnSair: { padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12 },
-  headerTitle: { color: '#FFF', fontSize: 22, fontWeight: '900', letterSpacing: 1 },
+  headerTitle: { color: cores.texto, fontSize: 22, fontWeight: '900', letterSpacing: 1 },
   
   arena: { flex: 1, justifyContent: 'center', paddingHorizontal: 10, position: 'relative' },
   namesRow: { flexDirection: 'row', justifyContent: 'space-between', position: 'absolute', top: 10, width: '100%', paddingHorizontal: 20 },
@@ -574,26 +577,26 @@ const styles = StyleSheet.create({
   teamRightZone: { flex: 1, alignItems: 'flex-end', zIndex: 5, paddingRight: 10 },
   teamContainer: { alignItems: 'flex-end', paddingBottom: 10 },
 
-  ropeLine: { position: 'absolute', top: 25, width: '100%', height: 3, backgroundColor: '#FFF', shadowColor: '#FFF', shadowOpacity: 0.8, shadowRadius: 10, elevation: 10, zIndex: 1 },
+  ropeLine: { position: 'absolute', top: 25, width: '100%', height: 3, backgroundColor: cores.texto, shadowColor: cores.texto, shadowOpacity: 0.8, shadowRadius: 10, elevation: 10, zIndex: 1 },
   ropeKnot: { position: 'absolute', top: 25, width: 24, height: 24, marginTop: -10, marginLeft: -12, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-  knotCore: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#FF4500', shadowColor: '#FF4500', shadowOpacity: 1, shadowRadius: 15, elevation: 15, borderWidth: 2, borderColor: '#FFF' },
+  knotCore: { width: 14, height: 14, borderRadius: 7, backgroundColor: cores.laranja, shadowColor: cores.laranja, shadowOpacity: 1, shadowRadius: 15, elevation: 15, borderWidth: 2, borderColor: cores.superficie },
 
-  panel: { backgroundColor: '#1a1a2e', padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30, alignItems: 'center', elevation: 10, borderTopWidth: 1, borderTopColor: '#333' },
-  instruction: { color: '#AAA', fontSize: 14, marginBottom: 15, fontWeight: 'bold' },
-  operationCard: { backgroundColor: '#4169E1', paddingVertical: 20, paddingHorizontal: 50, borderRadius: 16, marginBottom: 15, elevation: 4 },
-  operationText: { color: '#FFF', fontSize: 38, fontWeight: '900', letterSpacing: 2 },
+  panel: { backgroundColor: cores.superficie, padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30, alignItems: 'center', elevation: 10, borderTopWidth: 1, borderTopColor: cores.borda },
+  instruction: { color: cores.textoFraco, fontSize: 14, marginBottom: 15, fontWeight: 'bold' },
+  operationCard: { backgroundColor: cores.azul, paddingVertical: 20, paddingHorizontal: 50, borderRadius: 16, marginBottom: 15, elevation: 4 },
+  operationText: { color: cores.texto, fontSize: 38, fontWeight: '900', letterSpacing: 2 },
   displayContainer: { backgroundColor: 'rgba(0,0,0,0.5)', width: '100%', maxWidth: 300, height: 55, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 15, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  displayText: { color: '#fff', fontSize: 32, fontWeight: 'bold' },
+  displayText: { color: cores.texto, fontSize: 32, fontWeight: 'bold' },
   tecladoContainer: { width: '100%', maxWidth: 300, position: 'relative' },
   tecladoGrid: { width: '100%', gap: 5 },
   tecladoRow: { flexDirection: 'row', gap: 5, justifyContent: 'space-between' },
   tecla: { backgroundColor: 'rgba(255, 255, 255, 0.1)', flex: 1, height: 55, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  teclaText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+  teclaText: { color: cores.texto, fontSize: 24, fontWeight: 'bold' },
   teclaApagar: { backgroundColor: 'rgba(231, 76, 60, 0.85)' },
   teclaEnviar: { backgroundColor: 'rgba(50, 205, 50, 0.85)' },
 
   resultadoContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  resultadoTitle: { fontSize: 32, fontWeight: '900', color: '#FFF', marginBottom: 30, textAlign: 'center' },
+  resultadoTitle: { fontSize: 32, fontWeight: '900', color: cores.texto, marginBottom: 30, textAlign: 'center' },
   btnVoltar: { marginTop: 40, paddingVertical: 16, paddingHorizontal: 35, borderRadius: 16, elevation: 4 },
   btnVoltarText: { fontSize: 18, fontWeight: '900' }
 });

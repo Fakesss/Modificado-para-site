@@ -81,28 +81,28 @@ export default function Exercicios() {
 
   const getExerciseStatus = (exercicioId: string) => {
     const sub = submissoes[exercicioId];
-    if (!sub) return { status: 'new', label: 'Novo', color: '#00BFFF' };
-    if (sub.nota >= 7) return { status: 'great', label: `Nota: ${sub.nota}`, color: '#32CD32' };
-    if (sub.nota >= 5) return { status: 'ok', label: `Nota: ${sub.nota}`, color: '#FFD700' };
-    return { status: 'retry', label: `Nota: ${sub.nota}`, color: '#E74C3C' };
+    if (!sub) return { status: 'new', label: 'Novo', color: cores.ciano };
+    if (sub.nota >= 7) return { status: 'great', label: `Nota: ${sub.nota}`, color: cores.sucesso };
+    if (sub.nota >= 5) return { status: 'ok', label: `Nota: ${sub.nota}`, color: cores.dourado };
+    return { status: 'retry', label: `Nota: ${sub.nota}`, color: cores.erro };
   };
 
-  if (loading) return <SafeAreaView style={styles.container}><View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View></SafeAreaView>;
+  if (loading) return <SafeAreaView style={styles.container}><View style={styles.loadingContainer}><ActivityIndicator size="large" color={cores.dourado} /></View></SafeAreaView>;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="document-text" size={28} color="#32CD32" />
+        <Ionicons name="document-text" size={28} color={cores.sucesso} />
         <Text style={styles.title}>Atividades</Text>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={cores.dourado} />}>
         {exercicios.map((exercicio) => {
           const exerciseStatus = getExerciseStatus(exercicio.id);
           const sub = submissoes[exercicio.id];
           return (
             <TouchableOpacity key={exercicio.id} style={styles.exerciseCard} onPress={() => router.push(`/exercicio/${exercicio.id}`)}>
-              <View style={styles.exerciseIcon}><Ionicons name={exercicio.modoCriacao === 'PDF' ? 'document' : 'list'} size={28} color="#32CD32" /></View>
+              <View style={styles.exerciseIcon}><Ionicons name={exercicio.modoCriacao === 'PDF' ? 'document' : 'list'} size={28} color={cores.sucesso} /></View>
               <View style={styles.exerciseInfo}>
                 <Text style={styles.exerciseTitle}>{exercicio.titulo}</Text>
                 {exercicio.descricao && <Text style={styles.exerciseDescription} numberOfLines={2}>{exercicio.descricao}</Text>}
@@ -113,7 +113,7 @@ export default function Exercicios() {
                   </View>
                   {sub?.pontosGerados > 0 && (
                     <View style={styles.pointsBadge}>
-                      <Ionicons name="star" size={14} color="#FFD700" />
+                      <Ionicons name="star" size={14} color={cores.dourado} />
                       <Text style={styles.pointsText}>+{sub.pontosGerados} pts</Text>
                     </View>
                   )}
@@ -126,14 +126,14 @@ export default function Exercicios() {
                   </View>
                 )}
               </View>
-              <Ionicons name="chevron-forward" size={24} color="#666" />
+              <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
             </TouchableOpacity>
           );
         })}
 
         {exercicios.length === 0 && (
           <View style={styles.emptyState}>
-            <Ionicons name="document-text-outline" size={48} color="#666" />
+            <Ionicons name="document-text-outline" size={48} color={cores.textoFraco} />
             <Text style={styles.emptyText}>Nenhuma atividade no momento.</Text>
           </View>
         )}
@@ -150,17 +150,17 @@ const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
   exerciseCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 16, padding: 16, marginBottom: 12 },
-  exerciseIcon: { width: 56, height: 56, backgroundColor: '#32CD32' + '30', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  exerciseIcon: { width: 56, height: 56, backgroundColor: cores.sucesso + '30', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   exerciseInfo: { flex: 1, marginLeft: 12 },
   exerciseTitle: { color: cores.texto, fontSize: 16, fontWeight: '600' },
   exerciseDescription: { color: cores.textoFraco, fontSize: 13, marginTop: 4 },
   exerciseMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
   statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, gap: 4 },
   statusText: { fontSize: 12, fontWeight: '600' },
-  pointsBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: '#FFD700' + '30', gap: 4 },
+  pointsBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: cores.dourado + '30', gap: 4 },
   pointsText: { color: cores.dourado, fontSize: 12, fontWeight: '600' },
   tagsContainer: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 4 },
-  tag: { backgroundColor: '#333', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  tag: { backgroundColor: cores.borda, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   tagText: { color: cores.textoFraco, fontSize: 10 },
   emptyState: { alignItems: 'center', padding: 40 },
   emptyText: { color: cores.textoFraco, fontSize: 16, marginTop: 16 },

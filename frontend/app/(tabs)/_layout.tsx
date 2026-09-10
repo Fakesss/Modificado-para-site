@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Platform, Modal, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../src/context/AuthContext';
-import { useTema } from '../../src/context/ThemeContext';
+import { useTema, CoresTema, textoSobre } from '../../src/context/ThemeContext';
 import * as api from '../../src/services/api';
 import { Equipe } from '../../src/types';
 import OnlineHeartbeat from '../../src/components/OnlineHeartbeat';
@@ -21,28 +21,32 @@ const TEAM_COLORS: Record<string, string> = {
 function AdminBanner() {
   const { user, isAdminViewingAsStudent, setAdminViewingAsStudent } = useAuth();
   const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const handleBackToAdmin = () => { setAdminViewingAsStudent(false); router.replace('/admin'); };
   if (!(isAdminViewingAsStudent || user?.perfil === 'ADMIN')) return null;
   return (
-    <TouchableOpacity style={[styles.adminBanner, { backgroundColor: cores.superficie }]} onPress={handleBackToAdmin}>
-      <Ionicons name="arrow-back" size={18} color="#FFD700" />
+    <TouchableOpacity style={styles.adminBanner} onPress={handleBackToAdmin}>
+      <Ionicons name="arrow-back" size={18} color={cores.dourado} />
       <Text style={styles.adminBannerText}>Voltar ao Painel</Text>
     </TouchableOpacity>
   );
 }
 
 function NeonLineSimple({ color }: { color: string }) {
-  return <View style={[styles.neonLine, { backgroundColor: color }]} />;
+  return <View style={{ height: 2, width: '100%', opacity: 0.6, backgroundColor: color }} />;
 }
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const { user, isAdminViewingAsStudent } = useAuth();
-  const { cores } = useTema();
+  const { cores, corEquipe } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const isLeader = user?.perfil === 'ALUNO_LIDER';
   const [teamColor, setTeamColor] = useState<string>('#FFD700');
+  // No tema claro a cor da equipe é escurecida — amarelo neon some na barra branca.
+  const corAba = corEquipe(teamColor);
   
   const [convite, setConvite] = useState<any>(null);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
@@ -151,33 +155,33 @@ export default function TabsLayout() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: cores.fundo }]} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <OnlineHeartbeat />
       <AdminBanner />
-      <NeonLineSimple color={teamColor} />
+      <NeonLineSimple color={corAba} />
 
       <Modal visible={!!convite} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.iconCircle}>
-              <Ionicons name="game-controller" size={32} color="#FFF" />
+              <Ionicons name="game-controller" size={32} color={cores.sobreAcento} />
             </View>
             <Text style={styles.modalTitle}>DESAFIO RECEBIDO!</Text>
             <Text style={styles.modalText}>
-              <Text style={{fontWeight: 'bold', color: '#FFD700'}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : convite?.game_type === 'arcade' ? 'Matemática Turbo' : convite?.game_type === 'math_blaster' ? 'Equações Espaciais Co-op' : 'Cabo de Guerra'}!
+              <Text style={{fontWeight: 'bold', color: cores.dourado}}>{convite?.from_name}</Text> te chamou para jogar {convite?.game_type === 'tictactoe' ? 'Jogo da Velha' : convite?.game_type === 'arcade' ? 'Matemática Turbo' : convite?.game_type === 'math_blaster' ? 'Equações Espaciais Co-op' : 'Cabo de Guerra'}!
             </Text>
             <View style={{ width: '100%', gap: 10, marginTop: 20 }}>
-              <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#32CD32' }]} onPress={aceitarConvite}>
-                <Ionicons name="checkmark-circle" size={20} color="#000" />
-                <Text style={[styles.btnText, { color: '#000' }]}>ACEITAR E JOGAR</Text>
+              <TouchableOpacity style={[styles.btnAction, { backgroundColor: cores.sucesso }]} onPress={aceitarConvite}>
+                <Ionicons name="checkmark-circle" size={20} color={textoSobre(cores.sucesso)} />
+                <Text style={[styles.btnText, { color: textoSobre(cores.sucesso) }]}>ACEITAR E JOGAR</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#E74C3C' }]} onPress={recusarConvite}>
+              <TouchableOpacity style={[styles.btnAction, { backgroundColor: cores.erro }]} onPress={recusarConvite}>
                 <Ionicons name="close-circle" size={20} color="#FFF" />
                 <Text style={styles.btnText}>RECUSAR</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.btnAction, { backgroundColor: '#333' }]} onPress={bloquearJogador}>
-                <Ionicons name="shield" size={20} color="#888" />
-                <Text style={[styles.btnText, { color: '#888' }]}>BLOQUEAR POR 5 MINUTOS</Text>
+              <TouchableOpacity style={[styles.btnAction, styles.btnBloquear]} onPress={bloquearJogador}>
+                <Ionicons name="shield" size={20} color={cores.textoFraco} />
+                <Text style={[styles.btnText, { color: cores.textoFraco }]}>BLOQUEAR POR 5 MINUTOS</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -189,13 +193,13 @@ export default function TabsLayout() {
           headerShown: false,
           tabBarStyle: {
             backgroundColor: cores.barra,
-            borderTopColor: teamColor + '40',
+            borderTopColor: corAba + '40',
             borderTopWidth: 2,
             paddingBottom: Platform.OS === 'ios' ? 20 : Math.max(12, insets.bottom + 5),
             paddingTop: 8,
             height: Platform.OS === 'ios' ? 85 : 60 + insets.bottom,
           },
-          tabBarActiveTintColor: teamColor,
+          tabBarActiveTintColor: corAba,
           tabBarInactiveTintColor: cores.textoFraco,
           tabBarLabelStyle: { fontSize: 12, fontWeight: '600', marginBottom: Platform.OS === 'android' ? 4 : 0 },
         }}
@@ -219,17 +223,17 @@ export default function TabsLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
-  adminBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a2e', paddingVertical: 12, paddingHorizontal: 16, gap: 8, borderBottomWidth: 1, borderBottomColor: '#FFD70040' },
-  adminBannerText: { color: '#FFD700', fontSize: 14, fontWeight: '600' },
-  neonLine: { height: 2, width: '100%', opacity: 0.6 },
-  
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#1a1a2e', width: '100%', borderRadius: 24, padding: 25, alignItems: 'center', borderWidth: 1, borderColor: '#FFD70050' },
-  iconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FFD700', justifyContent: 'center', alignItems: 'center', marginBottom: 15, marginTop: -50, borderWidth: 4, borderColor: '#1a1a2e' },
-  modalTitle: { color: '#FFF', fontSize: 22, fontWeight: '900', marginBottom: 5 },
-  modalText: { color: '#AAA', fontSize: 16, textAlign: 'center', marginBottom: 10 },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
+  adminBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: cores.superficie, paddingVertical: 12, paddingHorizontal: 16, gap: 8, borderBottomWidth: 1, borderBottomColor: cores.dourado + '40' },
+  adminBannerText: { color: cores.dourado, fontSize: 14, fontWeight: '600' },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: cores.superficie, width: '100%', borderRadius: 24, padding: 25, alignItems: 'center', borderWidth: 1, borderColor: cores.dourado + '50' },
+  iconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: cores.dourado, justifyContent: 'center', alignItems: 'center', marginBottom: 15, marginTop: -50, borderWidth: 4, borderColor: cores.superficie },
+  modalTitle: { color: cores.texto, fontSize: 22, fontWeight: '900', marginBottom: 5 },
+  modalText: { color: cores.textoFraco, fontSize: 16, textAlign: 'center', marginBottom: 10 },
   btnAction: { flexDirection: 'row', width: '100%', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  btnBloquear: { backgroundColor: cores.superficieAlt, borderWidth: 1, borderColor: cores.borda },
   btnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
 });

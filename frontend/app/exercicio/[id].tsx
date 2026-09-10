@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, Alert, Image
@@ -8,12 +8,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
 import { Exercicio } from '../../src/types';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 
 const ALTERNATIVA_CORES = [
-  '#E74C3C', '#F39C12', '#27AE60', '#3498DB', '#9B59B6'
+  '#E74C3C', '#F39C12', '#27AE60', '#4169E1', '#9B59B6'
 ];
 
 export default function ExercicioScreen() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const [exercicio, setExercicio] = useState<Exercicio | null>(null);
@@ -97,13 +100,13 @@ export default function ExercicioScreen() {
     }
   };
 
-  if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View>;
+  if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={cores.dourado} /></View>;
   if (!exercicio) return <View style={styles.errorContainer}><Text style={styles.errorText}>Não encontrado</Text></View>;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color="#fff" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={cores.texto} /></TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{exercicio.titulo}</Text>
         <View style={{ width: 24 }} />
       </View>
@@ -134,7 +137,7 @@ export default function ExercicioScreen() {
                 {questao.alternativas.map((alt, altIndex) => {
                   const isSelected = respostas[questao.id] === alt.letra;
                   let cor = alt.cor;
-                  if (!cor || cor === '#4169E1') cor = ALTERNATIVA_CORES[altIndex % ALTERNATIVA_CORES.length];
+                  if (!cor || cor === cores.azul) cor = ALTERNATIVA_CORES[altIndex % ALTERNATIVA_CORES.length];
                   
                   let statusStyle = {};
                   let statusIcon = null;
@@ -143,11 +146,11 @@ export default function ExercicioScreen() {
                     const detalhe = existingSubmission.detalhesQuestoes?.find((d: any) => d.questaoId === questao.id);
                     if (detalhe) {
                       if (alt.letra === detalhe.correta) {
-                        statusStyle = { borderColor: '#32CD32', borderWidth: 2 };
-                        statusIcon = <Ionicons name="checkmark" size={20} color="#32CD32" />;
+                        statusStyle = { borderColor: cores.sucesso, borderWidth: 2 };
+                        statusIcon = <Ionicons name="checkmark" size={20} color={cores.sucesso} />;
                       } else if (alt.letra === detalhe.resposta && !detalhe.acertou) {
-                        statusStyle = { borderColor: '#E74C3C', borderWidth: 2 };
-                        statusIcon = <Ionicons name="close" size={20} color="#E74C3C" />;
+                        statusStyle = { borderColor: cores.erro, borderWidth: 2 };
+                        statusIcon = <Ionicons name="close" size={20} color={cores.erro} />;
                       }
                     }
                   }
@@ -176,7 +179,7 @@ export default function ExercicioScreen() {
               <TextInput
                 style={styles.textInput}
                 placeholder="Sua resposta..."
-                placeholderTextColor="#666"
+                placeholderTextColor={cores.textoFraco}
                 value={respostas[questao.id] || ''}
                 onChangeText={(text) => handleTextChange(questao.id, text)}
                 editable={!existingSubmission}
@@ -193,7 +196,7 @@ export default function ExercicioScreen() {
           onPress={handleSubmit} 
           disabled={submitting}
         >
-          {submitting ? <ActivityIndicator color="#000" /> : <Text style={styles.submitButtonText}>Enviar Respostas</Text>}
+          {submitting ? <ActivityIndicator color={cores.sobreAcento} /> : <Text style={styles.submitButtonText}>Enviar Respostas</Text>}
         </TouchableOpacity>
       ) : (
         <TouchableOpacity style={styles.backToExercises} onPress={() => router.back()}>
@@ -204,33 +207,33 @@ export default function ExercicioScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor:'#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor:cores.fundo },
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { color: '#666', fontSize: 18 },
+  errorText: { color: cores.textoFraco, fontSize: 18 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  headerTitle: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },
-  submittedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#222', padding: 10, gap: 8, borderBottomWidth:1, borderBottomColor:'#333' },
+  headerTitle: { flex: 1, color: cores.texto, fontSize: 16, fontWeight: '600', textAlign: 'center' },
+  submittedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: cores.superficieAlt, padding: 10, gap: 8, borderBottomWidth:1, borderBottomColor:cores.borda },
   submittedText: { fontWeight: 'bold', fontSize: 16 },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
-  description: { color: '#888', fontSize: 14, marginBottom: 20 },
-  questaoCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, marginBottom: 16 },
+  description: { color: cores.textoFraco, fontSize: 14, marginBottom: 20 },
+  questaoCard: { backgroundColor: cores.superficie, borderRadius: 16, padding: 16, marginBottom: 16 },
   questaoHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  questaoNumero: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFD700', alignItems: 'center', justifyContent: 'center' },
-  questaoNumeroText: { color: '#000', fontWeight: 'bold' },
-  questaoPontos: { color: '#888', fontSize: 12 },
-  questaoEnunciado: { color: '#fff', fontSize: 16, marginBottom: 16, lineHeight: 22 },
+  questaoNumero: { width: 30, height: 30, borderRadius: 15, backgroundColor: cores.dourado, alignItems: 'center', justifyContent: 'center' },
+  questaoNumeroText: { color: cores.sobreAcento, fontWeight: 'bold' },
+  questaoPontos: { color: cores.textoFraco, fontSize: 12 },
+  questaoEnunciado: { color: cores.texto, fontSize: 16, marginBottom: 16, lineHeight: 22 },
   alternativasContainer: { gap: 10 },
-  alternativa: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#252540', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: 'transparent' },
+  alternativa: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficieAlt, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: 'transparent' },
   alternativaLetra: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  alternativaLetraText: { color: '#000', fontWeight: 'bold' },
-  alternativaTexto: { flex: 1, color: '#fff' },
+  alternativaLetraText: { color: cores.texto, fontWeight: 'bold' },
+  alternativaTexto: { flex: 1, color: cores.texto },
   statusIcon: { marginLeft: 8 },
-  textInput: { backgroundColor: '#252540', borderRadius: 12, padding: 12, color: '#fff', minHeight: 50 },
-  submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFD700', margin: 16, padding: 16, borderRadius: 12 },
-  submitButtonText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
-  backToExercises: { alignItems: 'center', paddingVertical: 16, margin: 16, backgroundColor: '#1a1a2e', borderRadius: 12, borderWidth: 1, borderColor: '#333' },
-  backToExercisesText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  textInput: { backgroundColor: cores.superficieAlt, borderRadius: 12, padding: 12, color: cores.texto, minHeight: 50 },
+  submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: cores.dourado, margin: 16, padding: 16, borderRadius: 12 },
+  submitButtonText: { color: cores.sobreAcento, fontSize: 18, fontWeight: 'bold' },
+  backToExercises: { alignItems: 'center', paddingVertical: 16, margin: 16, backgroundColor: cores.superficie, borderRadius: 12, borderWidth: 1, borderColor: cores.borda },
+  backToExercisesText: { color: cores.texto, fontSize: 16, fontWeight: '600' },
 });

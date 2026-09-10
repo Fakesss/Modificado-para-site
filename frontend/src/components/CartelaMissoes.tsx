@@ -1,116 +1,126 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useMemo, useState } from 'react';
+import { View, Text, Image, StyleSheet, LayoutChangeEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTema } from '../context/ThemeContext';
 
 // =============================================================================
-// CARTELA DE MISSÕES — cartão de 30 casas que vão sendo preenchidas com
-// estrelas, uma a uma, conforme o professor concede (ver admin/cartela_missoes
-// e cartela_missoes.tsx). Desenhado inteiramente em código (sem imagem de
-// fundo) pra combinar com o resto do app e funcionar em qualquer tamanho de
-// tela — inspirado numa referência visual (moldura dourada, céu, faixa de
-// título) que o professor enviou.
+// CARTELA DE MISSÕES — a cartela que o professor enviou, com as estrelas dele.
+//
+// Duas imagens:
+//   • cartela_base.jpg  — a cartela vazia (5 colunas x 6 linhas = 30 casas)
+//   • cartela_selos.png — as 30 estrelas numeradas, numa folha 5x6 em ordem
+//                         (01..05 na 1ª linha, 06..10 na 2ª, e assim por diante)
+//
+// Cada estrela é recortada da folha por uma "janelinha" (View com overflow
+// hidden) e colocada exatamente no centro da casa correspondente. As posições
+// abaixo foram medidas em cima da imagem original, em pixels dela; tudo é
+// convertido para o tamanho real da tela pela escala calculada no onLayout,
+// então encaixa igual em qualquer celular.
 // =============================================================================
 
-const COLUNAS = 6;
-const LINHAS = 5;
+const FUNDO = require('../../assets/images/cartela_base.jpg');
+const SELOS = require('../../assets/images/cartela_selos.png');
+
+// medidas da imagem cartela_base.jpg
+const BASE_LARGURA = 784;
+const BASE_ALTURA = 1207;
+const CENTROS_X = [143, 269.5, 396, 520.5, 644.5];      // centro de cada coluna
+const CENTROS_Y = [350.5, 475, 599.5, 722.5, 841, 958]; // centro de cada linha
+const LADO_SELO = 100;                                   // tamanho da estrela na casa
+
+// folha de estrelas: 5 colunas x 6 linhas
+const SELOS_COLUNAS = 5;
+const SELOS_LINHAS = 6;
 
 interface Props {
   estrelas: number;
   total?: number;
+  /** Esconde o contador embaixo da cartela (o admin já mostra o número dele). */
+  semRodape?: boolean;
 }
 
-export default function CartelaMissoes({ estrelas, total = 30 }: Props) {
-  const casas = Array.from({ length: total }, (_, i) => i < estrelas);
+export default function CartelaMissoes({ estrelas, total = 30, semRodape }: Props) {
+  const { cores } = useTema();
+  const [largura, setLargura] = useState(0);
+
+  const escala = largura / BASE_LARGURA;
+  const conquistadas = Math.max(0, Math.min(estrelas, total, CENTROS_X.length * CENTROS_Y.length));
   const completa = estrelas >= total;
 
+  const aoMedir = (e: LayoutChangeEvent) => {
+    const l = e.nativeEvent.layout.width;
+    if (l > 0 && Math.abs(l - largura) > 0.5) setLargura(l);
+  };
+
+  const selos = useMemo(() => {
+    if (escala <= 0) return null;
+    const lado = LADO_SELO * escala;
+    return Array.from({ length: conquistadas }, (_, i) => {
+      const linha = Math.floor(i / SELOS_COLUNAS);
+      const coluna = i % SELOS_COLUNAS;
+      return (
+        <View
+          key={i}
+          style={{
+            position: 'absolute',
+            left: CENTROS_X[coluna] * escala - lado / 2,
+            top: CENTROS_Y[linha] * escala - lado / 2,
+            width: lado,
+            height: lado,
+            overflow: 'hidden',
+          }}
+        >
+          <Image
+            source={SELOS}
+            style={{
+              position: 'absolute',
+              width: lado * SELOS_COLUNAS,
+              height: lado * SELOS_LINHAS,
+              left: -coluna * lado,
+              top: -linha * lado,
+            }}
+            resizeMode="stretch"
+          />
+        </View>
+      );
+    });
+  }, [conquistadas, escala]);
+
   return (
-    <View style={styles.moldura}>
-      <LinearGradient colors={['#5EB6F0', '#BEE6FF', '#EAF7FF']} style={styles.ceu}>
-        <View style={styles.nuvem1} />
-        <View style={styles.nuvem2} />
-
-        <View style={styles.faixaWrap}>
-          <LinearGradient colors={['#D8232A', '#8B1418']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.faixa}>
-            <Ionicons name="star" size={16} color="#FFD700" />
-            <Text style={styles.faixaTexto}>CARTELA DE MISSÕES</Text>
-            <Ionicons name="star" size={16} color="#FFD700" />
-          </LinearGradient>
-        </View>
-
-        <View style={styles.grade}>
-          {casas.map((preenchida, i) => (
-            <View key={i} style={styles.casaWrap}>
-              {preenchida ? (
-                <LinearGradient colors={['#FFE07A', '#FFB300']} style={styles.casaCheia}>
-                  <Ionicons name="star" size={22} color="#FFF8E1" />
-                </LinearGradient>
-              ) : (
-                <View style={styles.casaVazia}>
-                  <Ionicons name="star-outline" size={16} color="rgba(255,255,255,0.55)" />
-                </View>
-              )}
-            </View>
-          ))}
-        </View>
-      </LinearGradient>
-
-      <View style={[styles.rodape, completa && styles.rodapeCompleto]}>
-        <Ionicons name={completa ? 'trophy' : 'star'} size={14} color={completa ? '#8B1418' : '#FFB300'} />
-        <Text style={[styles.rodapeTexto, completa && styles.rodapeTextoCompleto]}>
-          {completa ? 'CARTELA COMPLETA! 🎉' : `${estrelas} / ${total} estrelas`}
-        </Text>
+    <View>
+      <View style={styles.cartela} onLayout={aoMedir}>
+        <Image source={FUNDO} style={StyleSheet.absoluteFill} resizeMode="stretch" />
+        {selos}
       </View>
+
+      {!semRodape && (
+        <View style={[styles.rodape, { backgroundColor: cores.superficie, borderColor: cores.borda }]}>
+          <Ionicons name={completa ? 'trophy' : 'star'} size={16} color={cores.ambar} />
+          <Text style={[styles.rodapeTexto, { color: completa ? cores.ambar : cores.texto }]}>
+            {completa ? 'Cartela completa! 🎉' : `${conquistadas} de ${total} estrelas`}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  moldura: {
-    borderRadius: 18,
-    borderWidth: 4,
-    borderColor: '#FFB300',
-    overflow: 'hidden',
-    backgroundColor: '#0d0b04',
-  },
-  ceu: {
-    padding: 14,
+  cartela: {
+    width: '100%',
+    aspectRatio: BASE_LARGURA / BASE_ALTURA,
+    borderRadius: 10,
     overflow: 'hidden',
   },
-  nuvem1: {
-    position: 'absolute', top: 10, right: -10, width: 90, height: 34, borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.45)',
-  },
-  nuvem2: {
-    position: 'absolute', top: 30, left: -18, width: 70, height: 26, borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.35)',
-  },
-  faixaWrap: { alignItems: 'center', marginBottom: 14 },
-  faixa: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20,
-    borderWidth: 2, borderColor: '#FFD700',
-  },
-  faixaTexto: { color: '#FFF', fontWeight: '900', fontSize: 13, letterSpacing: 1 },
-
-  grade: { flexDirection: 'row', flexWrap: 'wrap', gap: '2%' },
-  casaWrap: { width: `${100 / COLUNAS - 2}%`, aspectRatio: 1, marginBottom: '2%' },
-  casaCheia: {
-    flex: 1, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: '#FFF8E1',
-    shadowColor: '#FFD700', shadowRadius: 6, shadowOpacity: 0.8, shadowOffset: { width: 0, height: 0 },
-  },
-  casaVazia: {
-    flex: 1, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)',
-  },
-
   rodape: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 10, backgroundColor: '#1a1608',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
   },
-  rodapeCompleto: { backgroundColor: '#FFD700' },
-  rodapeTexto: { color: '#FFB300', fontWeight: '900', fontSize: 13 },
-  rodapeTextoCompleto: { color: '#8B1418' },
+  rodapeTexto: { fontWeight: '900', fontSize: 14 },
 });

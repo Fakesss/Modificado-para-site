@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTema, CoresTema } from '../../src/context/ThemeContext';
+import { useTema, CoresTema, textoSobre } from '../../src/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
@@ -29,7 +29,7 @@ interface BNCCAnalysis {
 }
 
 export default function EquipeScreen() {
-  const { cores } = useTema();
+  const { cores, corEquipe } = useTema();
   const styles = useMemo(() => criarEstilos(cores), [cores]);
   const { user } = useAuth();
   const [equipe, setEquipe] = useState<EquipeType | null>(null);
@@ -82,7 +82,7 @@ export default function EquipeScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
+          <ActivityIndicator size="large" color={cores.dourado} />
         </View>
       </SafeAreaView>
     );
@@ -92,7 +92,7 @@ export default function EquipeScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.emptyState}>
-          <Ionicons name="people-outline" size={48} color="#666" />
+          <Ionicons name="people-outline" size={48} color={cores.textoFraco} />
           <Text style={styles.emptyText}>Você não pertence a uma equipe</Text>
         </View>
       </SafeAreaView>
@@ -102,8 +102,8 @@ export default function EquipeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <View style={[styles.teamBadge, { backgroundColor: equipe.cor }]}>
-          <Ionicons name="people" size={24} color="#000" />
+        <View style={[styles.teamBadge, { backgroundColor: corEquipe(equipe.cor) }]}>
+          <Ionicons name="people" size={24} color={textoSobre(corEquipe(equipe.cor))} />
         </View>
         <View>
           <Text style={styles.title}>Equipe {equipe.nome}</Text>
@@ -115,7 +115,7 @@ export default function EquipeScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={cores.dourado} />
         }
       >
         {/* Team Members */}
@@ -125,22 +125,22 @@ export default function EquipeScreen() {
             key={aluno.id}
             style={[
               styles.alunoCard,
-              selectedAluno === aluno.id && { borderColor: equipe.cor, borderWidth: 2 },
+              selectedAluno === aluno.id && { borderColor: corEquipe(equipe.cor), borderWidth: 2 },
             ]}
             onPress={() => loadAlunoAnalysis(aluno.id)}
           >
-            <View style={[styles.positionBadge, { backgroundColor: equipe.cor }]}>
+            <View style={[styles.positionBadge, { backgroundColor: corEquipe(equipe.cor) }]}>
               <Text style={styles.positionText}>{aluno.posicao}º</Text>
             </View>
             <View style={styles.alunoInfo}>
               <Text style={styles.alunoName}>{aluno.nome}</Text>
               <View style={styles.alunoMeta}>
                 <View style={styles.metaItem}>
-                  <Ionicons name="star" size={14} color="#FFD700" />
+                  <Ionicons name="star" size={14} color={cores.dourado} />
                   <Text style={styles.metaText}>{aluno.pontosTotais} pts</Text>
                 </View>
                 <View style={styles.metaItem}>
-                  <Ionicons name="flame" size={14} color="#FF6B35" />
+                  <Ionicons name="flame" size={14} color={cores.laranja} />
                   <Text style={styles.metaText}>{aluno.streakDias} dias</Text>
                 </View>
               </View>
@@ -148,7 +148,7 @@ export default function EquipeScreen() {
             <Ionicons
               name={selectedAluno === aluno.id ? 'chevron-down' : 'chevron-forward'}
               size={20}
-              color="#666"
+              color={cores.textoFraco}
             />
           </TouchableOpacity>
         ))}
@@ -161,15 +161,15 @@ export default function EquipeScreen() {
             {/* Difficulties */}
             <View style={styles.analysisSection}>
               <View style={styles.analysisSectionHeader}>
-                <Ionicons name="alert-circle" size={20} color="#E74C3C" />
+                <Ionicons name="alert-circle" size={20} color={cores.erro} />
                 <Text style={styles.analysisSectionTitle}>Dificuldades</Text>
               </View>
               {bnccAnalysis.dificuldades.length > 0 ? (
                 bnccAnalysis.dificuldades.slice(0, 5).map((item, index) => (
                   <View key={index} style={styles.analysisItem}>
                     <Text style={styles.analysisHabilidade}>{item.habilidade}</Text>
-                    <View style={[styles.analysisCount, { backgroundColor: '#E74C3C30' }]}>
-                      <Text style={[styles.analysisCountText, { color: '#E74C3C' }]}>
+                    <View style={[styles.analysisCount, { backgroundColor: cores.erro + '30' }]}>
+                      <Text style={[styles.analysisCountText, { color: cores.erro }]}>
                         {item.erros} erros
                       </Text>
                     </View>
@@ -183,15 +183,15 @@ export default function EquipeScreen() {
             {/* Strengths */}
             <View style={styles.analysisSection}>
               <View style={styles.analysisSectionHeader}>
-                <Ionicons name="checkmark-circle" size={20} color="#32CD32" />
+                <Ionicons name="checkmark-circle" size={20} color={cores.sucesso} />
                 <Text style={styles.analysisSectionTitle}>Facilidades</Text>
               </View>
               {bnccAnalysis.facilidades.length > 0 ? (
                 bnccAnalysis.facilidades.slice(0, 5).map((item, index) => (
                   <View key={index} style={styles.analysisItem}>
                     <Text style={styles.analysisHabilidade}>{item.habilidade}</Text>
-                    <View style={[styles.analysisCount, { backgroundColor: '#32CD3230' }]}>
-                      <Text style={[styles.analysisCountText, { color: '#32CD32' }]}>
+                    <View style={[styles.analysisCount, { backgroundColor: cores.sucesso + '30' }]}>
+                      <Text style={[styles.analysisCountText, { color: cores.sucesso }]}>
                         {item.acertos} acertos
                       </Text>
                     </View>
@@ -206,7 +206,7 @@ export default function EquipeScreen() {
 
         {alunos.length === 0 && (
           <View style={styles.emptyState}>
-            <Ionicons name="people-outline" size={48} color="#666" />
+            <Ionicons name="people-outline" size={48} color={cores.textoFraco} />
             <Text style={styles.emptyText}>Nenhum membro na equipe</Text>
           </View>
         )}
@@ -276,7 +276,7 @@ const criarEstilos = (cores: CoresTema) => StyleSheet.create({
     marginRight: 12,
   },
   positionText: {
-    color: '#000',
+    color: cores.texto,
     fontWeight: 'bold',
     fontSize: 14,
   },

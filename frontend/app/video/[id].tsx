@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -8,8 +8,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 
 export default function VideoPlayer() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const params = useLocalSearchParams();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
@@ -35,10 +38,10 @@ export default function VideoPlayer() {
   const isLiberado = progressoReal >= 100;
 
   const getTeamColor = () => {
-    if (user?.equipeId === 'equipe-alfa') return '#FFD700';
-    if (user?.equipeId === 'equipe-delta') return '#4169E1';
-    if (user?.equipeId === 'equipe-omega') return '#32CD32';
-    return '#FFD700'; 
+    if (user?.equipeId === 'equipe-alfa') return cores.dourado;
+    if (user?.equipeId === 'equipe-delta') return cores.azul;
+    if (user?.equipeId === 'equipe-omega') return cores.sucesso;
+    return cores.dourado; 
   };
   const teamColor = getTeamColor();
 
@@ -121,12 +124,12 @@ export default function VideoPlayer() {
     }
   };
 
-  if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View>;
+  if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={cores.dourado} /></View>;
 
   if (!video) return (
     <SafeAreaView style={styles.container}>
       <View style={styles.errorContainer}>
-        <Ionicons name="videocam-off" size={48} color="#666" />
+        <Ionicons name="videocam-off" size={48} color={cores.textoFraco} />
         <Text style={styles.errorText}>Vídeo não encontrado</Text>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}><Text style={styles.backButtonText}>Voltar</Text></TouchableOpacity>
       </View>
@@ -139,7 +142,7 @@ export default function VideoPlayer() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { borderColor: teamColor }]}>
             <View style={[styles.iconCircle, { backgroundColor: teamColor }]}>
-              <Ionicons name="trophy" size={40} color="#000" />
+              <Ionicons name="trophy" size={40} color={cores.sobreAcento} />
             </View>
             <Text style={styles.modalTitle}>PARABÉNS!</Text>
             <Text style={styles.modalText}>Você concluiu a aula com sucesso.</Text>
@@ -155,7 +158,7 @@ export default function VideoPlayer() {
       </Modal>
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color="#fff" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={cores.texto} /></TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{video.titulo}</Text>
         <View style={{ width: 24 }} />
       </View>
@@ -173,7 +176,7 @@ export default function VideoPlayer() {
           />
         ) : (
           <View style={styles.noVideo}>
-            <Ionicons name="videocam-off" size={48} color="#666" />
+            <Ionicons name="videocam-off" size={48} color={cores.textoFraco} />
             <Text style={styles.noVideoText}>URL do vídeo inválida</Text>
           </View>
         )}
@@ -187,7 +190,7 @@ export default function VideoPlayer() {
           </Text>
         </View>
         <View style={styles.progressBarBg}>
-          <View style={[styles.progressBarFill, { width: completed ? '100%' : `${progressoReal}%`, backgroundColor: completed ? teamColor : '#FFD700' }]} />
+          <View style={[styles.progressBarFill, { width: completed ? '100%' : `${progressoReal}%`, backgroundColor: completed ? teamColor : cores.dourado }]} />
         </View>
         <Text style={styles.progressHint}>
           {completed ? "Aula concluída! Você já resgatou seus pontos." : "Assista sem pular para liberar a recompensa."}
@@ -215,11 +218,11 @@ export default function VideoPlayer() {
           disabled={!isLiberado || submitting}
         >
           {submitting ? (
-            <ActivityIndicator color="#000" />
+            <ActivityIndicator color={cores.sobreAcento} />
           ) : (
             <>
-              <Ionicons name={!isLiberado ? 'lock-closed' : 'play-circle'} size={24} color={!isLiberado ? '#666' : '#000'} />
-              <Text style={[styles.completeButtonText, !isLiberado && { color: '#666' }]}>
+              <Ionicons name={!isLiberado ? 'lock-closed' : 'play-circle'} size={24} color={!isLiberado ? cores.textoFraco : cores.sobreAcento} />
+              <Text style={[styles.completeButtonText, !isLiberado && { color: cores.textoFraco }]}>
                 {!isLiberado ? 'Assista para Liberar' : 'Marcar como Concluído'}
               </Text>
             </>
@@ -231,45 +234,45 @@ export default function VideoPlayer() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  errorText: { color: '#666', fontSize: 18, marginTop: 16 },
-  backButton: { marginTop: 20, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#FFD700', borderRadius: 12 },
-  backButtonText: { color: '#000', fontWeight: 'bold' },
+  errorText: { color: cores.textoFraco, fontSize: 18, marginTop: 16 },
+  backButton: { marginTop: 20, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: cores.dourado, borderRadius: 12 },
+  backButtonText: { color: cores.sobreAcento, fontWeight: 'bold' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  headerTitle: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center', marginHorizontal: 16 },
+  headerTitle: { flex: 1, color: cores.texto, fontSize: 16, fontWeight: '600', textAlign: 'center', marginHorizontal: 16 },
   
   playerContainer: { width: '100%', height: 250, backgroundColor: '#000', justifyContent: 'center' },
   noVideo: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  noVideoText: { color: '#666', marginTop: 12, fontSize: 16 },
+  noVideoText: { color: cores.textoFraco, marginTop: 12, fontSize: 16 },
   
-  progressSection: { padding: 16, backgroundColor: '#151520', borderBottomWidth: 1, borderBottomColor: '#222' },
+  progressSection: { padding: 16, backgroundColor: cores.superficieAlt, borderBottomWidth: 1, borderBottomColor: cores.superficieAlt },
   progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  progressLabel: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  progressPercent: { color: '#FFD700', fontWeight: 'bold', fontSize: 14 },
-  progressBarBg: { height: 8, backgroundColor: '#333', borderRadius: 4, overflow: 'hidden' },
+  progressLabel: { color: cores.texto, fontWeight: 'bold', fontSize: 14 },
+  progressPercent: { color: cores.dourado, fontWeight: 'bold', fontSize: 14 },
+  progressBarBg: { height: 8, backgroundColor: cores.borda, borderRadius: 4, overflow: 'hidden' },
   progressBarFill: { height: '100%', borderRadius: 4 },
-  progressHint: { color: '#888', fontSize: 12, marginTop: 8 },
+  progressHint: { color: cores.textoFraco, fontSize: 12, marginTop: 8 },
 
   infoContainer: { padding: 16 },
-  title: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  description: { color: '#888', fontSize: 14, marginTop: 8, lineHeight: 20 },
+  title: { color: cores.texto, fontSize: 20, fontWeight: 'bold' },
+  description: { color: cores.textoFraco, fontSize: 14, marginTop: 8, lineHeight: 20 },
   
   completedBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, gap: 8, marginTop: 20 },
   completedText: { fontWeight: 'bold', fontSize: 14 },
   
-  completeButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFD700', margin: 16, paddingVertical: 16, borderRadius: 12, gap: 8 },
-  completeButtonDisabled: { backgroundColor: '#222' },
-  completeButtonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
+  completeButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: cores.dourado, margin: 16, paddingVertical: 16, borderRadius: 12, gap: 8 },
+  completeButtonDisabled: { backgroundColor: cores.superficieAlt },
+  completeButtonText: { color: cores.sobreAcento, fontSize: 16, fontWeight: 'bold' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#1a1a2e', width: '100%', borderRadius: 24, padding: 30, alignItems: 'center', borderWidth: 2 },
-  iconCircle: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 20, marginTop: -60, borderWidth: 4, borderColor: '#1a1a2e' },
-  modalTitle: { color: '#FFF', fontSize: 28, fontWeight: '900', marginBottom: 10, textAlign: 'center' },
-  modalText: { color: '#AAA', fontSize: 16, textAlign: 'center', marginBottom: 20 },
+  modalContent: { backgroundColor: cores.superficie, width: '100%', borderRadius: 24, padding: 30, alignItems: 'center', borderWidth: 2 },
+  iconCircle: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 20, marginTop: -60, borderWidth: 4, borderColor: cores.superficie },
+  modalTitle: { color: cores.texto, fontSize: 28, fontWeight: '900', marginBottom: 10, textAlign: 'center' },
+  modalText: { color: cores.textoFraco, fontSize: 16, textAlign: 'center', marginBottom: 20 },
   modalPoints: { fontSize: 32, fontWeight: '900', marginBottom: 30 },
   modalButton: { width: '100%', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
-  modalButtonText: { color: '#000', fontSize: 18, fontWeight: 'bold' }
+  modalButtonText: { color: cores.sobreAcento, fontSize: 18, fontWeight: 'bold' }
 });

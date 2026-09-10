@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import {
   QuantidadeDesafio, QUANTIDADES_DESAFIO, QuestaoDesafio,
 } from '../src/services/desafioTabuada';
 import { TabuadaDesafioResultado } from '../src/types';
+import { useTema, CoresTema } from '../src/context/ThemeContext';
 
 // =============================================================================
 // DESAFIO FLASH CARDS — modo à parte da Trilha da Tabuada, com ranking.
@@ -36,6 +37,8 @@ function formatarTempo(segundosTotais: number): string {
 }
 
 export default function DesafioFlashCards() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const [fase, setFase] = useState<Fase>('config');
 
@@ -263,10 +266,10 @@ export default function DesafioFlashCards() {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <ScrollView contentContainerStyle={styles.menuScroll}>
           <TouchableOpacity style={{ alignSelf: 'flex-start' }} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={28} color="#FFB300" />
+            <Ionicons name="arrow-back" size={28} color={cores.ambar} />
           </TouchableOpacity>
 
-          <Ionicons name="trophy" size={56} color="#FFB300" style={{ marginTop: 10 }} />
+          <Ionicons name="trophy" size={56} color={cores.ambar} style={{ marginTop: 10 }} />
           <Text style={styles.tituloMenu}>DESAFIO</Text>
           <Text style={styles.subtituloMenu}>FLASH CARDS</Text>
           <Text style={styles.explicacao}>
@@ -309,14 +312,14 @@ export default function DesafioFlashCards() {
             disabled={tabuadasSelecionadas.length === 0}
             onPress={iniciarDesafio}
           >
-            <Ionicons name="play" size={20} color="#1a1200" />
+            <Ionicons name="play" size={20} color={cores.sobreAcento} />
             <Text style={styles.btnIniciarTexto}>
               {tabuadasSelecionadas.length === 0 ? 'ESCOLHA AO MENOS 1 TABUADA' : 'COMEÇAR DESAFIO'}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.btnEvolucao} onPress={() => router.push('/tabuada_desafio_ranking' as any)}>
-            <Ionicons name="podium" size={18} color="#FFB300" />
+            <Ionicons name="podium" size={18} color={cores.ambar} />
             <Text style={styles.btnEvolucaoTexto}>VER RANKING</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -330,16 +333,16 @@ export default function DesafioFlashCards() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <ScrollView contentContainerStyle={styles.menuScroll}>
-          <Ionicons name={acertos >= fila.length / 2 ? 'trophy' : 'fitness'} size={56} color="#FFB300" style={{ marginTop: 16 }} />
+          <Ionicons name={acertos >= fila.length / 2 ? 'trophy' : 'fitness'} size={56} color={cores.ambar} style={{ marginTop: 16 }} />
           <Text style={styles.resumoTitulo}>Desafio concluído!</Text>
 
-          {enviando && <ActivityIndicator size="small" color="#FFB300" style={{ marginTop: 4 }} />}
+          {enviando && <ActivityIndicator size="small" color={cores.ambar} style={{ marginTop: 4 }} />}
           {erroEnvio && (
             <Text style={styles.avisoOffline}>Sem conexão agora — seu resultado ficou salvo no aparelho e será enviado automaticamente.</Text>
           )}
 
           <View style={styles.resumoGrid}>
-            <View style={styles.resumoBox}><Text style={[styles.resumoValor, { color: '#32CD32' }]}>{acertos}/{fila.length}</Text><Text style={styles.resumoLabel}>Acertos</Text></View>
+            <View style={styles.resumoBox}><Text style={[styles.resumoValor, { color: cores.sucesso }]}>{acertos}/{fila.length}</Text><Text style={styles.resumoLabel}>Acertos</Text></View>
             <View style={styles.resumoBox}><Text style={styles.resumoValor}>{formatarTempo(tempoAcumuladoRef.current)}</Text><Text style={styles.resumoLabel}>Tempo total</Text></View>
           </View>
 
@@ -365,11 +368,11 @@ export default function DesafioFlashCards() {
           </View>
 
           <TouchableOpacity style={styles.btnIniciar} onPress={iniciarDesafio}>
-            <Ionicons name="refresh" size={20} color="#1a1200" />
+            <Ionicons name="refresh" size={20} color={cores.sobreAcento} />
             <Text style={styles.btnIniciarTexto}>JOGAR DE NOVO</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.btnEvolucao} onPress={() => router.push('/tabuada_desafio_ranking' as any)}>
-            <Ionicons name="podium" size={18} color="#FFB300" />
+            <Ionicons name="podium" size={18} color={cores.ambar} />
             <Text style={styles.btnEvolucaoTexto}>VER RANKING</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.btnVoltar} onPress={() => setFase('config')}>
@@ -388,11 +391,11 @@ export default function DesafioFlashCards() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.jogoTopo}>
         <TouchableOpacity onPress={() => setFase('config')}>
-          <Ionicons name="close" size={26} color="#888" />
+          <Ionicons name="close" size={26} color={cores.textoFraco} />
         </TouchableOpacity>
         <Text style={styles.progresso}>{Math.min(indice + 1, fila.length)} / {fila.length}</Text>
         <View style={styles.cronometro}>
-          <Ionicons name="stopwatch-outline" size={14} color="#7FD4FF" />
+          <Ionicons name="stopwatch-outline" size={14} color={cores.ciano} />
           <Text style={styles.cronometroTexto}>{formatarTempo(segundosDecorridos)}</Text>
         </View>
       </View>
@@ -403,14 +406,14 @@ export default function DesafioFlashCards() {
             styles.barraTempoPreenchimento,
             {
               width: tempoBarraAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-              backgroundColor: tempoBarraAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: ['#FF7055', '#FFD700', '#32CD32'] }),
+              backgroundColor: tempoBarraAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [cores.laranja, cores.dourado, cores.sucesso] }),
             },
           ]}
         />
       </View>
 
       <Animated.View style={[styles.placarAoVivoRow, { transform: [{ translateX: shakeAnim.interpolate({ inputRange: [-1, 1], outputRange: [-6, 6] }) }] }]}>
-        <Ionicons name="trophy" size={13} color="#FFD700" />
+        <Ionicons name="trophy" size={13} color={cores.dourado} />
         <Text style={styles.placarAoVivoTexto}>{pontuacaoAoVivo.toFixed(0)} pts</Text>
         <Animated.View
           pointerEvents="none"
@@ -450,8 +453,8 @@ export default function DesafioFlashCards() {
                 onPress={() => apertarTecla(tecla)}
                 disabled={!!feedback}
               >
-                {tecla === 'apagar' ? <Ionicons name="backspace" size={22} color="#FFF" />
-                  : tecla === 'ok' ? <Ionicons name="checkmark" size={24} color="#1a1200" />
+                {tecla === 'apagar' ? <Ionicons name="backspace" size={22} color={cores.erro} />
+                  : tecla === 'ok' ? <Ionicons name="checkmark" size={24} color={cores.sobreAcento} />
                   : <Text style={styles.teclaTexto}>{tecla}</Text>}
               </TouchableOpacity>
             ))}
@@ -462,71 +465,71 @@ export default function DesafioFlashCards() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0d0b04' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   menuScroll: { padding: 20, alignItems: 'center', paddingBottom: 50 },
-  tituloMenu: { fontSize: 30, fontWeight: '900', color: '#FFF', letterSpacing: 3, marginTop: 8 },
-  subtituloMenu: { fontSize: 30, fontWeight: '900', color: '#FFB300', letterSpacing: 3, marginTop: -6 },
-  explicacao: { color: '#998', fontSize: 13, textAlign: 'center', marginTop: 12, lineHeight: 19, maxWidth: 340 },
+  tituloMenu: { fontSize: 30, fontWeight: '900', color: cores.texto, letterSpacing: 3, marginTop: 8 },
+  subtituloMenu: { fontSize: 30, fontWeight: '900', color: cores.ambar, letterSpacing: 3, marginTop: -6 },
+  explicacao: { color: cores.textoFraco, fontSize: 13, textAlign: 'center', marginTop: 12, lineHeight: 19, maxWidth: 340 },
 
-  rotuloSecao: { color: '#FFB300', fontSize: 13, fontWeight: '800', marginTop: 26, marginBottom: 10, alignSelf: 'flex-start' },
+  rotuloSecao: { color: cores.ambar, fontSize: 13, fontWeight: '800', marginTop: 26, marginBottom: 10, alignSelf: 'flex-start' },
   gridTabuadas: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
-  chipTabuada: { width: 62, paddingVertical: 10, borderRadius: 12, backgroundColor: '#1a1608', borderWidth: 2, borderColor: '#332a10', alignItems: 'center' },
-  chipTabuadaNumero: { color: '#DDC', fontSize: 20, fontWeight: '900' },
-  chipTabuadaNumeroAtivo: { color: '#1a1200' },
-  chipTabuadaRotulo: { color: '#776', fontSize: 9, fontWeight: '700', marginTop: 2 },
-  chipTabuadaRotuloAtivo: { color: '#1a1200' },
+  chipTabuada: { width: 62, paddingVertical: 10, borderRadius: 12, backgroundColor: cores.superficie, borderWidth: 2, borderColor: cores.borda, alignItems: 'center' },
+  chipTabuadaNumero: { color: cores.texto, fontSize: 20, fontWeight: '900' },
+  chipTabuadaNumeroAtivo: { color: cores.sobreAcento },
+  chipTabuadaRotulo: { color: cores.textoFraco, fontSize: 9, fontWeight: '700', marginTop: 2 },
+  chipTabuadaRotuloAtivo: { color: cores.sobreAcento },
 
   tamanhoRow: { flexDirection: 'row', gap: 10 },
-  tamanhoChip: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 20, backgroundColor: '#1a1608', borderWidth: 1, borderColor: '#332a10' },
-  tamanhoChipAtivo: { backgroundColor: '#FFB300', borderColor: '#FFB300' },
-  tamanhoChipTexto: { color: '#887', fontWeight: '700', fontSize: 12 },
-  tamanhoChipTextoAtivo: { color: '#1a1200' },
+  tamanhoChip: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 20, backgroundColor: cores.superficie, borderWidth: 1, borderColor: cores.borda },
+  tamanhoChipAtivo: { backgroundColor: cores.ambar, borderColor: cores.ambar },
+  tamanhoChipTexto: { color: cores.textoFraco, fontWeight: '700', fontSize: 12 },
+  tamanhoChipTextoAtivo: { color: cores.sobreAcento },
 
-  btnIniciar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFB300', borderRadius: 14, paddingVertical: 15, width: '100%', maxWidth: 360, marginTop: 28 },
-  btnIniciarDesativado: { backgroundColor: '#3a3220' },
-  btnIniciarTexto: { color: '#1a1200', fontWeight: '900', fontSize: 14, letterSpacing: 1, textAlign: 'center' },
-  btnEvolucao: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 2, borderColor: '#FFB300', borderRadius: 14, paddingVertical: 13, width: '100%', maxWidth: 360, marginTop: 12 },
-  btnEvolucaoTexto: { color: '#FFB300', fontWeight: '900', fontSize: 13, letterSpacing: 1 },
+  btnIniciar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: cores.ambar, borderRadius: 14, paddingVertical: 15, width: '100%', maxWidth: 360, marginTop: 28 },
+  btnIniciarDesativado: { backgroundColor: cores.borda },
+  btnIniciarTexto: { color: cores.sobreAcento, fontWeight: '900', fontSize: 14, letterSpacing: 1, textAlign: 'center' },
+  btnEvolucao: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 2, borderColor: cores.ambar, borderRadius: 14, paddingVertical: 13, width: '100%', maxWidth: 360, marginTop: 12 },
+  btnEvolucaoTexto: { color: cores.ambar, fontWeight: '900', fontSize: 13, letterSpacing: 1 },
   btnVoltar: { marginTop: 16, padding: 10 },
-  btnVoltarTexto: { color: '#776', fontWeight: '700', fontSize: 12 },
+  btnVoltarTexto: { color: cores.textoFraco, fontWeight: '700', fontSize: 12 },
 
   jogoTopo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingTop: 10 },
-  progresso: { color: '#CCB', fontSize: 15, fontWeight: '800' },
+  progresso: { color: cores.texto, fontSize: 15, fontWeight: '800' },
   cronometro: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  cronometroTexto: { color: '#7FD4FF', fontSize: 14, fontWeight: '800' },
-  barraTempoFundo: { height: 8, backgroundColor: '#1a1608', borderRadius: 4, marginHorizontal: 18, marginTop: 10, overflow: 'hidden' },
+  cronometroTexto: { color: cores.ciano, fontSize: 14, fontWeight: '800' },
+  barraTempoFundo: { height: 8, backgroundColor: cores.superficie, borderRadius: 4, marginHorizontal: 18, marginTop: 10, overflow: 'hidden' },
   barraTempoPreenchimento: { height: '100%', borderRadius: 4 },
   placarAoVivoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12 },
-  placarAoVivoTexto: { color: '#FFD700', fontSize: 15, fontWeight: '900' },
+  placarAoVivoTexto: { color: cores.dourado, fontSize: 15, fontWeight: '900' },
   popupPontos: { position: 'absolute', right: -6, top: -4 },
-  popupPontosTexto: { color: '#32CD32', fontSize: 14, fontWeight: '900' },
+  popupPontosTexto: { color: cores.sucesso, fontSize: 14, fontWeight: '900' },
   areaConta: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  conta: { color: '#FFF', fontSize: 56, fontWeight: '900', letterSpacing: 2 },
-  caixaResposta: { marginTop: 22, minWidth: 140, borderBottomWidth: 3, borderBottomColor: '#FFB300', paddingHorizontal: 18, paddingVertical: 6, alignItems: 'center' },
-  caixaAcerto: { borderBottomColor: '#32CD32' },
-  caixaErro: { borderBottomColor: '#FF7055' },
-  respostaTexto: { color: '#FFB300', fontSize: 42, fontWeight: '900', minHeight: 52 },
-  feedbackAcerto: { color: '#32CD32', fontSize: 20, fontWeight: '900', marginTop: 18 },
-  feedbackErro: { color: '#FF7055', fontSize: 20, fontWeight: '900', marginTop: 18 },
+  conta: { color: cores.texto, fontSize: 56, fontWeight: '900', letterSpacing: 2 },
+  caixaResposta: { marginTop: 22, minWidth: 140, borderBottomWidth: 3, borderBottomColor: cores.ambar, paddingHorizontal: 18, paddingVertical: 6, alignItems: 'center' },
+  caixaAcerto: { borderBottomColor: cores.sucesso },
+  caixaErro: { borderBottomColor: cores.laranja },
+  respostaTexto: { color: cores.ambar, fontSize: 42, fontWeight: '900', minHeight: 52 },
+  feedbackAcerto: { color: cores.sucesso, fontSize: 20, fontWeight: '900', marginTop: 18 },
+  feedbackErro: { color: cores.laranja, fontSize: 20, fontWeight: '900', marginTop: 18 },
 
   teclado: { paddingHorizontal: 24, paddingBottom: 18, gap: 10, alignSelf: 'center', width: '100%', maxWidth: 380 },
   tecladoLinha: { flexDirection: 'row', gap: 10 },
-  tecla: { flex: 1, height: 58, borderRadius: 12, backgroundColor: '#1a1608', borderWidth: 1, borderColor: '#332a10', alignItems: 'center', justifyContent: 'center' },
-  teclaOk: { backgroundColor: '#FFB300', borderColor: '#FFB300' },
-  teclaApagar: { backgroundColor: '#2a1410', borderColor: '#442018' },
-  teclaTexto: { color: '#FFF', fontSize: 24, fontWeight: '800' },
+  tecla: { flex: 1, height: 58, borderRadius: 12, backgroundColor: cores.superficie, borderWidth: 1, borderColor: cores.borda, alignItems: 'center', justifyContent: 'center' },
+  teclaOk: { backgroundColor: cores.ambar, borderColor: cores.ambar },
+  teclaApagar: { backgroundColor: cores.erro + '22', borderColor: cores.erro + '66' },
+  teclaTexto: { color: cores.texto, fontSize: 24, fontWeight: '800' },
 
-  resumoTitulo: { color: '#FFF', fontSize: 24, fontWeight: '900', marginTop: 10 },
-  avisoOffline: { color: '#FFD700', fontSize: 11, textAlign: 'center', marginTop: 8, paddingHorizontal: 30 },
+  resumoTitulo: { color: cores.texto, fontSize: 24, fontWeight: '900', marginTop: 10 },
+  avisoOffline: { color: cores.dourado, fontSize: 11, textAlign: 'center', marginTop: 8, paddingHorizontal: 30 },
   resumoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 20, justifyContent: 'center' },
-  resumoBox: { backgroundColor: '#1a1608', borderRadius: 12, borderWidth: 1, borderColor: '#332a10', paddingVertical: 12, alignItems: 'center', width: '46%', maxWidth: 170 },
-  resumoValor: { color: '#FFF', fontSize: 22, fontWeight: '900' },
-  resumoLabel: { color: '#887', fontSize: 11, marginTop: 2 },
-  resumoCard: { backgroundColor: '#1a1608', borderRadius: 12, borderWidth: 1, borderColor: '#332a10', padding: 14, marginTop: 12, width: '100%', maxWidth: 360 },
-  resumoCardTitulo: { color: '#FFB300', fontSize: 12, fontWeight: '800', marginBottom: 4 },
-  resumoCardTexto: { color: '#DDC', fontSize: 12, fontWeight: '600', marginTop: 4 },
-  resumoPontuacaoFinal: { color: '#FFD700', fontSize: 30, fontWeight: '900' },
+  resumoBox: { backgroundColor: cores.superficie, borderRadius: 12, borderWidth: 1, borderColor: cores.borda, paddingVertical: 12, alignItems: 'center', width: '46%', maxWidth: 170 },
+  resumoValor: { color: cores.texto, fontSize: 22, fontWeight: '900' },
+  resumoLabel: { color: cores.textoFraco, fontSize: 11, marginTop: 2 },
+  resumoCard: { backgroundColor: cores.superficie, borderRadius: 12, borderWidth: 1, borderColor: cores.borda, padding: 14, marginTop: 12, width: '100%', maxWidth: 360 },
+  resumoCardTitulo: { color: cores.ambar, fontSize: 12, fontWeight: '800', marginBottom: 4 },
+  resumoCardTexto: { color: cores.texto, fontSize: 12, fontWeight: '600', marginTop: 4 },
+  resumoPontuacaoFinal: { color: cores.dourado, fontSize: 30, fontWeight: '900' },
   badgesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   badgeTabuada: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   badgeTabuadaTexto: { fontWeight: '900', fontSize: 14 },

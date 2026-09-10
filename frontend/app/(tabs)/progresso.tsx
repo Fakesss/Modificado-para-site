@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
-import { useTema, CoresTema } from '../../src/context/ThemeContext';
+import { useTema, CoresTema, textoSobre } from '../../src/context/ThemeContext';
 import * as api from '../../src/services/api';
 import StreakBadge from '../../src/components/StreakBadge';
 import { Equipe, CartelaMissoes } from '../../src/types';
@@ -20,7 +20,7 @@ import { Equipe, CartelaMissoes } from '../../src/types';
 export default function Progresso() {
   const router = useRouter();
   const { user, refreshUser } = useAuth();
-  const { cores } = useTema();
+  const { cores, corEquipe } = useTema();
   const styles = useMemo(() => criarEstilos(cores), [cores]);
   const [progress, setProgress] = useState<any>(null);
   const [equipe, setEquipe] = useState<Equipe | null>(null);
@@ -90,13 +90,13 @@ export default function Progresso() {
 
         {/* Team Info */}
         {equipe && (
-          <View style={[styles.teamCard, { borderLeftColor: equipe.cor }]}>
-            <View style={[styles.teamBadge, { backgroundColor: equipe.cor }]}>
-              <Ionicons name="people" size={20} color="#000" />
+          <View style={[styles.teamCard, { borderLeftColor: corEquipe(equipe.cor) }]}>
+            <View style={[styles.teamBadge, { backgroundColor: corEquipe(equipe.cor) }]}>
+              <Ionicons name="people" size={20} color={textoSobre(corEquipe(equipe.cor))} />
             </View>
             <View style={styles.teamInfo}>
               <Text style={styles.teamLabel}>Sua Equipe</Text>
-              <Text style={[styles.teamName, { color: equipe.cor }]}>Equipe {equipe.nome}</Text>
+              <Text style={[styles.teamName, { color: corEquipe(equipe.cor) }]}>Equipe {equipe.nome}</Text>
             </View>
           </View>
         )}
@@ -110,19 +110,19 @@ export default function Progresso() {
           </View>
           
           <View style={styles.statCard}>
-            <Ionicons name="flame" size={32} color="#FF6B35" />
+            <Ionicons name="flame" size={32} color={cores.laranja} />
             <Text style={styles.statValue}>{user?.streakDias || 0}</Text>
             <Text style={styles.statLabel}>Dias de Ofensiva</Text>
           </View>
           
           <View style={styles.statCard}>
-            <Ionicons name="play-circle" size={32} color="#4169E1" />
+            <Ionicons name="play-circle" size={32} color={cores.azul} />
             <Text style={styles.statValue}>{progress?.totalVideos || 0}</Text>
             <Text style={styles.statLabel}>Vídeos Concluídos</Text>
           </View>
           
           <View style={styles.statCard}>
-            <Ionicons name="document-text" size={32} color="#32CD32" />
+            <Ionicons name="document-text" size={32} color={cores.sucesso} />
             <Text style={styles.statValue}>{progress?.totalExercicios || 0}</Text>
             <Text style={styles.statLabel}>Exercícios Feitos</Text>
           </View>
@@ -131,7 +131,7 @@ export default function Progresso() {
         {/* Cartela de Missões */}
         <TouchableOpacity style={styles.cartelaCard} onPress={() => router.push('/cartela_missoes' as any)} activeOpacity={0.85}>
           <View style={styles.cartelaIcone}>
-            <Ionicons name="star" size={26} color="#FFB300" />
+            <Ionicons name="star" size={26} color={cores.ambar} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.cartelaTitulo}>Cartela de Missões</Text>
@@ -145,7 +145,7 @@ export default function Progresso() {
         <View style={styles.breakdownCard}>
           <View style={styles.breakdownRow}>
             <View style={styles.breakdownLeft}>
-              <Ionicons name="play-circle" size={24} color="#4169E1" />
+              <Ionicons name="play-circle" size={24} color={cores.azul} />
               <Text style={styles.breakdownLabel}>Vídeo-aulas</Text>
             </View>
             <Text style={styles.breakdownValue}>+{progress?.pontosVideos || 0} pts</Text>
@@ -153,7 +153,7 @@ export default function Progresso() {
           <View style={styles.breakdownDivider} />
           <View style={styles.breakdownRow}>
             <View style={styles.breakdownLeft}>
-              <Ionicons name="document-text" size={24} color="#32CD32" />
+              <Ionicons name="document-text" size={24} color={cores.sucesso} />
               <Text style={styles.breakdownLabel}>Exercícios</Text>
             </View>
             <Text style={styles.breakdownValue}>+{progress?.pontosExercicios || 0} pts</Text>
@@ -166,7 +166,7 @@ export default function Progresso() {
             <Text style={styles.sectionTitle}>Últimas Atividades</Text>
             {progress.submissoes.slice(0, 5).map((sub: any, index: number) => (
               <View key={sub.id || index} style={styles.activityItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#32CD32" />
+                <Ionicons name="checkmark-circle" size={20} color={cores.sucesso} />
                 <View style={styles.activityInfo}>
                   <Text style={styles.activityTitle}>Exercício concluído</Text>
                   <Text style={styles.activityMeta}>

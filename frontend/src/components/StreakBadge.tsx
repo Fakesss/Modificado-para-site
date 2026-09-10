@@ -1,12 +1,17 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTema, corParaTema } from '../context/ThemeContext';
 
 interface Props {
   streakDias: number;
 }
 
 export default function StreakBadge({ streakDias }: Props) {
+  const { estaClaro } = useTema();
+
+  // No tema claro o laranja/dourado da chama é escurecido — o tom fluorescente
+  // some no fundo branco.
   const getStreakColor = () => {
     if (streakDias >= 30) return '#FF4500';
     if (streakDias >= 14) return '#FF6B35';
@@ -15,10 +20,12 @@ export default function StreakBadge({ streakDias }: Props) {
     return '#FFD700';
   };
 
+  const cor = corParaTema(getStreakColor(), estaClaro, 0.38);
+
   return (
-    <View style={[styles.container, { backgroundColor: getStreakColor() + '30' }]}>
-      <Ionicons name="flame" size={24} color={getStreakColor()} />
-      <Text style={[styles.text, { color: getStreakColor() }]}>
+    <View style={[styles.container, { backgroundColor: cor + (estaClaro ? '18' : '30') }]}>
+      <Ionicons name="flame" size={24} color={cor} />
+      <Text style={[styles.text, { color: cor }]}>
         {streakDias} dia{streakDias !== 1 ? 's' : ''} de ofensiva
       </Text>
     </View>

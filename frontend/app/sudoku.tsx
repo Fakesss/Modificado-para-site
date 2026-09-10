@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Modal, ActivityIndicator, Dimensions, AppState, Platform,
@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as api from '../src/services/api';
 import { SudokuSessaoAPI } from '../src/types';
+import { useTema, CoresTema, corParaTema } from '../src/context/ThemeContext';
 
 // ──────────────── Types & Constants ────────────────
 
@@ -22,7 +23,7 @@ interface SudokuTheme {
   bgCell: string; bgSelected: string; bgGroup: string; bgSame: string;
 }
 
-const THEMES: SudokuTheme[] = [
+const TEMAS_ESCUROS: SudokuTheme[] = [
   { id: 'azul', name: 'Azul Clássico', icon: 'water-outline',
     accent: '#4a6ef5', boxLine: '#555580', cellLine: '#282848',
     givenColor: '#c8c8e0', userColor: '#ffffff', pencilColor: '#7799ff',
@@ -40,9 +41,34 @@ const THEMES: SudokuTheme[] = [
     givenColor: '#c090e8', userColor: '#cc88ff', pencilColor: '#9955cc',
     bgCell: '#090512', bgSelected: '#1c0a33', bgGroup: '#0f061a', bgSame: '#170a2c' },
   { id: 'coral', name: 'Coral', icon: 'flame-outline',
-    accent: '#ff7055', boxLine: '#993322', cellLine: '#2a100a',
-    givenColor: '#dd7766', userColor: '#ff7055', pencilColor: '#cc5544',
+    accent: '#FF4500', boxLine: '#993322', cellLine: '#2a100a',
+    givenColor: '#dd7766', userColor: '#FF4500', pencilColor: '#cc5544',
     bgCell: '#0e0805', bgSelected: '#2e1008', bgGroup: '#1c0c06', bgSame: '#251008' },
+];
+
+// Mesmos 5 esquemas, versão para o tema claro: o tabuleiro fica em papel branco
+// com as linhas e os números em tons sólidos, no lugar do neon sobre preto.
+const TEMAS_CLAROS: SudokuTheme[] = [
+  { id: 'azul', name: 'Azul Clássico', icon: 'water-outline',
+    accent: '#2F52C9', boxLine: '#8E9DD4', cellLine: '#D7DCF0',
+    givenColor: '#3D4666', userColor: '#132043', pencilColor: '#5B73C9',
+    bgCell: '#FFFFFF', bgSelected: '#CFDCFF', bgGroup: '#EEF2FD', bgSame: '#DDE5FF' },
+  { id: 'ouro', name: 'Ouro', icon: 'star-outline',
+    accent: '#A9791B', boxLine: '#D3B461', cellLine: '#F0E6C8',
+    givenColor: '#7A6528', userColor: '#3D3100', pencilColor: '#A08A2E',
+    bgCell: '#FFFDF5', bgSelected: '#FFEEB8', bgGroup: '#FBF6E4', bgSame: '#F7ECCB' },
+  { id: 'verde', name: 'Esmeralda', icon: 'leaf-outline',
+    accent: '#12855A', boxLine: '#7FC7A8', cellLine: '#D5EEE3',
+    givenColor: '#2F6B53', userColor: '#0C3A27', pencilColor: '#3EA27B',
+    bgCell: '#FBFFFD', bgSelected: '#C5F0DD', bgGroup: '#ECF9F3', bgSame: '#D8F2E7' },
+  { id: 'roxo', name: 'Roxo', icon: 'sparkles-outline',
+    accent: '#7A3FB5', boxLine: '#BC9BE0', cellLine: '#E8DCF6',
+    givenColor: '#5A3F77', userColor: '#2C1147', pencilColor: '#9061C8',
+    bgCell: '#FFFDFF', bgSelected: '#E4D0FB', bgGroup: '#F5EEFD', bgSame: '#ECE0FA' },
+  { id: 'coral', name: 'Coral', icon: 'flame-outline',
+    accent: '#C2401B', boxLine: '#E59B82', cellLine: '#F8DFD6',
+    givenColor: '#8D4830', userColor: '#4A1A0A', pencilColor: '#C9714F',
+    bgCell: '#FFFCFA', bgSelected: '#FFD9C9', bgGroup: '#FDF0EA', bgSame: '#FBE3D8' },
 ];
 
 const DIFFICULTY_LABELS: Record<Difficulty, string> = {
@@ -51,7 +77,7 @@ const DIFFICULTY_LABELS: Record<Difficulty, string> = {
 };
 const DIFFICULTY_COLORS: Record<Difficulty, string> = {
   muito_facil: '#32CD32', facil: '#4169E1', medio: '#FFD700',
-  dificil: '#FF8C00', expert: '#FF4444',
+  dificil: '#FF4500', expert: '#E74C3C',
 };
 const DIFFICULTY_DESC: Record<Difficulty, string> = {
   muito_facil: '51 números dados — ideal para aprender',
@@ -162,6 +188,10 @@ const emptyPencil = () => Array.from({ length: 81 }, (): number[] => []);
 // ──────────────── Component ────────────────
 
 export default function SudokuScreen() {
+  const { cores, estaClaro } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
+  const PALETAS = estaClaro ? TEMAS_CLAROS : TEMAS_ESCUROS;
+  const corDif = (d: Difficulty) => corParaTema(corDif(d), estaClaro, 0.40);
   const router = useRouter();
 
   const [phase, setPhase] = useState<Phase>('loading');
@@ -169,7 +199,8 @@ export default function SudokuScreen() {
   const [difficulty, setDifficulty] = useState<Difficulty>('medio');
   const [savedData, setSavedData] = useState<SudokuSessaoAPI | null>(null);
   const [showThemes, setShowThemes] = useState(false);
-  const [theme, setTheme] = useState<SudokuTheme>(THEMES[0]);
+  const [temaId, setTemaId] = useState<string>(TEMAS_ESCUROS[0].id);
+  const theme = useMemo(() => PALETAS.find((t) => t.id === temaId) ?? PALETAS[0], [PALETAS, temaId]);
 
   const [given, setGiven] = useState<number[]>(new Array(81).fill(0));
   const [solution, setSolution] = useState<number[]>(new Array(81).fill(0));
@@ -203,9 +234,8 @@ export default function SudokuScreen() {
       AsyncStorage.getItem('sudoku_sessao'),
       AsyncStorage.getItem('sudoku_tema'),
     ]).then(([rawSession, rawTheme]) => {
-      if (rawTheme) {
-        const found = THEMES.find(t => t.id === rawTheme);
-        if (found) setTheme(found);
+      if (rawTheme && TEMAS_ESCUROS.some(t => t.id === rawTheme)) {
+        setTemaId(rawTheme);
       }
       try {
         const data: SudokuSessaoAPI = rawSession ? JSON.parse(rawSession) : null;
@@ -315,7 +345,7 @@ export default function SudokuScreen() {
   };
 
   const saveTheme = (t: SudokuTheme) => {
-    setTheme(t);
+    setTemaId(t.id);
     AsyncStorage.setItem('sudoku_tema', t.id);
     setShowThemes(false);
   };
@@ -507,7 +537,7 @@ export default function SudokuScreen() {
       : inGroup ? theme.bgGroup
       : theme.bgCell;
 
-    const textColor = wrong ? '#FF5555'
+    const textColor = wrong ? cores.erro
       : hinted ? theme.accent
       : gv ? theme.givenColor
       : theme.userColor;
@@ -548,7 +578,7 @@ export default function SudokuScreen() {
           <View style={styles.themeHandle} />
           <Text style={styles.themeSheetTitle}>Esquema de Cores</Text>
           <View style={styles.themeGrid}>
-            {THEMES.map(t => (
+            {PALETAS.map(t => (
               <TouchableOpacity
                 key={t.id}
                 style={[styles.themeCard, theme.id === t.id && { borderColor: t.accent, borderWidth: 2 }]}
@@ -574,7 +604,7 @@ export default function SudokuScreen() {
                     ))}
                   </View>
                 </View>
-                <Text style={[styles.themeCardName, { color: theme.id === t.id ? t.accent : '#aaa' }]}>{t.name}</Text>
+                <Text style={[styles.themeCardName, { color: theme.id === t.id ? t.accent : cores.textoFraco }]}>{t.name}</Text>
                 {theme.id === t.id && (
                   <Ionicons name="checkmark-circle" size={14} color={t.accent} style={{ marginTop: 2 }} />
                 )}
@@ -590,7 +620,7 @@ export default function SudokuScreen() {
   if (phase === 'loading') {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#FFD700" style={{ marginTop: 80 }} />
+        <ActivityIndicator size="large" color={cores.dourado} style={{ marginTop: 80 }} />
       </SafeAreaView>
     );
   }
@@ -601,7 +631,7 @@ export default function SudokuScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#FFD700" />
+            <Ionicons name="arrow-back" size={24} color={cores.dourado} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Sudoku</Text>
           <TouchableOpacity onPress={() => setShowThemes(true)} style={styles.paletteBtn}>
@@ -613,18 +643,18 @@ export default function SudokuScreen() {
           <Text style={styles.selectTitle}>Escolha a Dificuldade</Text>
           <Text style={styles.selectSub}>Preencha o 9×9 sem repetir números em cada linha, coluna ou quadrado</Text>
           {DIFFICULTIES.map(d => (
-            <TouchableOpacity key={d} style={[styles.diffBtn, { borderColor: DIFFICULTY_COLORS[d] + '55' }]} onPress={() => startGame(d)}>
-              <View style={[styles.diffDot, { backgroundColor: DIFFICULTY_COLORS[d] }]} />
+            <TouchableOpacity key={d} style={[styles.diffBtn, { borderColor: corDif(d) + '55' }]} onPress={() => startGame(d)}>
+              <View style={[styles.diffDot, { backgroundColor: corDif(d) }]} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.diffName}>{DIFFICULTY_LABELS[d]}</Text>
                 <Text style={styles.diffDesc}>{DIFFICULTY_DESC[d]}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={DIFFICULTY_COLORS[d]} />
+              <Ionicons name="chevron-forward" size={20} color={corDif(d)} />
             </TouchableOpacity>
           ))}
           {Platform.OS === 'web' && (
             <View style={styles.kbHint}>
-              <Ionicons name="keypad-outline" size={16} color="#555" />
+              <Ionicons name="keypad-outline" size={16} color={cores.textoFraco} />
               <Text style={styles.kbHintText}>Teclas: setas para navegar, 1-9 para preencher, P = lápis, Del = apagar, H = dica</Text>
             </View>
           )}
@@ -641,7 +671,7 @@ export default function SudokuScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#FFD700" />
+            <Ionicons name="arrow-back" size={24} color={cores.dourado} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Sudoku</Text>
           <TouchableOpacity onPress={() => setShowThemes(true)} style={styles.paletteBtn}>
@@ -652,13 +682,13 @@ export default function SudokuScreen() {
           <View style={styles.resumeCard}>
             <Ionicons name="time" size={48} color={theme.accent} />
             <Text style={styles.resumeTitle}>Partida salva</Text>
-            <View style={[styles.diffPill, { backgroundColor: DIFFICULTY_COLORS[diff] + '22', borderColor: DIFFICULTY_COLORS[diff] + '66', borderWidth: 1 }]}>
-              <Text style={[styles.diffPillText, { color: DIFFICULTY_COLORS[diff] }]}>{DIFFICULTY_LABELS[diff]}</Text>
+            <View style={[styles.diffPill, { backgroundColor: corDif(diff) + '22', borderColor: corDif(diff) + '66', borderWidth: 1 }]}>
+              <Text style={[styles.diffPillText, { color: corDif(diff) }]}>{DIFFICULTY_LABELS[diff]}</Text>
             </View>
             <Text style={styles.resumeTime}>{formatTime(savedData.elapsedSeconds)} jogados</Text>
             <View style={styles.resumeLivesRow}>
               {[0,1,2].map(i => (
-                <Ionicons key={i} name={i < savedData.lives ? 'heart' : 'heart-outline'} size={22} color={i < savedData.lives ? '#FF4444' : '#333'} />
+                <Ionicons key={i} name={i < savedData.lives ? 'heart' : 'heart-outline'} size={22} color={i < savedData.lives ? cores.erro : cores.borda} />
               ))}
             </View>
             <TouchableOpacity style={[styles.resumeBtn, { backgroundColor: theme.accent }]} onPress={resumeGame}>
@@ -682,12 +712,12 @@ export default function SudokuScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleRestart} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#FFD700" />
+          <Ionicons name="arrow-back" size={24} color={cores.dourado} />
         </TouchableOpacity>
         <View style={styles.headerMid}>
           <Text style={styles.headerTitle}>Sudoku</Text>
-          <View style={[styles.diffPill, { backgroundColor: DIFFICULTY_COLORS[difficulty] + '22' }]}>
-            <Text style={[styles.diffPillText, { color: DIFFICULTY_COLORS[difficulty] }]}>{DIFFICULTY_LABELS[difficulty]}</Text>
+          <View style={[styles.diffPill, { backgroundColor: corDif(difficulty) + '22' }]}>
+            <Text style={[styles.diffPillText, { color: corDif(difficulty) }]}>{DIFFICULTY_LABELS[difficulty]}</Text>
           </View>
         </View>
         <View style={styles.headerRight}>
@@ -702,13 +732,13 @@ export default function SudokuScreen() {
       <View style={styles.statusBar}>
         <View style={styles.livesRow}>
           {[0,1,2].map(i => (
-            <Ionicons key={i} name={i < lives ? 'heart' : 'heart-outline'} size={22} color={i < lives ? '#FF4444' : '#333'} />
+            <Ionicons key={i} name={i < lives ? 'heart' : 'heart-outline'} size={22} color={i < lives ? cores.erro : cores.borda} />
           ))}
           <Text style={styles.statusLabel}>Vidas</Text>
         </View>
         <View style={styles.hintsRow}>
           {[0,1,2].map(i => (
-            <Ionicons key={i} name={i < hintsLeft ? 'bulb' : 'bulb-outline'} size={20} color={i < hintsLeft ? theme.accent : '#333'} />
+            <Ionicons key={i} name={i < hintsLeft ? 'bulb' : 'bulb-outline'} size={20} color={i < hintsLeft ? theme.accent : cores.borda} />
           ))}
           <Text style={styles.statusLabel}>Dicas</Text>
         </View>
@@ -730,11 +760,11 @@ export default function SudokuScreen() {
       {/* Action bar */}
       <View style={styles.actionBar}>
         <TouchableOpacity style={[styles.actionBtn, pencilMode && [styles.actionBtnOn, { backgroundColor: theme.bgSelected }]]} onPress={() => setPencilMode(m => !m)}>
-          <Ionicons name="pencil" size={21} color={pencilMode ? theme.accent : '#888'} />
+          <Ionicons name="pencil" size={21} color={pencilMode ? theme.accent : cores.textoFraco} />
           <Text style={[styles.actionLabel, pencilMode && { color: theme.accent }]}>Lápis</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtn} onPress={handleErase}>
-          <Ionicons name="backspace-outline" size={21} color="#888" />
+          <Ionicons name="backspace-outline" size={21} color={cores.textoFraco} />
           <Text style={styles.actionLabel}>Apagar</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -742,11 +772,11 @@ export default function SudokuScreen() {
           onPress={handleHint}
           disabled={hintsLeft === 0 || selected === null}
         >
-          <Ionicons name="bulb-outline" size={21} color={hintsLeft > 0 && selected !== null ? theme.accent : '#444'} />
-          <Text style={[styles.actionLabel, (hintsLeft === 0 || selected === null) && { color: '#444' }]}>Dica ({hintsLeft})</Text>
+          <Ionicons name="bulb-outline" size={21} color={hintsLeft > 0 && selected !== null ? theme.accent : cores.borda} />
+          <Text style={[styles.actionLabel, (hintsLeft === 0 || selected === null) && { color: cores.textoFraco }]}>Dica ({hintsLeft})</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtn} onPress={handleRestart}>
-          <Ionicons name="refresh" size={21} color="#888" />
+          <Ionicons name="refresh" size={21} color={cores.textoFraco} />
           <Text style={styles.actionLabel}>Reiniciar</Text>
         </TouchableOpacity>
       </View>
@@ -788,8 +818,8 @@ export default function SudokuScreen() {
             </View>
             <Text style={styles.modalBigTitle}>Parabéns!</Text>
             <Text style={styles.modalSub}>Você completou o Sudoku!</Text>
-            <View style={[styles.diffPill, { backgroundColor: DIFFICULTY_COLORS[difficulty] + '22', marginBottom: 20 }]}>
-              <Text style={[styles.diffPillText, { color: DIFFICULTY_COLORS[difficulty] }]}>{DIFFICULTY_LABELS[difficulty]}</Text>
+            <View style={[styles.diffPill, { backgroundColor: corDif(difficulty) + '22', marginBottom: 20 }]}>
+              <Text style={[styles.diffPillText, { color: corDif(difficulty) }]}>{DIFFICULTY_LABELS[difficulty]}</Text>
             </View>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
@@ -798,7 +828,7 @@ export default function SudokuScreen() {
                 <Text style={styles.statKey}>Tempo</Text>
               </View>
               <View style={styles.statItem}>
-                <Ionicons name="heart" size={20} color="#FF4444" />
+                <Ionicons name="heart" size={20} color={cores.erro} />
                 <Text style={styles.statVal}>{lives}/3</Text>
                 <Text style={styles.statKey}>Vidas</Text>
               </View>
@@ -819,10 +849,10 @@ export default function SudokuScreen() {
       <Modal visible={phase === 'lost'} transparent animationType="fade">
         <View style={styles.overlay}>
           <View style={styles.modalCard}>
-            <View style={[styles.modalIconWrap, { backgroundColor: '#FF444420' }]}>
-              <Ionicons name="close-circle" size={48} color="#FF4444" />
+            <View style={[styles.modalIconWrap, { backgroundColor: cores.erro + '20' }]}>
+              <Ionicons name="close-circle" size={48} color={cores.erro} />
             </View>
-            <Text style={[styles.modalBigTitle, { color: '#FF5555' }]}>Fim de jogo!</Text>
+            <Text style={[styles.modalBigTitle, { color: cores.erro }]}>Fim de jogo!</Text>
             <Text style={styles.modalSub}>Você usou todas as suas 3 vidas.</Text>
             <TouchableOpacity style={[styles.modalPrimaryBtn, { backgroundColor: theme.accent }]} onPress={() => startGame(difficulty)}>
               <Text style={styles.modalPrimaryText}>Tentar novamente</Text>
@@ -841,19 +871,19 @@ export default function SudokuScreen() {
 
 // ──────────────── Styles ────────────────
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a12' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: '#1a1a28',
+    borderBottomWidth: 1, borderBottomColor: cores.borda,
   },
   backBtn: { padding: 4, width: 36 },
   headerMid: { alignItems: 'center', flex: 1 },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  headerTitle: { color: cores.texto, fontSize: 18, fontWeight: 'bold' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  timerText: { color: '#aaa', fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  timerText: { color: cores.textoFraco, fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
   paletteBtn: { padding: 4 },
 
   diffPill: { marginTop: 3, paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10 },
@@ -862,18 +892,18 @@ const styles = StyleSheet.create({
   statusBar: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 24, paddingVertical: 8,
-    backgroundColor: '#0c0c18', borderBottomWidth: 1, borderBottomColor: '#1a1a28',
+    backgroundColor: cores.superficieAlt, borderBottomWidth: 1, borderBottomColor: cores.borda,
   },
   livesRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   hintsRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  statusLabel: { color: '#444', fontSize: 11, marginLeft: 8 },
+  statusLabel: { color: cores.textoFraco, fontSize: 11, marginLeft: 8 },
 
   gridWrapper: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   gridOuter: { borderWidth: 3, borderRadius: 4 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', overflow: 'hidden' },
 
   cell: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  cellNum: { fontSize: CELL_SIZE * 0.46, color: '#fff' },
+  cellNum: { fontSize: CELL_SIZE * 0.46, color: cores.texto },
   cellNumUser: { fontWeight: '800' },
   selectedBorder: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderWidth: 2.5, borderRadius: 1 },
   sameValDot: { position: 'absolute', bottom: 2, right: 2, width: 4, height: 4, borderRadius: 2 },
@@ -885,87 +915,87 @@ const styles = StyleSheet.create({
   actionBar: {
     flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
     paddingHorizontal: 4, paddingVertical: 8,
-    backgroundColor: '#0c0c18', borderTopWidth: 1, borderTopColor: '#1a1a28',
+    backgroundColor: cores.superficieAlt, borderTopWidth: 1, borderTopColor: cores.borda,
   },
   actionBtn: { alignItems: 'center', gap: 3, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
   actionBtnOn: { borderRadius: 10 },
   actionBtnOff: { opacity: 0.35 },
-  actionLabel: { color: '#666', fontSize: 11, fontWeight: '500' },
+  actionLabel: { color: cores.textoFraco, fontSize: 11, fontWeight: '500' },
 
   numpad: {
     flexDirection: 'row', justifyContent: 'space-between',
-    paddingHorizontal: 8, paddingVertical: 10, backgroundColor: '#0a0a12',
+    paddingHorizontal: 8, paddingVertical: 10, backgroundColor: cores.fundo,
   },
   numBtn: {
     width: NW, height: NW + 4, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#14142a', borderRadius: 10,
+    backgroundColor: cores.superficie, borderRadius: 10,
   },
   numBtnDone: { opacity: 0.25 },
   numBtnActive: { borderWidth: 1.5 },
-  numText: { color: '#e0e0f0', fontSize: NW * 0.52, fontWeight: 'bold', lineHeight: NW * 0.62 },
-  numTextDone: { color: '#333' },
-  numCount: { color: '#444', fontSize: 9, fontWeight: '600' },
+  numText: { color: cores.texto, fontSize: NW * 0.52, fontWeight: 'bold', lineHeight: NW * 0.62 },
+  numTextDone: { color: cores.textoFraco },
+  numCount: { color: cores.textoFraco, fontSize: 9, fontWeight: '600' },
 
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  overlay: { flex: 1, backgroundColor: cores.veu, justifyContent: 'center', alignItems: 'center', padding: 24 },
   modalCard: {
-    width: '100%', maxWidth: 340, backgroundColor: '#12122a',
+    width: '100%', maxWidth: 340, backgroundColor: cores.superficie,
     borderRadius: 22, padding: 28, alignItems: 'center',
-    borderWidth: 1, borderColor: '#2a2a44',
+    borderWidth: 1, borderColor: cores.borda,
   },
   modalIconWrap: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  modalBigTitle: { color: '#fff', fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
-  modalSub: { color: '#777', fontSize: 15, textAlign: 'center', marginBottom: 16, lineHeight: 22 },
+  modalBigTitle: { color: cores.texto, fontSize: 28, fontWeight: 'bold', marginBottom: 8 },
+  modalSub: { color: cores.textoFraco, fontSize: 15, textAlign: 'center', marginBottom: 16, lineHeight: 22 },
   statsRow: { flexDirection: 'row', gap: 28, marginBottom: 28 },
   statItem: { alignItems: 'center', gap: 4 },
-  statVal: { color: '#fff', fontSize: 17, fontWeight: 'bold' },
-  statKey: { color: '#555', fontSize: 11 },
+  statVal: { color: cores.texto, fontSize: 17, fontWeight: 'bold' },
+  statKey: { color: cores.textoFraco, fontSize: 11 },
   modalPrimaryBtn: { borderRadius: 14, paddingVertical: 15, width: '100%', alignItems: 'center', marginBottom: 10 },
-  modalPrimaryText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
+  modalPrimaryText: { color: cores.sobreAcento, fontWeight: 'bold', fontSize: 16 },
   modalSecondaryBtn: { paddingVertical: 12, width: '100%', alignItems: 'center' },
-  modalSecondaryText: { color: '#555', fontSize: 14 },
+  modalSecondaryText: { color: cores.textoFraco, fontSize: 14 },
 
   // Select difficulty
   selectContent: { padding: 24, paddingTop: 8 },
-  selectTitle: { color: '#fff', fontSize: 26, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
-  selectSub: { color: '#555', fontSize: 13, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  selectTitle: { color: cores.texto, fontSize: 26, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
+  selectSub: { color: cores.textoFraco, fontSize: 13, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
   diffBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: '#12122a', borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1.5,
+    backgroundColor: cores.superficie, borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1.5,
   },
   diffDot: { width: 12, height: 12, borderRadius: 6, flexShrink: 0 },
-  diffName: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 2 },
-  diffDesc: { color: '#555', fontSize: 12 },
+  diffName: { color: cores.texto, fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  diffDesc: { color: cores.textoFraco, fontSize: 12 },
   kbHint: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 16,
-    backgroundColor: '#12122a', borderRadius: 12, padding: 12,
+    backgroundColor: cores.superficie, borderRadius: 12, padding: 12,
   },
-  kbHintText: { color: '#555', fontSize: 12, flex: 1, lineHeight: 18 },
+  kbHintText: { color: cores.textoFraco, fontSize: 12, flex: 1, lineHeight: 18 },
 
   // Resume
   resumeWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   resumeCard: {
-    width: '100%', maxWidth: 340, backgroundColor: '#12122a',
+    width: '100%', maxWidth: 340, backgroundColor: cores.superficie,
     borderRadius: 22, padding: 28, alignItems: 'center',
-    borderWidth: 1, borderColor: '#2a2a44',
+    borderWidth: 1, borderColor: cores.borda,
   },
-  resumeTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginTop: 14, marginBottom: 14 },
-  resumeTime: { color: '#888', fontSize: 16, marginBottom: 10 },
+  resumeTitle: { color: cores.texto, fontSize: 22, fontWeight: 'bold', marginTop: 14, marginBottom: 14 },
+  resumeTime: { color: cores.textoFraco, fontSize: 16, marginBottom: 10 },
   resumeLivesRow: { flexDirection: 'row', gap: 8, marginBottom: 28 },
   resumeBtn: { flexDirection: 'row', borderRadius: 14, paddingVertical: 15, alignItems: 'center', gap: 8, width: '100%', justifyContent: 'center', marginBottom: 10 },
-  resumeBtnText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
+  resumeBtnText: { color: cores.sobreAcento, fontWeight: 'bold', fontSize: 16 },
   resumeNewBtn: { paddingVertical: 12 },
-  resumeNewText: { color: '#555', fontSize: 14 },
+  resumeNewText: { color: cores.textoFraco, fontSize: 14 },
 
   // Theme selector
   themeSheet: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: '#12122a', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    backgroundColor: cores.superficie, borderTopLeftRadius: 24, borderTopRightRadius: 24,
     padding: 20, paddingBottom: 32,
   },
-  themeHandle: { width: 40, height: 4, backgroundColor: '#333', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
-  themeSheetTitle: { color: '#fff', fontSize: 17, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
+  themeHandle: { width: 40, height: 4, backgroundColor: cores.borda, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  themeSheetTitle: { color: cores.texto, fontSize: 17, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
   themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' },
-  themeCard: { alignItems: 'center', width: 90, borderRadius: 12, padding: 10, backgroundColor: '#0c0c1e', borderWidth: 1.5, borderColor: '#2a2a3a' },
+  themeCard: { alignItems: 'center', width: 90, borderRadius: 12, padding: 10, backgroundColor: cores.superficieAlt, borderWidth: 1.5, borderColor: cores.borda },
   themePreview: { width: 64, height: 64, borderRadius: 8, overflow: 'hidden', marginBottom: 6 },
   themePreviewInner: { flex: 1, flexDirection: 'row', flexWrap: 'wrap' },
   themePreviewCell: { width: '25%', height: '25%', alignItems: 'center', justifyContent: 'center' },

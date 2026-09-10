@@ -154,21 +154,21 @@ export default function Conteudos() {
     return acc;
   }, {} as Record<string, Conteudo[]>);
 
-  if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View>;
+  if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={cores.dourado} /></View>;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="folder-open" size={28} color="#4169E1" />
+        <Ionicons name="folder-open" size={28} color={cores.azul} />
         <Text style={styles.title}>Arquivos & Links</Text>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }} tintColor="#FFD700" />}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }} tintColor={cores.dourado} />}>
         
         {novos.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="flash" size={24} color="#FFD700" />
+              <Ionicons name="flash" size={24} color={cores.dourado} />
               <Text style={styles.sectionTitle}>Novos Conteúdos</Text>
             </View>
             <Text style={styles.sectionSubtitle}>Acesse para concluir e organizar.</Text>
@@ -176,14 +176,14 @@ export default function Conteudos() {
             {novos.map((item) => (
               <TouchableOpacity key={item.id} style={[styles.card, styles.cardNovo]} onPress={() => item.tipo === 'LINK' ? abrirLink(item) : abrirMaterial(item)}>
                 <View style={styles.badgeNovo}><Text style={styles.badgeNovoText}>NOVO</Text></View>
-                <View style={[styles.cardIcon, { backgroundColor: item.tipo === 'LINK' ? '#32CD3220' : '#FFD70020' }]}>
-                  <Ionicons name={item.tipo === 'LINK' ? 'link' : 'document'} size={24} color={item.tipo === 'LINK' ? '#32CD32' : '#FFD700'} />
+                <View style={[styles.cardIcon, { backgroundColor: item.tipo === 'LINK' ? cores.sucesso + '20' : cores.dourado + '20' }]}>
+                  <Ionicons name={item.tipo === 'LINK' ? 'link' : 'document'} size={24} color={item.tipo === 'LINK' ? cores.sucesso : cores.dourado} />
                 </View>
                 <View style={styles.cardContent}>
                   <Text style={styles.cardTitle}>{item.titulo}</Text>
                   <Text style={styles.cardDescription} numberOfLines={2}>{item.descricao || (item.tipo === 'LINK' ? item.urlVideo : 'Toque para baixar')}</Text>
                 </View>
-                <Ionicons name="arrow-forward-circle" size={28} color="#FFD700" />
+                <Ionicons name="arrow-forward-circle" size={28} color={cores.dourado} />
               </TouchableOpacity>
             ))}
           </View>
@@ -192,24 +192,24 @@ export default function Conteudos() {
         {Object.keys(pastasAgrupadas).length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="library" size={24} color="#888" />
-              <Text style={[styles.sectionTitle, { color: '#888' }]}>Seu Arquivo</Text>
+              <Ionicons name="library" size={24} color={cores.textoFraco} />
+              <Text style={[styles.sectionTitle, { color: cores.textoFraco }]}>Seu Arquivo</Text>
             </View>
             
             {Object.entries(pastasAgrupadas).sort().map(([nomePasta, itens]) => (
               <View key={nomePasta} style={styles.pastaContainer}>
                 <View style={styles.pastaHeader}>
-                  <Ionicons name="folder" size={20} color="#4169E1" />
+                  <Ionicons name="folder" size={20} color={cores.azul} />
                   <Text style={styles.pastaTitle}>{nomePasta}</Text>
                 </View>
                 
                 {itens.map((item) => (
                   <TouchableOpacity key={item.id} style={styles.cardPastas} onPress={() => item.tipo === 'LINK' ? abrirLink(item) : abrirMaterial(item)}>
-                    <Ionicons name={item.tipo === 'LINK' ? 'link' : 'document-text'} size={20} color="#666" style={{marginRight: 12}} />
+                    <Ionicons name={item.tipo === 'LINK' ? 'link' : 'document-text'} size={20} color={cores.textoFraco} style={{marginRight: 12}} />
                     <View style={{flex: 1}}>
                       <Text style={styles.cardPastasTitle}>{item.titulo}</Text>
                     </View>
-                    <Ionicons name="checkmark-circle" size={20} color="#32CD32" />
+                    <Ionicons name="checkmark-circle" size={20} color={cores.sucesso} />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -219,7 +219,7 @@ export default function Conteudos() {
 
         {conteudos.length === 0 && (
           <View style={styles.emptyState}>
-            <Ionicons name="folder-open-outline" size={48} color="#666" />
+            <Ionicons name="folder-open-outline" size={48} color={cores.textoFraco} />
             <Text style={styles.emptyText}>Nenhum material postado ainda.</Text>
           </View>
         )}
@@ -227,7 +227,7 @@ export default function Conteudos() {
 
       {toast.visible && (
         <View style={styles.toastContainer}>
-          <Ionicons name="checkmark-circle" size={28} color="#32CD32" />
+          <Ionicons name="checkmark-circle" size={28} color={cores.sucesso} />
           <View>
             <Text style={styles.toastTitle}>Sucesso!</Text>
             <Text style={styles.toastText}>{toast.msg}</Text>
@@ -241,7 +241,7 @@ export default function Conteudos() {
 const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   container: { flex: 1, backgroundColor: cores.fundo },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a2e' },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12, borderBottomWidth: 1, borderBottomColor: cores.superficie },
   title: { fontSize: 22, fontWeight: 'bold', color: cores.texto },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
@@ -251,24 +251,24 @@ const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   sectionSubtitle: { color: cores.textoFraco, fontSize: 12, marginTop: 4, marginBottom: 12 },
   
   card: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 16, padding: 12, marginBottom: 12, overflow: 'hidden' },
-  cardNovo: { borderColor: '#FFD70050', borderWidth: 1 },
-  badgeNovo: { position: 'absolute', top: 0, right: 0, backgroundColor: '#FFD700', paddingHorizontal: 10, paddingVertical: 2, borderBottomLeftRadius: 12 },
-  badgeNovoText: { fontSize: 9, fontWeight: 'bold', color: '#000' },
+  cardNovo: { borderColor: cores.dourado + '50', borderWidth: 1 },
+  badgeNovo: { position: 'absolute', top: 0, right: 0, backgroundColor: cores.dourado, paddingHorizontal: 10, paddingVertical: 2, borderBottomLeftRadius: 12 },
+  badgeNovoText: { fontSize: 9, fontWeight: 'bold', color: cores.sobreAcento },
   cardIcon: { width: 50, height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   cardContent: { flex: 1, marginLeft: 12, marginRight: 10 },
   cardTitle: { color: cores.texto, fontSize: 16, fontWeight: 'bold' },
   cardDescription: { color: cores.textoFraco, fontSize: 12, marginTop: 2 },
   
-  pastaContainer: { backgroundColor: '#151520', borderRadius: 16, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#222' },
-  pastaHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#222' },
-  pastaTitle: { color: '#4169E1', fontSize: 15, fontWeight: 'bold', textTransform: 'uppercase' },
+  pastaContainer: { backgroundColor: cores.superficieAlt, borderRadius: 16, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: cores.superficieAlt },
+  pastaHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: cores.superficieAlt },
+  pastaTitle: { color: cores.azul, fontSize: 15, fontWeight: 'bold', textTransform: 'uppercase' },
   cardPastas: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  cardPastasTitle: { color: '#bbb', fontSize: 14 },
+  cardPastasTitle: { color: cores.textoFraco, fontSize: 14 },
   
   emptyState: { alignItems: 'center', padding: 40 },
   emptyText: { color: cores.textoFraco, fontSize: 14, marginTop: 16 },
 
-  toastContainer: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: cores.superficie, borderColor: '#32CD32', borderWidth: 1, padding: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', elevation: 5, gap: 12 },
+  toastContainer: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: cores.superficie, borderColor: cores.sucesso, borderWidth: 1, padding: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', elevation: 5, gap: 12 },
   toastTitle: { color: cores.texto, fontWeight: 'bold', fontSize: 16 },
-  toastText: { color: '#aaa', fontSize: 13, marginTop: 2 }
+  toastText: { color: cores.textoFraco, fontSize: 13, marginTop: 2 }
 });
