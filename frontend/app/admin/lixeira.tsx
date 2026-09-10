@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 
 interface TrashItem {
   id: string;
@@ -25,6 +26,8 @@ interface TrashItem {
 }
 
 export default function Lixeira() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const [items, setItems] = useState<TrashItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,19 +140,19 @@ export default function Lixeira() {
 
   const getColor = (item: TrashItem) => {
     if (item.tipo === 'EXERCICIO') {
-      return '#FFD700';
+      return cores.dourado;
     }
     if (item.subtipo === 'VIDEO') {
-      return '#32CD32';
+      return cores.sucesso;
     }
-    return '#4169E1';
+    return cores.azul;
   };
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#E74C3C" />
+          <ActivityIndicator size="large" color={cores.erro} />
         </View>
       </SafeAreaView>
     );
@@ -160,7 +163,7 @@ export default function Lixeira() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+          <Ionicons name="arrow-back" size={24} color={cores.texto} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Lixeira</Text>
         <TouchableOpacity
@@ -168,13 +171,13 @@ export default function Lixeira() {
           onPress={handleLimparExpirados}
           disabled={items.length === 0}
         >
-          <Ionicons name="trash-bin" size={20} color={items.length > 0 ? '#E74C3C' : '#666'} />
+          <Ionicons name="trash-bin" size={20} color={items.length > 0 ? cores.erro : cores.textoFraco} />
         </TouchableOpacity>
       </View>
 
       {/* Info Banner */}
       <View style={styles.infoBanner}>
-        <Ionicons name="information-circle" size={20} color="#FFD700" />
+        <Ionicons name="information-circle" size={20} color={cores.dourado} />
         <Text style={styles.infoText}>
           Itens na lixeira são excluídos permanentemente após 7 dias
         </Text>
@@ -184,12 +187,12 @@ export default function Lixeira() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E74C3C" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={cores.erro} />
         }
       >
         {items.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="trash-outline" size={64} color="#444" />
+            <Ionicons name="trash-outline" size={64} color={cores.borda} />
             <Text style={styles.emptyTitle}>Lixeira vazia</Text>
             <Text style={styles.emptySubtitle}>
               Itens excluídos aparecerão aqui
@@ -212,7 +215,7 @@ export default function Lixeira() {
                     {item.tipo === 'CONTEUDO' ? 'Conteúdo' : 'Exercício'} • {item.subtipo || 'N/A'}
                   </Text>
                   <View style={styles.itemDateRow}>
-                    <Ionicons name="time-outline" size={12} color="#888" />
+                    <Ionicons name="time-outline" size={12} color={cores.textoFraco} />
                     <Text style={styles.itemDate}>
                       Excluído: {formatDate(item.deleted_at)}
                     </Text>
@@ -224,7 +227,7 @@ export default function Lixeira() {
                     <Ionicons 
                       name={item.dias_restantes <= 2 ? 'warning' : 'timer-outline'} 
                       size={14} 
-                      color={item.dias_restantes <= 2 ? '#E74C3C' : '#FFD700'} 
+                      color={item.dias_restantes <= 2 ? cores.erro : cores.dourado} 
                     />
                     <Text style={[
                       styles.daysRemainingText,
@@ -237,20 +240,20 @@ export default function Lixeira() {
 
                 <View style={styles.itemActions}>
                   {actionLoading === item.id ? (
-                    <ActivityIndicator size="small" color="#FFD700" />
+                    <ActivityIndicator size="small" color={cores.dourado} />
                   ) : (
                     <>
                       <TouchableOpacity
                         style={styles.restoreButton}
                         onPress={() => showConfirmation('restore', item)}
                       >
-                        <Ionicons name="refresh" size={20} color="#32CD32" />
+                        <Ionicons name="refresh" size={20} color={cores.sucesso} />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.deleteButton}
                         onPress={() => showConfirmation('delete', item)}
                       >
-                        <Ionicons name="close-circle" size={20} color="#E74C3C" />
+                        <Ionicons name="close-circle" size={20} color={cores.erro} />
                       </TouchableOpacity>
                     </>
                   )}
@@ -272,12 +275,12 @@ export default function Lixeira() {
           <View style={styles.modalContent}>
             <View style={[
               styles.modalIcon,
-              { backgroundColor: confirmModal.action === 'restore' ? '#32CD3230' : '#E74C3C30' }
+              { backgroundColor: confirmModal.action === 'restore' ? cores.sucesso + '30' : cores.erro + '30' }
             ]}>
               <Ionicons
                 name={confirmModal.action === 'restore' ? 'refresh' : 'trash'}
                 size={32}
-                color={confirmModal.action === 'restore' ? '#32CD32' : '#E74C3C'}
+                color={confirmModal.action === 'restore' ? cores.sucesso : cores.erro}
               />
             </View>
             
@@ -302,7 +305,7 @@ export default function Lixeira() {
               <TouchableOpacity
                 style={[
                   styles.modalConfirmButton,
-                  { backgroundColor: confirmModal.action === 'restore' ? '#32CD32' : '#E74C3C' }
+                  { backgroundColor: confirmModal.action === 'restore' ? cores.sucesso : cores.erro }
                 ]}
                 onPress={handleConfirm}
               >
@@ -318,10 +321,10 @@ export default function Lixeira() {
   );
 }
 
-const styles = StyleSheet.create({
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: cores.fundo,
   },
   loadingContainer: {
     flex: 1,
@@ -335,7 +338,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1a1a2e',
+    borderBottomColor: cores.superficie,
   },
   backButton: {
     padding: 8,
@@ -343,7 +346,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
   },
   cleanButton: {
     padding: 8,
@@ -351,14 +354,14 @@ const styles = StyleSheet.create({
   infoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFD70015',
+    backgroundColor: cores.dourado + '15',
     paddingHorizontal: 16,
     paddingVertical: 10,
     gap: 8,
   },
   infoText: {
     flex: 1,
-    color: '#FFD700',
+    color: cores.dourado,
     fontSize: 13,
   },
   scrollView: {
@@ -376,23 +379,23 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
     marginTop: 16,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: '#888',
+    color: cores.textoFraco,
     marginTop: 8,
   },
   itemCount: {
-    color: '#888',
+    color: cores.textoFraco,
     fontSize: 14,
     marginBottom: 16,
   },
   itemCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
@@ -409,13 +412,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   itemTitle: {
-    color: '#fff',
+    color: cores.texto,
     fontSize: 15,
     fontWeight: '600',
     marginBottom: 4,
   },
   itemMeta: {
-    color: '#888',
+    color: cores.textoFraco,
     fontSize: 12,
     marginBottom: 4,
   },
@@ -426,13 +429,13 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   itemDate: {
-    color: '#666',
+    color: cores.textoFraco,
     fontSize: 11,
   },
   daysRemaining: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFD70020',
+    backgroundColor: cores.dourado + '20',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
@@ -440,15 +443,15 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   daysRemainingUrgent: {
-    backgroundColor: '#E74C3C20',
+    backgroundColor: cores.erro + '20',
   },
   daysRemainingText: {
-    color: '#FFD700',
+    color: cores.dourado,
     fontSize: 11,
     fontWeight: '600',
   },
   daysRemainingTextUrgent: {
-    color: '#E74C3C',
+    color: cores.erro,
   },
   itemActions: {
     flexDirection: 'column',
@@ -457,12 +460,12 @@ const styles = StyleSheet.create({
   },
   restoreButton: {
     padding: 8,
-    backgroundColor: '#32CD3220',
+    backgroundColor: cores.sucesso + '20',
     borderRadius: 8,
   },
   deleteButton: {
     padding: 8,
-    backgroundColor: '#E74C3C20',
+    backgroundColor: cores.erro + '20',
     borderRadius: 8,
   },
   // Modal styles
@@ -474,7 +477,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   modalContent: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 20,
     padding: 24,
     width: '100%',
@@ -492,13 +495,13 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
     marginBottom: 12,
     textAlign: 'center',
   },
   modalMessage: {
     fontSize: 14,
-    color: '#888',
+    color: cores.textoFraco,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
@@ -511,12 +514,12 @@ const styles = StyleSheet.create({
   modalCancelButton: {
     flex: 1,
     paddingVertical: 14,
-    backgroundColor: '#333',
+    backgroundColor: cores.borda,
     borderRadius: 12,
     alignItems: 'center',
   },
   modalCancelText: {
-    color: '#fff',
+    color: cores.texto,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -527,7 +530,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalConfirmText: {
-    color: '#fff',
+    color: cores.texto,
     fontSize: 15,
     fontWeight: '600',
   },

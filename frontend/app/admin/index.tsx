@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator, Alert, Modal, TextInput, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
+import { useTema, CoresTema, corParaTema } from '../../src/context/ThemeContext';
 
 export default function AdminHome() {
+  const { cores, estaClaro } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const { user, logout, isPreviewMode, exitPreviewMode } = useAuth();
   const router = useRouter();
   const [stats, setStats] = useState<any>(null);
@@ -104,31 +107,31 @@ export default function AdminHome() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View>
+        <View style={styles.loadingContainer}><ActivityIndicator size="large" color={cores.dourado} /></View>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={cores.dourado} />}>
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Painel Administrativo</Text>
-            {isPreviewMode && (<View style={styles.previewBadge}><Ionicons name="eye" size={14} color="#FFD700" /><Text style={styles.previewText}>Modo Visualização</Text></View>)}
+            {isPreviewMode && (<View style={styles.previewBadge}><Ionicons name="eye" size={14} color={cores.dourado} /><Text style={styles.previewText}>Modo Visualização</Text></View>)}
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}><Ionicons name="log-out-outline" size={24} color="#888" /></TouchableOpacity>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}><Ionicons name="log-out-outline" size={24} color={cores.textoFraco} /></TouchableOpacity>
         </View>
 
         <View style={styles.statsGrid}>
-          <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/usuarios')}><Ionicons name="people" size={28} color="#4169E1" /><Text style={styles.statValue}>{stats?.totalUsuarios || 0}</Text><Text style={styles.statLabel}>Usuários</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/conteudos')}><Ionicons name="play-circle" size={28} color="#32CD32" /><Text style={styles.statValue}>{stats?.totalVideos || 0}</Text><Text style={styles.statLabel}>Vídeos</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/exercicios')}><Ionicons name="document-text" size={28} color="#FFD700" /><Text style={styles.statValue}>{stats?.totalExercicios || 0}</Text><Text style={styles.statLabel}>Exercícios</Text></TouchableOpacity>
-          <View style={styles.statCard}><Ionicons name="checkmark-circle" size={28} color="#9B59B6" /><Text style={styles.statValue}>{stats?.totalSubmissoes || 0}</Text><Text style={styles.statLabel}>Submissões</Text></View>
+          <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/usuarios')}><Ionicons name="people" size={28} color={cores.azul} /><Text style={styles.statValue}>{stats?.totalUsuarios || 0}</Text><Text style={styles.statLabel}>Usuários</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/conteudos')}><Ionicons name="play-circle" size={28} color={cores.sucesso} /><Text style={styles.statValue}>{stats?.totalVideos || 0}</Text><Text style={styles.statLabel}>Vídeos</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.statCard} onPress={() => navigateTo('/admin/exercicios')}><Ionicons name="document-text" size={28} color={cores.dourado} /><Text style={styles.statValue}>{stats?.totalExercicios || 0}</Text><Text style={styles.statLabel}>Exercícios</Text></TouchableOpacity>
+          <View style={styles.statCard}><Ionicons name="checkmark-circle" size={28} color={cores.roxo} /><Text style={styles.statValue}>{stats?.totalSubmissoes || 0}</Text><Text style={styles.statLabel}>Submissões</Text></View>
         </View>
 
         <View style={styles.averageCard}>
-          <Ionicons name="analytics" size={32} color="#FFD700" />
+          <Ionicons name="analytics" size={32} color={cores.dourado} />
           <View style={styles.averageInfo}>
             <Text style={styles.averageLabel}>Média Geral das Notas</Text>
             <Text style={styles.averageValue}>{stats?.mediaGeral?.toFixed(1) || '0.0'}</Text>
@@ -138,51 +141,51 @@ export default function AdminHome() {
         <Text style={styles.sectionTitle}>Gerenciamento</Text>
         
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/usuarios')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#4169E130' }]}><Ionicons name="people" size={24} color="#4169E1" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.azul + '30' }]}><Ionicons name="people" size={24} color={cores.azul} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Usuários</Text><Text style={styles.menuDescription}>Gerenciar alunos e ocultar contas</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/moderacao_chat')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#E74C3C30' }]}><Ionicons name="shield-checkmark" size={24} color="#E74C3C" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.erro + '30' }]}><Ionicons name="shield-checkmark" size={24} color={cores.erro} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Moderação de Chat</Text><Text style={styles.menuDescription}>Visualizar mensagens e bloquear conversas</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/conteudos')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#32CD3230' }]}><Ionicons name="play-circle" size={24} color="#32CD32" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.sucesso + '30' }]}><Ionicons name="play-circle" size={24} color={cores.sucesso} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Conteúdos</Text><Text style={styles.menuDescription}>Gerenciar vídeos e materiais</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/exercicios')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#FFD70030' }]}><Ionicons name="document-text" size={24} color="#FFD700" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.dourado + '30' }]}><Ionicons name="document-text" size={24} color={cores.dourado} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Exercícios</Text><Text style={styles.menuDescription}>Criar e gerenciar atividades</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/gerenciar-jogos')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#FF69B430' }]}><Ionicons name="game-controller" size={24} color="#FF69B4" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.rosa + '30' }]}><Ionicons name="game-controller" size={24} color={cores.rosa} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Jogos Personalizados</Text><Text style={styles.menuDescription}>Criar missões e desafios específicos</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => setModalPremiacaoVisible(true)}>
-          <View style={[styles.menuIcon, { backgroundColor: '#FFD70030' }]}><Ionicons name="trophy" size={24} color="#FFD700" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.dourado + '30' }]}><Ionicons name="trophy" size={24} color={cores.dourado} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Premiações de Rankings</Text><Text style={styles.menuDescription}>Dar pontos a quem estiver no Hall da Fama</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/relatorios')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#9B59B630' }]}><Ionicons name="bar-chart" size={24} color="#9B59B6" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.roxo + '30' }]}><Ionicons name="bar-chart" size={24} color={cores.roxo} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Relatórios</Text><Text style={styles.menuDescription}>Análises e habilidades BNCC</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/equipes')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#FF8C0030' }]}><Ionicons name="color-palette" size={24} color="#FF8C00" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.laranja + '30' }]}><Ionicons name="color-palette" size={24} color={cores.laranja} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Equipes</Text><Text style={styles.menuDescription}>Alterar nomes e cores padrão</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/sudoku')}>
@@ -193,53 +196,53 @@ export default function AdminHome() {
             <Text style={styles.menuTitle}>Sudoku (beta)</Text>
             <Text style={styles.menuDescription}>Testar o jogo de Sudoku</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color="#555" />
+          <Ionicons name="chevron-forward" size={20} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/reino')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#7B68EE30' }]}><Ionicons name="flag" size={24} color="#7B68EE" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.roxo + '30' }]}><Ionicons name="flag" size={24} color={cores.roxo} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Reino (beta)</Text><Text style={styles.menuDescription}>Construir e testar o reino das equipes</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/config_jogo')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#FFD70030' }]}><Ionicons name="options" size={24} color="#FFD700" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.dourado + '30' }]}><Ionicons name="options" size={24} color={cores.dourado} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Painel de Partida (beta)</Text><Text style={styles.menuDescription}>Ajustar powerups e inimigos do Equações Espaciais ao vivo</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/tabuada')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#FFB30030' }]}><Ionicons name="trail-sign" size={24} color="#FFB300" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.ambar + '30' }]}><Ionicons name="trail-sign" size={24} color={cores.ambar} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Trilha da Tabuada (beta)</Text><Text style={styles.menuDescription}>Testar o treino de tabuada com repetição espaçada</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/tabuada_relatorio')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#7FD4FF30' }]}><Ionicons name="analytics" size={24} color="#7FD4FF" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.ciano + '30' }]}><Ionicons name="analytics" size={24} color={cores.ciano} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Relatório da Tabuada</Text><Text style={styles.menuDescription}>Progresso dos alunos no método Leitner, por turma</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/cartela_missoes')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#FFB30030' }]}><Ionicons name="star" size={24} color="#FFB300" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.ambar + '30' }]}><Ionicons name="star" size={24} color={cores.ambar} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Cartela de Missões</Text><Text style={styles.menuDescription}>Dar estrelas aos alunos por missões cumpridas</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/cor-admin')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#00CED130' }]}><Ionicons name="color-wand" size={24} color="#00CED1" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.ciano + '30' }]}><Ionicons name="color-wand" size={24} color={cores.ciano} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Cor da Prévia</Text><Text style={styles.menuDescription}>Escolher sua cor para "Ver como aluno"</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/lixeira')}>
-          <View style={[styles.menuIcon, { backgroundColor: '#E74C3C30' }]}><Ionicons name="trash" size={24} color="#E74C3C" /></View>
+          <View style={[styles.menuIcon, { backgroundColor: cores.erro + '30' }]}><Ionicons name="trash" size={24} color={cores.erro} /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Lixeira</Text><Text style={styles.menuDescription}>Itens excluídos (7 dias para restaurar)</Text></View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
+          <Ionicons name="chevron-forward" size={24} color={cores.textoFraco} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.studentViewButton} onPress={() => router.replace('/(tabs)')}>
-          <Ionicons name="school" size={20} color="#FFD700" />
+          <Ionicons name="school" size={20} color={cores.dourado} />
           <Text style={styles.studentViewText}>Ver como aluno</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -249,7 +252,7 @@ export default function AdminHome() {
           <View style={styles.modalContent}>
             
             <View style={styles.modalHeader}>
-               <Ionicons name="trophy" size={32} color="#FFD700" />
+               <Ionicons name="trophy" size={32} color={cores.dourado} />
                <View style={{ marginLeft: 12 }}>
                  <Text style={styles.modalTitle}>Gerenciador de Premiações</Text>
                  <Text style={styles.modalSubtitle}>Configure os prêmios dos Rankings</Text>
@@ -288,13 +291,13 @@ export default function AdminHome() {
                 <Text style={styles.sectionDescModal}>Envie os pontos para os jogadores do ranking {modoPremiacao === 'ARCADE' ? 'do Matemática Turbo' : 'da nave Blaster'}.</Text>
                 
                 <View style={styles.top3Box}>
-                  <Text style={styles.top3Item}><Text style={{color:'#FFD700'}}>🥇 1º {topAtual[0]?.nome || 'N/A'}</Text> • {topAtual[0]?.pontosMaximos || 0} pts (recorde)</Text>
-                  <Text style={styles.top3Item}><Text style={{color:'#C0C0C0'}}>🥈 2º {topAtual[1]?.nome || 'N/A'}</Text> • {topAtual[1]?.pontosMaximos || 0} pts (recorde)</Text>
-                  <Text style={styles.top3Item}><Text style={{color:'#CD7F32'}}>🥉 3º {topAtual[2]?.nome || 'N/A'}</Text> • {topAtual[2]?.pontosMaximos || 0} pts (recorde)</Text>
+                  <Text style={styles.top3Item}><Text style={{color:cores.dourado}}>🥇 1º {topAtual[0]?.nome || 'N/A'}</Text> • {topAtual[0]?.pontosMaximos || 0} pts (recorde)</Text>
+                  <Text style={styles.top3Item}><Text style={{color: corParaTema('#C0C0C0', estaClaro, 0.45)}}>🥈 2º {topAtual[1]?.nome || 'N/A'}</Text> • {topAtual[1]?.pontosMaximos || 0} pts (recorde)</Text>
+                  <Text style={styles.top3Item}><Text style={{color: corParaTema('#CD7F32', estaClaro, 0.45)}}>🥉 3º {topAtual[2]?.nome || 'N/A'}</Text> • {topAtual[2]?.pontosMaximos || 0} pts (recorde)</Text>
                 </View>
                 
                 <TouchableOpacity style={styles.btnPremiar} onPress={handlePremiarManualmente}>
-                  <Ionicons name="send" size={18} color="#000" />
+                  <Ionicons name="send" size={18} color={cores.sobreAcento} />
                   <Text style={styles.btnPremiarText}>ENVIAR PONTOS AGORA</Text>
                 </TouchableOpacity>
               </View>
@@ -305,7 +308,7 @@ export default function AdminHome() {
                  
                  <View style={styles.switchRow}>
                    <Text style={styles.switchLabel}>Ativar Robô Automático?</Text>
-                   <Switch value={isAutoAtivo} onValueChange={setIsAutoAtivo} trackColor={{ false: '#333', true: '#FFD700' }} thumbColor={isAutoAtivo ? '#fff' : '#888'} />
+                   <Switch value={isAutoAtivo} onValueChange={setIsAutoAtivo} trackColor={{ false: cores.borda, true: cores.dourado }} thumbColor={isAutoAtivo ? '#fff' : cores.textoFraco} />
                  </View>
 
                  {isAutoAtivo && (
@@ -325,7 +328,7 @@ export default function AdminHome() {
                          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                            {['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map(dia => (
                              <TouchableOpacity key={dia} style={[styles.chipDia, diaSemana === dia && styles.chipDiaAtivo]} onPress={() => setDiaSemana(dia)}>
-                               <Text style={[styles.txtDia, diaSemana === dia && {color: '#000'}]}>{dia}</Text>
+                               <Text style={[styles.txtDia, diaSemana === dia && {color: cores.sobreAcento}]}>{dia}</Text>
                              </TouchableOpacity>
                            ))}
                          </ScrollView>
@@ -340,15 +343,15 @@ export default function AdminHome() {
                  )}
                  
                  <TouchableOpacity style={styles.btnSalvarAuto} onPress={handleSalvarAuto}>
-                    <Ionicons name="save-outline" size={18} color="#FFD700" />
+                    <Ionicons name="save-outline" size={18} color={cores.dourado} />
                     <Text style={styles.btnSalvarAutoText}>SALVAR CONFIGURAÇÃO</Text>
                  </TouchableOpacity>
               </View>
 
-              <View style={[styles.modalSection, { backgroundColor: 'rgba(231, 76, 60, 0.1)', borderColor: '#E74C3C50', borderWidth: 1 }]}>
-                 <Text style={[styles.sectionLabelModal, { color: '#E74C3C' }]}>ZONA DE PERIGO</Text>
+              <View style={[styles.modalSection, { backgroundColor: 'rgba(231, 76, 60, 0.1)', borderColor: cores.erro + '50', borderWidth: 1 }]}>
+                 <Text style={[styles.sectionLabelModal, { color: cores.erro }]}>ZONA DE PERIGO</Text>
                  <Text style={styles.sectionDescModal}>Zerar as pontuações e recordes de todos os jogadores.</Text>
-                 <TouchableOpacity style={[styles.btnPremiar, { backgroundColor: '#E74C3C' }]} onPress={handleZerarRanking}>
+                 <TouchableOpacity style={[styles.btnPremiar, { backgroundColor: cores.erro }]} onPress={handleZerarRanking}>
                     <Ionicons name="trash-outline" size={18} color="#FFF" />
                     <Text style={[styles.btnPremiarText, { color: '#FFF' }]}>ZERAR TODOS OS JOGOS</Text>
                  </TouchableOpacity>
@@ -367,71 +370,71 @@ export default function AdminHome() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 },
-  greeting: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
-  previewBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD70030', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 8, gap: 4 },
-  previewText: { color: '#FFD700', fontSize: 12, fontWeight: '600' },
+  greeting: { fontSize: 24, fontWeight: 'bold', color: cores.texto },
+  previewBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.dourado + '30', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginTop: 8, gap: 4 },
+  previewText: { color: cores.dourado, fontSize: 12, fontWeight: '600' },
   logoutButton: { padding: 8 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
-  statCard: { width: '47%', backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, alignItems: 'center' },
-  statValue: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginTop: 8 },
-  statLabel: { fontSize: 12, color: '#888', marginTop: 4 },
-  averageCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, marginBottom: 24, gap: 16 },
+  statCard: { width: '47%', backgroundColor: cores.superficie, borderRadius: 16, padding: 16, alignItems: 'center' },
+  statValue: { fontSize: 28, fontWeight: 'bold', color: cores.texto, marginTop: 8 },
+  statLabel: { fontSize: 12, color: cores.textoFraco, marginTop: 4 },
+  averageCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 16, padding: 20, marginBottom: 24, gap: 16 },
   averageInfo: { flex: 1 },
-  averageLabel: { color: '#888', fontSize: 14 },
-  averageValue: { color: '#FFD700', fontSize: 32, fontWeight: 'bold' },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 16 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, marginBottom: 12 },
+  averageLabel: { color: cores.textoFraco, fontSize: 14 },
+  averageValue: { color: cores.dourado, fontSize: 32, fontWeight: 'bold' },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: cores.texto, marginBottom: 16 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 16, padding: 16, marginBottom: 12 },
   menuIcon: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   menuInfo: { flex: 1 },
-  menuTitle: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  menuDescription: { color: '#888', fontSize: 13, marginTop: 2 },
-  studentViewButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFD70020', borderRadius: 12, paddingVertical: 14, marginTop: 16, gap: 8 },
-  studentViewText: { color: '#FFD700', fontSize: 16, fontWeight: '600' },
+  menuTitle: { color: cores.texto, fontSize: 16, fontWeight: '600' },
+  menuDescription: { color: cores.textoFraco, fontSize: 13, marginTop: 2 },
+  studentViewButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: cores.dourado + '20', borderRadius: 12, paddingVertical: 14, marginTop: 16, gap: 8 },
+  studentViewText: { color: cores.dourado, fontSize: 16, fontWeight: '600' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#1a1a2e', borderRadius: 24, padding: 24, maxHeight: '85%', borderWidth: 1, borderColor: '#FFD70040' },
+  modalContent: { backgroundColor: cores.superficie, borderRadius: 24, padding: 24, maxHeight: '85%', borderWidth: 1, borderColor: cores.dourado + '40' },
   modalHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)', paddingBottom: 15 },
-  modalTitle: { color: '#FFF', fontSize: 20, fontWeight: '900' },
-  modalSubtitle: { color: '#888', fontSize: 14, marginTop: 2 },
+  modalTitle: { color: cores.texto, fontSize: 20, fontWeight: '900' },
+  modalSubtitle: { color: cores.textoFraco, fontSize: 14, marginTop: 2 },
   modalSection: { backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 16, padding: 16, marginBottom: 15 },
-  sectionLabelModal: { color: '#FFF', fontWeight: 'bold', fontSize: 14, letterSpacing: 1, marginBottom: 5 },
-  sectionDescModal: { color: '#888', fontSize: 13, marginBottom: 15 },
+  sectionLabelModal: { color: cores.texto, fontWeight: 'bold', fontSize: 14, letterSpacing: 1, marginBottom: 5 },
+  sectionDescModal: { color: cores.textoFraco, fontSize: 13, marginBottom: 15 },
   
-  inputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 12, paddingHorizontal: 15, paddingVertical: 8, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  inputLabel: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  inputRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 12, paddingHorizontal: 15, paddingVertical: 8, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  inputLabel: { color: cores.texto, fontSize: 16, fontWeight: 'bold' },
   inputWrapper: { flexDirection: 'row', alignItems: 'center' },
-  inputPts: { color: '#FFD700', fontSize: 20, fontWeight: '900', textAlign: 'right', minWidth: 60 },
-  inputPtsSuffix: { color: '#888', fontSize: 14, marginLeft: 5, fontWeight: 'bold' },
+  inputPts: { color: cores.dourado, fontSize: 20, fontWeight: '900', textAlign: 'right', minWidth: 60 },
+  inputPtsSuffix: { color: cores.textoFraco, fontSize: 14, marginLeft: 5, fontWeight: 'bold' },
   
-  top3Box: { backgroundColor: '#0c0c0c', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#333' },
-  top3Item: { color: '#FFF', fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
+  top3Box: { backgroundColor: cores.fundo, padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: cores.borda },
+  top3Item: { color: cores.texto, fontSize: 15, fontWeight: 'bold', marginBottom: 4 },
 
-  btnPremiar: { flexDirection: 'row', backgroundColor: '#FFD700', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  btnPremiarText: { color: '#000', fontWeight: '900', fontSize: 16 },
+  btnPremiar: { flexDirection: 'row', backgroundColor: cores.dourado, padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  btnPremiarText: { color: cores.sobreAcento, fontWeight: '900', fontSize: 16 },
   
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 12, padding: 15, marginBottom: 10 },
-  switchLabel: { color: '#FFF', fontSize: 15, fontWeight: 'bold' },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 12, padding: 15, marginBottom: 10 },
+  switchLabel: { color: cores.texto, fontSize: 15, fontWeight: 'bold' },
   intervaloContainer: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   btnIntervalo: { flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', alignItems: 'center' },
-  btnIntervaloAtivo: { backgroundColor: 'rgba(255, 215, 0, 0.15)', borderColor: '#FFD700' },
-  txtIntervalo: { color: '#888', fontWeight: 'bold' },
-  txtIntervaloAtivo: { color: '#FFD700' },
+  btnIntervaloAtivo: { backgroundColor: 'rgba(255, 215, 0, 0.15)', borderColor: cores.dourado },
+  txtIntervalo: { color: cores.textoFraco, fontWeight: 'bold' },
+  txtIntervaloAtivo: { color: cores.dourado },
   
-  diaRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 12, padding: 12, marginBottom: 10 },
-  diaLabel: { color: '#FFF', fontSize: 14, marginRight: 10 },
-  chipDia: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#333', marginRight: 8 },
-  chipDiaAtivo: { backgroundColor: '#FFD700' },
-  txtDia: { color: '#AAA', fontSize: 13, fontWeight: 'bold' },
-  inputDiaMes: { backgroundColor: '#333', color: '#FFD700', fontSize: 18, fontWeight: 'bold', paddingHorizontal: 15, paddingVertical: 5, borderRadius: 8, minWidth: 50, textAlign: 'center' },
+  diaRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 12, padding: 12, marginBottom: 10 },
+  diaLabel: { color: cores.texto, fontSize: 14, marginRight: 10 },
+  chipDia: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: cores.borda, marginRight: 8 },
+  chipDiaAtivo: { backgroundColor: cores.dourado },
+  txtDia: { color: cores.textoFraco, fontSize: 13, fontWeight: 'bold' },
+  inputDiaMes: { backgroundColor: cores.borda, color: cores.dourado, fontSize: 18, fontWeight: 'bold', paddingHorizontal: 15, paddingVertical: 5, borderRadius: 8, minWidth: 50, textAlign: 'center' },
 
-  btnSalvarAuto: { flexDirection: 'row', borderWidth: 2, borderColor: '#FFD700', padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 5, gap: 8 },
-  btnSalvarAutoText: { color: '#FFD700', fontWeight: '900', fontSize: 15 },
+  btnSalvarAuto: { flexDirection: 'row', borderWidth: 2, borderColor: cores.dourado, padding: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 5, gap: 8 },
+  btnSalvarAutoText: { color: cores.dourado, fontWeight: '900', fontSize: 15 },
   btnFechar: { padding: 15, alignItems: 'center', marginTop: 10 },
-  btnFecharText: { color: '#888', fontWeight: 'bold', fontSize: 16 }
+  btnFecharText: { color: cores.textoFraco, fontWeight: 'bold', fontSize: 16 }
 });

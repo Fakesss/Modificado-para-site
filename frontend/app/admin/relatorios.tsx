@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -6,8 +6,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as api from '../../src/services/api';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 
 export default function Relatorios() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   
@@ -151,12 +154,12 @@ export default function Relatorios() {
       
       <View style={styles.acoesRow}>
           <TouchableOpacity style={styles.acaoBtn} onPress={baixarRelatorioTXT}>
-              <Ionicons name="document-text" size={18} color="#fff" />
+              <Ionicons name="document-text" size={18} color={cores.texto} />
               <Text style={styles.acaoText}>Baixar Relatório (TXT)</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.acaoBtn, {backgroundColor: '#FF450020', borderColor: '#FF4500'}]} onPress={() => setShowClearModal(true)}>
-              <Ionicons name="trash-bin" size={18} color="#FF4500" />
-              <Text style={[styles.acaoText, {color: '#FF4500'}]}>Zerar Dados</Text>
+          <TouchableOpacity style={[styles.acaoBtn, {backgroundColor: cores.laranja + '20', borderColor: cores.laranja}]} onPress={() => setShowClearModal(true)}>
+              <Ionicons name="trash-bin" size={18} color={cores.laranja} />
+              <Text style={[styles.acaoText, {color: cores.laranja}]}>Zerar Dados</Text>
           </TouchableOpacity>
       </View>
     </View>
@@ -175,9 +178,9 @@ export default function Relatorios() {
                   {pctErro > 0 && <View style={[styles.graficoFillErro, { width: `${pctErro}%` }]} />}
               </View>
               <View style={styles.graficoLegendRow}>
-                  <Text style={{color: '#32CD32', fontSize: 11, fontWeight: 'bold'}}>{item.acertos} Acertos</Text>
-                  <Text style={{color: '#888', fontSize: 11}}>{item.total} Total</Text>
-                  <Text style={{color: '#FF4500', fontSize: 11, fontWeight: 'bold'}}>{item.erros} Erros</Text>
+                  <Text style={{color: cores.sucesso, fontSize: 11, fontWeight: 'bold'}}>{item.acertos} Acertos</Text>
+                  <Text style={{color: cores.textoFraco, fontSize: 11}}>{item.total} Total</Text>
+                  <Text style={{color: cores.laranja, fontSize: 11, fontWeight: 'bold'}}>{item.erros} Erros</Text>
               </View>
           </View>
       );
@@ -186,7 +189,7 @@ export default function Relatorios() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color="#fff" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={cores.texto} /></TouchableOpacity>
         <Text style={styles.headerTitle}>Relatórios e Gráficos</Text>
         <View style={{ width: 24 }} />
       </View>
@@ -194,7 +197,7 @@ export default function Relatorios() {
       {renderFiltros()}
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color="#FFD700" /></View>
+        <View style={styles.center}><ActivityIndicator size="large" color={cores.dourado} /></View>
       ) : (
         <ScrollView style={styles.content}>
           <Text style={styles.sectionTitle}>⚠️ Gráfico: Mais Erradas</Text>
@@ -208,11 +211,11 @@ export default function Relatorios() {
             </View>
           )) : <Text style={styles.emptyText}>Nenhum erro registrado neste filtro.</Text>}
 
-          <Text style={[styles.sectionTitle, { marginTop: 24, color: '#32CD32' }]}>🏆 Gráfico: Mais Acertadas</Text>
+          <Text style={[styles.sectionTitle, { marginTop: 24, color: cores.sucesso }]}>🏆 Gráfico: Mais Acertadas</Text>
           {maisAcertadas.length > 0 ? maisAcertadas.map((item, index) => (
             <View key={`ac-${item.habilidade}`} style={styles.card}>
               <View style={styles.cardHeader}>
-                  <View style={[styles.rankBadge, { backgroundColor: '#32CD3220' }]}><Text style={[styles.rankText, { color: '#32CD32' }]}>{index + 1}º</Text></View>
+                  <View style={[styles.rankBadge, { backgroundColor: cores.sucesso + '20' }]}><Text style={[styles.rankText, { color: cores.sucesso }]}>{index + 1}º</Text></View>
                   <Text style={styles.bnccTitle}>{item.habilidade}</Text>
               </View>
               {renderGraficoBarra(item)}
@@ -226,7 +229,7 @@ export default function Relatorios() {
       <Modal visible={showClearModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-                <Ionicons name="warning" size={40} color="#FF4500" style={{marginBottom: 10}} />
+                <Ionicons name="warning" size={40} color={cores.laranja} style={{marginBottom: 10}} />
                 <Text style={styles.modalTitle}>Zerar Relatório</Text>
                 <Text style={styles.modalSub}>Isso ocultará os dados antigos dos gráficos. Os pontos dos alunos serão mantidos.</Text>
                 
@@ -234,7 +237,7 @@ export default function Relatorios() {
                 <View style={styles.modalTabs}>
                     {['TUDO', 'TURMA', 'USUARIO'].map(t => (
                         <TouchableOpacity key={t} style={[styles.modalTab, clearTipo === t && styles.modalTabActive]} onPress={() => {setClearTipo(t); setClearTargetId('');}}>
-                            <Text style={{color: clearTipo === t ? '#000' : '#888', fontSize: 12, fontWeight: 'bold'}}>{t}</Text>
+                            <Text style={{color: clearTipo === t ? cores.sobreAcento : cores.textoFraco, fontSize: 12, fontWeight: 'bold'}}>{t}</Text>
                         </TouchableOpacity>
                     ))}
                 </View>
@@ -261,7 +264,7 @@ export default function Relatorios() {
 
                 <View style={{flexDirection: 'row', gap: 10, marginTop: 20}}>
                     <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setShowClearModal(false)}>
-                        <Text style={{color: '#fff', fontWeight: 'bold'}}>Cancelar</Text>
+                        <Text style={{color: cores.texto, fontWeight: 'bold'}}>Cancelar</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.modalBtnConfirm} onPress={handleLimparDados} disabled={isClearing}>
                         {isClearing ? <ActivityIndicator color="#fff" /> : <Text style={{color: '#fff', fontWeight: 'bold'}}>Confirmar Limpeza</Text>}
@@ -275,49 +278,49 @@ export default function Relatorios() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#151520' },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: cores.superficieAlt },
+  headerTitle: { color: cores.texto, fontSize: 18, fontWeight: 'bold' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
-  filtrosContainer: { padding: 16, backgroundColor: '#151520', borderBottomWidth: 1, borderBottomColor: '#222' },
-  label: { color: '#888', fontSize: 12, textTransform: 'uppercase', marginBottom: 8, marginTop: 4 },
+  filtrosContainer: { padding: 16, backgroundColor: cores.superficieAlt, borderBottomWidth: 1, borderBottomColor: cores.superficieAlt },
+  label: { color: cores.textoFraco, fontSize: 12, textTransform: 'uppercase', marginBottom: 8, marginTop: 4 },
   chipsScroll: { marginBottom: 8, maxHeight: 40 },
-  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: '#333' },
-  chipActive: { backgroundColor: '#FFD700', borderColor: '#FFD700' },
-  chipText: { color: '#aaa', fontWeight: 'bold' },
-  chipTextActive: { color: '#000' },
+  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: cores.borda },
+  chipActive: { backgroundColor: cores.dourado, borderColor: cores.dourado },
+  chipText: { color: cores.textoFraco, fontWeight: 'bold' },
+  chipTextActive: { color: cores.sobreAcento },
   colorDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
   
   acoesRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, gap: 10 },
-  acaoBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a2e', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#333', gap: 8 },
-  acaoText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
+  acaoBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: cores.superficie, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: cores.borda, gap: 8 },
+  acaoText: { color: cores.texto, fontSize: 13, fontWeight: 'bold' },
 
   content: { padding: 16 },
-  sectionTitle: { color: '#FF4500', fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
+  sectionTitle: { color: cores.laranja, fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
   
-  card: { backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, marginBottom: 12 },
+  card: { backgroundColor: cores.superficie, padding: 16, borderRadius: 12, marginBottom: 12 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  rankBadge: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FF450020', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  rankText: { color: '#FF4500', fontWeight: 'bold', fontSize: 14 },
-  bnccTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  rankBadge: { width: 30, height: 30, borderRadius: 15, backgroundColor: cores.laranja + '20', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  rankText: { color: cores.laranja, fontWeight: 'bold', fontSize: 14 },
+  bnccTitle: { color: cores.texto, fontSize: 16, fontWeight: 'bold' },
   
   graficoContainer: { width: '100%' },
-  graficoBarraBackground: { flexDirection: 'row', height: 16, width: '100%', backgroundColor: '#333', borderRadius: 8, overflow: 'hidden', marginBottom: 8 },
-  graficoFillAcerto: { height: '100%', backgroundColor: '#32CD32' },
-  graficoFillErro: { height: '100%', backgroundColor: '#FF4500' },
+  graficoBarraBackground: { flexDirection: 'row', height: 16, width: '100%', backgroundColor: cores.borda, borderRadius: 8, overflow: 'hidden', marginBottom: 8 },
+  graficoFillAcerto: { height: '100%', backgroundColor: cores.sucesso },
+  graficoFillErro: { height: '100%', backgroundColor: cores.laranja },
   graficoLegendRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   
-  emptyText: { color: '#666', fontStyle: 'italic', marginBottom: 20 },
+  emptyText: { color: cores.textoFraco, fontStyle: 'italic', marginBottom: 20 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#151520', width: '100%', borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#333' },
-  modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  modalSub: { color: '#aaa', fontSize: 13, textAlign: 'center', marginBottom: 20 },
-  modalTabs: { flexDirection: 'row', backgroundColor: '#1a1a2e', borderRadius: 8, padding: 4, width: '100%', marginBottom: 15 },
+  modalContent: { backgroundColor: cores.superficieAlt, width: '100%', borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: cores.borda },
+  modalTitle: { color: cores.texto, fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
+  modalSub: { color: cores.textoFraco, fontSize: 13, textAlign: 'center', marginBottom: 20 },
+  modalTabs: { flexDirection: 'row', backgroundColor: cores.superficie, borderRadius: 8, padding: 4, width: '100%', marginBottom: 15 },
   modalTab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 6 },
-  modalTabActive: { backgroundColor: '#FFD700' },
-  modalBtnCancel: { flex: 1, padding: 14, backgroundColor: '#333', borderRadius: 10, alignItems: 'center' },
-  modalBtnConfirm: { flex: 1, padding: 14, backgroundColor: '#FF4500', borderRadius: 10, alignItems: 'center' }
+  modalTabActive: { backgroundColor: cores.dourado },
+  modalBtnCancel: { flex: 1, padding: 14, backgroundColor: cores.borda, borderRadius: 10, alignItems: 'center' },
+  modalBtnConfirm: { flex: 1, padding: 14, backgroundColor: cores.laranja, borderRadius: 10, alignItems: 'center' }
 });

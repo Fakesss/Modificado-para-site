@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Modal, Alert, FlatList, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as api from '../../src/services/api'; 
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 
 interface Questao { id: string; texto: string; resposta: number; }
 interface Missao {
@@ -12,6 +13,8 @@ interface Missao {
 }
 
 export default function GerenciarJogosAdmin() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const [missoes, setMissoes] = useState<Missao[]>([]);
   
@@ -146,16 +149,16 @@ export default function GerenciarJogosAdmin() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#FFD700" />
+          <Ionicons name="arrow-back" size={24} color={cores.dourado} />
         </TouchableOpacity>
         <Text style={styles.title}>Gerenciar Jogos</Text>
       </View>
 
-      {carregando && <ActivityIndicator size="large" color="#FFD700" style={{marginTop: 20}} />}
+      {carregando && <ActivityIndicator size="large" color={cores.dourado} style={{marginTop: 20}} />}
 
       <ScrollView contentContainerStyle={{padding: 16}}>
         <TouchableOpacity style={styles.btnNew} onPress={() => { limparForm(); setModalVisivel(true); }}>
-          <Ionicons name="add-circle" size={24} color="#000" />
+          <Ionicons name="add-circle" size={24} color={cores.sobreAcento} />
           <Text style={styles.btnNewTxt}>CRIAR NOVO JOGO</Text>
         </TouchableOpacity>
 
@@ -165,7 +168,7 @@ export default function GerenciarJogosAdmin() {
             <View key={m.id} style={styles.card}>
               <View style={{flex:1}}>
                 <Text style={styles.cardTitle}>
-                  {m.titulo} <Text style={{color: expirado ? '#FF4444' : '#32CD32', fontSize: 12}}>({expirado ? '🔴 Expirado' : '🟢 Ativo'})</Text>
+                  {m.titulo} <Text style={{color: expirado ? cores.erro : cores.sucesso, fontSize: 12}}>({expirado ? '🔴 Expirado' : '🟢 Ativo'})</Text>
                 </Text>
                 <Text style={styles.cardSub}>{m.alvoNome} • {m.questoes.length} Questões</Text>
                 <View style={styles.badgeRow}>
@@ -176,10 +179,10 @@ export default function GerenciarJogosAdmin() {
               </View>
               <View style={{flexDirection: 'row', gap: 15, alignItems: 'center'}}>
                 <TouchableOpacity onPress={() => abrirReenviar(m)}>
-                  <Ionicons name="refresh-circle" size={28} color="#4169E1" />
+                  <Ionicons name="refresh-circle" size={28} color={cores.azul} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={async ()=>{ await api.deletarJogo(m.id); carregar(); }}>
-                  <Ionicons name="trash" size={24} color="#FF4444" />
+                  <Ionicons name="trash" size={24} color={cores.erro} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -193,48 +196,48 @@ export default function GerenciarJogosAdmin() {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Novo Jogo (Vale 24h)</Text>
             <TouchableOpacity onPress={() => setModalVisivel(false)}>
-              <Ionicons name="close" size={28} color="#FF4444"/>
+              <Ionicons name="close" size={28} color={cores.erro}/>
             </TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={{padding: 20}}>
             <Text style={styles.label}>1. Configurações:</Text>
-            <TextInput style={styles.input} placeholder="Título do Jogo" placeholderTextColor="#666" value={titulo} onChangeText={setTitulo} />
+            <TextInput style={styles.input} placeholder="Título do Jogo" placeholderTextColor={cores.textoFraco} value={titulo} onChangeText={setTitulo} />
             
             <View style={{flexDirection:'row', gap:10, marginTop:10}}>
               <View style={{flex:1}}>
                 <Text style={styles.miniLabel}>Vidas:</Text>
-                <TextInput style={styles.input} placeholder="Ex: 3" keyboardType="numeric" placeholderTextColor="#666" value={vidas} onChangeText={setVidas} />
+                <TextInput style={styles.input} placeholder="Ex: 3" keyboardType="numeric" placeholderTextColor={cores.textoFraco} value={vidas} onChangeText={setVidas} />
               </View>
               <View style={{flex:1}}>
                 <Text style={styles.miniLabel}>Pontos:</Text>
-                <TextInput style={styles.input} placeholder="Ex: 500" keyboardType="numeric" placeholderTextColor="#666" value={pontos} onChangeText={setPontos} />
+                <TextInput style={styles.input} placeholder="Ex: 500" keyboardType="numeric" placeholderTextColor={cores.textoFraco} value={pontos} onChangeText={setPontos} />
               </View>
             </View>
             
             <View style={{marginTop:10}}>
               <Text style={styles.miniLabel}>Quantas vezes o aluno pode jogar? (0 = Ilimitado)</Text>
-              <TextInput style={styles.input} placeholder="Padrão: 1" keyboardType="numeric" placeholderTextColor="#666" value={limiteTentativas} onChangeText={setLimiteTentativas} />
+              <TextInput style={styles.input} placeholder="Padrão: 1" keyboardType="numeric" placeholderTextColor={cores.textoFraco} value={limiteTentativas} onChangeText={setLimiteTentativas} />
             </View>
 
             <Text style={styles.label}>2. Para quem?</Text>
             <View style={{flexDirection:'row', gap:8, marginBottom:10}}>
               {['GERAL','TURMA','EQUIPE','INDIVIDUAL'].map((t:any) => (
                 <TouchableOpacity key={t} style={[styles.btnSeg, alvoTipo===t && styles.btnSegAtivo]} onPress={()=>{setAlvoTipo(t); setAlvoSel(null);}}>
-                  <Text style={{color: alvoTipo===t?'#000':'#666', fontWeight:'bold', fontSize:11}}>{t}</Text>
+                  <Text style={{color: alvoTipo===t?cores.sobreAcento:cores.textoFraco, fontWeight:'bold', fontSize:11}}>{t}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             {alvoTipo !== 'GERAL' && (
               <TouchableOpacity style={styles.input} onPress={()=>setModalSelVisivel(true)}>
-                <Text style={{color: alvoSel?'#fff':'#666'}}>{alvoSel ? alvoSel.nome : 'Selecionar...'}</Text>
+                <Text style={{color: alvoSel?cores.texto:cores.textoFraco}}>{alvoSel ? alvoSel.nome : 'Selecionar...'}</Text>
               </TouchableOpacity>
             )}
 
             <Text style={styles.label}>3. Questões:</Text>
             <View style={styles.boxQ}>
-              <TextInput style={[styles.input, {marginBottom:10}]} placeholder="Conta (ex: 2^3)" placeholderTextColor="#666" value={inConta} onChangeText={setInConta} />
-              <TextInput style={[styles.input, {marginBottom:10}]} placeholder="Resposta (ex: 8)" keyboardType="numeric" placeholderTextColor="#666" value={inResp} onChangeText={setInResp} />
+              <TextInput style={[styles.input, {marginBottom:10}]} placeholder="Conta (ex: 2^3)" placeholderTextColor={cores.textoFraco} value={inConta} onChangeText={setInConta} />
+              <TextInput style={[styles.input, {marginBottom:10}]} placeholder="Resposta (ex: 8)" keyboardType="numeric" placeholderTextColor={cores.textoFraco} value={inResp} onChangeText={setInResp} />
               <TouchableOpacity style={styles.btnAdd} onPress={addQuestao}>
                 <Text style={styles.btnAddTxt}>ADICIONAR</Text>
               </TouchableOpacity>
@@ -242,18 +245,18 @@ export default function GerenciarJogosAdmin() {
 
             {questoes.map((q,i) => (
               <View key={q.id} style={styles.itemQ}>
-                <Text style={{color:'#fff'}}>
-                  {i+1}. {q.texto} = <Text style={{color:'#32CD32'}}>{q.resposta}</Text>
+                <Text style={{color: cores.texto}}>
+                  {i+1}. {q.texto} = <Text style={{color:cores.sucesso}}>{q.resposta}</Text>
                 </Text>
                 <TouchableOpacity onPress={()=>setQuestoes(questoes.filter(x=>x.id!==q.id))}>
-                  <Ionicons name="trash" size={18} color="#FF4444"/>
+                  <Ionicons name="trash" size={18} color={cores.erro}/>
                 </TouchableOpacity>
               </View>
             ))}
 
             <TouchableOpacity style={[styles.btnSave, salvando && {opacity: 0.6}]} onPress={salvar} disabled={salvando}>
               {salvando ? (
-                <ActivityIndicator color="#000" />
+                <ActivityIndicator color={cores.sobreAcento} />
               ) : (
                 <Text style={styles.btnSaveTxt}>PUBLICAR JOGO</Text>
               )}
@@ -268,34 +271,34 @@ export default function GerenciarJogosAdmin() {
         <View style={styles.overlay}>
           <View style={[styles.selBox, {padding: 20}]}>
             <Text style={styles.modalTitle}>Reenviar Jogo</Text>
-            <Text style={{color: '#888', marginBottom: 15, fontSize: 12}}>
+            <Text style={{color: cores.textoFraco, marginBottom: 15, fontSize: 12}}>
               Para quem você quer enviar o jogo "{missaoReenviar?.titulo}"?
             </Text>
             
             <View style={{flexDirection:'row', gap:8, marginBottom:10}}>
               {['GERAL','TURMA','EQUIPE','INDIVIDUAL'].map((t:any) => (
                 <TouchableOpacity key={t} style={[styles.btnSeg, alvoTipo===t && styles.btnSegAtivo]} onPress={()=>{setAlvoTipo(t); setAlvoSel(null);}}>
-                  <Text style={{color: alvoTipo===t?'#000':'#666', fontWeight:'bold', fontSize:11}}>{t}</Text>
+                  <Text style={{color: alvoTipo===t?cores.sobreAcento:cores.textoFraco, fontWeight:'bold', fontSize:11}}>{t}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             {alvoTipo !== 'GERAL' && (
               <TouchableOpacity style={styles.input} onPress={()=>setModalSelVisivel(true)}>
-                <Text style={{color: alvoSel?'#fff':'#666'}}>{alvoSel ? alvoSel.nome : 'Selecionar...'}</Text>
+                <Text style={{color: alvoSel?cores.texto:cores.textoFraco}}>{alvoSel ? alvoSel.nome : 'Selecionar...'}</Text>
               </TouchableOpacity>
             )}
             
             <TouchableOpacity style={[styles.btnSave, {marginTop: 20}]} onPress={reenviar} disabled={salvando}>
               {salvando ? (
-                <ActivityIndicator color="#000" />
+                <ActivityIndicator color={cores.sobreAcento} />
               ) : (
                 <Text style={styles.btnSaveTxt}>REENVIAR</Text>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity style={{padding:15, alignItems:'center'}} onPress={()=>setModalReenviar(false)}>
-              <Text style={{color:'#FF4444'}}>Cancelar</Text>
+              <Text style={{color:cores.erro}}>Cancelar</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -310,12 +313,12 @@ export default function GerenciarJogosAdmin() {
               keyExtractor={(i:any)=>i.id} 
               renderItem={({item}) => (
                 <TouchableOpacity style={styles.selItem} onPress={()=>{setAlvoSel(item); setModalSelVisivel(false);}}>
-                  <Text style={{color:'#fff'}}>{item.nome}</Text>
+                  <Text style={{color: cores.texto}}>{item.nome}</Text>
                 </TouchableOpacity>
               )} 
             />
             <TouchableOpacity style={{padding:15, alignItems:'center'}} onPress={()=>setModalSelVisivel(false)}>
-              <Text style={{color:'#FF4444'}}>Fechar</Text>
+              <Text style={{color:cores.erro}}>Fechar</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -324,33 +327,33 @@ export default function GerenciarJogosAdmin() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {flex:1, backgroundColor:'#0a0a0a'}, 
-  header: {padding:20, flexDirection:'row', alignItems:'center', gap:15, borderBottomWidth:1, borderColor:'#222'}, 
-  title: {color:'#FFD700', fontSize:20, fontWeight:'bold'}, 
-  btnNew: {backgroundColor:'#FFD700', padding:15, borderRadius:10, flexDirection:'row', justifyContent:'center', alignItems:'center', gap:10, marginBottom:20}, 
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: {flex:1, backgroundColor:cores.fundo}, 
+  header: {padding:20, flexDirection:'row', alignItems:'center', gap:15, borderBottomWidth:1, borderColor:cores.superficieAlt}, 
+  title: {color:cores.dourado, fontSize:20, fontWeight:'bold'}, 
+  btnNew: {backgroundColor:cores.dourado, padding:15, borderRadius:10, flexDirection:'row', justifyContent:'center', alignItems:'center', gap:10, marginBottom:20}, 
   btnNewTxt: {fontWeight:'900'}, 
-  card: {backgroundColor:'#1a1a2e', padding:15, borderRadius:12, marginBottom:10, flexDirection:'row', alignItems:'center', justifyContent:'space-between'}, 
-  cardTitle: {color:'#fff', fontWeight:'bold', fontSize:16}, 
-  cardSub: {color:'#888', fontSize:12, marginBottom:5}, 
+  card: {backgroundColor:cores.superficie, padding:15, borderRadius:12, marginBottom:10, flexDirection:'row', alignItems:'center', justifyContent:'space-between'}, 
+  cardTitle: {color: cores.texto, fontWeight:'bold', fontSize:16}, 
+  cardSub: {color:cores.textoFraco, fontSize:12, marginBottom:5}, 
   badgeRow: {flexDirection:'row', gap:8, marginTop: 4}, 
-  badge: {backgroundColor:'#333', paddingHorizontal:8, paddingVertical:2, borderRadius:4}, 
-  badgeTxt: {color:'#FFD700', fontSize:10, fontWeight:'bold'}, 
-  modal: {flex:1, backgroundColor:'#0a0a0a'}, 
-  modalHeader: {padding:20, flexDirection:'row', justifyContent:'space-between', borderBottomWidth:1, borderColor:'#222'}, 
-  modalTitle: {color:'#fff', fontSize:20, fontWeight:'bold'}, 
-  label: {color:'#FFD700', marginTop:20, marginBottom:10, fontWeight:'bold'}, 
-  miniLabel: {color:'#888', fontSize:12, marginBottom:5}, 
-  input: {backgroundColor:'#1a1a2e', color:'#fff', padding:12, borderRadius:8, borderWidth:1, borderColor:'#333'}, 
-  btnSeg: {flex:1, padding:10, backgroundColor:'#1a1a2e', borderRadius:6, alignItems:'center', borderWidth:1, borderColor:'#333'}, 
-  btnSegAtivo: {backgroundColor:'#FFD700', borderColor:'#FFD700'}, 
-  boxQ: {backgroundColor:'#1a1a2e', padding:15, borderRadius:10, borderWidth:1, borderColor:'#333'}, 
-  btnAdd: {backgroundColor:'#333', padding:10, borderRadius:6, alignItems:'center'}, 
-  btnAddTxt: {color:'#fff', fontWeight:'bold'}, 
-  itemQ: {flexDirection:'row', justifyContent:'space-between', padding:15, borderBottomWidth:1, borderColor:'#222'}, 
-  btnSave: {backgroundColor:'#32CD32', padding:15, borderRadius:10, alignItems:'center', marginTop:30}, 
+  badge: {backgroundColor:cores.borda, paddingHorizontal:8, paddingVertical:2, borderRadius:4}, 
+  badgeTxt: {color:cores.dourado, fontSize:10, fontWeight:'bold'}, 
+  modal: {flex:1, backgroundColor:cores.fundo}, 
+  modalHeader: {padding:20, flexDirection:'row', justifyContent:'space-between', borderBottomWidth:1, borderColor:cores.superficieAlt}, 
+  modalTitle: {color: cores.texto, fontSize:20, fontWeight:'bold'}, 
+  label: {color:cores.dourado, marginTop:20, marginBottom:10, fontWeight:'bold'}, 
+  miniLabel: {color:cores.textoFraco, fontSize:12, marginBottom:5}, 
+  input: {backgroundColor:cores.superficie, color: cores.texto, padding:12, borderRadius:8, borderWidth:1, borderColor:cores.borda}, 
+  btnSeg: {flex:1, padding:10, backgroundColor:cores.superficie, borderRadius:6, alignItems:'center', borderWidth:1, borderColor:cores.borda}, 
+  btnSegAtivo: {backgroundColor:cores.dourado, borderColor:cores.dourado}, 
+  boxQ: {backgroundColor:cores.superficie, padding:15, borderRadius:10, borderWidth:1, borderColor:cores.borda}, 
+  btnAdd: {backgroundColor:cores.borda, padding:10, borderRadius:6, alignItems:'center'}, 
+  btnAddTxt: {color: '#FFF', fontWeight:'bold'}, 
+  itemQ: {flexDirection:'row', justifyContent:'space-between', padding:15, borderBottomWidth:1, borderColor:cores.superficieAlt}, 
+  btnSave: {backgroundColor:cores.sucesso, padding:15, borderRadius:10, alignItems:'center', marginTop:30}, 
   btnSaveTxt: {fontWeight:'900', fontSize:16}, 
   overlay: {flex:1, backgroundColor:'rgba(0,0,0,0.8)', justifyContent:'center', alignItems:'center'}, 
-  selBox: {width:'80%', maxHeight:'60%', backgroundColor:'#1a1a2e', borderRadius:10}, 
-  selItem: {padding:15, borderBottomWidth:1, borderColor:'#333'}
+  selBox: {width:'80%', maxHeight:'60%', backgroundColor:cores.superficie, borderRadius:10}, 
+  selItem: {padding:15, borderBottomWidth:1, borderColor:cores.borda}
 });

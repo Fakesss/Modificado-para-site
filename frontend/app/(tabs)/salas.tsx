@@ -656,7 +656,7 @@ const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   voiceButton: { backgroundColor: cores.borda, padding: 10, borderRadius: 20 },
   adminDeleteButton: { backgroundColor: cores.laranja, padding: 10, borderRadius: 20 },
 
-  participantsBar: { backgroundColor: cores.superficieAlt, paddingVertical: 10, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: cores.superficieAlt },
+  participantsBar: { backgroundColor: cores.superficieAlt, paddingVertical: 10, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: cores.borda },
   participantChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficieAlt, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, marginRight: 8, gap: 6 },
   participantName: { color: cores.textoFraco, fontSize: 12 },
 
@@ -674,7 +674,7 @@ const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   textInput: { flex: 1, backgroundColor: cores.borda, color: cores.texto, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15 },
   sendButton: { backgroundColor: cores.ciano, width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
 
-  topChallengeArea: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: cores.fundo, borderBottomWidth: 1, borderBottomColor: cores.superficieAlt },
+  topChallengeArea: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: cores.fundo, borderBottomWidth: 1, borderBottomColor: cores.borda },
   floatingChallengeCard: { backgroundColor: cores.superficie, borderWidth: 1, borderColor: cores.dourado, borderRadius: 12, padding: 12, marginBottom: 10, position: 'relative' },
   closeChallengeButton: { position: 'absolute', top: 8, right: 8, zIndex: 10, padding: 4 },
   challengeTitle: { color: cores.dourado, fontSize: 14, fontWeight: 'bold', marginBottom: 4 },

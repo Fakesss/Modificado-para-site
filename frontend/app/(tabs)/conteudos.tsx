@@ -259,8 +259,8 @@ const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   cardTitle: { color: cores.texto, fontSize: 16, fontWeight: 'bold' },
   cardDescription: { color: cores.textoFraco, fontSize: 12, marginTop: 2 },
   
-  pastaContainer: { backgroundColor: cores.superficieAlt, borderRadius: 16, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: cores.superficieAlt },
-  pastaHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: cores.superficieAlt },
+  pastaContainer: { backgroundColor: cores.superficieAlt, borderRadius: 16, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: cores.borda },
+  pastaHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: cores.borda },
   pastaTitle: { color: cores.azul, fontSize: 15, fontWeight: 'bold', textTransform: 'uppercase' },
   cardPastas: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   cardPastasTitle: { color: cores.textoFraco, fontSize: 14 },

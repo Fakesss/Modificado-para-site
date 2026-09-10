@@ -122,7 +122,8 @@ export function corParaTema(cor: string | undefined, estaClaro: boolean, brilhoM
 
   if (l <= brilhoMax) return cor;      // já é escura o bastante
   const novoL = brilhoMax;
-  const novoS = Math.min(1, Math.max(s, 0.45)); // mantém a cor viva ao escurecer
+  // cinzas continuam cinzas; só cores com matiz é que ganham saturação ao escurecer
+  const novoS = s < 0.12 ? s : Math.min(1, Math.max(s, 0.45));
 
   const c = (1 - Math.abs(2 * novoL - 1)) * novoS;
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));

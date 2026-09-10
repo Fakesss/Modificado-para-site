@@ -198,8 +198,8 @@ const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   pointsBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.sucesso + '20', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, gap: 4 },
   pointsText: { color: cores.sucesso, fontSize: 10, fontWeight: 'bold' },
   
-  pastaContainer: { backgroundColor: cores.superficieAlt, borderRadius: 16, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: cores.superficieAlt },
-  pastaHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: cores.superficieAlt },
+  pastaContainer: { backgroundColor: cores.superficieAlt, borderRadius: 16, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: cores.borda },
+  pastaHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: cores.borda },
   pastaTitle: { color: cores.dourado, fontSize: 15, fontWeight: 'bold', textTransform: 'uppercase' },
   cardPastas: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   cardPastasTitle: { color: cores.textoFraco, fontSize: 14 },

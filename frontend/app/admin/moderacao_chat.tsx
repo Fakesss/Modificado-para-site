@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, TextInput, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,8 +6,11 @@ import { useRouter } from 'expo-router';
 import * as api from '../../src/services/api';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 
 export default function ModeracaoChat() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   
   // Etapas de navegação: 'lista_alunos' -> 'inbox_aluno' -> 'conversa'
@@ -171,7 +174,7 @@ export default function ModeracaoChat() {
   // RENDERIZAÇÃO
   // ==========================================
   if (loading) {
-    return <SafeAreaView style={styles.container}><ActivityIndicator size="large" color="#E74C3C" style={{ marginTop: 50 }} /></SafeAreaView>;
+    return <SafeAreaView style={styles.container}><ActivityIndicator size="large" color={cores.erro} style={{ marginTop: 50 }} /></SafeAreaView>;
   }
 
   // TELA 1: LISTA DE ALUNOS
@@ -179,18 +182,18 @@ export default function ModeracaoChat() {
       const mapeados = todosUsuarios.map(u => {
           const t = turmas.find(x => x.id === u.turmaId);
           const e = equipes.find(x => x.id === u.equipeId);
-          return { ...u, turmaNome: t ? t.nome : '', equipeCor: e ? e.cor : '#555' };
+          return { ...u, turmaNome: t ? t.nome : '', equipeCor: e ? e.cor : cores.textoFraco };
       });
       mapeados.sort((a, b) => a.nome.localeCompare(b.nome));
 
       return (
         <SafeAreaView style={styles.container} edges={['top']}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 15 }}><Ionicons name="arrow-back" size={28} color="#FFF" /></TouchableOpacity>
-            <Ionicons name="shield-checkmark" size={32} color="#E74C3C" />
+            <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 15 }}><Ionicons name="arrow-back" size={28} color={cores.texto} /></TouchableOpacity>
+            <Ionicons name="shield-checkmark" size={32} color={cores.erro} />
             <Text style={styles.headerTitle}>Moderação (Selecionar)</Text>
           </View>
-          <Text style={{color: '#888', paddingHorizontal: 15, paddingBottom: 10}}>Selecione o usuário que deseja investigar:</Text>
+          <Text style={{color: cores.textoFraco, paddingHorizontal: 15, paddingBottom: 10}}>Selecione o usuário que deseja investigar:</Text>
           <FlatList
             data={mapeados}
             keyExtractor={item => item.id}
@@ -202,7 +205,7 @@ export default function ModeracaoChat() {
                     <Text style={styles.nomeText}>{item.nome}</Text>
                     {item.turmaNome ? <Text style={styles.subText}>{item.turmaNome}</Text> : null}
                 </View>
-                <Ionicons name="chevron-forward" size={20} color="#555" />
+                <Ionicons name="chevron-forward" size={20} color={cores.textoFraco} />
               </TouchableOpacity>
             )}
           />
@@ -215,10 +218,10 @@ export default function ModeracaoChat() {
       return (
         <SafeAreaView style={styles.container} edges={['top']}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => setView('lista_alunos')} style={{ marginRight: 15 }}><Ionicons name="arrow-back" size={28} color="#FFF" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setView('lista_alunos')} style={{ marginRight: 15 }}><Ionicons name="arrow-back" size={28} color={cores.texto} /></TouchableOpacity>
             <View>
                 <Text style={styles.headerTitle}>Inbox de {alunoSelecionado.nome.split(' ')[0]}</Text>
-                <Text style={{color: '#E74C3C', fontSize: 12, fontWeight: 'bold', marginLeft: 10}}>Visão do Administrador</Text>
+                <Text style={{color: cores.erro, fontSize: 12, fontWeight: 'bold', marginLeft: 10}}>Visão do Administrador</Text>
             </View>
           </View>
           
@@ -233,7 +236,7 @@ export default function ModeracaoChat() {
                     <Text style={styles.nomeText}>{item.nome}</Text>
                     <Text style={styles.subText}>Última interção: {new Date(item.lastMessageTime).toLocaleString('pt-BR')}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color="#555" />
+                <Ionicons name="chevron-forward" size={20} color={cores.textoFraco} />
               </TouchableOpacity>
             )}
             ListEmptyComponent={<Text style={styles.emptyText}>Este usuário não possui conversas.</Text>}
@@ -247,15 +250,15 @@ export default function ModeracaoChat() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.chatHeader}>
           <TouchableOpacity onPress={() => setView('inbox_aluno')} style={{ padding: 10 }}>
-            <Ionicons name="arrow-back" size={24} color="#FFF" />
+            <Ionicons name="arrow-back" size={24} color={cores.texto} />
           </TouchableOpacity>
           <View style={{ flex: 1, marginLeft: 5 }}>
             <Text style={styles.headerTitle} numberOfLines={1}>{alunoSelecionado.nome.split(' ')[0]} ⚡ {contatoSelecionado.nome.split(' ')[0]}</Text>
           </View>
           
-          <TouchableOpacity onPress={() => gerenciarBloqueio(true)} style={{ padding: 10 }}><Ionicons name="lock-closed" size={20} color="#E74C3C" /></TouchableOpacity>
-          <TouchableOpacity onPress={() => gerenciarBloqueio(false)} style={{ padding: 10 }}><Ionicons name="lock-open" size={20} color="#32CD32" /></TouchableOpacity>
-          <TouchableOpacity onPress={baixarConversa} style={{ padding: 10 }}><Ionicons name="download" size={22} color="#00FFFF" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => gerenciarBloqueio(true)} style={{ padding: 10 }}><Ionicons name="lock-closed" size={20} color={cores.erro} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => gerenciarBloqueio(false)} style={{ padding: 10 }}><Ionicons name="lock-open" size={20} color={cores.sucesso} /></TouchableOpacity>
+          <TouchableOpacity onPress={baixarConversa} style={{ padding: 10 }}><Ionicons name="download" size={22} color={cores.ciano} /></TouchableOpacity>
       </View>
 
       <FlatList
@@ -271,7 +274,7 @@ export default function ModeracaoChat() {
                 
                 <Text style={styles.nomeTagMod}>{isAlunoSelecionado ? alunoSelecionado.nome : contatoSelecionado.nome}</Text>
                 
-                <Text style={[styles.msgText, item.apagadaPorAdmin && { fontStyle: 'italic', color: '#FF4444' }]}>
+                <Text style={[styles.msgText, item.apagadaPorAdmin && { fontStyle: 'italic', color: cores.erro }]}>
                   {item.texto}
                 </Text>
                 
@@ -280,8 +283,8 @@ export default function ModeracaoChat() {
                     
                     {!item.apagadaPorAdmin && (
                         <View style={{flexDirection: 'row', gap: 10}}>
-                            <TouchableOpacity onPress={() => iniciarEdicao(item)}><Ionicons name="pencil" size={14} color="#FFF" /></TouchableOpacity>
-                            <TouchableOpacity onPress={() => apagarMensagem(item.id)}><Ionicons name="trash" size={14} color="#FF4444" /></TouchableOpacity>
+                            <TouchableOpacity onPress={() => iniciarEdicao(item)}><Ionicons name="pencil" size={14} color={cores.textoFraco} /></TouchableOpacity>
+                            <TouchableOpacity onPress={() => apagarMensagem(item.id)}><Ionicons name="trash" size={14} color={cores.erro} /></TouchableOpacity>
                         </View>
                     )}
                 </View>
@@ -309,7 +312,7 @@ export default function ModeracaoChat() {
                       <Text style={styles.btnText}>Cancelar</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.btnSave} onPress={salvarEdicao}>
-                      <Text style={styles.btnText}>Salvar Edição</Text>
+                      <Text style={[styles.btnText, { color: '#FFF' }]}>Salvar Edição</Text>
                   </TouchableOpacity>
               </View>
           </View>
@@ -320,36 +323,36 @@ export default function ModeracaoChat() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   header: { flexDirection: 'row', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#FFF', marginLeft: 10 },
+  headerTitle: { fontSize: 22, fontWeight: 'bold', color: cores.texto, marginLeft: 10 },
   
-  cardSelect: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 15, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  cardSelect: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, padding: 15, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
   avatar: { width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center', marginRight: 15, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.05)' },
-  nomeText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
-  subText: { color: '#888', fontSize: 13, marginTop: 2 },
-  emptyText: { color: '#666', textAlign: 'center', marginTop: 30, fontStyle: 'italic' },
+  nomeText: { color: cores.texto, fontSize: 16, fontWeight: 'bold' },
+  subText: { color: cores.textoFraco, fontSize: 13, marginTop: 2 },
+  emptyText: { color: cores.textoFraco, textAlign: 'center', marginTop: 30, fontStyle: 'italic' },
   
-  chatHeader: { flexDirection: 'row', alignItems: 'center', padding: 10, backgroundColor: '#1a1a2e', borderBottomWidth: 1, borderBottomColor: 'rgba(231, 76, 60, 0.5)' },
+  chatHeader: { flexDirection: 'row', alignItems: 'center', padding: 10, backgroundColor: cores.superficie, borderBottomWidth: 1, borderBottomColor: 'rgba(231, 76, 60, 0.5)' },
   
   msgWrapper: { width: '100%', marginBottom: 15, flexDirection: 'row' },
   msgWrapperRight: { justifyContent: 'flex-end' },
   msgWrapperLeft: { justifyContent: 'flex-start' },
   msgBubble: { maxWidth: '85%', padding: 12, borderRadius: 16 },
-  msgBubbleMe: { backgroundColor: 'rgba(65, 105, 225, 0.3)', borderBottomRightRadius: 4, borderWidth: 1, borderColor: '#4169E1' },
-  msgBubbleOther: { backgroundColor: 'rgba(255, 255, 255, 0.05)', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#333' },
+  msgBubbleMe: { backgroundColor: 'rgba(65, 105, 225, 0.3)', borderBottomRightRadius: 4, borderWidth: 1, borderColor: cores.azul },
+  msgBubbleOther: { backgroundColor: 'rgba(255, 255, 255, 0.05)', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: cores.borda },
   
-  nomeTagMod: { color: '#888', fontSize: 10, fontWeight: 'bold', marginBottom: 5, textTransform: 'uppercase' },
-  msgText: { color: '#FFF', fontSize: 15, marginBottom: 12 },
+  nomeTagMod: { color: cores.textoFraco, fontSize: 10, fontWeight: 'bold', marginBottom: 5, textTransform: 'uppercase' },
+  msgText: { color: cores.texto, fontSize: 15, marginBottom: 12 },
   toolsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: 8 },
   msgTime: { color: 'rgba(255,255,255,0.5)', fontSize: 11 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#E74C3C' },
-  modalTitle: { color: '#E74C3C', fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
-  textInput: { backgroundColor: '#0c0c0c', color: '#FFF', padding: 15, borderRadius: 12, minHeight: 100, textAlignVertical: 'top', borderWidth: 1, borderColor: '#333' },
-  btnCancel: { flex: 1, backgroundColor: '#333', padding: 15, borderRadius: 12, alignItems: 'center' },
-  btnSave: { flex: 1, backgroundColor: '#E74C3C', padding: 15, borderRadius: 12, alignItems: 'center' },
-  btnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 }
+  modalContent: { backgroundColor: cores.superficie, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: cores.erro },
+  modalTitle: { color: cores.erro, fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
+  textInput: { backgroundColor: cores.fundo, color: cores.texto, padding: 15, borderRadius: 12, minHeight: 100, textAlignVertical: 'top', borderWidth: 1, borderColor: cores.borda },
+  btnCancel: { flex: 1, backgroundColor: cores.borda, padding: 15, borderRadius: 12, alignItems: 'center' },
+  btnSave: { flex: 1, backgroundColor: cores.erro, padding: 15, borderRadius: 12, alignItems: 'center' },
+  btnText: { color: cores.texto, fontWeight: 'bold', fontSize: 14 }
 });
