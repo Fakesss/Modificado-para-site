@@ -2,15 +2,17 @@ import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider } from '../src/context/AuthContext';
+import { ThemeProvider, useTema } from '../src/context/ThemeContext';
 
-export default function RootLayout() {
+function Navegacao() {
+  const { cores, estaClaro } = useTema();
   return (
-    <AuthProvider>
-      <StatusBar style="light" />
+    <>
+      <StatusBar style={estaClaro ? 'dark' : 'light'} />
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: '#0c0c0c' },
+          contentStyle: { backgroundColor: cores.fundo },
         }}
       >
         <Stack.Screen name="index" />
@@ -22,6 +24,16 @@ export default function RootLayout() {
         <Stack.Screen name="exercicio/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="resultado" options={{ presentation: 'modal' }} />
       </Stack>
-    </AuthProvider>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <Navegacao />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

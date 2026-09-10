@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
   ActivityIndicator, Image, Platform, UIManager, LayoutAnimation
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,6 +17,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 export default function Videos() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const { user } = useAuth();
   const [videos, setVideos] = useState<Conteudo[]>([]);
@@ -170,37 +173,37 @@ export default function Videos() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a2e' },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  title: { fontSize: 22, fontWeight: 'bold', color: cores.texto },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
   section: { marginBottom: 30 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  sectionSubtitle: { color: '#888', fontSize: 12, marginTop: 4, marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: cores.texto },
+  sectionSubtitle: { color: cores.textoFraco, fontSize: 12, marginTop: 4, marginBottom: 12 },
   
-  videoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 16, padding: 12, marginBottom: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#333' },
+  videoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 16, padding: 12, marginBottom: 12, overflow: 'hidden', borderWidth: 1, borderColor: cores.borda },
   badgeNovo: { position: 'absolute', top: 0, right: 0, backgroundColor: '#FF4500', paddingHorizontal: 10, paddingVertical: 2, borderBottomLeftRadius: 12, zIndex: 10 },
-  badgeNovoText: { fontSize: 9, fontWeight: 'bold', color: '#fff' },
+  badgeNovoText: { fontSize: 9, fontWeight: 'bold', color: cores.texto },
   videoThumbnail: { width: 100, height: 70, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
   videoInfo: { flex: 1, marginLeft: 12 },
-  videoTitle: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
-  videoDescription: { color: '#888', fontSize: 12, marginTop: 4 },
+  videoTitle: { color: cores.texto, fontSize: 15, fontWeight: 'bold' },
+  videoDescription: { color: cores.textoFraco, fontSize: 12, marginTop: 4 },
   videoMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
   statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFD70020', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, gap: 4 },
-  statusText: { fontSize: 10, fontWeight: 'bold', color: '#FFD700' },
+  statusText: { fontSize: 10, fontWeight: 'bold', color: cores.dourado },
   pointsBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#32CD3220', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6, gap: 4 },
   pointsText: { color: '#32CD32', fontSize: 10, fontWeight: 'bold' },
   
   pastaContainer: { backgroundColor: '#151520', borderRadius: 16, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#222' },
   pastaHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#222' },
-  pastaTitle: { color: '#FFD700', fontSize: 15, fontWeight: 'bold', textTransform: 'uppercase' },
+  pastaTitle: { color: cores.dourado, fontSize: 15, fontWeight: 'bold', textTransform: 'uppercase' },
   cardPastas: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   cardPastasTitle: { color: '#bbb', fontSize: 14 },
   
   emptyState: { alignItems: 'center', padding: 40 },
-  emptyText: { color: '#666', fontSize: 14, marginTop: 16 },
+  emptyText: { color: cores.textoFraco, fontSize: 14, marginTop: 16 },
 });

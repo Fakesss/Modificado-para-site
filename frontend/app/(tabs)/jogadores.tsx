@@ -1,12 +1,15 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Switch, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
 import { socket } from '../../src/services/socket';
 
 export default function JogadoresOnline() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const { user } = useAuth();
   const router = useRouter();
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
@@ -277,33 +280,33 @@ export default function JogadoresOnline() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   header: { flexDirection: 'row', alignItems: 'center', padding: 20, gap: 10, paddingBottom: 15 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
-  dndContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1a1a2e', marginHorizontal: 20, padding: 15, borderRadius: 12, marginBottom: 15 },
-  tabSelector: { flexDirection: 'row', marginHorizontal: 20, backgroundColor: '#1a1a2e', borderRadius: 12, padding: 4, marginBottom: 10 },
+  title: { fontSize: 24, fontWeight: 'bold', color: cores.texto },
+  dndContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: cores.superficie, marginHorizontal: 20, padding: 15, borderRadius: 12, marginBottom: 15 },
+  tabSelector: { flexDirection: 'row', marginHorizontal: 20, backgroundColor: cores.superficie, borderRadius: 12, padding: 4, marginBottom: 10 },
   tabBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 10 },
   tabActive: { backgroundColor: '#333' },
-  tabText: { color: '#888', fontWeight: 'bold' },
-  tabTextActive: { color: '#FFF' },
+  tabText: { color: cores.textoFraco, fontWeight: 'bold' },
+  tabTextActive: { color: cores.texto },
   list: { padding: 16, gap: 12, paddingBottom: 40 },
-  card: { backgroundColor: '#1a1a2e', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  card: { backgroundColor: cores.superficie, padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   info: { flex: 1 },
   onlineDot: { width: 10, height: 10, borderRadius: 5 },
-  name: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  statusText: { color: '#888', fontSize: 12, marginTop: 4 },
+  name: { color: cores.texto, fontSize: 16, fontWeight: 'bold' },
+  statusText: { color: cores.textoFraco, fontSize: 12, marginTop: 4 },
   btnAcao: { backgroundColor: '#32CD32', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 5 },
-  btnAcaoText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
+  btnAcaoText: { color: cores.texto, fontWeight: 'bold', fontSize: 12 },
   empty: { alignItems: 'center', marginTop: 50 },
-  emptyText: { color: '#666', marginTop: 10 },
+  emptyText: { color: cores.textoFraco, marginTop: 10 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
-  modalGameContent: { backgroundColor: '#1a1a2e', padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
-  modalTitle: { color: '#FFF', fontSize: 20, fontWeight: '900', marginBottom: 5 },
+  modalGameContent: { backgroundColor: cores.superficie, padding: 25, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
+  modalTitle: { color: cores.texto, fontSize: 20, fontWeight: '900', marginBottom: 5 },
   modalText: { color: '#AAA', fontSize: 14, marginBottom: 20 },
-  gameOptionBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0c0c0c', padding: 15, borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: '#333' },
+  gameOptionBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.fundo, padding: 15, borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: cores.borda },
   iconContainer: { width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  gameOptionText: { color: '#FFF', fontSize: 16, fontWeight: 'bold', flex: 1 },
+  gameOptionText: { color: cores.texto, fontSize: 16, fontWeight: 'bold', flex: 1 },
   cancelBtn: { marginTop: 15, paddingVertical: 15, alignItems: 'center' },
   cancelBtnText: { color: '#FF4444', fontWeight: 'bold', fontSize: 16 }
 });

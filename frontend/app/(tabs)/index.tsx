@@ -15,6 +15,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../src/context/AuthContext';
+import { useTema } from '../../src/context/ThemeContext';
 import * as api from '../../src/services/api';
 import RankingHeader from '../../src/components/RankingHeader';
 import StreakBadge from '../../src/components/StreakBadge';
@@ -37,6 +38,7 @@ const obterJogoDoDia = () => {
 
 export default function Home() {
   const { user, logout, refreshUser } = useAuth();
+  const { cores, estaClaro, alternarTema } = useTema();
   const router = useRouter();
   const [ranking, setRanking] = useState<RankingItem[]>([]);
   const [equipe, setEquipe] = useState<Equipe | null>(null);
@@ -138,9 +140,9 @@ export default function Home() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: cores.fundo }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
+          <ActivityIndicator size="large" color={cores.dourado} />
         </View>
       </SafeAreaView>
     );
@@ -149,7 +151,7 @@ export default function Home() {
   const finalTeamColor = equipe?.cor || '#333333';
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: cores.fundo }]}>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -160,39 +162,44 @@ export default function Home() {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Olá, {user?.nome?.split(' ')[0]}!</Text>
-            
+            <Text style={[styles.greeting, { color: cores.texto }]}>Olá, {user?.nome?.split(' ')[0]}!</Text>
+
             {turma && (
-              <View style={styles.turmaBadge}>
-                <Ionicons name="school" size={14} color="#888" />
-                <Text style={styles.turmaText}>{turma.nome}</Text>
+              <View style={[styles.turmaBadge, { backgroundColor: cores.superficie, borderColor: cores.borda }]}>
+                <Ionicons name="school" size={14} color={cores.textoFraco} />
+                <Text style={[styles.turmaText, { color: cores.textoFraco }]}>{turma.nome}</Text>
               </View>
             )}
 
             <StreakBadge streakDias={user?.streakDias || 0} />
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={24} color="#888" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity style={styles.logoutButton} onPress={alternarTema}>
+              <Ionicons name={estaClaro ? 'moon-outline' : 'sunny-outline'} size={24} color={cores.textoFraco} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={24} color={cores.textoFraco} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Ranking Header (O Pódio) */}
         <RankingHeader ranking={ranking} />
 
         {/* User Stats Card (Cor 100% dinâmica do banco) */}
-        <View style={styles.statsCard}>
-          <Text style={styles.statsTitle}>Seus Pontos</Text>
+        <View style={[styles.statsCard, { backgroundColor: cores.superficie, borderColor: cores.borda }]}>
+          <Text style={[styles.statsTitle, { color: cores.textoFraco }]}>Seus Pontos</Text>
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
-              <Ionicons name="star" size={28} color="#FFD700" />
-              <Text style={styles.statValue}>{user?.pontosTotais || 0}</Text>
-              <Text style={styles.statLabel}>pontos totais</Text>
+              <Ionicons name="star" size={28} color={cores.dourado} />
+              <Text style={[styles.statValue, { color: cores.texto }]}>{user?.pontosTotais || 0}</Text>
+              <Text style={[styles.statLabel, { color: cores.textoFraco }]}>pontos totais</Text>
             </View>
             {equipe && (
               <View style={styles.statItem}>
-                <View style={[styles.teamDot, { backgroundColor: finalTeamColor }]} />
+                <View style={[styles.teamDot, { backgroundColor: finalTeamColor, borderColor: cores.borda }]} />
                 <Text style={[styles.statValue, { color: finalTeamColor }]}>{equipe.nome}</Text>
-                <Text style={styles.statLabel}>sua equipe</Text>
+                <Text style={[styles.statLabel, { color: cores.textoFraco }]}>sua equipe</Text>
               </View>
             )}
           </View>
@@ -207,12 +214,12 @@ export default function Home() {
           <View style={styles.actionRow}>
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#4169E1' + '50' }]} onPress={() => router.push('/(tabs)/videos')}>
               <Ionicons name="play" size={24} color="#4169E1" />
-              <Text style={styles.actionText}>Vídeo-aulas</Text>
+              <Text style={[styles.actionText, { color: cores.texto }]}>Vídeo-aulas</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#32CD32' + '50' }]} onPress={() => router.push('/(tabs)/exercicios')}>
               <Ionicons name="document-text" size={24} color="#32CD32" />
-              <Text style={styles.actionText}>Atividades</Text>
+              <Text style={[styles.actionText, { color: cores.texto }]}>Atividades</Text>
             </TouchableOpacity>
           </View>
 
@@ -220,7 +227,7 @@ export default function Home() {
           <View style={styles.actionRow}>
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FFD700' + '50' }]} onPress={() => router.push('/(tabs)/ranking')}>
               <Ionicons name="trophy" size={28} color="#FFD700" />
-              <Text style={[styles.actionText, { fontSize: 13, marginTop: 10 }]}>Ranking Geral</Text>
+              <Text style={[styles.actionText, { fontSize: 13, marginTop: 10, color: cores.texto }]}>Ranking Geral</Text>
             </TouchableOpacity>
 
             {/* BOTÃO ROTATIVO COM SELO "NOVO" */}
@@ -242,12 +249,12 @@ export default function Home() {
           <View style={styles.actionRow}>
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#FF8C00' + '50' }]} onPress={() => router.push('/(tabs)/conteudos')}>
               <Ionicons name="book-outline" size={24} color="#FF8C00" />
-              <Text style={styles.actionText}>Conteúdos</Text>
+              <Text style={[styles.actionText, { color: cores.texto }]}>Conteúdos</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.actionCard, { backgroundColor: '#E066FF' + '50' }]} onPress={() => router.push('/(tabs)/progresso')}>
               <Ionicons name="stats-chart" size={24} color="#E066FF" />
-              <Text style={styles.actionText}>Progresso</Text>
+              <Text style={[styles.actionText, { color: cores.texto }]}>Progresso</Text>
             </TouchableOpacity>
           </View>
 
@@ -258,7 +265,7 @@ export default function Home() {
               onPress={() => router.push('/cartela_missoes' as any)}
             >
               <Ionicons name="star" size={26} color="#FFB300" />
-              <Text style={[styles.actionText, { marginTop: 0, fontSize: 14 }]}>Cartela de Missões</Text>
+              <Text style={[styles.actionText, { marginTop: 0, fontSize: 14, color: cores.texto }]}>Cartela de Missões</Text>
             </TouchableOpacity>
           </View>
 

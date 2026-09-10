@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
@@ -28,6 +29,8 @@ interface BNCCAnalysis {
 }
 
 export default function EquipeScreen() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const { user } = useAuth();
   const [equipe, setEquipe] = useState<EquipeType | null>(null);
   const [alunos, setAlunos] = useState<AlunoRanking[]>([]);
@@ -212,10 +215,10 @@ export default function EquipeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: cores.fundo,
   },
   loadingContainer: {
     flex: 1,
@@ -238,11 +241,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
   },
   subtitle: {
     fontSize: 14,
-    color: '#888',
+    color: cores.textoFraco,
   },
   scrollView: {
     flex: 1,
@@ -253,13 +256,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
     marginBottom: 16,
   },
   alunoCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 12,
     padding: 12,
     marginBottom: 10,
@@ -281,7 +284,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   alunoName: {
-    color: '#fff',
+    color: cores.texto,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -296,11 +299,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   metaText: {
-    color: '#888',
+    color: cores.textoFraco,
     fontSize: 12,
   },
   analysisContainer: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 16,
     padding: 16,
     marginTop: 16,
@@ -308,7 +311,7 @@ const styles = StyleSheet.create({
   analysisTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
     marginBottom: 16,
   },
   analysisSection: {
@@ -321,7 +324,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   analysisSectionTitle: {
-    color: '#fff',
+    color: cores.texto,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -331,10 +334,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    borderBottomColor: cores.borda,
   },
   analysisHabilidade: {
-    color: '#fff',
+    color: cores.texto,
     fontSize: 14,
   },
   analysisCount: {
@@ -347,7 +350,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   noDataText: {
-    color: '#666',
+    color: cores.textoFraco,
     fontSize: 14,
     fontStyle: 'italic',
   },
@@ -356,7 +359,7 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   emptyText: {
-    color: '#666',
+    color: cores.textoFraco,
     fontSize: 16,
     marginTop: 16,
   },

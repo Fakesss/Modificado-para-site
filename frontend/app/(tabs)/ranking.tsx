@@ -1,12 +1,15 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router'; 
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 import * as api from '../../src/services/api';
 import { RankingItem, Turma } from '../../src/types';
 
 export default function Ranking() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const [ranking, setRanking] = useState<RankingItem[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [selectedTurma, setSelectedTurma] = useState<string | null>(null);
@@ -44,7 +47,7 @@ export default function Ranking() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#FFD700" /></View>
+        <View style={styles.loadingContainer}><ActivityIndicator size="large" color={cores.dourado} /></View>
       </SafeAreaView>
     );
   }
@@ -74,7 +77,7 @@ export default function Ranking() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="trophy" size={28} color="#FFD700" />
+        <Ionicons name="trophy" size={28} color={cores.dourado} />
         <Text style={styles.title}>Ranking das Equipes</Text>
       </View>
 
@@ -89,7 +92,7 @@ export default function Ranking() {
         ))}
       </ScrollView>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={cores.dourado} />}>
         
         <View style={styles.podiumContainer}>
           {/* 2º LUGAR */}
@@ -188,16 +191,16 @@ export default function Ranking() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  title: { fontSize: 22, fontWeight: 'bold', color: cores.texto },
   filterContainer: { maxHeight: 50 },
   filterContent: { paddingHorizontal: 16, gap: 10 },
-  filterButton: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, backgroundColor: '#1a1a2e' },
+  filterButton: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, backgroundColor: cores.superficie },
   filterButtonActive: { backgroundColor: '#FFD700' },
-  filterText: { color: '#888', fontWeight: '600' },
+  filterText: { color: cores.textoFraco, fontWeight: '600' },
   filterTextActive: { color: '#000' },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
@@ -209,13 +212,13 @@ const styles = StyleSheet.create({
   insidePositionCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   insidePositionText: { color: '#000', fontWeight: 'bold', fontSize: 14 },
   podiumPoints: { fontWeight: 'bold', fontSize: 14 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 16 },
-  rankingItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 12, padding: 16, marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: cores.texto, marginBottom: 16 },
+  rankingItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 12, padding: 16, marginBottom: 12 },
   positionBadge: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   positionBadgeText: { color: '#000', fontWeight: 'bold', fontSize: 14 },
   rankingInfo: { flex: 1 },
-  teamName: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  teamName: { color: cores.texto, fontSize: 16, fontWeight: '600' },
   teamPoints: { fontSize: 14, marginTop: 4 },
   emptyState: { alignItems: 'center', padding: 40 },
-  emptyText: { color: '#666', fontSize: 16, marginTop: 16 },
+  emptyText: { color: cores.textoFraco, fontSize: 16, marginTop: 16 },
 });

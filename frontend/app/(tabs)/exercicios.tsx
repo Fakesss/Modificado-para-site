@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as api from '../../src/services/api';
@@ -16,6 +17,8 @@ import { Exercicio } from '../../src/types';
 import { useAuth } from '../../src/context/AuthContext';
 
 export default function Exercicios() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
   const { user } = useAuth();
   const [exercicios, setExercicios] = useState<Exercicio[]>([]);
@@ -139,26 +142,26 @@ export default function Exercicios() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  title: { fontSize: 22, fontWeight: 'bold', color: cores.texto },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
-  exerciseCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, marginBottom: 12 },
+  exerciseCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 16, padding: 16, marginBottom: 12 },
   exerciseIcon: { width: 56, height: 56, backgroundColor: '#32CD32' + '30', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   exerciseInfo: { flex: 1, marginLeft: 12 },
-  exerciseTitle: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  exerciseDescription: { color: '#888', fontSize: 13, marginTop: 4 },
+  exerciseTitle: { color: cores.texto, fontSize: 16, fontWeight: '600' },
+  exerciseDescription: { color: cores.textoFraco, fontSize: 13, marginTop: 4 },
   exerciseMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 },
   statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, gap: 4 },
   statusText: { fontSize: 12, fontWeight: '600' },
   pointsBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: '#FFD700' + '30', gap: 4 },
-  pointsText: { color: '#FFD700', fontSize: 12, fontWeight: '600' },
+  pointsText: { color: cores.dourado, fontSize: 12, fontWeight: '600' },
   tagsContainer: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 4 },
   tag: { backgroundColor: '#333', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  tagText: { color: '#888', fontSize: 10 },
+  tagText: { color: cores.textoFraco, fontSize: 10 },
   emptyState: { alignItems: 'center', padding: 40 },
-  emptyText: { color: '#666', fontSize: 16, marginTop: 16 },
+  emptyText: { color: cores.textoFraco, fontSize: 16, marginTop: 16 },
 });

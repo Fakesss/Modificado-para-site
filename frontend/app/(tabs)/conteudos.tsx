@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl,
   ActivityIndicator, Linking, Alert, Platform, LayoutAnimation, UIManager
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +20,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 export default function Conteudos() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const { user } = useAuth();
   const [conteudos, setConteudos] = useState<Conteudo[]>([]);
   const [viewedIds, setViewedIds] = useState<string[]>([]);
@@ -235,26 +238,26 @@ export default function Conteudos() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a2e' },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  title: { fontSize: 22, fontWeight: 'bold', color: cores.texto },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
   section: { marginBottom: 30 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
-  sectionSubtitle: { color: '#888', fontSize: 12, marginTop: 4, marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: cores.texto },
+  sectionSubtitle: { color: cores.textoFraco, fontSize: 12, marginTop: 4, marginBottom: 12 },
   
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', borderRadius: 16, padding: 12, marginBottom: 12, overflow: 'hidden' },
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, borderRadius: 16, padding: 12, marginBottom: 12, overflow: 'hidden' },
   cardNovo: { borderColor: '#FFD70050', borderWidth: 1 },
   badgeNovo: { position: 'absolute', top: 0, right: 0, backgroundColor: '#FFD700', paddingHorizontal: 10, paddingVertical: 2, borderBottomLeftRadius: 12 },
   badgeNovoText: { fontSize: 9, fontWeight: 'bold', color: '#000' },
   cardIcon: { width: 50, height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   cardContent: { flex: 1, marginLeft: 12, marginRight: 10 },
-  cardTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  cardDescription: { color: '#888', fontSize: 12, marginTop: 2 },
+  cardTitle: { color: cores.texto, fontSize: 16, fontWeight: 'bold' },
+  cardDescription: { color: cores.textoFraco, fontSize: 12, marginTop: 2 },
   
   pastaContainer: { backgroundColor: '#151520', borderRadius: 16, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#222' },
   pastaHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#222' },
@@ -263,9 +266,9 @@ const styles = StyleSheet.create({
   cardPastasTitle: { color: '#bbb', fontSize: 14 },
   
   emptyState: { alignItems: 'center', padding: 40 },
-  emptyText: { color: '#666', fontSize: 14, marginTop: 16 },
+  emptyText: { color: cores.textoFraco, fontSize: 14, marginTop: 16 },
 
-  toastContainer: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: '#1a1a2e', borderColor: '#32CD32', borderWidth: 1, padding: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', elevation: 5, gap: 12 },
-  toastTitle: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  toastContainer: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: cores.superficie, borderColor: '#32CD32', borderWidth: 1, padding: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', elevation: 5, gap: 12 },
+  toastTitle: { color: cores.texto, fontWeight: 'bold', fontSize: 16 },
   toastText: { color: '#aaa', fontSize: 13, marginTop: 2 }
 });

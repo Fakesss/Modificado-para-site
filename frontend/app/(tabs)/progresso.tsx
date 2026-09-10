@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 import * as api from '../../src/services/api';
 import StreakBadge from '../../src/components/StreakBadge';
 import { Equipe, CartelaMissoes } from '../../src/types';
@@ -19,6 +20,8 @@ import { Equipe, CartelaMissoes } from '../../src/types';
 export default function Progresso() {
   const router = useRouter();
   const { user, refreshUser } = useAuth();
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const [progress, setProgress] = useState<any>(null);
   const [equipe, setEquipe] = useState<Equipe | null>(null);
   const [cartela, setCartela] = useState<CartelaMissoes | null>(null);
@@ -60,7 +63,7 @@ export default function Progresso() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FFD700" />
+          <ActivityIndicator size="large" color={cores.dourado} />
         </View>
       </SafeAreaView>
     );
@@ -72,13 +75,13 @@ export default function Progresso() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFD700" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={cores.dourado} />
         }
       >
         {/* Profile Header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
-            <Ionicons name="person" size={48} color="#FFD700" />
+            <Ionicons name="person" size={48} color={cores.dourado} />
           </View>
           <Text style={styles.profileName}>{user?.nome}</Text>
           <Text style={styles.profileEmail}>{user?.email}</Text>
@@ -101,7 +104,7 @@ export default function Progresso() {
         {/* Stats Cards */}
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
-            <Ionicons name="star" size={32} color="#FFD700" />
+            <Ionicons name="star" size={32} color={cores.dourado} />
             <Text style={styles.statValue}>{progress?.pontosTotais || 0}</Text>
             <Text style={styles.statLabel}>Pontos Totais</Text>
           </View>
@@ -134,7 +137,7 @@ export default function Progresso() {
             <Text style={styles.cartelaTitulo}>Cartela de Missões</Text>
             <Text style={styles.cartelaSubtitulo}>{cartela ? `${cartela.estrelas} / ${cartela.total} estrelas` : 'Veja suas estrelas'}</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color="#666" />
+          <Ionicons name="chevron-forward" size={20} color={cores.textoFraco} />
         </TouchableOpacity>
 
         {/* Points Breakdown */}
@@ -179,10 +182,10 @@ export default function Progresso() {
   );
 }
 
-const styles = StyleSheet.create({
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0c0c0c',
+    backgroundColor: cores.fundo,
   },
   loadingContainer: {
     flex: 1,
@@ -203,7 +206,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#FFD700' + '30',
+    backgroundColor: cores.dourado + '30',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -211,18 +214,18 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
     marginBottom: 4,
   },
   profileEmail: {
     fontSize: 14,
-    color: '#888',
+    color: cores.textoFraco,
     marginBottom: 16,
   },
   teamCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
@@ -241,7 +244,7 @@ const styles = StyleSheet.create({
   },
   teamLabel: {
     fontSize: 12,
-    color: '#888',
+    color: cores.textoFraco,
   },
   teamName: {
     fontSize: 18,
@@ -255,7 +258,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     width: '47%',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
@@ -263,29 +266,29 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
     marginTop: 8,
   },
   statLabel: {
     fontSize: 12,
-    color: '#888',
+    color: cores.textoFraco,
     marginTop: 4,
     textAlign: 'center',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: cores.texto,
     marginBottom: 16,
   },
   cartelaCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#332a10',
+    borderColor: cores.borda,
     padding: 16,
     marginBottom: 20,
   },
@@ -293,22 +296,22 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#1a1608',
+    backgroundColor: cores.superficieAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cartelaTitulo: {
-    color: '#fff',
+    color: cores.texto,
     fontWeight: 'bold',
     fontSize: 15,
   },
   cartelaSubtitulo: {
-    color: '#999',
+    color: cores.textoFraco,
     fontSize: 12,
     marginTop: 2,
   },
   breakdownCard: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 16,
     padding: 16,
     marginBottom: 24,
@@ -325,23 +328,23 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   breakdownLabel: {
-    color: '#fff',
+    color: cores.texto,
     fontSize: 16,
   },
   breakdownValue: {
-    color: '#FFD700',
+    color: cores.dourado,
     fontSize: 16,
     fontWeight: 'bold',
   },
   breakdownDivider: {
     height: 1,
-    backgroundColor: '#333',
+    backgroundColor: cores.borda,
     marginVertical: 8,
   },
   activityItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a2e',
+    backgroundColor: cores.superficie,
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
@@ -351,12 +354,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   activityTitle: {
-    color: '#fff',
+    color: cores.texto,
     fontSize: 14,
     fontWeight: '600',
   },
   activityMeta: {
-    color: '#888',
+    color: cores.textoFraco,
     fontSize: 12,
     marginTop: 2,
   },

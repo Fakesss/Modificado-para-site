@@ -1,11 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 
 export default function ChatScreen() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const { user } = useAuth();
   const [view, setView] = useState<'lista' | 'conversa'>('lista');
   const [usuarios, setUsuarios] = useState<any[]>([]);
@@ -205,7 +208,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.chatHeader}>
           <TouchableOpacity onPress={voltarLista} style={{ padding: 10 }}>
-            <Ionicons name="arrow-back" size={24} color="#FFF" />
+            <Ionicons name="arrow-back" size={24} color={cores.texto} />
           </TouchableOpacity>
           <View style={[styles.avatarSmall, { backgroundColor: contatoAtual?.equipeCor + '20', borderColor: contatoAtual?.equipeCor, marginLeft: 5, marginRight: 12 }]}>
               <Ionicons name="shield" size={16} color={contatoAtual?.equipeCor || '#fff'} />
@@ -256,31 +259,31 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#FFF', marginLeft: 10 },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: cores.borda },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', color: cores.texto, marginLeft: 10 },
   
   filterRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 15, paddingVertical: 10, backgroundColor: '#111' },
-  filterBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#222', marginRight: 8, borderWidth: 1, borderColor: '#333' },
+  filterBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#222', marginRight: 8, borderWidth: 1, borderColor: cores.borda },
   filterBtnActive: { backgroundColor: 'rgba(0, 255, 255, 0.1)', borderColor: '#00FFFF' },
-  filterText: { color: '#888', fontSize: 12, fontWeight: 'bold' },
+  filterText: { color: cores.textoFraco, fontSize: 12, fontWeight: 'bold' },
   filterTextActive: { color: '#00FFFF' },
 
-  userCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a2e', padding: 15, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  userCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.superficie, padding: 15, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
   avatar: { width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center', marginRight: 15, borderWidth: 1 },
   avatarSmall: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
-  userName: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  userName: { color: cores.texto, fontSize: 16, fontWeight: 'bold' },
   userGrade: { color: '#AAA', fontSize: 13, fontWeight: 'normal' },
-  userStatus: { color: '#888', fontSize: 12, marginTop: 3, fontWeight: 'bold' },
+  userStatus: { color: cores.textoFraco, fontSize: 12, marginTop: 3, fontWeight: 'bold' },
   
   unreadBadge: { backgroundColor: '#FF4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, minWidth: 24, alignItems: 'center', justifyContent: 'center' },
-  unreadText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+  unreadText: { color: cores.texto, fontSize: 12, fontWeight: 'bold' },
 
-  emptyText: { color: '#666', textAlign: 'center', marginTop: 30, fontStyle: 'italic' },
+  emptyText: { color: cores.textoFraco, textAlign: 'center', marginTop: 30, fontStyle: 'italic' },
   
-  chatHeader: { flexDirection: 'row', alignItems: 'center', padding: 10, backgroundColor: '#1a1a2e', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
-  chatHeaderName: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  chatHeader: { flexDirection: 'row', alignItems: 'center', padding: 10, backgroundColor: cores.superficie, borderBottomWidth: 1, borderBottomColor: cores.borda },
+  chatHeaderName: { color: cores.texto, fontSize: 18, fontWeight: 'bold' },
   chatHeaderSub: { color: '#00FFFF', fontSize: 12 },
   
   msgWrapper: { width: '100%', marginBottom: 10, flexDirection: 'row' },
@@ -288,11 +291,11 @@ const styles = StyleSheet.create({
   msgWrapperLeft: { justifyContent: 'flex-start' },
   msgBubble: { maxWidth: '80%', padding: 12, borderRadius: 16, position: 'relative' },
   msgBubbleMe: { backgroundColor: '#4169E1', borderBottomRightRadius: 4 },
-  msgBubbleOther: { backgroundColor: '#222', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#333' },
-  msgText: { color: '#FFF', fontSize: 15, marginBottom: 12 },
+  msgBubbleOther: { backgroundColor: '#222', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: cores.borda },
+  msgText: { color: cores.texto, fontSize: 15, marginBottom: 12 },
   msgTime: { color: 'rgba(255,255,255,0.5)', fontSize: 10, position: 'absolute', bottom: 5, right: 10 },
   
-  inputContainer: { flexDirection: 'row', padding: 10, backgroundColor: '#1a1a2e', alignItems: 'flex-end' },
-  input: { flex: 1, backgroundColor: '#0c0c0c', color: '#FFF', borderRadius: 20, paddingHorizontal: 15, paddingTop: 12, paddingBottom: 12, maxHeight: 100, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  inputContainer: { flexDirection: 'row', padding: 10, backgroundColor: cores.superficie, alignItems: 'flex-end' },
+  input: { flex: 1, backgroundColor: cores.fundo, color: cores.texto, borderRadius: 20, paddingHorizontal: 15, paddingTop: 12, paddingBottom: 12, maxHeight: 100, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#00FFFF', justifyContent: 'center', alignItems: 'center', marginLeft: 10, marginBottom: 2 }
 });

@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Modal, RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import { socket } from '../../src/services/socket';
@@ -11,6 +12,8 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 export default function Salas() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const { user } = useAuth();
   const router = useRouter();
   const isAdmin = user?.role === 'ADMIN' || user?.email === 'danielprofessormatematica@gmail.com';
@@ -377,7 +380,7 @@ export default function Salas() {
         
         <View style={styles.roomHeader}>
           <TouchableOpacity onPress={handleLeaveLobby} style={styles.leaveButton}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
+            <Ionicons name="arrow-back" size={24} color={cores.texto} />
           </TouchableOpacity>
           <View style={styles.roomHeaderInfo}>
             <Text style={styles.roomTitle}>{currentLobby.nome}</Text>
@@ -617,38 +620,38 @@ export default function Salas() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
+  title: { fontSize: 24, fontWeight: 'bold', color: cores.texto },
   createButton: { backgroundColor: '#00BFFF', marginHorizontal: 16, marginBottom: 16, padding: 14, borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   createButtonText: { color: '#0c0c0c', fontSize: 16, fontWeight: 'bold' },
   listContent: { paddingHorizontal: 16, paddingBottom: 20 },
-  lobbyCard: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 16, marginBottom: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#333' },
+  lobbyCard: { backgroundColor: cores.superficie, borderRadius: 16, padding: 16, marginBottom: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: cores.borda },
   lobbyInfo: { flex: 1 },
-  lobbyName: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  lobbyHost: { color: '#888', fontSize: 13, marginTop: 4 },
+  lobbyName: { color: cores.texto, fontSize: 18, fontWeight: 'bold' },
+  lobbyHost: { color: cores.textoFraco, fontSize: 13, marginTop: 4 },
   lobbyTags: { flexDirection: 'row', marginTop: 8, gap: 8 },
   tag: { backgroundColor: '#00BFFF20', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 },
   tagText: { color: '#bbb', fontSize: 11, fontWeight: '600' },
   joinButton: { backgroundColor: '#32CD32', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   joinButtonText: { color: '#000', fontWeight: 'bold' },
   emptyState: { alignItems: 'center', marginTop: 60 },
-  emptyText: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 16 },
+  emptyText: { color: cores.texto, fontSize: 18, fontWeight: 'bold', marginTop: 16 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#333' },
+  modalContent: { backgroundColor: cores.superficie, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: cores.borda },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  inputLabel: { color: '#888', marginBottom: 8, fontSize: 14 },
-  modalInput: { backgroundColor: '#0c0c0c', color: '#fff', padding: 14, borderRadius: 10, marginBottom: 20, borderWidth: 1, borderColor: '#333' },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: cores.texto },
+  inputLabel: { color: cores.textoFraco, marginBottom: 8, fontSize: 14 },
+  modalInput: { backgroundColor: cores.fundo, color: cores.texto, padding: 14, borderRadius: 10, marginBottom: 20, borderWidth: 1, borderColor: cores.borda },
   confirmCreateButton: { backgroundColor: '#00BFFF', padding: 14, borderRadius: 10, alignItems: 'center' },
   confirmCreateText: { color: '#0c0c0c', fontSize: 16, fontWeight: 'bold' },
 
-  roomHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#1a1a2e', borderBottomWidth: 1, borderBottomColor: '#333' },
+  roomHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: cores.superficie, borderBottomWidth: 1, borderBottomColor: cores.borda },
   leaveButton: { padding: 8, marginRight: 8 },
   roomHeaderInfo: { flex: 1 },
-  roomTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  roomTitle: { color: cores.texto, fontSize: 18, fontWeight: 'bold' },
   roomSubtitle: { color: '#00BFFF', fontSize: 12 },
   voiceButton: { backgroundColor: '#333', padding: 10, borderRadius: 20 },
   adminDeleteButton: { backgroundColor: '#FF4500', padding: 10, borderRadius: 20 },
@@ -664,26 +667,26 @@ const styles = StyleSheet.create({
   messageMe: { alignSelf: 'flex-end', backgroundColor: '#00BFFF', borderBottomRightRadius: 4 },
   messageOther: { alignSelf: 'flex-start', backgroundColor: '#2a2a3e', borderBottomLeftRadius: 4 },
   messageSender: { color: '#00BFFF', fontSize: 11, fontWeight: 'bold', marginBottom: 4 },
-  messageText: { color: '#fff', fontSize: 15 },
+  messageText: { color: cores.texto, fontSize: 15 },
   messageTime: { color: '#rgba(255,255,255,0.5)', fontSize: 10, alignSelf: 'flex-end', marginTop: 4 },
 
-  inputContainer: { flexDirection: 'row', padding: 16, backgroundColor: '#1a1a2e', alignItems: 'center', gap: 12 },
-  textInput: { flex: 1, backgroundColor: '#2a2a3e', color: '#fff', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15 },
+  inputContainer: { flexDirection: 'row', padding: 16, backgroundColor: cores.superficie, alignItems: 'center', gap: 12 },
+  textInput: { flex: 1, backgroundColor: '#2a2a3e', color: cores.texto, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15 },
   sendButton: { backgroundColor: '#00BFFF', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
 
-  topChallengeArea: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: '#0c0c0c', borderBottomWidth: 1, borderBottomColor: '#222' },
-  floatingChallengeCard: { backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#FFD700', borderRadius: 12, padding: 12, marginBottom: 10, position: 'relative' },
+  topChallengeArea: { paddingHorizontal: 16, paddingTop: 10, backgroundColor: cores.fundo, borderBottomWidth: 1, borderBottomColor: '#222' },
+  floatingChallengeCard: { backgroundColor: cores.superficie, borderWidth: 1, borderColor: '#FFD700', borderRadius: 12, padding: 12, marginBottom: 10, position: 'relative' },
   closeChallengeButton: { position: 'absolute', top: 8, right: 8, zIndex: 10, padding: 4 },
-  challengeTitle: { color: '#FFD700', fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
+  challengeTitle: { color: cores.dourado, fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
   challengeText: { color: '#ccc', fontSize: 13, marginBottom: 8, paddingRight: 20 },
   challengeButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
   challengeButton: { backgroundColor: '#32CD32', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  challengeButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  challengeButtonText: { color: cores.texto, fontWeight: 'bold', fontSize: 13 },
   
   scrollToBottomButton: { position: 'absolute', right: 20, bottom: 90, backgroundColor: '#333', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3 },
   unreadBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: '#00BFFF', width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   unreadText: { color: '#000', fontSize: 10, fontWeight: 'bold' },
 
-  gameOptionButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0c0c0c', borderWidth: 1, borderColor: '#00BFFF', padding: 16, borderRadius: 12, gap: 12 },
+  gameOptionButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: cores.fundo, borderWidth: 1, borderColor: '#00BFFF', padding: 16, borderRadius: 12, gap: 12 },
   gameOptionText: { color: '#00BFFF', fontSize: 16, fontWeight: 'bold' }
 });

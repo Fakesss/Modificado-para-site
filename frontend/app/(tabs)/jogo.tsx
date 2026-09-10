@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTema, CoresTema } from '../../src/context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
 export default function HubJogos() {
+  const { cores } = useTema();
+  const styles = useMemo(() => criarEstilos(cores), [cores]);
   const router = useRouter();
 
   return (
@@ -126,23 +129,23 @@ export default function HubJogos() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0c0c0c' },
+const criarEstilos = (cores: CoresTema) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: cores.fundo },
   scrollContent: { padding: 20, alignItems: 'center' },
   header: { alignItems: 'center', marginBottom: 40, marginTop: 20 },
-  title: { fontSize: 32, fontWeight: '900', color: '#fff', marginTop: 12 },
-  subtitle: { fontSize: 16, color: '#888', marginTop: 4 },
+  title: { fontSize: 32, fontWeight: '900', color: cores.texto, marginTop: 12 },
+  subtitle: { fontSize: 16, color: cores.textoFraco, marginTop: 4 },
   
   gameCard: { 
     flexDirection: 'row', 
-    backgroundColor: '#1a1a2e', 
+    backgroundColor: cores.superficie, 
     borderRadius: 20, 
     padding: 20, 
     marginBottom: 20, 
     width: '100%', 
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#333'
+    borderColor: cores.borda
   },
   iconContainer: { 
     width: 80, 
@@ -153,6 +156,6 @@ const styles = StyleSheet.create({
     marginRight: 15 
   },
   gameInfo: { flex: 1 },
-  gameTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 6 },
+  gameTitle: { color: cores.texto, fontSize: 20, fontWeight: 'bold', marginBottom: 6 },
   gameDesc: { color: '#aaa', fontSize: 13, lineHeight: 18 }
 });
