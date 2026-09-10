@@ -17,6 +17,7 @@ export default function AdminLayout() {
       <Stack.Screen name="reino" />
       <Stack.Screen name="config_jogo" />
       <Stack.Screen name="tabuada_relatorio" />
+      <Stack.Screen name="cartela_missoes" />
       <Stack.Screen name="criar-exercicio" options={{ presentation: 'modal' }} />
       <Stack.Screen name="criar-conteudo" options={{ presentation: 'modal' }} />
     </Stack>

@@ -197,6 +197,11 @@ export const getTabuadaJogos = async () => { try { return (await api.get('/tabua
 export const criarTabuadaJogo = async (nome: string) => (await api.post('/tabuada/jogos', { nome })).data;
 export const deletarTabuadaJogo = async (id: string) => (await api.delete(`/tabuada/jogos/${id}`)).data;
 
+// ======== CARTELA DE MISSÕES (estrelas dadas manualmente pelo professor) ========
+export const getMinhaCartelaMissoes = async () => { try { return (await api.get('/cartela-missoes/minha')).data; } catch { return null; } };
+export const getCartelaMissoesAluno = async (alunoId: string) => { try { return (await api.get(`/cartela-missoes/aluno/${alunoId}`)).data; } catch { return null; } };
+export const ajustarCartelaMissoes = async (alunoId: string, delta: 1 | -1) => (await api.post('/cartela-missoes/ajustar', { alunoId, delta })).data;
+
 // ======== DESAFIO FLASH CARDS (modo com ranking, à parte da Trilha da Tabuada) ========
 // A pontuação é sempre calculada e devolvida pelo servidor (nunca confiar num cálculo local).
 export const enviarTabuadaDesafioResultado = async (dados: { tabuadas: number[]; quantidadeQuestoes: number; acertos: number; tempoTotalSegundos: number }) => (await api.post('/tabuada/desafio/resultado', dados)).data;

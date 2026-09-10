@@ -220,6 +220,12 @@ export default function AdminHome() {
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/cartela_missoes')}>
+          <View style={[styles.menuIcon, { backgroundColor: '#FFB30030' }]}><Ionicons name="star" size={24} color="#FFB300" /></View>
+          <View style={styles.menuInfo}><Text style={styles.menuTitle}>Cartela de Missões</Text><Text style={styles.menuDescription}>Dar estrelas aos alunos por missões cumpridas</Text></View>
+          <Ionicons name="chevron-forward" size={24} color="#666" />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/admin/cor-admin')}>
           <View style={[styles.menuIcon, { backgroundColor: '#00CED130' }]}><Ionicons name="color-wand" size={24} color="#00CED1" /></View>
           <View style={styles.menuInfo}><Text style={styles.menuTitle}>Cor da Prévia</Text><Text style={styles.menuDescription}>Escolher sua cor para "Ver como aluno"</Text></View>

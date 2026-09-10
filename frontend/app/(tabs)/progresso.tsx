@@ -6,29 +6,35 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
 import * as api from '../../src/services/api';
 import StreakBadge from '../../src/components/StreakBadge';
-import { Equipe } from '../../src/types';
+import { Equipe, CartelaMissoes } from '../../src/types';
 
 export default function Progresso() {
+  const router = useRouter();
   const { user, refreshUser } = useAuth();
   const [progress, setProgress] = useState<any>(null);
   const [equipe, setEquipe] = useState<Equipe | null>(null);
+  const [cartela, setCartela] = useState<CartelaMissoes | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [progressData, equipesData] = await Promise.all([
+      const [progressData, equipesData, cartelaData] = await Promise.all([
         api.getMeuProgresso(),
         api.getEquipes(),
+        api.getMinhaCartelaMissoes(),
       ]);
       setProgress(progressData);
-      
+      setCartela(cartelaData);
+
       if (user?.equipeId) {
         const userEquipe = equipesData.find((e: Equipe) => e.id === user.equipeId);
         setEquipe(userEquipe || null);
@@ -118,6 +124,18 @@ export default function Progresso() {
             <Text style={styles.statLabel}>Exercícios Feitos</Text>
           </View>
         </View>
+
+        {/* Cartela de Missões */}
+        <TouchableOpacity style={styles.cartelaCard} onPress={() => router.push('/cartela_missoes' as any)} activeOpacity={0.85}>
+          <View style={styles.cartelaIcone}>
+            <Ionicons name="star" size={26} color="#FFB300" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cartelaTitulo}>Cartela de Missões</Text>
+            <Text style={styles.cartelaSubtitulo}>{cartela ? `${cartela.estrelas} / ${cartela.total} estrelas` : 'Veja suas estrelas'}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#666" />
+        </TouchableOpacity>
 
         {/* Points Breakdown */}
         <Text style={styles.sectionTitle}>Origem dos Pontos</Text>
@@ -259,6 +277,35 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 16,
+  },
+  cartelaCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: '#1a1a2e',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#332a10',
+    padding: 16,
+    marginBottom: 20,
+  },
+  cartelaIcone: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#1a1608',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartelaTitulo: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  cartelaSubtitulo: {
+    color: '#999',
+    fontSize: 12,
+    marginTop: 2,
   },
   breakdownCard: {
     backgroundColor: '#1a1a2e',

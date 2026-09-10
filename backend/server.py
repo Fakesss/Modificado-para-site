@@ -231,6 +231,10 @@ class TabuadaFlashcardCreate(BaseModel):
 class JogoPersonalizadoCreate(BaseModel):
     nome: str
 
+class CartelaMissoesAjusteRequest(BaseModel):
+    alunoId: str
+    delta: int  # +1 (dar estrela) ou -1 (corrigir/tirar estrela)
+
 class TabuadaDesafioSubmissao(BaseModel):
     tabuadas: List[int]        # quais tabuadas (1..10) o aluno escolheu praticar
     quantidadeQuestoes: int    # 15 | 20 | 30
@@ -1987,6 +1991,44 @@ async def get_tabuada_desafio_ranking(quantidade: int, current_user: dict = Depe
         {"quantidadeQuestoes": quantidade}
     ).sort("pontuacaoFinal", -1).to_list(50)
     return [{k: v for k, v in r.items() if k != '_id'} for r in resultados]
+
+# =========================================================================
+# CARTELA DE MISSÕES — cartão de 30 casas, o professor concede estrelas uma a
+# uma (por missão/comportamento cumprido fora do app) e elas vão preenchendo
+# o cartão em ordem, como um quadro de adesivos. Sem ligação com o sistema de
+# pontos/ranking — é só um reconhecimento visual, controlado manualmente pelo
+# professor, não gerado automaticamente por nenhum jogo.
+# =========================================================================
+CARTELA_MISSOES_TOTAL_ESTRELAS = 30
+
+async def get_or_create_cartela_missoes(aluno_id: str) -> dict:
+    doc = await db.cartela_missoes.find_one({"alunoId": aluno_id})
+    if not doc:
+        doc = {"id": str(uuid.uuid4()), "alunoId": aluno_id, "estrelas": 0}
+        await db.cartela_missoes.insert_one(doc)
+    return doc
+
+@api_router.get("/cartela-missoes/minha")
+async def get_minha_cartela_missoes(current_user: dict = Depends(get_current_user)):
+    doc = await get_or_create_cartela_missoes(current_user["id"])
+    return {"alunoId": doc["alunoId"], "estrelas": doc.get("estrelas", 0), "total": CARTELA_MISSOES_TOTAL_ESTRELAS}
+
+@api_router.get("/cartela-missoes/aluno/{aluno_id}")
+async def get_cartela_missoes_aluno(aluno_id: str, current_user: dict = Depends(require_admin)):
+    doc = await get_or_create_cartela_missoes(aluno_id)
+    return {"alunoId": doc["alunoId"], "estrelas": doc.get("estrelas", 0), "total": CARTELA_MISSOES_TOTAL_ESTRELAS}
+
+@api_router.post("/cartela-missoes/ajustar")
+async def ajustar_cartela_missoes(dados: CartelaMissoesAjusteRequest, current_user: dict = Depends(require_admin)):
+    if dados.delta not in (1, -1):
+        raise HTTPException(status_code=400, detail="delta precisa ser 1 (dar estrela) ou -1 (tirar estrela)")
+    aluno = await db.usuarios.find_one({"id": dados.alunoId})
+    if not aluno:
+        raise HTTPException(status_code=404, detail="Aluno não encontrado")
+    doc = await get_or_create_cartela_missoes(dados.alunoId)
+    novo_total = max(0, min(CARTELA_MISSOES_TOTAL_ESTRELAS, doc.get("estrelas", 0) + dados.delta))
+    await db.cartela_missoes.update_one({"alunoId": dados.alunoId}, {"$set": {"estrelas": novo_total}})
+    return {"alunoId": dados.alunoId, "estrelas": novo_total, "total": CARTELA_MISSOES_TOTAL_ESTRELAS}
 
 @api_router.get("/hangar/perfil")
 async def get_hangar_perfil(current_user: dict = Depends(get_current_user)):
