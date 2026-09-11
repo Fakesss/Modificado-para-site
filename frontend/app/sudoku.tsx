@@ -191,7 +191,7 @@ export default function SudokuScreen() {
   const { cores, estaClaro } = useTema();
   const styles = useMemo(() => criarEstilos(cores), [cores]);
   const PALETAS = estaClaro ? TEMAS_CLAROS : TEMAS_ESCUROS;
-  const corDif = (d: Difficulty) => corParaTema(corDif(d), estaClaro, 0.40);
+  const corDif = (d: Difficulty) => corParaTema(DIFFICULTY_COLORS[d], estaClaro, 0.40);
   const router = useRouter();
 
   const [phase, setPhase] = useState<Phase>('loading');

@@ -50,7 +50,6 @@ export default function TabsLayout() {
   
   const [convite, setConvite] = useState<any>(null);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
-  const [totalNaoLidas, setTotalNaoLidas] = useState(0);
 
   useEffect(() => { loadTeamColor(); }, [user?.equipeId, isAdminViewingAsStudent]);
 
@@ -67,20 +66,6 @@ export default function TabsLayout() {
       }
     } catch (error) { console.error(error); }
   };
-
-  useEffect(() => {
-    if (!user) return;
-    const fetchUnread = async () => {
-      const summary = await api.getInboxSummary();
-      let total = 0;
-      Object.values(summary).forEach((val: any) => { total += val.unreadCount; });
-      setTotalNaoLidas(total);
-    };
-    
-    fetchUnread();
-    const interval = setInterval(fetchUnread, 5000);
-    return () => clearInterval(interval);
-  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -201,19 +186,19 @@ export default function TabsLayout() {
           },
           tabBarActiveTintColor: corAba,
           tabBarInactiveTintColor: cores.textoFraco,
-          tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginBottom: Platform.OS === 'android' ? 4 : 0 },
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginBottom: Platform.OS === 'android' ? 4 : 0 },
         }}
       >
         <Tabs.Screen name="index" options={{ title: 'Início', tabBarIcon: ({ color, size }) => (<Ionicons name="home" size={size} color={color} />) }} />
         <Tabs.Screen name="jogadores" options={{ title: 'Online', tabBarIcon: ({ color, size }) => (<Ionicons name="radio" size={size} color={color} /> ) }} />
         <Tabs.Screen name="salas" options={{ title: 'Salas', tabBarIcon: ({ color, size }) => (<Ionicons name="chatbubbles" size={size} color={color} /> ) }} />
         
-        <Tabs.Screen name="chat" options={{ title: 'Inbox', tabBarIcon: ({ color, size }) => (<Ionicons name="mail" size={size} color={color} /> ), tabBarBadge: totalNaoLidas > 0 ? totalNaoLidas : undefined }} />
 
         <Tabs.Screen name="jogo" options={{ title: 'Jogos', tabBarIcon: ({ color, size }) => (<Ionicons name="game-controller" size={size} color={color} />), tabBarBadge: '🧪', tabBarBadgeStyle: { backgroundColor: 'transparent', fontSize: 10 } }} />
         <Tabs.Screen name="equipe" options={{ title: 'Equipe', href: isLeader ? undefined : null, tabBarIcon: ({ color, size }) => (<Ionicons name="people" size={size} color={color} />) }} />
         <Tabs.Screen name="progresso" options={{ title: 'Perfil', tabBarIcon: ({ color, size }) => (<Ionicons name="person" size={size} color={color} />) }} />
         
+        <Tabs.Screen name="chat" options={{ href: null }} />
         <Tabs.Screen name="ranking" options={{ href: null }} />
         <Tabs.Screen name="conteudos" options={{ href: null }} />
         <Tabs.Screen name="exercicios" options={{ href: null }} />
