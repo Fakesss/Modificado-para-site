@@ -37,7 +37,7 @@ export default function AdminUsuarios() {
     loadData();
 
     let isActive = true;
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout>;
 
     const checkOnline = async () => {
       if (!isActive) return;

@@ -19,7 +19,7 @@ const ContadorExpiracao = ({ expiraEm, esgotado }: { expiraEm: string, esgotado:
   useEffect(() => {
     if (!expiraEm || esgotado) return;
     const targetTime = new Date(expiraEm).getTime();
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout>;
 
     const atualizar = () => {
       const now = Date.now();
