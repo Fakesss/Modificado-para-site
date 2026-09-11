@@ -84,7 +84,7 @@ export default function VideoPlayer() {
   };
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (playing && !completed && metaTempo > 0) {
       interval = setInterval(() => {
         setWatchedTime((prev) => prev + 1);

@@ -148,7 +148,7 @@ export default function CaboDeGuerraOffline() {
   // I.A. DO ROBÔ E TIMERS
   const playerTimes = useRef<number[]>([]);
   const timeUltimaPergunta = useRef<number>(0);
-  const botTimer = useRef<NodeJS.Timeout | null>(null);
+  const botTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isGameOver = useRef(false);
   const ropeAnim = useRef(new Animated.Value(0)).current;
 
@@ -222,7 +222,7 @@ export default function CaboDeGuerraOffline() {
   // SISTEMA DO CRONÔMETRO
   // =========================================================================
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (tela === 'jogo' && !isGameOver.current) {
         interval = setInterval(() => {
             setTempoRestante(prev => {

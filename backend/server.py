@@ -1312,6 +1312,110 @@ async def get_ranking_turma(turma_id: str):
     for i, e in enumerate(equipes_ranking): e["posicao"] = i + 1
     return equipes_ranking
 
+async def _equipe_do_usuario(usuario: dict) -> Optional[dict]:
+    """Resolve a equipe de um usuário aceitando id OU nome no campo equipeId."""
+    bruto = str(usuario.get("equipeId") or "").strip()
+    if not bruto: return None
+    equipe = await db.equipes.find_one({"id": bruto})
+    if equipe: return equipe
+    for e in await db.equipes.find({}).to_list(200):
+        if bruto.lower() in _identificadores_equipe(e): return e
+    return None
+
+
+def _identificadores_equipe(equipe: dict) -> set:
+    """O campo equipeId do aluno às vezes guarda o id da equipe e às vezes o
+    nome dela (banco antigo). Aqui juntamos as duas formas pra comparação."""
+    ids = set()
+    for chave in ("id", "_id", "nome"):
+        valor = str(equipe.get(chave) or "").strip().lower()
+        if valor: ids.add(valor)
+    return ids
+
+
+@api_router.get("/ranking/equipe/{equipe_id}")
+async def get_ranking_alunos_equipe(equipe_id: str, current_user: dict = Depends(get_current_user)):
+    """Membros de uma equipe, do maior pro menor em pontos. É o que o líder vê
+    na aba Equipe. Só o professor ou quem é da própria equipe pode consultar."""
+    equipe = await db.equipes.find_one({"id": equipe_id})
+    if not equipe:
+        raise HTTPException(status_code=404, detail="Equipe não encontrada")
+
+    aceitos = _identificadores_equipe(equipe)
+    eh_admin = current_user.get("perfil") == "ADMIN"
+    if not eh_admin and str(current_user.get("equipeId") or "").strip().lower() not in aceitos:
+        raise HTTPException(status_code=403, detail="Acesso negado")
+
+    membros = []
+    for aluno in await db.usuarios.find({}).to_list(5000):
+        if str(aluno.get("perfil") or "ALUNO").strip().upper() not in ["ALUNO", "ALUNO_LIDER"]:
+            continue
+        ativo_val = aluno.get("ativo", True)
+        ativo = ativo_val.lower() in ["true", "1", "t", "y", "yes"] if isinstance(ativo_val, str) else bool(ativo_val)
+        if not ativo: continue
+        if str(aluno.get("equipeId") or "").strip().lower() not in aceitos: continue
+        try: pontos = int(float(aluno.get("pontosTotais", 0)))
+        except (TypeError, ValueError): pontos = 0
+        try: streak = int(float(aluno.get("streakDias", 0)))
+        except (TypeError, ValueError): streak = 0
+        membros.append({"id": aluno.get("id"), "nome": aluno.get("nome", "Sem nome"),
+                        "pontosTotais": pontos, "streakDias": streak})
+
+    membros.sort(key=lambda m: m["pontosTotais"], reverse=True)
+    for i, m in enumerate(membros): m["posicao"] = i + 1
+    return membros
+
+
+@api_router.get("/relatorios/bncc/aluno/{aluno_id}")
+async def get_relatorio_bncc_aluno(aluno_id: str, current_user: dict = Depends(get_current_user)):
+    """Habilidades da BNCC de um aluno só: onde ele mais erra e onde mais
+    acerta. Quem vê: o professor, o próprio aluno e o líder da equipe dele."""
+    aluno = await db.usuarios.find_one({"id": aluno_id})
+    if not aluno:
+        raise HTTPException(status_code=404, detail="Aluno não encontrado")
+
+    eh_admin = current_user.get("perfil") == "ADMIN"
+    eh_o_proprio = current_user.get("id") == aluno_id
+    eh_lider_da_equipe = False
+    if current_user.get("perfil") == "ALUNO_LIDER":
+        # o equipeId às vezes guarda o id e às vezes o nome da equipe, então as
+        # duas pontas passam pela mesma resolução antes de comparar
+        equipe_aluno = await _equipe_do_usuario(aluno)
+        equipe_lider = await _equipe_do_usuario(current_user)
+        eh_lider_da_equipe = bool(
+            equipe_aluno and equipe_lider
+            and str(equipe_aluno.get("id")) == str(equipe_lider.get("id"))
+        )
+    if not (eh_admin or eh_o_proprio or eh_lider_da_equipe):
+        raise HTTPException(status_code=403, detail="Acesso negado")
+
+    submissoes = await db.submissoes.find(
+        {"usuarioId": aluno_id, "ignorarNoRelatorioBNCC": {"$ne": True}}
+    ).to_list(5000)
+    exercicios = {str(e.get("id", e.get("_id"))): e for e in await db.exercicios.find({}).to_list(10000)}
+
+    stats = {}
+    for sub in submissoes:
+        for det in sub.get("detalhesQuestoes", []):
+            habilidades = det.get("habilidadesBNCC", [])
+            if not habilidades:
+                ex = exercicios.get(sub.get("exercicioId"))
+                if ex: habilidades = ex.get("habilidadesBNCC", [])
+            acertou = det.get("acertou", False)
+            for hab in habilidades:
+                if not hab: continue
+                item = stats.setdefault(hab, {"habilidade": hab, "acertos": 0, "erros": 0})
+                if acertou: item["acertos"] += 1
+                else: item["erros"] += 1
+
+    dificuldades = sorted([h for h in stats.values() if h["erros"] > 0], key=lambda h: h["erros"], reverse=True)
+    facilidades = sorted([h for h in stats.values() if h["acertos"] > 0], key=lambda h: h["acertos"], reverse=True)
+    return {
+        "dificuldades": [{"habilidade": h["habilidade"], "erros": h["erros"]} for h in dificuldades[:10]],
+        "facilidades": [{"habilidade": h["habilidade"], "acertos": h["acertos"]} for h in facilidades[:10]],
+    }
+
+
 @api_router.post("/jogos/pontuar")
 async def pontuar_jogo(dados: PontuacaoJogo, current_user: dict = Depends(get_current_user)):
     """Endpoint único usado por TODOS os jogos (arcade, math blaster, cabo

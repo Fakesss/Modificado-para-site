@@ -37,3 +37,6 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
+
+# cache do empacotador (gerado ao rodar o app)
+.metro-cache/
